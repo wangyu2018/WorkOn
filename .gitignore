@@ -7,3 +7,8 @@ dist-installer/
 *.vrm
 dev-out.log
 dev.err
+assets/rapidocr/RapidOCR-json.exe
+assets/rapidocr/*.onnx
+assets/rapidocr/dict_*.txt
+assets/rapidocr/ppocr_keys_v1.txt
+assets/rapidocr/rec_*.onnx

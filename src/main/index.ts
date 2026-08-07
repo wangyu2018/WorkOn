@@ -36,6 +36,12 @@ process.stderr?.on('error', (e: NodeJS.ErrnoException) => {
   if (e.code !== 'EPIPE') throw e
 })
 
+// 未捕获异常时先关闭 splash，避免遮住错误弹窗
+process.on('uncaughtException', (err) => {
+  closeSplash()
+  console.error('[fatal] uncaughtException:', err)
+})
+
 function setupBusForwarding(): void {
   // presence / pet / question 推送到所有窗口
   bus.on('presence', (snap) => {
@@ -118,6 +124,7 @@ app.whenReady().then(() => {
     }
   })
 
+  try {
   initSettings()
   initDb()
   registerIpc()
@@ -181,6 +188,11 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
   })
+
+  } catch (e) {
+    closeSplash()
+    console.error('[fatal] 启动失败:', e)
+  }
 })
 
 app.on('window-all-closed', () => {
