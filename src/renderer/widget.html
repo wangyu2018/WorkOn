@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>WorkOn Widget</title>
+    <style>
+      /* 悬浮窗必须完全透明，透出桌面 */
+      html,
+      body {
+        background: transparent !important;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/widget.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,9 @@
+node_modules/
+out/
+dist/
+dist-installer/
+*.log
+.DS_Store
+*.vrm
+dev-out.log
+dev.err

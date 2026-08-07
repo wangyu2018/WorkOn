@@ -1,0 +1,72 @@
+{
+  "name": "workon",
+  "version": "0.2.0",
+  "private": true,
+  "description": "WorkOn — 本地优先的桌面工作记录 + 3D 虚拟桌宠",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
+  },
+  "dependencies": {
+    "rapidocrjson": "^0.1.1",
+    "sharp": "^0.35.3",
+    "tesseract.js": "^5.1.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@pixiv/three-vrm": "^3.5.5",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.170.0",
+    "@types/ws": "^8.5.13",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "electron": "^33.2.1",
+    "electron-builder": "^26.15.3",
+    "electron-packager": "^17.1.2",
+    "electron-vite": "^2.3.0",
+    "postcss": "^8.4.49",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.15",
+    "three": "^0.170.0",
+    "typescript": "~5.6.3",
+    "vite": "^5.4.11",
+    "zustand": "^4.5.5"
+  },
+  "build": {
+    "appId": "com.workon.desktop",
+    "productName": "WorkOn",
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "dist-installer",
+      "buildResources": "assets"
+    },
+    "files": [
+      "out/**/*",
+      "assets/**/*",
+      "package.json",
+      "node_modules/ws/**/*",
+      "node_modules/sharp/**/*",
+      "node_modules/detect-libc/**/*",
+      "node_modules/semver/**/*",
+      "node_modules/@img/colour/**/*",
+      "node_modules/@img/sharp-win32-x64/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon-512.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "WorkOn"
+    }
+  }
+}

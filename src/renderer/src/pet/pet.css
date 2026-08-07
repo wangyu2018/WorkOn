@@ -1,0 +1,304 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  /* 透明 overlay：body 必须完全透明，桌面穿透可见 */
+  background: transparent !important;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+canvas {
+  display: block;
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* 右键「对桌宠说点什么」输入框：透明玻璃风，浮在桌宠旁 */
+#saybox {
+  position: fixed;
+  z-index: 10;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(180, 150, 220, 0.35);
+  background: rgba(22, 18, 34, 0.72);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow:
+    0 8px 28px rgba(0, 0, 0, 0.3),
+    0 0 16px rgba(160, 120, 220, 0.1);
+  opacity: 0;
+  transform: translateY(6px) scale(0.96);
+  transition:
+    opacity 180ms ease-out,
+    transform 180ms ease-out;
+  font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+}
+#saybox.open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+#saybox .say-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+#saybox input {
+  width: 180px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #E8E0F0;
+  font-size: 13px;
+  font-family: inherit;
+}
+#saybox input::placeholder {
+  color: rgba(180, 160, 200, 0.4);
+}
+#saybox .say-hint {
+  font-size: 11px;
+  color: rgba(180, 160, 200, 0.35);
+}
+
+/* 快捷操作栏：独立面板，浮在输入框正下方 */
+#say-actions {
+  position: fixed;
+  z-index: 10;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(180, 150, 220, 0.25);
+  background: rgba(22, 18, 34, 0.65);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.25),
+    0 0 12px rgba(160, 120, 220, 0.08);
+  opacity: 0;
+  transform: translateY(4px) scale(0.97);
+  transition:
+    opacity 200ms ease-out,
+    transform 200ms ease-out;
+  font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  pointer-events: auto;
+}
+#say-actions.open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+#say-actions button {
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(180, 150, 220, 0.2);
+  background: rgba(160, 120, 210, 0.1);
+  color: rgba(210, 190, 230, 0.85);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 140ms;
+  white-space: nowrap;
+}
+#say-actions button:hover {
+  background: rgba(160, 120, 210, 0.25);
+  border-color: rgba(180, 150, 220, 0.45);
+  color: #E8E0F0;
+}
+
+/* 情境确认面板：虚拟角色的独立问答卡片（轻问诊/浏览器确认/会议检测） */
+#qconfirm {
+  position: fixed;
+  z-index: 11;
+  display: none;
+  width: 260px;
+  padding: 12px 14px 10px;
+  border-radius: 18px;
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  background: rgba(18, 22, 36, 0.6);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  box-shadow:
+    0 10px 32px rgba(0, 0, 0, 0.4),
+    0 0 18px rgba(139, 92, 246, 0.12);
+  opacity: 0;
+  transform: translateY(8px) scale(0.94);
+  transition:
+    opacity 200ms ease-out,
+    transform 200ms ease-out;
+}
+#qconfirm.open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+#qconfirm .qc-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #A78BFA;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+#qconfirm .qc-body {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #E2E8F0;
+  margin-bottom: 10px;
+}
+#qconfirm .qc-actions {
+  display: flex;
+  gap: 8px;
+}
+#qconfirm .qc-btn {
+  flex: 1;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: none;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 150ms, opacity 150ms;
+  font-family: inherit;
+}
+#qconfirm .qc-yes {
+  background: rgba(16, 185, 129, 0.25);
+  color: #6EE7B7;
+}
+#qconfirm .qc-yes:hover {
+  background: rgba(16, 185, 129, 0.4);
+}
+#qconfirm .qc-no {
+  background: rgba(255, 255, 255, 0.06);
+  color: #94A3B8;
+}
+#qconfirm .qc-no:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+#qconfirm .qc-close {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #64748B;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+#qconfirm .qc-close:hover {
+  color: #94A3B8;
+  background: rgba(255,255,255,0.06);
+}
+
+/* ── 首次启动 CG（intro） ── */
+#intro {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 300ms ease-out;
+}
+#intro.on { opacity: 1; }
+#intro.bye { opacity: 0; transition: opacity 500ms ease-in; }
+#intro .intro-logo {
+  position: absolute;
+  left: 8%;
+  top: 22%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #eef4fb;
+  font-family: 'Microsoft YaHei', sans-serif;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 500ms ease-out 600ms, transform 500ms ease-out 600ms;
+}
+#intro.on .intro-logo { opacity: 1; transform: translateY(0); }
+#intro .intro-logo-dot {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #34d399; box-shadow: 0 0 18px #34d399;
+}
+#intro .intro-tagline {
+  position: absolute;
+  left: 32px;
+  top: 56px;
+  font-size: 16px;
+  font-weight: 400;
+  color: rgba(180, 200, 220, 0.65);
+  letter-spacing: 4px;
+}
+#intro .intro-captions {
+  position: absolute;
+  left: 8%;
+  top: 38%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#intro .intro-cap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(94, 234, 212, 0.25);
+  background: rgba(10, 20, 32, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transform: translateX(-14px);
+  transition: opacity 320ms ease-out, transform 320ms ease-out;
+}
+#intro .intro-cap.on { opacity: 1; transform: translateX(0); }
+#intro .intro-cap-icon { font-size: 26px; }
+#intro .intro-cap-title { font-size: 16px; font-weight: 700; color: #5eead4; }
+#intro .intro-cap-desc { font-size: 12px; color: rgba(200, 215, 230, 0.75); margin-top: 2px; }
+#intro .intro-progress {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: 8%;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+#intro .intro-progress-fill {
+  width: 0;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #34d399, #22d3ee);
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.6);
+}
+#intro .intro-skip {
+  position: absolute;
+  right: 4%;
+  bottom: 5%;
+  pointer-events: auto;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(12, 20, 32, 0.5);
+  color: rgba(200, 215, 230, 0.8);
+  font-size: 13px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 150ms, color 150ms;
+}
+#intro .intro-skip:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+#intro.final .intro-cap { transition-delay: 0s; }

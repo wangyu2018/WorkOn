@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VRM 桌宠预览 · 姵儿</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: radial-gradient(ellipse 90% 70% at 50% 38%, #14233d 0%, #0b1220 62%, #070c16 100%);
+        font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        user-select: none;
+      }
+      #grid {
+        position: fixed;
+        left: 50%;
+        bottom: 4%;
+        width: 760px;
+        height: 260px;
+        transform: translateX(-50%) perspective(420px) rotateX(64deg);
+        background-image:
+          linear-gradient(rgba(80, 200, 120, 0.16) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(80, 200, 120, 0.16) 1px, transparent 1px);
+        background-size: 36px 36px;
+        border-radius: 50%;
+        mask-image: radial-gradient(ellipse at center, #000 30%, transparent 72%);
+        -webkit-mask-image: radial-gradient(ellipse at center, #000 30%, transparent 72%);
+        pointer-events: none;
+      }
+      canvas {
+        position: fixed;
+        inset: 0;
+      }
+      .hud {
+        position: fixed;
+        left: 0;
+        right: 0;
+        text-align: center;
+        color: #9fd8b4;
+        letter-spacing: 0.18em;
+        pointer-events: none;
+        text-shadow: 0 0 12px rgba(80, 200, 120, 0.45);
+      }
+      #title {
+        top: 26px;
+        font-size: 15px;
+        color: #d8c87a;
+        text-shadow: 0 0 14px rgba(212, 175, 55, 0.5);
+      }
+      #title small {
+        display: block;
+        margin-top: 6px;
+        font-size: 10px;
+        color: #5f7a8c;
+        letter-spacing: 0.3em;
+        text-shadow: none;
+      }
+      #status {
+        bottom: 30px;
+        font-size: 14px;
+      }
+      #status::before,
+      #status::after {
+        content: '——';
+        margin: 0 14px;
+        color: #2e4a3a;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="grid"></div>
+    <div class="hud" id="title">
+      姵儿 · VRM
+      <small>DESKTOP PET MODEL PREVIEW — TURNTABLE</small>
+    </div>
+    <div class="hud" id="status">加载中…</div>
+    <script type="module" src="/src/vrm-preview.ts"></script>
+  </body>
+</html>
