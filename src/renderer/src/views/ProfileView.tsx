@@ -967,25 +967,6 @@ export default function ProfileView() {
                   )
                 })}
       </div>
-
-      <section className="glass-card hoverable">
-        <h3 className="mb-3 text-[14px] font-semibold text-slate-200">📍 我的位置</h3>
-        <SettingRow label="城市" desc="用于下班天气提醒、周末出行建议">
-          <input
-            className="glass-input !w-36 !py-1 !text-[12px]"
-            placeholder="例：北京"
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            onBlur={() => {
-              const v = city.trim()
-              void patchSettings({ city: v })
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-            }}
-          />
-        </SettingRow>
-      </section>
     </div>
           ))}
         </div>

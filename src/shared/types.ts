@@ -606,7 +606,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   reportTemplate: '',
   planForecastEnabled: true,
   theme: 'cyan',
-  appearanceMode: 'dark',
+  appearanceMode: 'light',
   aiEnabled: false,
   aiApiKey: '',
   aiBaseUrl: 'https://api.openai.com/v1',

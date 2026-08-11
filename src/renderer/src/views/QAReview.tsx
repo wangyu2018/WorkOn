@@ -62,6 +62,9 @@ export default function QAReview() {
   const [input, setInput] = useState('')
   const [thinking, setThinking] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const [qaList, setQaList] = useState<Array<{id:string, date:string, question:string, answer:string, ts:number}>>([])
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [pruneMode, setPruneMode] = useState(false)
 
   const LOCAL_EXAMPLES = ['今天专注了多久？', '我什么时候效率最高？', '今天摸鱼多久了？', '我最常用的应用？', '双屏并行占比？']
 
@@ -71,6 +74,8 @@ export default function QAReview() {
       .then((list) => setMessages((list as QAMessage[]) ?? []))
       .catch(() => undefined)
   }, [])
+
+  useEffect(() => { void window.api?.listQA?.().then(r => setQaList(r as any[] ?? [])) }, [])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -109,6 +114,7 @@ export default function QAReview() {
           <p className="mt-0.5 text-[11px] text-slate-500">向姵儿提问今日工作状态，随时回顾历史问答</p>
         </div>
         <span className="chip ml-auto shrink-0">{aiReady ? '🤖 AI 模式' : '📊 本地模式'}</span>
+        <button className="glass-btn text-[11px] ml-2 shrink-0" onClick={() => { setPruneMode(!pruneMode); if (pruneMode) setSelectedIds(new Set()) }}>🗑 管理回顾</button>
       </header>
 
       {!aiReady ? (
@@ -135,6 +141,35 @@ export default function QAReview() {
           📊 周效率报表
         </button>
       </div>
+      {pruneMode && (
+        <div className="glass-card hoverable mt-3 p-3 anim-fade-up">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-[13px] font-semibold text-slate-200">选择保留的日期</h4>
+            <div className="flex gap-2">
+              <button className="glass-btn text-[11px]" onClick={() => setPruneMode(false)}>取消</button>
+              <button className="glass-btn primary text-[11px]" onClick={async () => {
+                const keep = [...selectedIds]
+                await window.api?.pruneQA?.(keep)
+                window.location.reload()
+              }}>保留所选，删除其余</button>
+            </div>
+          </div>
+          {Object.entries(qaList.reduce<Record<string, typeof qaList>>((acc, q) => { const d = q.date ?? new Date(q.ts).toISOString().slice(0, 10); if (!acc[d]) acc[d] = []; acc[d].push(q); return acc }, {})).map(([date, items]) => (
+            <div key={date} className="mb-2">
+              <label className="flex items-center gap-2 cursor-pointer text-[12px]">
+                <input type="checkbox" checked={items.every(i => selectedIds.has(i.id))} onChange={e => {
+                  const next = new Set(selectedIds)
+                  if (e.target.checked) items.forEach(i => next.add(i.id))
+                  else items.forEach(i => next.delete(i.id))
+                  setSelectedIds(next)
+                }} className="accent-neon-cyan" />
+                <span className="text-slate-300">{date}</span>
+                <span className="text-slate-500">({items.length}条)</span>
+              </label>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="glass-card anim-fade-up min-h-0 flex-1 overflow-y-auto" style={{ animationDelay: '120ms' }}>
         {messages.length === 0 && !thinking ? (
           <EmptyState

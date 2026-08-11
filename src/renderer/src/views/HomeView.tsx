@@ -56,6 +56,8 @@ export default function HomeView() {
   const [tagsOpen, setTagsOpen] = useState(false)
   const [newTag, setNewTag] = useState({ app: '', label: '', state: 'focus' as WorkState })
   const [tlOpen, setTlOpen] = useState(false)
+  const [editCard, setEditCard] = useState<TimelineEntry & { idx: number } | null>(null)
+  const [editTitle, setEditTitle] = useState('')
 
   useEffect(() => {
     void (async () => {
@@ -119,8 +121,8 @@ export default function HomeView() {
         style={{ minWidth: 80 }}
         title={`${seg.mainApp} · ${fmtTime(seg.startTs)}-${fmtTime(seg.endTs)} · ${fmtDur(seg.durationMin)}${seg.mainTitle ? `\n${seg.mainTitle}` : ''}`}>
         <div className="flex items-center gap-1.5"><span className="text-[13px]">{stateInfo?.emoji ?? '📌'}</span><span className="truncate font-medium text-slate-200">{seg.mainApp}</span></div>
-        <div className="mt-0.5 text-[10px] text-slate-400 flex items-center justify-between"><span>{fmtDur(seg.durationMin)}</span><span>{fmtTime(seg.startTs)}</span></div>
-        {seg.mainTitle && <div className="mt-0.5 truncate text-[10px] text-slate-500 max-w-[140px]">{seg.mainTitle}</div>}
+        <div className="mt-0.5 text-[10px] text-slate-300 flex items-center justify-between"><span>{fmtDur(seg.durationMin)}</span><span>{fmtTime(seg.startTs)}</span></div>
+        {seg.mainTitle && <div className="mt-0.5 truncate text-[10px] text-slate-300 max-w-[140px]">{seg.mainTitle}</div>}
       </div>
     )
   }
@@ -191,12 +193,12 @@ export default function HomeView() {
         {tlOpen && (
           <div className="flex gap-2 overflow-x-auto pb-1">
             {timeline.length === 0 ? <p className="text-[12px] text-slate-600 py-2">暂无数据</p> : timeline.map((e, i) => (
-              <div key={i} className="shrink-0 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 min-w-[140px]">
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-0.5">
+              <div key={i} className="shrink-0 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 min-w-[140px] cursor-pointer hover:bg-white/[0.06] transition-colors" onClick={() => { setEditCard({ ...e, idx: i }); setEditTitle(e.title) }}>
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-300 mb-0.5">
                   <span>{tlIcons[e.type]}</span><span>{e.type === 'focus' ? e.app : '计划'}</span><span className="ml-auto">{fmtTime(e.ts)}</span>
                 </div>
                 <p className="text-[12px] text-slate-200 truncate">{e.title || '无标题'}</p>
-                {e.duration && <span className="text-[10px] text-slate-500">{fmtDur(e.duration)}</span>}
+                {e.duration && <span className="text-[10px] text-slate-300">{fmtDur(e.duration)}</span>}
               </div>
             ))}
           </div>
@@ -235,6 +237,29 @@ export default function HomeView() {
           </div>
         )}
       </section>
+
+      {editCard && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setEditCard(null)}>
+          <div className="glass-card anim-scale-in w-[360px]" onClick={e => e.stopPropagation()}>
+            <h3 className="text-[15px] font-semibold text-slate-200 mb-3">✏️ 编辑动作</h3>
+            <div className="flex flex-col gap-3">
+              <input className="glass-input" placeholder="标题" value={editTitle} onChange={e => setEditTitle(e.target.value)} autoFocus />
+              <div className="flex gap-2 items-center text-[12px] text-slate-400">
+                <span>起止：</span>
+                <input type="datetime-local" className="glass-input flex-1" defaultValue={new Date(editCard.ts).toISOString().slice(0, 16)} />
+              </div>
+              <div className="flex justify-end gap-2 mt-1">
+                <button className="glass-btn text-[12px]" onClick={() => setEditCard(null)}>取消</button>
+                <button className="glass-btn primary text-[12px]" onClick={() => {
+                  void window.api?.saveEntry?.({ date: new Date(editCard.ts).toISOString().slice(0, 10), title: editTitle, startMin: 0, endMin: editCard.duration ?? 0, source: 'manual' })
+                  setEditCard(null)
+                }}>保存</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

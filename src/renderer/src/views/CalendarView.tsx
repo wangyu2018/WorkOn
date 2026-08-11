@@ -278,15 +278,15 @@ function DayGrid({ date, entries, trail, pva, forecasts, filter, hourH, habits, 
       {/* 时间刻度 */}
       <div className="w-12 shrink-0 select-none">
         {Array.from({ length: 24 }, (_, h) => (
-          <div key={h} className="relative text-right text-[10px] tabular-nums text-slate-500" style={{ height: HOUR_H }}>
-            <span className="absolute -top-1.5 right-1.5">{h}:00</span>
+          <div key={h} className="relative text-right tabular-nums" style={{ height: HOUR_H }}>
+            <span className="absolute -top-1.5 right-1.5 text-[11px] text-slate-400">{h}:00</span>
           </div>
         ))}
       </div>
       {/* 网格 */}
       <div
         ref={gridRef}
-        className="relative flex-1 cursor-crosshair rounded-xl border border-white/[0.06] bg-ink-900/40"
+        className="relative flex-1 cursor-crosshair rounded-xl border border-white/[0.06] bg-transparent"
         style={{ height: DAY_H }}
         onMouseDown={onGridMouseDown}
         title="点击空白处补录时段"
@@ -416,7 +416,7 @@ function DayGrid({ date, entries, trail, pva, forecasts, filter, hourH, habits, 
                 <div
                   key={en.id}
                   data-entry
-                  className="group absolute left-1 right-1 z-10 cursor-pointer rounded-lg border-l-4 px-2 py-0.5 transition-all hover:z-20 hover:brightness-125"
+                   className="group absolute left-1 right-1 z-10 cursor-pointer rounded-xl border border-white/[0.04] bg-white/[0.03] border-l-4 px-2 py-0.5 shadow-sm transition-all hover:z-20 hover:brightness-125"
                   style={{
                     top,
                     height,
@@ -452,12 +452,12 @@ function DayGrid({ date, entries, trail, pva, forecasts, filter, hourH, habits, 
           : null}
         {nowMin !== null ? (
           <div
-            className="pointer-events-none absolute left-0 right-0 z-10 h-px bg-neon-cyan"
-            style={{ top: (nowMin / 1440) * DAY_H, boxShadow: '0 0 8px rgba(34,211,238,0.8)' }}
+            className="pointer-events-none absolute left-0 right-0 z-10 h-px bg-cyan-500/30"
+            style={{ top: (nowMin / 1440) * DAY_H, boxShadow: '0 0 4px rgba(6,182,212,0.3)' }}
           >
             <span
-              className="pulse-dot absolute -left-1 -top-[3px] h-[7px] w-[7px] rounded-full bg-neon-cyan"
-              style={{ boxShadow: '0 0 8px rgba(34,211,238,0.9)' }}
+              className="pulse-dot absolute -left-1 -top-[3px] h-[7px] w-[7px] rounded-full bg-cyan-500/50"
+              style={{ boxShadow: '0 0 4px rgba(6,182,212,0.3)' }}
             />
           </div>
         ) : null}
@@ -627,7 +627,7 @@ function WeekGrid({ date }: { date: string }) {
   }
 
   return (
-    <div className="anim-fade-up grid grid-cols-7 gap-2.5" style={{ animationDelay: '120ms' }}>
+    <div className="anim-fade-up grid grid-cols-7 gap-3" style={{ animationDelay: '120ms' }}>
       {days.map((d, i) => {
         const trail = trails[i] ?? null
         const states: (WorkState | null)[] = trails.length ? hourStates(trail) : new Array(24).fill(null)
@@ -636,7 +636,7 @@ function WeekGrid({ date }: { date: string }) {
         return (
           <div
             key={d}
-            className={`glass-card !p-2 transition-transform hover:-translate-y-0.5 ${isToday ? '!border-neon-cyan/40' : ''}`}
+            className={`glass-card !p-2 rounded-xl bg-white/[0.02] transition-transform hover:-translate-y-0.5 ${isToday ? '!border-neon-cyan/40' : ''}`}
             style={isToday ? { boxShadow: '0 0 16px rgba(34,211,238,0.15)' } : undefined}
           >
             <div className="mb-2 text-center">

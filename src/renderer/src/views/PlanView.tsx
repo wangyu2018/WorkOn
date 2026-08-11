@@ -319,6 +319,8 @@ export default function PlanView() {
   const [delayReason, setDelayReason] = useState('')
   const [folderModal, setFolderModal] = useState(false)
   const [folderDirs, setFolderDirs] = useState<string[]>([])
+  const [scanProgress, setScanProgress] = useState(0)
+  const [scanFile, setScanFile] = useState('')
 
   const loadCats = useCallback(async () => {
     try {
@@ -371,10 +373,18 @@ export default function PlanView() {
     void load()
   }
 
+  useEffect(() => {
+    const off = window.api?.onScanProgress?.((p: { pct: number; file: string }) => {
+      setScanProgress(p.pct); setScanFile(p.file)
+    })
+    return off
+  }, [])
+
   const importFromMeeting = async () => {
     if (folderDirs.length === 0) { setFolderModal(true); return }
+    setScanProgress(0); setScanFile('正在扫描...')
     const entries = await window.api?.scanFolders?.() as Array<{ source: string; type: string; content: string }> | undefined
-    if (!entries?.length) return
+    if (!entries?.length) { setScanProgress(0); return }
     const actions = entries
       .filter((e) => e.type === 'action')
       .flatMap((e) => {
@@ -394,6 +404,7 @@ export default function PlanView() {
         note: `来自会议纪要导入`
       })
     }
+    setScanProgress(0)
     void load()
   }
 
@@ -439,6 +450,16 @@ export default function PlanView() {
           <Icon name="plus" size={14} /> 新建计划
         </button>
       </header>
+
+      {scanProgress > 0 && (
+        <div className="anim-fade-in">
+          <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+            <span>扫描中...</span><span>{scanProgress}%</span>
+          </div>
+          <div className="h-1 rounded-full bg-white/10"><div className="h-1 rounded-full bg-neon-cyan transition-all" style={{ width: `${scanProgress}%` }} /></div>
+          <p className="text-[10px] text-slate-500 mt-1 truncate">{scanFile}</p>
+        </div>
+      )}
 
       {/* 日期工具条 */}
       <div className="anim-fade-up flex items-center gap-2" style={{ animationDelay: '60ms' }}>

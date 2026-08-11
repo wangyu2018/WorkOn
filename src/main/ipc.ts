@@ -206,6 +206,13 @@ export function registerIpc(): void {
 
   ipcMain.handle('qa:list', () => col('qa'))
 
+  ipcMain.handle('qa:prune', (_e, keepIds: string[]) => {
+    const all = col('qa') as Array<{ id: string }>
+    const toRemove = all.filter(q => !keepIds.includes(q.id))
+    for (const q of toRemove) removeFrom('qa', q.id)
+    return { removed: toRemove.length }
+  })
+
   // ── 备忘 ──
   ipcMain.handle('memos:list', () => col('memos'))
   ipcMain.handle('memos:add', (_e, text: string) =>

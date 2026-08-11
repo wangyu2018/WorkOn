@@ -47,6 +47,7 @@ const api = {
   onAIStreamError: on('ai:streamError'),
   onAIStreamTool: on('ai:streamTool'),
   listQA: () => ipcRenderer.invoke('qa:list'),
+  pruneQA: (keepIds: string[]) => ipcRenderer.invoke('qa:prune', keepIds),
   listMemos: () => ipcRenderer.invoke('memos:list'),
   addMemo: (text: string) => ipcRenderer.invoke('memos:add', text),
   usageToday: () => ipcRenderer.invoke('usage:today'),
@@ -97,6 +98,7 @@ const api = {
   selectFolders: () => ipcRenderer.invoke('folders:select'),
   setFolders: (dirs: string[]) => ipcRenderer.invoke('folders:set', dirs),
   scanFolders: () => ipcRenderer.invoke('folders:scan'),
+  onScanProgress: on('folders:scanProgress'),
   confirmQuestion: (payload: {
     qid: string
     ctx: string
