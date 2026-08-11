@@ -589,6 +589,7 @@ export interface AppSettings {
   petVrmPath?: string // 自定义 VRM 角色文件路径（L1 上传入口）
   ocrEngine?: 'tesseract' | 'rapidocr' // OCR 引擎选择，默认 rapidocr
   folders?: string[] // v3.0 文件夹 ingestion：用户配置的工作目录
+  mutualExclusive?: boolean // v3.1 互斥模式：桌面形象与浮窗互相排斥
   city?: string // v3.1 用户城市（天气/通勤提醒用）
   
   petVrmUploadEnabled?: boolean // v3.0 VRM 照片生成：入口占位开关，默认 true

@@ -213,6 +213,29 @@ export default function BuddyStage() {
         </span>
       </header>
 
+      {/* 总控卡：桌面形象 + 浮窗 + 互斥模式，三开关并列 */}
+      <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '40ms' }}>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <span className="text-[13px] font-semibold text-slate-200">桌面形象</span>
+            <Toggle checked={settings.petEnabled} onChange={(v) => void patch({ petEnabled: v })} />
+          </div>
+          <div className="w-px h-6 bg-white/10" />
+          <div className="flex items-center gap-3">
+            <span className="text-[13px] font-semibold text-slate-200">浮窗与托盘</span>
+            <Toggle checked={settings.petEnabled} onChange={(v) => void patch({ petEnabled: v })} />
+          </div>
+          <div className="flex-1" />
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] text-slate-500">互斥模式</span>
+            <Toggle checked={settings.mutualExclusive ?? false} onChange={(v) => {
+              void patch({ mutualExclusive: v })
+              if (v && settings.petEnabled) void patch({ widgetVisible: false })
+            }} />
+          </div>
+        </div>
+      </section>
+
       <div className="grid gap-5 lg:grid-cols-2">
         {/* 桌搭状态卡 */}
         <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '60ms' }}>

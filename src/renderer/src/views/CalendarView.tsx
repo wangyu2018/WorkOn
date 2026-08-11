@@ -452,12 +452,12 @@ function DayGrid({ date, entries, trail, pva, forecasts, filter, hourH, habits, 
           : null}
         {nowMin !== null ? (
           <div
-            className="pointer-events-none absolute left-0 right-0 z-10 h-px bg-cyan-500/30"
-            style={{ top: (nowMin / 1440) * DAY_H, boxShadow: '0 0 4px rgba(6,182,212,0.3)' }}
+            className="pointer-events-none absolute left-0 right-0 z-10 h-px"
+            style={{ top: (nowMin / 1440) * DAY_H, background: '#FF3B30', boxShadow: '0 0 4px rgba(255,59,48,0.3)' }}
           >
             <span
-              className="pulse-dot absolute -left-1 -top-[3px] h-[7px] w-[7px] rounded-full bg-cyan-500/50"
-              style={{ boxShadow: '0 0 4px rgba(6,182,212,0.3)' }}
+              className="pulse-dot absolute -left-1 -top-[3px] h-[7px] w-[7px] rounded-full"
+              style={{ background: '#FF3B30', boxShadow: '0 0 4px rgba(255,59,48,0.5)' }}
             />
           </div>
         ) : null}
