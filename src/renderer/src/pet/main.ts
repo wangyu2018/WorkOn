@@ -293,9 +293,11 @@ async function boot(): Promise<void> {
           e.preventDefault()
           const action = btn.dataset.action
           if (action === 'dock') {
-            spatial.restore()
-            spatial.applyRestoreLock()
+            spatial.dock()
             bubble.show('回来啦~', 2.5, 'character')
+          } else if (action === 'undock') {
+            spatial.undock()
+            bubble.show('来啦！', 2.5, 'character')
           } else if (action === 'pose') {
             const currentPose = anim.currentPoseName
             const others = CLICK_POSES.filter((p) => p !== currentPose)
@@ -392,7 +394,7 @@ async function boot(): Promise<void> {
     chatterNext -= dt
     if (chatterNext > 0) return
     chatterNext = 20 // 每 20s 评估一次
-    if (bubble.visible || drag.active || spatial.restoreLocked) return
+    if (bubble.visible || drag.active || spatial.docked) return
     // 会议模式：免打扰静默；会议辅助每 15min 报时
     if (meetingQuiet) return
     if (meetingAssistSince && Date.now() - meetingNoticeLast > 900_000) {
@@ -466,7 +468,10 @@ async function boot(): Promise<void> {
     saybox.style.left = `${x}px`
     saybox.style.top = `${y}px`
     saybox.style.display = 'flex'
-    // 操作栏：放在输入框正下方，gap 4px
+    // 操作栏：收纳态显示唤出，否则显示收纳
+    actions.innerHTML = spatial.docked
+      ? '<button data-action="undock">🔓 唤出</button><button data-action="pose">🎭 换个动作</button><button data-action="state">🎲 随机状态</button>'
+      : '<button data-action="dock">🏠 回到收纳栏</button><button data-action="pose">🎭 换个动作</button><button data-action="state">🎲 随机状态</button>'
     actions.style.left = `${x}px`
     actions.style.top = `${y + sayH + 4}px`
     actions.style.display = 'flex'
