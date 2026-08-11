@@ -525,31 +525,11 @@ export default function SettingsView() {
         </Row>
       </Section>
 
-      {/* 5. 悬浮窗 */}
+      {/* 5. 悬浮窗 — 已移至「桌搭」页统一管理 */}
       <Section title="悬浮窗" icon="monitor">
-        <Row label="启动时显示悬浮窗">
-          <Toggle checked={settings.widgetVisible} onChange={(v) => p({ widgetVisible: v })} />
-        </Row>
-        <Row label="现在显隐一次">
-          <button className="glass-btn" onClick={() => window.api.toggleWidget()}>
-            <Icon name="eye" size={13} /> 切换显隐
-          </button>
-        </Row>
-        <Row label={`透明度 ${(settings.widgetOpacity * 100).toFixed(0)}%`} desc="20% – 100%，拖动即时生效">
-          <input
-            type="range"
-            className="w-44"
-            min={0.2}
-            max={1}
-            step={0.01}
-            value={settings.widgetOpacity}
-            onChange={(e) => {
-              const v = Number(e.target.value)
-              window.api.setWidgetOpacity(v)
-              p({ widgetOpacity: v })
-            }}
-          />
-        </Row>
+        <p className="text-[12px] text-slate-500 py-2">
+          浮窗与托盘的管控已移至「桌搭」页面的"浮窗与托盘"分区，与桌搭伴侣统一管理。
+        </p>
       </Section>
 
       {/* 8. Oner 数据同步（能力 + 开关 + 折叠详情） */}

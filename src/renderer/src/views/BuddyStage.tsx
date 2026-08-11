@@ -538,6 +538,74 @@ export default function BuddyStage() {
         )}
       </section>
 
+      {/* 浮窗与托盘 — 与桌搭并列主开关 */}
+      <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '140ms' }}>
+        <div className="mb-3">
+          <SectionTitle icon="monitor" title="浮窗与托盘" />
+        </div>
+        <div className="mb-2 text-[11px] text-slate-500">
+          托盘图标是桌搭的"手柄"——左键展开状态浮窗，右键弹出快捷菜单。与桌搭伴侣的开关独立但联动。
+        </div>
+
+        {/* 主开关：浮窗与托盘 */}
+        <div className="-mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-white/[0.03]">
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-semibold text-slate-200">启用托盘与浮窗</div>
+            <div className="mt-0.5 text-[10px] text-slate-500">系统托盘常驻 WorkOn 图标，左键展开/右键菜单</div>
+          </div>
+          <Toggle checked={settings.petEnabled} onChange={(v) => void patch({ petEnabled: v })} />
+        </div>
+
+        {/* 管控细节（开关开启后展开） */}
+        {settings.petEnabled && (
+          <div className="mt-2 ml-2 flex flex-col divide-y divide-white/[0.05] border-l border-white/[0.06] pl-3">
+            <div className="-mx-1 flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-white/[0.03]">
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] text-slate-300">桌面浮窗</div>
+                <div className="mt-0.5 text-[10px] text-slate-500">屏幕右侧半透明悬浮窗，显示今日状态概览与快捷问答</div>
+              </div>
+              <Toggle checked={settings.widgetVisible} onChange={(v) => void patch({ widgetVisible: v })} />
+            </div>
+            <div className="-mx-1 rounded-lg px-1 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12px] text-slate-300">浮窗透明度</div>
+                  <div className="mt-0.5 text-[10px] text-slate-500">20% – 100%</div>
+                </div>
+                <span className="text-[11px] tabular-nums text-slate-400">{(settings.widgetOpacity * 100).toFixed(0)}%</span>
+              </div>
+              <input
+                type="range"
+                min={0.2}
+                max={1}
+                step={0.05}
+                className="mt-1 w-full"
+                value={settings.widgetOpacity}
+                onChange={(e) => patch({ widgetOpacity: parseFloat(e.target.value) })}
+              />
+            </div>
+            <div className="-mx-1 flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-white/[0.03]">
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] text-slate-300">摸鱼自动隐身</div>
+                <div className="mt-0.5 text-[10px] text-slate-500">持续摸鱼超过设定时长后自动隐藏，回到工作恢复</div>
+              </div>
+              <Toggle checked={settings.slackAutoHide} onChange={(v) => void patch({ slackAutoHide: v })} />
+            </div>
+            {settings.slackAutoHide && (
+              <div className="-mx-1 flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-white/[0.03]">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12px] text-slate-300">隐身触发时长</div>
+                  <div className="mt-0.5 text-[10px] text-slate-500">摸鱼持续 X 秒后自动隐藏</div>
+                </div>
+                <select className="glass-input w-24" value={settings.slackHideSec} onChange={(e) => void patch({ slackHideSec: Number(e.target.value) })}>
+                  {[30, 60, 120, 180, 300].map((s) => <option key={s} value={s}>{s >= 60 ? `${s/60}分钟` : `${s}秒`}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
       {showGuide ? <GuideModal onDone={closeGuide} /> : null}
     </div>
   )
