@@ -96,6 +96,7 @@ const api = {
   // v3.0 文件夹
   selectFolders: () => ipcRenderer.invoke('folders:select'),
   setFolders: (dirs: string[]) => ipcRenderer.invoke('folders:set', dirs),
+  scanFolders: () => ipcRenderer.invoke('folders:scan'),
   confirmQuestion: (payload: {
     qid: string
     ctx: string

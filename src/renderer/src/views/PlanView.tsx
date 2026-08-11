@@ -363,6 +363,31 @@ export default function PlanView() {
     void load()
   }
 
+  const importFromMeeting = async () => {
+    const entries = await window.api?.scanFolders?.() as Array<{ source: string; type: string; content: string }> | undefined
+    if (!entries?.length) return
+    const actions = entries
+      .filter((e) => e.type === 'action')
+      .flatMap((e) => {
+        // 提取 - [ ] / 下一步: / 待办: 开头的行动项
+        const lines = e.content.split('\n').filter((l: string) => /^[\s]*(- \[[ x]\]\s*|(下一步|待办)[：:]\s*)/i.test(l.trim()))
+        return lines.map((l: string) => l.replace(/^[\s]*(- \[[ x]\]\s*|(下一步|待办)[：:]\s*)/i, '').trim()).filter(Boolean)
+      })
+    if (actions.length === 0) return
+    // 逐个创建计划项
+    for (const title of actions) {
+      await window.api.savePlan({
+        date,
+        title: title.slice(0, 100),
+        category: 'other',
+        status: 'planned' as const,
+        source: 'import' as const,
+        note: `来自会议纪要导入`
+      })
+    }
+    void load()
+  }
+
   const removeCategory = async (c: CustomCategory) => {
     await window.api.deleteCategory(c.id)
     void loadCats()
@@ -395,6 +420,9 @@ export default function PlanView() {
           <p className="mt-0.5 text-[11px] text-slate-500">安排目标 · 跟踪达成率与完成预测</p>
         </div>
         <div className="flex-1" />
+        <button className="glass-btn text-[12px]" onClick={() => void importFromMeeting()}>
+          📋 从会议纪要导入
+        </button>
         <button className="glass-btn primary" onClick={() => setEditor({ plan: { date }, isNew: true })}>
           <Icon name="plus" size={14} /> 新建计划
         </button>

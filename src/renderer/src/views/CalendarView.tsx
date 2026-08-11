@@ -20,6 +20,12 @@ import {
 
 type CalMode = 'day' | 'week' | 'heat'
 
+// 持久化视图选择
+function savedMode(): CalMode {
+  try { return (localStorage.getItem('calMode') as CalMode) ?? 'heat' } catch { return 'heat' }
+}
+function saveMode(v: CalMode) { try { localStorage.setItem('calMode', v) } catch { /* */ } }
+
 const DEFAULT_HOUR_H = 44 // 默认每小时高度 px（可缩放 22-88）
 
 const SOURCE_LABEL: Record<TimeEntry['source'], string> = {
@@ -658,7 +664,7 @@ function WeekGrid({ date }: { date: string }) {
 
 /* ── 日历主视图 ── */
 export default function CalendarView() {
-  const [mode, setMode] = useState<CalMode>('day')
+  const [mode, setMode] = useState<CalMode>(savedMode)
   const [date, setDate] = useState(todayKey())
   const [entries, setEntries] = useState<TimeEntry[]>([])
   const [trail, setTrail] = useState<MergedTrail | null>(null)
@@ -800,7 +806,7 @@ export default function CalendarView() {
                 mode === m.key ? 'bg-neon-cyan/15 font-medium text-neon-cyan' : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-200'
               }`}
               style={{ transitionDuration: '150ms' }}
-              onClick={() => setMode(m.key)}
+              onClick={() => { setMode(m.key); saveMode(m.key) }}
             >
               {m.label}
             </button>

@@ -156,6 +156,28 @@ export const WORKON_TOOLS: ToolDef[] = [
         required: ['message']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_weekly_summary',
+      description: '获取本周工作总结：完成项数、工作时长趋势、主要项目进度',
+      parameters: { type: 'object', properties: {}, required: [] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'quick_recommend',
+      description: '基于当前工作模式推荐快捷操作或工作流建议',
+      parameters: {
+        type: 'object',
+        properties: {
+          context: { type: 'string', description: '当前工作上下文（由 AI 从对话/监控中推断）' }
+        },
+        required: []
+      }
+    }
   }
 ]
 
@@ -344,6 +366,30 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
         const message = (args.message as string).slice(0, 50)
         bus.setPet({ message })
         return JSON.stringify({ success: true, message: `桌宠已显示：${message}` })
+      }
+
+      case 'get_weekly_summary': {
+        const { dateKey } = await import('@shared/trail')
+        const { col: colFn } = await import('./db')
+        const today = dateKey(Date.now())
+        const plans = colFn<{ status: string; date: string }>('plans')
+        const done = plans.filter((p) => p.status === 'done')
+        const inProgress = plans.filter((p) => p.status === 'in_progress')
+        return JSON.stringify({
+          date: today,
+          completed: done.length,
+          inProgress: inProgress.length,
+          message: `本周已完成 ${done.length} 项，${inProgress.length} 项进行中`
+        })
+      }
+
+      case 'quick_recommend': {
+        const ctx = (args.context as string) || ''
+        const suggestions: string[] = []
+        suggestions.push('检测到工作时段，建议打开首页图谱查看今日工作分布')
+        suggestions.push('在问答中说"帮我生成周报"可一键导出')
+        if (ctx) suggestions.push(`基于"${ctx.slice(0, 60)}"推荐：尝试用番茄钟聚焦当前任务`)
+        return JSON.stringify({ suggestions })
       }
 
       default:

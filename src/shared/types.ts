@@ -90,6 +90,8 @@ export interface TrailSegment {
   screens: number[] // 本片段涉及的屏幕索引
   /** 短切换（<30s 停留）：只是瞄了一眼/路过，不算有效作业段 */
   glance?: boolean
+  /** v3.0 操作痕迹：OCR 识别的具体操作（如 "VSCode 编辑 monitor.ts"） */
+  operation?: string
 }
 
 /** 双屏合并轨迹 */
