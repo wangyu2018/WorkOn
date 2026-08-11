@@ -81,6 +81,19 @@ export default function SuggestionWidget() {
     })
     window.api.getSettings().then((s) => setOpacity(s.widgetOpacity)).catch(() => undefined)
 
+    return () => {
+      cleanup()
+      offQ()
+      offBP()
+      offW()
+      offMD()
+      offME()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 拖拽（独立于 StrictMode 重装载，避免事件重复绑定）
+  useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!dragRef.current) return
       const dx = e.clientX - dragRef.current.x
@@ -90,20 +103,13 @@ export default function SuggestionWidget() {
         dragRef.current = { x: e.clientX, y: e.clientY }
       }
     }
-    const onUp = () => (dragRef.current = null)
+    const onUp = () => { dragRef.current = null }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
     return () => {
-      cleanup()
-      offQ()
-      offBP()
-      offW()
-      offMD()
-      offME()
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const state = presence?.state ?? 'idle'
