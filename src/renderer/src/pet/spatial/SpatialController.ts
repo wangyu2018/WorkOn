@@ -177,6 +177,7 @@ export class SpatialController {
 
   /** 主窗口页面切换：抑制状态切换 ms 毫秒（期间只记最后一个目标）+ 缩放锁定 */
   notePageSwitch(ms: number): void {
+    if (this._docked) return
     this.suppressTimer = ms
     this.scaleLocked = true
     this.scaleLockTimer = ms + 1000 // 比抑制期多 1s，确保过渡完成前 scale 不变
@@ -221,6 +222,8 @@ export class SpatialController {
 
   /** 状态切换主入口（§16 transitionTo + 底部粘性 + 过渡冲突 + 冷却期 + 缩放锁） */
   transitionTo(name: SpatialStateName, poseOverride?: string, fromPending = false): void {
+    // 收纳锁：dock/undock 通过 restore/dock/undock 直接操作，不走这条路径
+    if (this._docked && !fromPending) return
     if (name === this.current && !poseOverride) {
       // 自愈：状态未变但姿态被残留覆盖（如闭眼姿态卡住不恢复）时，重新应用本状态姿态
       const cfgNow = SPATIAL_STATE_TABLE[name]
@@ -438,7 +441,9 @@ export class SpatialController {
     }
 
     // ── 闲置回位：交互锁（气泡可见/刚拖拽）不触发；用户放置位置 10min 内不弹回 ──
-    if (performance.now() - this.lastInteract > this.returnMin * 60_000) {
+    if (this._docked) {
+      // 收纳中：不触发任何自动操作
+    } else if (performance.now() - this.lastInteract > this.returnMin * 60_000) {
       this.lastInteract = performance.now()
       if (this.interactionLockTimer > 0) {
         // 交互锁生效中：什么都不做
@@ -456,7 +461,7 @@ export class SpatialController {
     }
 
     // ── 自由游荡（working/idle 且 roam 开启 + 设置允许） ──
-    if (this.cfg.roam && this.roamEnabled) {
+    if (this.cfg.roam && this.roamEnabled && !this._docked) {
       const upd = this.roam.update(
         dt,
         this.pos,
