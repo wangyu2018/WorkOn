@@ -72,6 +72,7 @@ const api = {
   setPet: (patch: Partial<PetState>) => ipcRenderer.invoke('pet:set', patch),
   onPet: on('pet:update'),
   petHit: (over: boolean) => ipcRenderer.send('pet:hit', over),
+  petModal: (active: boolean) => ipcRenderer.send('pet:modal', active),
   petAffection: () => ipcRenderer.invoke('pet:affection'),
   petRestore: () => ipcRenderer.send('pet:restore'),
   onPetRestore: on('pet:restore'),

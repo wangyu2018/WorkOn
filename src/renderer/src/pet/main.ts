@@ -432,6 +432,7 @@ async function boot(): Promise<void> {
   const hideSaybox = (): void => {
     saybox.classList.remove('open')
     actions.classList.remove('open')
+    window.api?.petModal?.(false)
     window.setTimeout(() => {
       saybox.style.display = 'none'
       actions.style.display = 'none'
@@ -473,6 +474,7 @@ async function boot(): Promise<void> {
       actions.classList.add('open')
     })
     sayInput.value = ''
+    window.api?.petModal?.(true)
     window.setTimeout(() => sayInput.focus(), 60)
   })
   sayInput.addEventListener('keydown', (e) => {
@@ -544,6 +546,7 @@ async function boot(): Promise<void> {
 
   const hideQConfirm = (): void => {
     qconfirm.classList.remove('open')
+    window.api?.petModal?.(false)
     window.setTimeout(() => { qconfirm.style.display = 'none'; qcState = null }, 200)
   }
 
@@ -558,6 +561,7 @@ async function boot(): Promise<void> {
     qconfirm.style.left = `${x}px`
     qconfirm.style.top = `${y}px`
     qconfirm.style.display = 'block'
+    window.api?.petModal?.(true)
     requestAnimationFrame(() => qconfirm.classList.add('open'))
   }
 

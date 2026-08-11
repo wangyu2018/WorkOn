@@ -166,9 +166,23 @@ export function createPetWindow(): BrowserWindow {
   return petWindow
 }
 
+let petModalLock = false
+
 export function setPetIgnoreMouse(ignore: boolean): void {
+  if (petModalLock) return
   if (petWindow && !petWindow.isDestroyed()) {
     petWindow.setIgnoreMouseEvents(ignore, ignore ? { forward: true } : undefined)
+  }
+}
+
+/** 弹窗态：菜单/面板可见时强制窗口接收鼠标事件（优先级高于 hitTest） */
+export function setPetModal(active: boolean): void {
+  petModalLock = active
+  if (!petWindow || petWindow.isDestroyed()) return
+  if (active) {
+    petWindow.setIgnoreMouseEvents(false)
+  } else {
+    petWindow.setIgnoreMouseEvents(true, { forward: true })
   }
 }
 

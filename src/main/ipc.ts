@@ -38,7 +38,7 @@ import { listAccessLogs, clearAccessLogs } from './desensitize'
 import { ACHIEVEMENT_DEFS } from '@shared/achievements'
 import {
   mainWindow, widgetWindow, petWindow, toggleWidget, togglePet,
-  setPetIgnoreMouse, createMainWindow, createPetWindow, closePetWindow, sendTo
+  setPetIgnoreMouse, setPetModal, createMainWindow, createPetWindow, closePetWindow, sendTo
 } from './windows'
 import type { UserAnalysis, MergedTrail, CustomCategory, UserHabits, Achievement, UserType, ReportTemplate } from '@shared/types'
 import { generateReport, generateWeeklyReport } from './report/engine'
@@ -241,6 +241,7 @@ export function registerIpc(): void {
   ipcMain.handle('pet:get', () => bus.pet)
   ipcMain.handle('pet:set', (_e, patch: Partial<PetState>) => bus.setPet(patch))
   ipcMain.on('pet:hit', (_e, over: boolean) => setPetIgnoreMouse(!over))
+  ipcMain.on('pet:modal', (_e, active: boolean) => setPetModal(active))
   ipcMain.on('pet:restore', () => sendTo('pet', 'pet:restore'))
   ipcMain.on('pet:introReplay', () => sendTo('pet', 'pet:introReplay'))
   ipcMain.handle('ai:test', () => testAIConnection())
