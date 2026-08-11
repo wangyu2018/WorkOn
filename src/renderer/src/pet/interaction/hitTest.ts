@@ -16,7 +16,7 @@ type HitListener = (r: HitResult) => void
 export type CursorState = 'hidden' | 'grab' | 'grabbing'
 
 const CURSOR_MAP: Record<CursorState, string> = {
-  hidden: 'none',
+  hidden: 'default',
   grab: 'grab',
   grabbing: 'grabbing'
 }
@@ -52,7 +52,7 @@ export class HitTest {
     this.target = target
     this.proxy = proxy ?? null
     // 初始化即隐藏光标，避免窗口加载时系统光标短暂可见
-    document.body.style.cursor = 'none'
+    document.body.style.cursor = 'default'
   }
 
   /** 拖拽开关（dragPhysics 调用）：进入 grabbing / 退出后按最近命中回 grab 或 hidden */

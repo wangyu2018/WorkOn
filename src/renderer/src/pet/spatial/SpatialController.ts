@@ -325,7 +325,7 @@ export class SpatialController {
       y = sh - TASKBAR_HEIGHT - 6
     } else if (cfg.defaultPos.y === 'peek') {
       // §11.1：脚底锚点在屏幕下，身体 70% 在屏下，露头（scale 已调大保证可见）
-      y = sh + this.char.height * cfg.scale * 0.7
+      y = sh + this.char.height * cfg.scale * 0.55
     } else {
       y = sh * (cfg.defaultPos.y as number)
     }
