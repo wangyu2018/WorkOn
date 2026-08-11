@@ -68,6 +68,17 @@ export class SpatialController {
   private static USER_PLACE_EXPIRE = 10 * 60 * 1000
   /** 闲置自动归位分钟数（默认 30，桌搭设置可配） */
   private returnMin = 30
+  /** 手动收纳锁：用户点"回到收纳栏"后，bridge 推送的状态切换被抑制直到 timeout */
+  private _restoreLockUntil = 0
+
+  get restoreLocked(): boolean {
+    return Date.now() < this._restoreLockUntil
+  }
+
+  /** 手动收纳：锁住自动状态切换 8 秒 */
+  applyRestoreLock(): void {
+    this._restoreLockUntil = Date.now() + 8000
+  }
 
   constructor(char: VrmCharacter, anim: Animator, micro: MicroBehaviors) {
     this.char = char

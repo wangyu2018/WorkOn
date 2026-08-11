@@ -50,6 +50,7 @@ export class Bridge {
 
   /** 状态切换防抖：紧急态立即执行；bottom 类互切 300ms；其余 800ms */
   private scheduleTransition(target: { name: SpatialStateName; pose?: string }): void {
+    if (this.deps.spatial.restoreLocked) return
     if (this.debounceId) clearTimeout(this.debounceId)
     const cfg = SPATIAL_STATE_TABLE[target.name]
     if (cfg?.urgent) {

@@ -294,6 +294,7 @@ async function boot(): Promise<void> {
           const action = btn.dataset.action
           if (action === 'dock') {
             spatial.restore()
+            spatial.applyRestoreLock()
             bubble.show('回来啦~', 2.5, 'character')
           } else if (action === 'pose') {
             const currentPose = anim.currentPoseName
@@ -391,7 +392,7 @@ async function boot(): Promise<void> {
     chatterNext -= dt
     if (chatterNext > 0) return
     chatterNext = 20 // 每 20s 评估一次
-    if (bubble.visible || bubble.visible || drag.active) return
+    if (bubble.visible || drag.active || spatial.restoreLocked) return
     // 会议模式：免打扰静默；会议辅助每 15min 报时
     if (meetingQuiet) return
     if (meetingAssistSince && Date.now() - meetingNoticeLast > 900_000) {
