@@ -15,7 +15,7 @@ import { HitTest } from './interaction/hitTest'
 import { DragPhysics } from './interaction/dragPhysics'
 import { ClickFeedback } from './interaction/clickFeedback'
 import { Bridge } from './bridge'
-import { pickChatter, SCENE_MIN_INTERVAL, type ChatterScene } from './character/chatter'
+import { pickChatter, SCENE_MIN_INTERVAL, getActiveRole, type ChatterScene } from './character/chatter'
 import type { SpatialStateName } from './spatial/stateTable'
 
 /** 创建轻量加载提示 sprite（VRM 加载期间窗口不再是空白） */
@@ -405,7 +405,7 @@ async function boot(): Promise<void> {
     const scene = detectScene()
     if (!scene) return
     chatterLast[scene] = Date.now()
-    const line = pickChatter(scene, chatterRecent)
+    const line = pickChatter(scene, chatterRecent, getActiveRole())
     chatterRecent.push(line)
     if (chatterRecent.length > 10) chatterRecent.shift()
     bubble.show(line, undefined, 'character')

@@ -24,8 +24,8 @@ const SHORT_THRESHOLD = 15
 export type BubbleVariant = 'character' | 'user'
 
 const PALETTE: Record<BubbleVariant, { bg: string; border: string; text: string }> = {
-  character: { bg: 'rgba(30, 25, 45, 0.88)', border: 'rgba(180, 140, 220, 0.6)', text: '#F0E6F6' },
-  user: { bg: 'rgba(20, 40, 55, 0.88)', border: 'rgba(100, 200, 220, 0.55)', text: '#E0F2F8' }
+  character: { bg: 'rgba(20, 18, 32, 0.75)', border: 'rgba(139, 92, 246, 0.5)', text: '#F5F0FF' },
+  user: { bg: 'rgba(12, 28, 44, 0.72)', border: 'rgba(56, 189, 248, 0.45)', text: '#E8F4FD' }
 }
 
 function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
@@ -174,7 +174,7 @@ export class Bubble {
     const oy = isUser ? (safe / 2 + TAIL_H) * SS : (safe / 2) * SS
     const bw = (bodyW) * SS
     const bh = (bodyH) * SS
-    const radius = isShort ? 14 * SS : 20 * SS
+    const radius = isShort ? 16 * SS : 24 * SS
     const bx = ox
     const by = oy
 
