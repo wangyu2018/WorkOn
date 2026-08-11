@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, Fragment } from 'react'
 import type { AppSettings } from '@shared/types'
 import { useSettingsStore } from '../stores/settingsStore'
 import { Icon } from '../components/Icon'
@@ -465,7 +465,7 @@ export default function SettingsView() {
             <div className="mt-2 rounded-xl border border-white/10 p-3">
               <div className="grid grid-cols-3 gap-2 text-[11px]">
                 <div className="font-medium text-slate-300">功能</div><div className="font-medium text-slate-400 text-center">无需 AI</div><div className="font-medium text-emerald-400 text-center">开启 AI 后增强</div>
-                {['日报/周报生成|65% 覆盖|95% + 摘要/拆解','工作/生活分类|✓ 规则+拖拽|LLM 自动归类','作业链路|✓ 闭环规则|LLM 命名','快捷推荐|✗|AI 推荐','注意力曲线|✓ 算法|—','位置提醒|✓ 天气 API|—','文件夹解析|✓ 正则|LLM 归纳','标签体系|✓ 规则+拖拽|AI 发现新标签'].map((r,i)=>{const [n,w,a]=r.split('|');return <React.Fragment key={i}><div className="text-slate-200">{n}</div><div className="text-slate-400 text-center">{w}</div><div className="text-emerald-400 text-center">{a}</div></React.Fragment>})}
+                {['日报/周报生成|65% 覆盖|95% + 摘要/拆解','工作/生活分类|✓ 规则+拖拽|LLM 自动归类','作业链路|✓ 闭环规则|LLM 命名','快捷推荐|✗|AI 推荐','注意力曲线|✓ 算法|—','位置提醒|✓ 天气 API|—','文件夹解析|✓ 正则|LLM 归纳','标签体系|✓ 规则+拖拽|AI 发现新标签'].map((r,i)=>{const [n,w,a]=r.split('|');return <Fragment key={i}><div className="text-slate-200">{n}</div><div className="text-slate-400 text-center">{w}</div><div className="text-emerald-400 text-center">{a}</div></Fragment>})}
               </div>
             </div>
           </details>
