@@ -17,6 +17,7 @@ import { bus } from './state'
 import { startAttentionEngine, setPetNotifier } from './attention'
 import { refreshPersona } from './persona'
 import { startOcrCollector } from './report/ocrCollector'
+import { startFolderWatch } from './folderWatcher'
 import { presence } from './presence'
 import { genQuestion, analyzeDay, deriveHabits } from './ai'
 import { genPersonaGapQuestion } from './qa/questionGenerator'
@@ -142,6 +143,7 @@ app.whenReady().then(() => {
   startMonitor()
   // v2.9 报表 OCR 采集：订阅 ocrWorker 文本产出（deepMode 开启后随 startOcr 生效）
   startOcrCollector()
+  startFolderWatch()
   startIntegration()
   startOnerAutoSync()
   startPeriodicJobs()

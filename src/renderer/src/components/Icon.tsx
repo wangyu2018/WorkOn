@@ -195,6 +195,14 @@ const PATHS = {
       <path d="M3 12l9-9 9 9" />
       <path d="M5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9" />
     </>
+  ),
+  lightning: (
+    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+  ),
+  folder: (
+    <>
+      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+    </>
   )
 } satisfies Record<string, ReactNode>
 

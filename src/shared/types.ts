@@ -586,6 +586,9 @@ export interface AppSettings {
   hardwareTier?: 'L0' | 'L1' | 'L2' // 硬件等级（自动检测，可手动覆盖）
   petVrmPath?: string // 自定义 VRM 角色文件路径（L1 上传入口）
   ocrEngine?: 'tesseract' | 'rapidocr' // OCR 引擎选择，默认 rapidocr
+  folders?: string[] // v3.0 文件夹 ingestion：用户配置的工作目录
+  
+  petVrmUploadEnabled?: boolean // v3.0 VRM 照片生成：入口占位开关，默认 true
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {

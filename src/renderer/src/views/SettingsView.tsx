@@ -5,6 +5,47 @@ import { Icon } from '../components/Icon'
 import { Toggle } from '../components/Toggle'
 import { fmtMin } from '../components/utils'
 
+function WatchedFolders() {
+  const [dirs, setDirs] = useState<string[]>([])
+  useEffect(() => { void window.api?.getSettings?.().then((s) => setDirs((s as AppSettings)?.folders ?? [])) }, [])
+
+  const addFolder = async () => {
+    const paths = await window.api?.selectFolders?.() as string[] | undefined
+    if (paths?.length) {
+      const next = [...new Set([...dirs, ...paths])]
+      setDirs(next)
+      await window.api?.setSettings?.({ folders: next })
+      await window.api?.setFolders?.(next)
+    }
+  }
+
+  const removeFolder = async (dir: string) => {
+    const next = dirs.filter((d) => d !== dir)
+    setDirs(next)
+    await window.api?.setSettings?.({ folders: next })
+    await window.api?.setFolders?.(next)
+  }
+
+  return (
+    <div className="space-y-2">
+      {dirs.length === 0 ? (
+        <p className="text-[12px] text-slate-600">尚未添加工作文件夹。点击下方按钮选择目录。</p>
+      ) : (
+        dirs.map((d) => (
+          <div key={d} className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2 text-[12px]">
+            <span className="text-slate-300 truncate">{d}</span>
+            <button onClick={() => void removeFolder(d)} className="text-slate-500 hover:text-red-400">✕</button>
+          </div>
+        ))
+      )}
+      <button className="glass-btn primary" onClick={() => void addFolder()}>
+        <Icon name="folder" size={13} />
+        添加文件夹
+      </button>
+    </div>
+  )
+}
+
 /* ── 分组与行 ── */
 function Section({ title, icon, children }: { title: string; icon: Parameters<typeof Icon>[0]['name']; children: React.ReactNode }) {
   return (
@@ -573,6 +614,28 @@ export default function SettingsView() {
             <div>💬 问 AI…</div>
           </div>
         </div>
+      </Section>
+
+      {/* v3.0 文件夹 ingestion */}
+      <Section title="工作文件夹" icon="folder">
+        <p className="mb-3 text-[12px] text-slate-500">
+          添加工作目录后，其中的 随手记(.md) / 会议纪要 / 数据表(.csv) 将自动融入日报周报生成。
+        </p>
+        <WatchedFolders />
+      </Section>
+
+      {/* v3.0 VRM 照片生成（入口占位） */}
+      <Section title="VRM 照片生成虚拟人" icon="cat">
+        <p className="mb-3 text-[12px] text-slate-500">
+          上传本人照片，生成接近 1:1 还原的虚拟角色（发型 / 服装 / 比例与照片一致）。功能后续开放，敬请期待。
+        </p>
+        <button
+          className="glass-btn primary"
+          onClick={() => { /* P3 实现 */ }}
+          title="功能后续开放"
+        >
+          📷 上传照片生成虚拟人
+        </button>
       </Section>
     </div>
   )

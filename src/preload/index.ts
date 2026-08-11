@@ -93,6 +93,9 @@ const api = {
   selectVrmFile: () => ipcRenderer.invoke('pet:selectVrm'),
   resetVrm: () => ipcRenderer.invoke('pet:resetVrm'),
   onReloadVrm: on('pet:reloadVrm'),
+  // v3.0 文件夹
+  selectFolders: () => ipcRenderer.invoke('folders:select'),
+  setFolders: (dirs: string[]) => ipcRenderer.invoke('folders:set', dirs),
   confirmQuestion: (payload: {
     qid: string
     ctx: string

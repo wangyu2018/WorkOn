@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type ViewKey = 'home' | 'monitor' | 'calendar' | 'plan' | 'report' | 'buddy' | 'qa' | 'profile' | 'privacy' | 'settings'
+export type ViewKey = 'home' | 'monitor' | 'calendar' | 'plan' | 'report' | 'buddy' | 'qa' | 'profile' | 'privacy' | 'settings' | 'capability'
 
 interface AppState {
   view: ViewKey

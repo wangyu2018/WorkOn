@@ -26,6 +26,7 @@ import { onerPull, onerPushStatus, startOnerAutoSync } from './oner'
 import { restartMonitor, PRIVACY_ALIASES } from './monitor'
 import { startIntegration } from './integration'
 import { getOcrStorageStats, clearOcrCache } from './ocr'
+import { startFolderWatch, updateFolders, scanFolders, getWatchDirs } from './folderWatcher'
 import { saveWorkChain } from './qa/questionGenerator'
 import { refreshTray } from './tray'
 import { todayScore, recentScores, getScoreStrategy } from './attention'
@@ -738,5 +739,16 @@ export function registerIpc(): void {
     return import('./tools').then(({ WORKON_TOOLS }) =>
       WORKON_TOOLS.map((t) => ({ name: t.function.name, description: t.function.description }))
     )
+  })
+
+  // ── v3.0 文件夹 ingestion ──
+  ipcMain.handle('folders:get', () => getWatchDirs())
+  ipcMain.handle('folders:set', (_e, dirs: string[]) => { updateFolders(dirs); return getWatchDirs() })
+  ipcMain.handle('folders:scan', () => scanFolders(getWatchDirs()))
+  ipcMain.handle('folders:select', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory', 'multiSelections']
+    })
+    return result.canceled ? [] : result.filePaths
   })
 }

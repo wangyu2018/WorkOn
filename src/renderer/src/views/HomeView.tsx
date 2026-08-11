@@ -1,7 +1,7 @@
 /**
- * 首页 — 今日图谱 + 一句话洞察（PRD v3.0 P0）
+ * 首页 — 今日图谱 + 一句话洞察 + 标签面板（PRD v3.0 P0）
  */
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { WORK_LIKE_STATES, WORK_STATES } from '@shared/stateMeta'
 import type { MergedTrail, TrailSegment, WorkState } from '@shared/types'
 
@@ -38,7 +38,15 @@ interface GraphItem {
   column: Column
 }
 
-/** 今天的一句话洞察 */
+interface TagRule {
+  id: string
+  app: string
+  label: string
+  state: WorkState
+  hitCount: number
+  enabled: boolean
+}
+
 function generateInsight(trail: MergedTrail): string {
   if (!trail || trail.totalMin < 1) return '今天刚开始，图谱会慢慢长出来 ~'
   const totalH = Math.round(trail.totalMin / 60 * 10) / 10
@@ -55,15 +63,19 @@ function generateInsight(trail: MergedTrail): string {
 export default function HomeView() {
   const [trail, setTrail] = useState<MergedTrail | null>(null)
   const [items, setItems] = useState<GraphItem[]>([])
+  const [tags, setTags] = useState<TagRule[]>([])
   const [dragFrom, setDragFrom] = useState<{ idx: number; col: Column } | null>(null)
   const [hoverCol, setHoverCol] = useState<Column | null>(null)
+  const [tagsOpen, setTagsOpen] = useState(false)
+  const [newTag, setNewTag] = useState({ app: '', label: '', state: 'focus' as WorkState })
 
   useEffect(() => {
     void (async () => {
       const t = await window.api?.getTrail?.()
       if (t) {
-        setTrail(t as MergedTrail)
-        const segs = (t as MergedTrail).segments.filter((s) => !s.glance && s.durationMin > 0)
+        const trail = t as MergedTrail
+        setTrail(trail)
+        const segs = trail.segments.filter((s) => !s.glance && s.durationMin > 0)
         setItems(segs.map((seg) => ({
           seg,
           channel: mapChannel(seg.mainApp),
@@ -73,12 +85,21 @@ export default function HomeView() {
     })()
   }, [])
 
-  const channels = useMemo(() => {
-    const map = new Map<Channel, GraphItem[]>()
-    for (const ch of CHANNELS) map.set(ch, [])
-    for (const item of items) map.get(item.channel)?.push(item)
-    return map
-  }, [items])
+  const loadTags = useCallback(() => {
+    void window.api?.listRules?.().then((rules) => {
+      const mapped = (rules as Array<Record<string, unknown>>)?.map((r) => ({
+        id: r.id as string,
+        app: r.matchApp as string,
+        label: (r.setState ?? 'focus') as WorkState,
+        state: (r.setState ?? 'focus') as WorkState,
+        hitCount: (r.hitCount ?? 0) as number,
+        enabled: (r.enabled ?? true) as boolean
+      })) ?? []
+      setTags(mapped)
+    })
+  }, [])
+
+  useEffect(() => { loadTags() }, [loadTags])
 
   const insight = useMemo(() => (trail ? generateInsight(trail) : ''), [trail])
 
@@ -91,13 +112,47 @@ export default function HomeView() {
     [items]
   )
 
-  const moveItem = (idx: number, toCol: Column) => {
+  const moveItem = useCallback((idx: number, toCol: Column) => {
     setItems((prev) => {
       const next = [...prev]
-      next[idx] = { ...next[idx], column: toCol }
+      const item = next[idx]
+      next[idx] = { ...item, column: toCol }
+
+      // 拖拽纠偏 → 自动沉淀规则
+      void window.api?.saveRule?.({
+        screen: 0,
+        matchApp: item.seg.mainApp,
+        matchTitleContains: '',
+        setState: toCol === 'work' ? 'coding' : 'slack' as WorkState,
+        weight: 1,
+        enabled: true
+      }).then(() => loadTags())
+
       return next
     })
-  }
+  }, [loadTags])
+
+  const addTagRule = useCallback(async () => {
+    if (!newTag.app.trim() || !newTag.label.trim()) return
+    await window.api?.saveRule?.({
+      screen: 0,
+      matchApp: newTag.app.trim(),
+      matchTitleContains: newTag.label.trim(),
+      setState: newTag.state,
+      weight: 1,
+      enabled: true
+    })
+    setNewTag({ app: '', label: '', state: 'focus' })
+    loadTags()
+  }, [newTag, loadTags])
+
+  const toggleTag = useCallback((id: string, enabled: boolean) => {
+    void window.api?.saveRule?.({ id, enabled }).then(() => loadTags())
+  }, [loadTags])
+
+  const removeTag = useCallback((id: string) => {
+    void window.api?.removeRule?.(id).then(() => loadTags())
+  }, [loadTags])
 
   const renderCard = (item: GraphItem, idx: number) => {
     const { seg, column } = item
@@ -106,7 +161,7 @@ export default function HomeView() {
 
     return (
       <div
-        key={seg.id}
+        key={`${seg.id}-${idx}`}
         draggable
         onDragStart={() => setDragFrom({ idx, col: column })}
         onDragEnd={() => { setDragFrom(null); setHoverCol(null) }}
@@ -135,6 +190,12 @@ export default function HomeView() {
     )
   }
 
+  const columnDropProps = (col: Column) => ({
+    onDragOver: (e: React.DragEvent) => { e.preventDefault(); setHoverCol(col) },
+    onDragLeave: () => setHoverCol(null),
+    onDrop: () => { if (dragFrom && dragFrom.col !== col) moveItem(dragFrom.idx, col); setHoverCol(null); setDragFrom(null) }
+  })
+
   return (
     <div className="flex h-full flex-col gap-4">
       {/* 一句话洞察 */}
@@ -146,16 +207,14 @@ export default function HomeView() {
 
       {/* 图谱主区域 */}
       <div className="flex min-h-0 flex-1 gap-4">
-        {/* 工作区（左列） */}
+        {/* 工作区 */}
         <div
           className={`flex w-1/2 flex-col gap-2 rounded-2xl border p-3 transition-all ${
             hoverCol === 'work' && dragFrom && dragFrom.col !== 'work'
               ? 'border-emerald-400/40 bg-emerald-500/8'
               : 'border-white/5 bg-ink-950/40'
           }`}
-          onDragOver={(e) => { e.preventDefault(); setHoverCol('work') }}
-          onDragLeave={() => setHoverCol(null)}
-          onDrop={() => { if (dragFrom) moveItem(dragFrom.idx, 'work'); setHoverCol(null); setDragFrom(null) }}
+          {...columnDropProps('work')}
         >
           <div className="flex items-center justify-between px-1">
             <h3 className="text-[13px] font-semibold text-emerald-400">🟢 工作</h3>
@@ -169,27 +228,25 @@ export default function HomeView() {
                 <div key={ch} className="flex flex-col gap-1">
                   <span className="text-[10px] uppercase tracking-wider text-slate-600 pl-1">{ch}</span>
                   <div className="flex flex-wrap gap-1.5">
-                    {chItems.map((item) => renderCard(item, items.indexOf(item)))}
+                    {chItems.map((item) => {
+                      const idx = items.indexOf(item)
+                      return renderCard(item, idx)
+                    })}
                   </div>
                 </div>
               )
             })}
-            {items.filter((i) => i.column === 'work').length === 0 && (
-              <p className="py-8 text-center text-[12px] text-slate-600">把右侧卡片拖到工作区来分类 ~</p>
-            )}
           </div>
         </div>
 
-        {/* 生活区（右列） */}
+        {/* 生活区 */}
         <div
           className={`flex w-1/2 flex-col gap-2 rounded-2xl border p-3 transition-all ${
             hoverCol === 'life' && dragFrom && dragFrom.col !== 'life'
               ? 'border-slate-400/30 bg-slate-500/8'
               : 'border-white/5 bg-ink-950/40'
           }`}
-          onDragOver={(e) => { e.preventDefault(); setHoverCol('life') }}
-          onDragLeave={() => setHoverCol(null)}
-          onDrop={() => { if (dragFrom) moveItem(dragFrom.idx, 'life'); setHoverCol(null); setDragFrom(null) }}
+          {...columnDropProps('life')}
         >
           <div className="flex items-center justify-between px-1">
             <h3 className="text-[13px] font-semibold text-slate-400">⚪ 生活</h3>
@@ -203,16 +260,97 @@ export default function HomeView() {
                 <div key={ch} className="flex flex-col gap-1">
                   <span className="text-[10px] uppercase tracking-wider text-slate-600 pl-1">{ch}</span>
                   <div className="flex flex-wrap gap-1.5">
-                    {chItems.map((item) => renderCard(item, items.indexOf(item)))}
+                    {chItems.map((item) => {
+                      const idx = items.indexOf(item)
+                      return renderCard(item, idx)
+                    })}
                   </div>
                 </div>
               )
             })}
-            {items.filter((i) => i.column === 'life').length === 0 && (
-              <p className="py-8 text-center text-[12px] text-slate-600">把左侧工作区里误判的卡片拖过来 ~</p>
-            )}
           </div>
         </div>
+      </div>
+
+      {/* 标签管理面板（折叠） */}
+      <div className="rounded-2xl border border-white/5 bg-ink-950/40 p-3">
+        <button
+          onClick={() => setTagsOpen(!tagsOpen)}
+          className="flex w-full items-center justify-between text-left"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] font-semibold text-slate-300">🏷️ 分类标签规则</span>
+            <span className="text-[11px] text-slate-600">{tags.length} 条</span>
+          </div>
+          <span className="text-[11px] text-slate-500">{tagsOpen ? '收起 ▲' : '展开 ▼'}</span>
+        </button>
+
+        {tagsOpen && (
+          <div className="mt-3 space-y-2">
+            {tags.length === 0 ? (
+              <p className="text-[12px] text-slate-600 py-2">
+                还没有标签规则。在右边图谱中拖拽卡片到工作/生活区会自动创建规则；也可以手动添加。
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {tags.map((t) => (
+                  <div
+                    key={t.id}
+                    className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] ${
+                      t.enabled ? 'bg-neon-cyan/10 border border-neon-cyan/20' : 'bg-slate-500/5 border border-slate-500/10 opacity-50'
+                    }`}
+                  >
+                    <span className="text-slate-300">{WORK_STATES[t.state]?.emoji ?? '📌'}</span>
+                    <span className="text-slate-200">{t.app}</span>
+                    <span className="text-slate-500">→ {WORK_STATES[t.state]?.label ?? t.state}</span>
+                    <span className="text-slate-600 text-[10px]">({t.hitCount}次)</span>
+                    <button
+                      onClick={() => toggleTag(t.id, !t.enabled)}
+                      className="ml-1 text-slate-500 hover:text-slate-300"
+                      title={t.enabled ? '禁用' : '启用'}
+                    >
+                      {t.enabled ? '✓' : '○'}
+                    </button>
+                    <button onClick={() => removeTag(t.id)} className="text-slate-600 hover:text-red-400" title="删除">
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* 手动添加标签规则 */}
+            <div className="mt-3 flex items-center gap-2">
+              <input
+                className="w-32 rounded-lg border border-white/10 bg-ink-900 px-2 py-1 text-[11px] text-slate-200 placeholder-slate-600 outline-none focus:border-neon-cyan/30"
+                placeholder="应用名"
+                value={newTag.app}
+                onChange={(e) => setNewTag({ ...newTag, app: e.target.value })}
+              />
+              <input
+                className="w-32 rounded-lg border border-white/10 bg-ink-900 px-2 py-1 text-[11px] text-slate-200 placeholder-slate-600 outline-none focus:border-neon-cyan/30"
+                placeholder="关键词（可选）"
+                value={newTag.label}
+                onChange={(e) => setNewTag({ ...newTag, label: e.target.value })}
+              />
+              <select
+                className="rounded-lg border border-white/10 bg-ink-900 px-2 py-1 text-[11px] text-slate-300 outline-none"
+                value={newTag.state}
+                onChange={(e) => setNewTag({ ...newTag, state: e.target.value as WorkState })}
+              >
+                {Object.entries(WORK_STATES).map(([k, v]) => (
+                  <option key={k} value={k}>{v.emoji} {v.label}</option>
+                ))}
+              </select>
+              <button
+                onClick={addTagRule}
+                className="rounded-lg bg-neon-cyan/15 border border-neon-cyan/25 px-3 py-1 text-[11px] text-neon-cyan hover:bg-neon-cyan/25 transition-colors"
+              >
+                + 添加
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
