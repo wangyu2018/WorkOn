@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type ViewKey = 'monitor' | 'calendar' | 'plan' | 'report' | 'buddy' | 'qa' | 'profile' | 'privacy' | 'settings'
+export type ViewKey = 'home' | 'monitor' | 'calendar' | 'plan' | 'report' | 'buddy' | 'qa' | 'profile' | 'privacy' | 'settings'
 
 interface AppState {
   view: ViewKey
@@ -10,7 +10,7 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>()((set) => ({
-  view: 'monitor',
+  view: 'home',
   paletteOpen: false,
   setView: (view) => set({ view }),
   setPaletteOpen: (paletteOpen) => set({ paletteOpen })

@@ -189,6 +189,12 @@ const PATHS = {
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
       <polyline points="9 12 11 14 15 10" />
     </>
+  ),
+  home: (
+    <>
+      <path d="M3 12l9-9 9 9" />
+      <path d="M5 10v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9" />
+    </>
   )
 } satisfies Record<string, ReactNode>
 

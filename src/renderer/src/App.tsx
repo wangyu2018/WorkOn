@@ -11,6 +11,7 @@ import { Icon, type IconName } from './components/Icon'
 import { StateBadge } from './components/StateBadge'
 import { attentionGrade, focusScoreLine } from '@shared/focusMeta'
 import workonLogo from './assets/workon-logo.png'
+import HomeView from './views/HomeView'
 import MonitorView from './views/MonitorView'
 import CalendarView from './views/CalendarView'
 import PlanView from './views/PlanView'
@@ -28,7 +29,7 @@ interface NavItem {
 }
 
 const CORE_NAV: NavItem[] = [
-  { key: 'monitor', label: '监控', icon: 'activity' },
+  { key: 'home', label: '首页', icon: 'home' },
   { key: 'calendar', label: '日历', icon: 'calendar' },
   { key: 'plan', label: '计划', icon: 'target' },
   { key: 'report', label: '报表', icon: 'chart' },
@@ -42,6 +43,7 @@ const GLOBAL_NAV: NavItem[] = [
 ]
 
 const VIEWS: Record<ViewKey, () => JSX.Element> = {
+  home: HomeView,
   monitor: MonitorView,
   calendar: CalendarView,
   plan: PlanView,
