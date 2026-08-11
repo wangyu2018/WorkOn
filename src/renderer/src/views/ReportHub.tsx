@@ -12,7 +12,7 @@ import SmartReportView from './SmartReportView'
 import { useSettingsStore } from '../stores/settingsStore'
 import { WEEK_LABELS, addDays, fmtMin, todayKey } from '../components/utils'
 
-type Tab = 'daily' | 'weekly' | 'smart' | 'smartWeekly' | 'ai'
+type Tab = 'smart' | 'smartWeekly' | 'ai'
 
 /** 状态分布甜甜圈（纯 SVG） */
 function Donut({ data }: { data: { state: WorkState; value: number }[] }) {
@@ -513,11 +513,9 @@ export default function ReportHub() {
   const aiEnabled = useSettingsStore((s) => s.settings.aiEnabled)
   const settings = useSettingsStore((s) => s.settings)
   const patch = useSettingsStore((s) => s.patch)
-  const [tab, setTab] = useState<Tab>('daily')
+  const [tab, setTab] = useState<Tab>('smart')
   const [showSettings, setShowSettings] = useState(false)
   const TABS: { key: Tab; label: string; icon: 'chart' | 'calendar' | 'sparkles' | 'brain' }[] = [
-    { key: 'daily', label: '日报', icon: 'chart' },
-    { key: 'weekly', label: '周报', icon: 'calendar' },
     { key: 'smart', label: '智能日报', icon: 'sparkles' },
     { key: 'smartWeekly', label: '智能周报', icon: 'sparkles' },
     ...(aiEnabled ? [{ key: 'ai' as Tab, label: 'AI 洞察', icon: 'brain' as const }] : [])
@@ -578,11 +576,7 @@ export default function ReportHub() {
         </div>
       ) : null}
       <div key={tab} className="anim-fade-up" style={{ animationDelay: '60ms' }}>
-        {tab === 'daily' ? (
-          <DailyReport />
-        ) : tab === 'weekly' ? (
-          <WeeklyReport />
-        ) : tab === 'smart' ? (
+        {tab === 'smart' ? (
           <SmartReportView mode="day" />
         ) : tab === 'smartWeekly' ? (
           <SmartReportView mode="week" />

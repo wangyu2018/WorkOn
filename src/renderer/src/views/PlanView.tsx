@@ -317,6 +317,8 @@ export default function PlanView() {
   const [delayOpen, setDelayOpen] = useState<string | null>(null)
   const [delayDate, setDelayDate] = useState('')
   const [delayReason, setDelayReason] = useState('')
+  const [folderModal, setFolderModal] = useState(false)
+  const [folderDirs, setFolderDirs] = useState<string[]>([])
 
   const loadCats = useCallback(async () => {
     try {
@@ -353,6 +355,12 @@ export default function PlanView() {
   // 问答确认创建计划后实时刷新
   useEffect(() => window.api.onPlanUpdated(() => void load()), [load])
 
+  useEffect(() => {
+    if (folderModal) {
+      window.api?.getSettings?.().then(s => setFolderDirs(((s as any)?.folders) ?? []))
+    }
+  }, [folderModal])
+
   const toggleDone = async (p: PlanItem) => {
     await window.api.setPlanStatus(p.id, p.status === 'done' ? 'planned' : 'done')
     void load()
@@ -364,6 +372,7 @@ export default function PlanView() {
   }
 
   const importFromMeeting = async () => {
+    if (folderDirs.length === 0) { setFolderModal(true); return }
     const entries = await window.api?.scanFolders?.() as Array<{ source: string; type: string; content: string }> | undefined
     if (!entries?.length) return
     const actions = entries
@@ -422,6 +431,9 @@ export default function PlanView() {
         <div className="flex-1" />
         <button className="glass-btn text-[12px]" onClick={() => void importFromMeeting()}>
           📋 从会议纪要导入
+        </button>
+        <button className="glass-btn text-[12px]" onClick={() => setFolderModal(true)}>
+          ⚙ 配置文件目录
         </button>
         <button className="glass-btn primary" onClick={() => setEditor({ plan: { date }, isNew: true })}>
           <Icon name="plus" size={14} /> 新建计划
@@ -748,6 +760,26 @@ export default function PlanView() {
           }}
         />
       ) : null}
+      {folderModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setFolderModal(false)}>
+          <div className="glass-card anim-scale-in w-[400px] max-h-[60vh] overflow-auto" onClick={e => e.stopPropagation()}>
+            <h3 className="text-[15px] font-semibold text-slate-200 mb-3">📁 工作文件夹</h3>
+            {folderDirs.length === 0 ? (<p className="text-[12px] text-slate-500 mb-3">未配置工作目录。添加后会议纪要解析将自动生效。</p>) : (
+              folderDirs.map(d => <div key={d} className="flex items-center justify-between text-[12px] bg-white/5 rounded-lg px-3 py-2 mb-1"><span className="text-slate-300 truncate">{d}</span><button onClick={async () => { const next = folderDirs.filter(x => x !== d); setFolderDirs(next); await window.api?.setSettings?.({ folders: next }); await window.api?.setFolders?.(next) }} className="text-slate-500 hover:text-red-400">✕</button></div>)
+            )}
+            <div className="flex gap-2 mt-3">
+              <button className="glass-btn primary text-[12px]" onClick={async () => {
+                await window.api?.getSettings?.().then(s => setFolderDirs(((s as any).folders) ?? []))
+              }}>刷新</button>
+              <button className="glass-btn primary text-[12px]" onClick={async () => {
+                const paths = await window.api?.selectFolders?.() as string[] | undefined
+                if (paths?.length) { const next = [...new Set([...folderDirs, ...paths])]; setFolderDirs(next); await window.api?.setSettings?.({ folders: next }); await window.api?.setFolders?.(next) }
+              }}>+ 添加目录</button>
+              <button className="glass-btn text-[12px]" onClick={() => setFolderModal(false)}>关闭</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

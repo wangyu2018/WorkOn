@@ -127,6 +127,14 @@ export default function QAReview() {
           </div>
         </div>
       ) : null}
+      <div className="anim-fade-up shrink-0 flex flex-wrap gap-2 mb-3" style={{ animationDelay: '80ms' }}>
+        <button className="glass-btn text-[11px]" onClick={() => void ask('生成今天的注意力曲线报告')}>
+          📈 注意力曲线
+        </button>
+        <button className="glass-btn text-[11px]" onClick={() => void ask('生成本周效率报表')}>
+          📊 周效率报表
+        </button>
+      </div>
       <div className="glass-card anim-fade-up min-h-0 flex-1 overflow-y-auto" style={{ animationDelay: '120ms' }}>
         {messages.length === 0 && !thinking ? (
           <EmptyState

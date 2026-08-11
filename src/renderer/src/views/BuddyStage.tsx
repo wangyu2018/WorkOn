@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import type { Achievement } from '@shared/types'
 import { usePresenceStore } from '../stores/presenceStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { StateBadge } from '../components/StateBadge'
@@ -524,9 +523,6 @@ export default function BuddyStage() {
           </div>
         </section>
       </div>
-
-      {/* 成就墙（v2.6）：已解锁/未解锁徽章 + 最新解锁 */}
-      <AchievementWall delay={160} />
 
       {/* 虚拟人资源占用（调试模式：设置 → 开发者选项 开启后显示） */}
       {settings.devMode && petStats ? (

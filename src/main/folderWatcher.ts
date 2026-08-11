@@ -129,19 +129,36 @@ async function startWatcher(dirs: string[]): Promise<void> {
   }
 }
 
-/** 手动全量扫描一次（兜底方案 B） */
-export function scanFolders(dirs: string[], exts = ['.md', '.txt', '.csv', '.xlsx']): ParsedEntry[] {
+/** 手动全量扫描一次（兜底方案 B），支持进度回调 */
+export async function scanFolders(dirs: string[], exts = ['.md', '.txt', '.csv', '.xlsx'], onProgress?: (pct: number, file: string) => void): Promise<ParsedEntry[]> {
   const all: ParsedEntry[] = []
+  let totalFiles = 0
+  let scanned = 0
+  const fileList: string[] = []
+
+  // 先收集所有文件
   for (const dir of dirs) {
     try {
       const files = fs.readdirSync(dir, { recursive: true })
       for (const f of files) {
         const fullPath = path.join(dir, f as string)
         if (exts.includes(path.extname(fullPath).toLowerCase())) {
-          all.push(...parseFile(fullPath))
+          fileList.push(fullPath)
         }
       }
     } catch { /* skip */ }
+  }
+  totalFiles = fileList.length
+
+  // 分批异步处理
+  for (const filePath of fileList) {
+    all.push(...parseFile(filePath))
+    scanned++
+    if (onProgress && totalFiles > 0) {
+      onProgress(Math.round(scanned / totalFiles * 100), filePath)
+    }
+    // 每处理 5 个文件让出主线程 1ms
+    if (scanned % 5 === 0) await new Promise(r => setTimeout(r, 1))
   }
   return all
 }

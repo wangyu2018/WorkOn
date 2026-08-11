@@ -287,6 +287,7 @@ export default function ProfileView() {
   const [sel, setSel] = useState<NavKey>('basicInfo')
   const [nick, setNick] = useState('')
   const [hobbiesDraft, setHobbiesDraft] = useState<string | null>(null)
+  const [city, setCity] = useState(settings.city ?? '')
   const [exportNote, setExportNote] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -965,8 +966,27 @@ export default function ProfileView() {
                     </div>
                   )
                 })}
-              </div>
-            </div>
+      </div>
+
+      <section className="glass-card hoverable">
+        <h3 className="mb-3 text-[14px] font-semibold text-slate-200">📍 我的位置</h3>
+        <SettingRow label="城市" desc="用于下班天气提醒、周末出行建议">
+          <input
+            className="glass-input !w-36 !py-1 !text-[12px]"
+            placeholder="例：北京"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            onBlur={() => {
+              const v = city.trim()
+              void patchSettings({ city: v })
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+            }}
+          />
+        </SettingRow>
+      </section>
+    </div>
           ))}
         </div>
       )}
@@ -1147,6 +1167,25 @@ export default function ProfileView() {
           </div>
         </aside>
       </div>
+
+      <section className="glass-card hoverable">
+        <h3 className="mb-3 text-[14px] font-semibold text-slate-200">📍 我的位置</h3>
+        <SettingRow label="城市" desc="用于下班天气提醒、周末出行建议">
+          <input
+            className="glass-input !w-36 !py-1 !text-[12px]"
+            placeholder="例：北京"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            onBlur={() => {
+              const v = city.trim()
+              void patchSettings({ city: v })
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+            }}
+          />
+        </SettingRow>
+      </section>
     </div>
   )
 }

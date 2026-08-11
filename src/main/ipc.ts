@@ -744,7 +744,13 @@ export function registerIpc(): void {
   // ── v3.0 文件夹 ingestion ──
   ipcMain.handle('folders:get', () => getWatchDirs())
   ipcMain.handle('folders:set', (_e, dirs: string[]) => { updateFolders(dirs); return getWatchDirs() })
-  ipcMain.handle('folders:scan', () => scanFolders(getWatchDirs()))
+  ipcMain.handle('folders:scan', async () => {
+    const dirs = getWatchDirs()
+    if (dirs.length === 0) return []
+    return scanFolders(dirs, undefined, (pct, file) => {
+      sendTo('main', 'folders:scanProgress', { pct, file })
+    })
+  })
   ipcMain.handle('folders:select', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory', 'multiSelections']

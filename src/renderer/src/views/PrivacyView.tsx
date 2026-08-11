@@ -397,6 +397,14 @@ export default function PrivacyView() {
           <NumberSetting value={settings.activityRetentionDays} min={7} max={180} suffix="天" onCommit={(v) => p({ activityRetentionDays: v })} />
         </Row>
       </Section>
+
+      <section className="glass-card hoverable mt-4">
+        <h3 className="mb-2 text-[14px] font-semibold text-slate-200">📁 工作文件夹</h3>
+        <p className="mb-2 text-[12px] text-slate-500">配置后，会议纪要和随手记自动融入智能日报。</p>
+        <button className="glass-btn primary text-[12px]" onClick={async () => { const paths = await window.api?.selectFolders?.() as string[]|undefined; if (paths?.length) { await window.api?.setSettings?.({folders:paths}); alert('已添加') } }}>
+          📂 选择文件夹
+        </button>
+      </section>
     </div>
   )
 }

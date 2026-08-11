@@ -21,7 +21,6 @@ import QAReview from './views/QAReview'
 import ProfileView from './views/ProfileView'
 import PrivacyView from './views/PrivacyView'
 import SettingsView from './views/SettingsView'
-import CapabilityView from './views/CapabilityView'
 
 interface NavItem {
   key: ViewKey | 'palette'
@@ -53,8 +52,7 @@ const VIEWS: Record<ViewKey, () => JSX.Element> = {
   qa: QAReview,
   profile: ProfileView,
   privacy: PrivacyView,
-  settings: SettingsView,
-  capability: CapabilityView
+  settings: SettingsView
 }
 
 export default function App() {
@@ -162,7 +160,7 @@ export default function App() {
         <div className="my-2 border-t border-white/5" />
         {renderNav(GLOBAL_NAV)}
         <div className="flex-1" />
-        {renderNav([{ key: 'settings', label: '设置', icon: 'settings' }, { key: 'capability', label: '能力', icon: 'lightning' }])}
+        {renderNav([{ key: 'settings', label: '设置', icon: 'settings' }])}
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col">
