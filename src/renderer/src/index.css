@@ -346,6 +346,12 @@ textarea {
 [data-theme='green'] input[type='range']::-webkit-slider-thumb { background: #34d399; box-shadow: 0 0 8px rgba(52, 211, 153, 0.6); }
 [data-theme='amber'] input[type='range']::-webkit-slider-thumb { background: #fbbf24; box-shadow: 0 0 8px rgba(251, 191, 36, 0.6); }
 
+/* 星图主题色联动：切换主题时 work/life 星图整体换色 */
+[data-theme='cyan']   { --star-work: 6 182 212; --star-life: 236 72 153; }
+[data-theme='violet'] { --star-work: 139 92 246; --star-life: 245 158 11; }
+[data-theme='green']  { --star-work: 16 185 129; --star-life: 251 191 36; }
+[data-theme='amber']  { --star-work: 251 191 36; --star-life: 239 68 68; }
+
 /* ── 亮色模式（data-mode=light，覆盖少量硬编码工具类） ── */
 [data-mode='light'] body {
   background:
