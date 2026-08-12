@@ -246,7 +246,7 @@ export default function HomeView() {
       </section>
 
       {/* 时间轴 — 水平泳道 */}
-      <section className="glass-card hoverable" style={{ background: '#fff', maxHeight: '80vh', overflowY: 'auto' }}>
+      <section className="glass-card hoverable" style={{ background: '#fff' }}>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <span className="text-base">⏱️</span>
