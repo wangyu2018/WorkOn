@@ -59,6 +59,7 @@ export default function App() {
   const { view, setView, setPaletteOpen } = useAppStore()
   const presence = usePresenceStore((s) => s.presence)
   const loadSettings = useSettingsStore((s) => s.load)
+  const settings = useSettingsStore((s) => s.settings)
   const theme = useSettingsStore((s) => s.settings.theme)
   const appearanceMode = useSettingsStore((s) => s.settings.appearanceMode)
 
@@ -93,6 +94,11 @@ export default function App() {
     void loadSettings()
     return cleanup
   }, [loadSettings])
+
+  useEffect(() => {
+    if (!settings.petEnabled) window.api?.hidePet?.()
+    else window.api?.showPet?.()
+  }, [settings.petEnabled])
 
   useEffect(() => {
     const off = window.api.onOpenPalette(() => setPaletteOpen(true))

@@ -66,3 +66,14 @@ export function createTray(): void {
 export function refreshTray(): void {
   buildMenu()
 }
+
+/** 根据设置的总开关创建/销毁托盘 */
+export function syncTrayFromSettings(): void {
+  const s = getSettings()
+  if (!s.widgetVisible && tray) {
+    tray.destroy()
+    tray = null
+  } else if (s.widgetVisible && !tray) {
+    createTray()
+  }
+}

@@ -5,6 +5,9 @@ import { WORK_LIKE_STATES, WORK_STATES } from '@shared/stateMeta'
 import { AttentionDailyCard, DIM_META, Delta, SectionTitle } from '../components/AttentionCard'
 import type { DimKey } from '../components/AttentionCard'
 import { ChainCard } from '../components/ChainCard'
+import StateDistCard from '../components/StateDistCard'
+import TopAppsCard from '../components/TopAppsCard'
+import DailyOverviewCard from '../components/DailyOverviewCard'
 import { Icon } from '../components/Icon'
 import { EmptyState } from '../components/EmptyState'
 import AnalysisView from './AnalysisView'
@@ -178,7 +181,6 @@ function DailyReport() {
   const [trail, setTrail] = useState<MergedTrail | null>(null)
   const [pva, setPva] = useState<PlanVsActual | null>(null)
   const [loaded, setLoaded] = useState(false)
-  const [expandedState, setExpandedState] = useState<WorkState | null>(null)
   const excludeSlack = useSettingsStore((s) => s.settings.reportExcludeSlack)
   const template = useSettingsStore((s) => s.settings.reportTemplate)
   const patch = useSettingsStore((s) => s.patch)
@@ -232,20 +234,6 @@ function DailyReport() {
     appMap.set(seg.mainApp, (appMap.get(seg.mainApp) ?? 0) + seg.durationMin)
   }
   const topApps = [...appMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6)
-  const maxApp = topApps.length ? topApps[0][1] : 1
-
-  // 状态→应用粒度明细
-  const stateAppMap = expandedState
-    ? (() => {
-        const map = new Map<string, number>()
-        for (const seg of trail.segments) {
-          if (seg.mainState === expandedState && seg.mainApp) {
-            map.set(seg.mainApp, (map.get(seg.mainApp) ?? 0) + seg.durationMin)
-          }
-        }
-        return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6)
-      })()
-    : []
 
   /** 复制日报：有模板按模板变量替换，否则默认格式 */
   const copyReport = () => {
@@ -341,52 +329,15 @@ function DailyReport() {
       <ChainCard date={trail.date} />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* 状态分布（可展开查看应用明细） */}
+        {/* 状态分布 */}
         <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '120ms' }}>
-          <SectionTitle icon="chart" title="状态分布" hint="点击行查看应用明细" />
+          <SectionTitle icon="chart" title="状态分布" />
           <div className="flex items-start gap-4">
             <div className="shrink-0">
               <Donut data={dist.map(([state, value]) => ({ state, value }))} />
             </div>
             <div className="flex flex-1 flex-col gap-0.5">
-              {dist.slice(0, 8).map(([state, min]) => {
-                const m = WORK_STATES[state]
-                const expanded = expandedState === state
-                return (
-                  <div key={state}>
-                    <button
-                      className={`flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-white/[0.04] ${
-                        expanded ? 'bg-white/[0.05]' : ''
-                      }`}
-                      onClick={() => setExpandedState(expanded ? null : state)}
-                    >
-                      <span className={`text-[9px] transition-colors ${expanded ? 'text-neon-cyan' : 'text-slate-600'}`}>{expanded ? '▾' : '▸'}</span>
-                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: m.color, boxShadow: `0 0 6px ${m.color}66` }} />
-                      <span className="w-14 text-[11px] text-slate-300">
-                        {m.emoji} {m.label}
-                      </span>
-                      <span className="flex-1 text-right text-[11px] font-medium text-slate-300">{fmtMin(min)}</span>
-                      <span className="w-10 text-right text-[11px] text-slate-500">{Math.round((min / trail.totalMin) * 100)}%</span>
-                    </button>
-                    {expanded && stateAppMap.length > 0 ? (
-                      <div className="anim-fade-in ml-6 mr-1 mt-1 flex flex-col gap-1.5 rounded-lg border border-white/[0.05] bg-white/[0.02] px-2.5 py-2">
-                        {stateAppMap.map(([app, appMin]) => {
-                          const pct = Math.round((appMin / Math.max(1, min)) * 100)
-                          return (
-                            <div key={app} className="flex items-center gap-1.5 text-[10px]">
-                              <span className="w-24 truncate text-slate-400">{app}</span>
-                              <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
-                                <div className="h-full rounded-full" style={{ width: `${pct}%`, background: m.color, opacity: 0.6 }} />
-                              </div>
-                              <span className="w-10 text-right text-slate-500">{fmtMin(appMin)}</span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
-                )
-              })}
+              <StateDistCard stateMinutes={trail.stateMinutes} />
             </div>
           </div>
         </section>
@@ -395,27 +346,7 @@ function DailyReport() {
         <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '180ms' }}>
           <SectionTitle icon="flame" title="TOP 应用榜" />
           {topApps.length ? (
-            <div className="flex flex-col gap-2.5">
-              {topApps.map(([app, min], i) => (
-                <div key={app} className="flex items-center gap-2 text-[12px]">
-                  <span
-                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[10px] font-bold ${
-                      i === 0 ? 'bg-neon-cyan/20 text-neon-cyan shadow-glow' : 'bg-white/[0.06] text-slate-400'
-                    }`}
-                  >
-                    {i + 1}
-                  </span>
-                  <span className="w-28 truncate text-slate-300">{app}</span>
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
-                    <div
-                      className={`h-full rounded-full ${i === 0 ? 'bg-gradient-to-r from-neon-cyan to-neon-blue' : 'bg-neon-blue/70'}`}
-                      style={{ width: `${(min / maxApp) * 100}%` }}
-                    />
-                  </div>
-                  <span className="w-14 shrink-0 text-right text-slate-400">{fmtMin(min)}</span>
-                </div>
-              ))}
-            </div>
+            <TopAppsCard apps={topApps.map(([app, minutes]) => ({ app, minutes }))} />
           ) : (
             <EmptyState emoji="📱" title="暂无应用数据" />
           )}
@@ -456,52 +387,10 @@ function WeeklyReport() {
   if (!loaded) return <Loading />
 
   const maxTotal = Math.max(1, ...days.map((d) => d.work + d.slack + d.other))
-  const today = todayKey()
-  const BAR_H = 160
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="glass-card hoverable anim-fade-up">
-      <SectionTitle icon="calendar" title="近 7 天逐日概览" />
-      <div className="flex items-end justify-around gap-3 px-1">
-        {days.map((d) => {
-          const dt = new Date(`${d.key}T00:00:00`)
-          const total = d.work + d.slack + d.other
-          const scale = (v: number) => (v / maxTotal) * BAR_H
-          const isToday = d.key === today
-          return (
-            <div
-              key={d.key}
-              className="group flex flex-1 cursor-default flex-col items-center gap-1.5 transition-transform hover:-translate-y-0.5"
-              title={`工作 ${fmtMin(d.work)} · 摸鱼 ${fmtMin(d.slack)} · 其他 ${fmtMin(d.other)}`}
-            >
-              <div className={`text-[10px] ${isToday ? 'font-medium text-neon-cyan' : 'text-slate-500'}`}>{total > 0 ? fmtMin(total) : ''}</div>
-              <div
-                className={`flex w-full max-w-[44px] flex-col-reverse overflow-hidden rounded-lg border border-white/[0.04] transition-shadow group-hover:shadow-[0_0_14px_rgba(34,211,238,0.15)] ${
-                  isToday ? 'ring-1 ring-neon-cyan' : ''
-                }`}
-                style={{ height: BAR_H, background: 'rgba(255,255,255,0.03)' }}
-              >
-                <div className="w-full bg-neon-green/80 transition-all" style={{ height: scale(d.work), transitionDuration: '250ms' }} />
-                <div className="w-full bg-neon-pink/80 transition-all" style={{ height: scale(d.slack), transitionDuration: '250ms' }} />
-                <div className="w-full bg-slate-500/60 transition-all" style={{ height: scale(d.other), transitionDuration: '250ms' }} />
-              </div>
-              <div className={`text-[10px] ${isToday ? 'font-semibold text-neon-cyan' : 'text-slate-500'}`}>
-                周{WEEK_LABELS[(dt.getDay() + 6) % 7]}
-              </div>
-              <div className="text-[9px] text-slate-600">
-                {dt.getMonth() + 1}/{dt.getDate()}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-      <div className="mt-4 flex items-center justify-center gap-4 border-t border-white/[0.05] pt-3 text-[10px] text-slate-500">
-        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-neon-green/80" /> 工作</span>
-        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-neon-pink/80" /> 摸鱼</span>
-        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-slate-500/60" /> 其他</span>
-      </div>
-      </div>
+      <DailyOverviewCard days={days} maxTotal={maxTotal} />
       {/* 本周注意力趋势：无评分记录时不渲染 */}
       {scores.length > 0 ? <AttentionWeeklyCard scores={scores} /> : null}
     </div>

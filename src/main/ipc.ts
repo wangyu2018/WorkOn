@@ -29,7 +29,7 @@ import { startIntegration } from './integration'
 import { getOcrStorageStats, clearOcrCache } from './ocr'
 import { startFolderWatch, updateFolders, scanFolders, getWatchDirs } from './folderWatcher'
 import { saveWorkChain } from './qa/questionGenerator'
-import { refreshTray } from './tray'
+import { refreshTray, syncTrayFromSettings } from './tray'
 import { todayScore, recentScores, getScoreStrategy } from './attention'
 import { todayChains, analyzeDayChains } from './chain/engine'
 import {
@@ -92,6 +92,7 @@ export function registerIpc(): void {
       else closePetWindow()
     }
     if (patch.petEnabled !== undefined || patch.widgetVisible !== undefined) refreshTray()
+    if (patch.widgetVisible !== undefined) syncTrayFromSettings()
     // 桌宠相关设置实时同步到桌宠窗（缩放 / 游荡开关 / 帧率档位 / 互动开关）
     if (
       patch.petScale !== undefined ||
@@ -256,6 +257,8 @@ export function registerIpc(): void {
   ipcMain.handle('pet:set', (_e, patch: Partial<PetState>) => bus.setPet(patch))
   ipcMain.on('pet:hit', (_e, over: boolean) => setPetIgnoreMouse(!over))
   ipcMain.on('pet:modal', (_e, active: boolean) => setPetModal(active))
+  ipcMain.on('pet:hide', () => { if (petWindow) petWindow.hide() })
+  ipcMain.on('pet:show', () => { if (petWindow) { createPetWindow(); petWindow.show() } })
   ipcMain.on('pet:restore', () => sendTo('pet', 'pet:restore'))
   ipcMain.on('pet:introReplay', () => sendTo('pet', 'pet:introReplay'))
   ipcMain.handle('ai:test', () => testAIConnection())
