@@ -163,11 +163,14 @@ export default function HomeView() {
           opacity: isDragging ? 0.25 : 1,
           zIndex: node.isCore ? 10 : 5,
           scale: starHover === node.idx ? '1.15' : '1',
-        }}
-        title={`${node.item.seg.mainApp} · ${fmtTime(node.item.seg.startTs)}-${fmtTime(node.item.seg.endTs)} · ${fmtDur(node.item.seg.durationMin)}${node.item.seg.mainTitle ? '\n' + node.item.seg.mainTitle : ''}`}
-      >
+          border: `1px solid rgb(var(--star-${isWork ? 'work' : 'life'}-fg)/0.25)`,
+        }}>
+
         {starHover === node.idx && (
-          <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-ink-900/80 backdrop-blur-md px-2.5 py-1 text-[10px] text-slate-200 pointer-events-none z-20 shadow-lg">{node.item.seg.mainApp} · {fmtDur(node.item.seg.durationMin)}{node.item.seg.mainTitle ? ` · ${node.item.seg.mainTitle}` : ''}</div>
+          <div className="absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg px-2.5 py-1 pointer-events-none z-30 backdrop-blur-md text-[11px] font-medium"
+            style={{ background:'rgba(17,24,39,0.95)', color:'#f1f5f9', border:`1px solid rgb(${chroma}/0.55)`, boxShadow:`0 4px 18px rgb(${chroma}/0.28)` }}>
+            {node.item.seg.mainApp} · {fmtDur(node.item.seg.durationMin)}{node.item.seg.mainTitle ? ` · ${node.item.seg.mainTitle}` : ''}
+          </div>
         )}
       </div>
     )
@@ -185,7 +188,7 @@ export default function HomeView() {
       </section>
 
       {/* 星图 — 白底卡片 */}
-      <section className="glass-card hoverable overflow-hidden" style={{ background: '#fff' }}>
+      <section className="glass-card hoverable" style={{ background: '#fff' }}>
         <div className="flex items-center justify-between mb-3 px-1">
           <div className="flex items-center gap-2">
             <span className="text-base">🗂️</span>
@@ -193,7 +196,7 @@ export default function HomeView() {
           </div>
           <span className="text-[11px] text-slate-500">工作 ✦ {fmtDur(totalWorkMin)} · 生活 ✦ {fmtDur(totalLifeMin)} · 拖动星点可纠偏</span>
         </div>
-        <div className="relative flex rounded-xl overflow-hidden" style={{ minHeight: 320, background: '#ffffff' }}>
+        <div className="relative flex rounded-xl" style={{ minHeight: 320, background: '#ffffff' }}>
           <div className="absolute left-1/2 top-4 bottom-4 border-l-2 border-dashed border-slate-200 z-10" />
           <div className={`relative flex-1 min-h-[320px] transition-colors ${hoverCol === 'work' && dragFrom && dragFrom.col !== 'work' ? 'bg-[rgb(var(--star-work)/0.04)]' : ''}`} style={{ background: 'rgb(var(--star-work)/0.03)' }} {...starDropProps('work')}>
             <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
