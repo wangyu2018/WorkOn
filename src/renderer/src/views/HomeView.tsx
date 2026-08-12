@@ -5,6 +5,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react'
 import { WORK_LIKE_STATES, WORK_STATES } from '@shared/stateMeta'
 import type { MergedTrail, TrailSegment, WorkState, PlanItem } from '@shared/types'
 import ActionCard from '../components/ActionCard'
+import { ActivityHoverCard } from '../components/ActivityHoverCard'
 
 type Channel = 'CMD' | '浏览器' | '微信' | 'IDE' | '其他'
 type Column = 'work' | 'life'
@@ -180,10 +181,15 @@ export default function HomeView() {
         }}>
 
         {starHover === node.idx && (
-          <div className="absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg px-2.5 py-1 pointer-events-none z-30 backdrop-blur-md text-[11px] font-medium"
-            style={{ background:'rgba(17,24,39,0.95)', color:'#f1f5f9', border:`1px solid rgb(${chroma}/0.55)`, boxShadow:`0 4px 18px rgb(${chroma}/0.28)` }}>
-            {node.item.seg.mainApp} · {fmtDur(node.item.seg.durationMin)}{node.item.seg.mainTitle ? ` · ${node.item.seg.mainTitle}` : ''}
-          </div>
+          <ActivityHoverCard a={{
+            app: node.item.seg.mainApp,
+            title: node.item.seg.mainTitle ?? '',
+            state: node.item.seg.mainState,
+            startText: fmtTime(node.item.seg.startTs),
+            endText: fmtTime(node.item.seg.endTs),
+            durationText: fmtDur(node.item.seg.durationMin),
+            source: '监控',
+          }} />
         )}
       </div>
     )

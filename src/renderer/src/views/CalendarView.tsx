@@ -3,6 +3,7 @@ import type { TimeEntry, WorkState, MergedTrail } from '@shared/types'
 import { ALL_STATES, WORK_STATES } from '@shared/stateMeta'
 import { genId } from '@shared/types'
 import { Icon } from '../components/Icon'
+import { ActivityHoverCard } from '../components/ActivityHoverCard'
 import HeatmapView from './HeatmapView'
 import {
   WEEK_LABELS,
@@ -159,6 +160,7 @@ function WeekGrid({ date }: { date: string }) {
   const [trails, setTrails] = useState<(MergedTrail | null)[]>([])
   const [dayEntries, setDayEntries] = useState<Record<string, TimeEntry[]>>({})
   const [editor, setEditor] = useState<{ entry: TimeEntry; isNew: boolean } | null>(null)
+  const [hoverEntry, setHoverEntry] = useState<string | null>(null)
   const days = weekDays(date)
 
   useEffect(() => {
@@ -290,14 +292,16 @@ function WeekGrid({ date }: { date: string }) {
                   .map((entry) => {
                     const meta = WORK_STATES[entry.state]
                     return (
-                      <div
+                       <div
                         key={entry.id}
-                        className="mb-1 cursor-pointer rounded-lg border-l-2 px-2 py-1 text-[10px] transition-all hover:brightness-125"
+                        className="relative mb-1 cursor-pointer rounded-lg border-l-2 px-2 py-1 text-[10px] transition-all hover:brightness-125"
                         style={{
                           borderColor: meta.color,
                           background: `${meta.color}12`
                         }}
                         onClick={() => setEditor({ entry, isNew: false })}
+                        onMouseEnter={() => setHoverEntry(entry.id)}
+                        onMouseLeave={() => setHoverEntry(null)}
                       >
                         <div className="flex items-center gap-1">
                           <span>{meta.emoji}</span>
@@ -306,6 +310,17 @@ function WeekGrid({ date }: { date: string }) {
                         <div className="mt-0.5 text-[9px] text-slate-500">
                           {clockOf(entry.startMin)}–{clockOf(entry.endMin)} · {fmtMin(entry.endMin - entry.startMin)}
                         </div>
+                        {hoverEntry === entry.id && (
+                          <ActivityHoverCard a={{
+                            app: meta.emoji + ' ' + meta.label,
+                            title: entry.title || '（未命名）',
+                            state: entry.state,
+                            startText: clockOf(entry.startMin),
+                            endText: clockOf(entry.endMin),
+                            durationText: fmtMin(entry.endMin - entry.startMin),
+                            source: SOURCE_LABEL[entry.source],
+                          }} />
+                        )}
                       </div>
                     )
                   })
