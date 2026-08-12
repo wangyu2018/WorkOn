@@ -127,6 +127,16 @@ export function registerIpc(): void {
     return updated ? { success: true } : { success: false }
   })
 
+  const segmentPlanMap = new Map<number, string>()
+  ipcMain.handle('trail:assignPlan', (_e, segStartTs: number, planId: string | null) => {
+    if (planId) {
+      segmentPlanMap.set(segStartTs, planId)
+    } else {
+      segmentPlanMap.delete(segStartTs)
+    }
+    return { success: true }
+  })
+
   // ── 日历条目 ──
   ipcMain.handle('entries:list', (_e, date: string) =>
     col<TimeEntry>('entries').filter((en) => en.date === date))

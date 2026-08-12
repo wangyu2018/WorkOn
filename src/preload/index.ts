@@ -27,6 +27,7 @@ const api = {
   // 轨迹 / 日历 / 计划
   getTrail: (date?: string) => ipcRenderer.invoke('trail:get', date),
   updateTrail: (startTs: number, patch: { title?: string }) => ipcRenderer.invoke('trail:update', startTs, patch),
+  assignSegmentPlan: (segStartTs: number, planId: string | null) => ipcRenderer.invoke('trail:assignPlan', segStartTs, planId),
   listEntries: (date: string) => ipcRenderer.invoke('entries:list', date),
   saveEntry: (entry: unknown) => ipcRenderer.invoke('entries:save', entry),
   removeEntry: (id: string) => ipcRenderer.invoke('entries:remove', id),

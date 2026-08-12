@@ -95,6 +95,8 @@ export interface TrailSegment {
   operation?: string
   /** 推断的微观活动标签（如 "写码"、"调试"） */
   microActivity?: string | null
+  /** 关联的计划 ID（拖拽分配） */
+  planId?: string
 }
 
 /** 双屏合并轨迹 */

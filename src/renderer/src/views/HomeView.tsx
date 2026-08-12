@@ -4,7 +4,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { WORK_LIKE_STATES, WORK_STATES } from '@shared/stateMeta'
 import type { MergedTrail, TrailSegment, WorkState, PlanItem } from '@shared/types'
-import ActionCard from '../components/ActionCard'
 import { ActivityHoverCard } from '../components/ActivityHoverCard'
 import { displayApp } from '@shared/appDisplayName'
 
@@ -19,11 +18,6 @@ interface GraphItem {
 
 interface TagRule {
   id: string; app: string; label: string; state: WorkState; hitCount: number; enabled: boolean
-}
-
-interface TimelineEntry {
-  type: 'focus' | 'plan' | 'switch' | 'meeting'
-  ts: number; app: string; title: string; duration?: number
 }
 
 function mapChannel(app: string): Channel {
@@ -66,6 +60,15 @@ function computeStarLayout(filtered: GraphItem[], allItems: GraphItem[]): { node
   return { nodes, connections }
 }
 
+const STATUS_BG: Record<string,string> = {
+  planned: '#eff6ff', in_progress: '#ecfdf5', partial: '#fefce8',
+  done: '#f0fdf4', delayed: '#fef2f2', cancelled: '#f8fafc'
+}
+const STATUS_BORDER: Record<string,string> = {
+  planned: '#bfdbfe', in_progress: '#a7f3d0', partial: '#fde68a',
+  done: '#bbf7d0', delayed: '#fecaca', cancelled: '#e2e8f0'
+}
+
 function insight(trail: MergedTrail): string {
   if (!trail || trail.totalMin < 1) return '今天刚开始，随着时间推进图谱会自动长出来 ✨'
   const focusMin = (trail.stateMinutes.focus ?? 0) + (trail.stateMinutes.coding ?? 0)
@@ -80,13 +83,14 @@ export default function HomeView() {
   const [items, setItems] = useState<GraphItem[]>([])
   const [tags, setTags] = useState<TagRule[]>([])
   const [plans, setPlans] = useState<PlanItem[]>([])
-  const [timeline, setTimeline] = useState<TimelineEntry[]>([])
   const [dragFrom, setDragFrom] = useState<{ idx: number; col: Column } | null>(null)
   const [hoverCol, setHoverCol] = useState<Column | null>(null)
   const [tagsOpen, setTagsOpen] = useState(false)
   const [newTag, setNewTag] = useState({ app: '', label: '', state: 'focus' as WorkState })
   const [tlOpen, setTlOpen] = useState(false)
   const [starHover, setStarHover] = useState<number | null>(null)
+  const [dragSeg, setDragSeg] = useState<number | null>(null)
+  const [planSegments, setPlanSegments] = useState<Map<number, string>>(new Map())
 
   useEffect(() => {
     void (async () => {
@@ -96,16 +100,9 @@ export default function HomeView() {
         setTrail(t)
         const segs = t.segments.filter((s) => !s.glance && s.durationMin > 0)
         setItems(segs.map((seg) => ({ seg, channel: mapChannel(seg.mainApp), column: WORK_LIKE_STATES.includes(seg.mainState) ? 'work' : 'life' })))
-        // 构建时间轴
-        const tl: TimelineEntry[] = segs.map((s) => ({ type: 'focus' as const, ts: s.startTs, app: s.mainApp, title: s.mainTitle ?? '', duration: s.durationMin }))
         if (p) {
           setPlans(p)
-          for (const plan of p) {
-            if (plan.startMin) tl.push({ type: 'plan', ts: new Date().setHours(0, 0, 0, 0) + plan.startMin * 60000, app: '📋', title: plan.title })
-          }
         }
-        tl.sort((a, b) => a.ts - b.ts)
-        setTimeline(tl)
       }
     })()
   }, [])
@@ -123,6 +120,45 @@ export default function HomeView() {
   const insightText = useMemo(() => (trail ? insight(trail) : ''), [trail])
   const workChart = useMemo(() => computeStarLayout(items.filter(i => i.column === 'work'), items), [items])
   const lifeChart = useMemo(() => computeStarLayout(items.filter(i => i.column === 'life'), items), [items])
+
+  const unassignedSegs = useMemo(() =>
+    items.filter(i => !planSegments.has(i.seg.startTs)),
+    [items, planSegments]
+  )
+  const getPlanSegs = useCallback((planId: string) =>
+    items.filter(i => planSegments.get(i.seg.startTs) === planId),
+    [items, planSegments]
+  )
+  const coverMin = useCallback((planId: string) =>
+    getPlanSegs(planId).reduce((a, i) => a + i.seg.durationMin, 0),
+    [getPlanSegs]
+  )
+  const maxTotalMin = useMemo(() => Math.max(60, ...items.map(i => i.seg.durationMin)), [items])
+
+  const renderSegBlock = useCallback((seg: TrailSegment & { planId?: string }) => {
+    const w = Math.max(40, (seg.durationMin / maxTotalMin) * 300)
+    const senseColor = senseOf(seg.mainState) === 'work' ? '#7c9eff' : senseOf(seg.mainState) === 'slack' ? '#ff7c7c' : '#94a3b8'
+    return (
+      <div key={seg.startTs} draggable onDragStart={() => setDragSeg(seg.startTs)}
+        className="shrink-0 rounded px-1.5 py-0.5 text-[10px] cursor-grab hover:brightness-110 transition-all"
+        style={{ width: w, background: `${senseColor}22`, border: `1px solid ${senseColor}44`, color: '#334155' }}
+        title={`${displayApp(seg.mainApp)} · ${fmtTime(seg.startTs)} · ${fmtDur(seg.durationMin)}${seg.mainTitle ? '\n' + seg.mainTitle : ''}`}>
+        {displayApp(seg.mainApp)}
+        {(seg as any).microActivity && <span className="text-[9px] ml-1" style={{color:'#94a3b8'}}>{(seg as any).microActivity}</span>}
+      </div>
+    )
+  }, [maxTotalMin])
+
+  const handleAssignPlan = useCallback(async (planId: string | null) => {
+    if (dragSeg === null) return
+    await window.api?.assignSegmentPlan?.(dragSeg, planId)
+    if (planId) {
+      setPlanSegments(prev => { const next = new Map(prev); next.set(dragSeg, planId); return next })
+    } else {
+      setPlanSegments(prev => { const next = new Map(prev); next.delete(dragSeg); return next })
+    }
+    setDragSeg(null)
+  }, [dragSeg])
 
   const moveItem = useCallback((idx: number, toCol: Column) => {
     setItems((prev) => {
@@ -208,6 +244,48 @@ export default function HomeView() {
         <p className="text-[13px] text-slate-400 leading-relaxed">{insightText || '加载中...'}</p>
       </section>
 
+      {/* 时间轴 — 水平泳道 */}
+      <section className="glass-card hoverable" style={{ background: '#fff', maxHeight: 210, overflowY: 'auto' }}>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-base">⏱️</span>
+            <h3 className="text-[13px] font-semibold text-slate-800">时间轴</h3>
+            <span className="text-[10px] text-slate-400">{plans.length} 计划 · {fmtDur(items.reduce((a, i) => a + i.seg.durationMin, 0))}</span>
+          </div>
+          <button onClick={() => setTlOpen(!tlOpen)} className="text-[11px] text-slate-500 hover:text-slate-600">{tlOpen ? '收起 ▲' : '展开 ▼'}</button>
+        </div>
+        {tlOpen && (
+          <div className="overflow-x-auto" style={{ minHeight: 168 }}>
+            <div className="flex text-[10px] text-slate-400 pl-20 pr-4 mb-1">
+              {[8,10,12,14,16,18,20,22].map(h => <div key={h} style={{flex:1}}>{h}:00</div>)}
+            </div>
+            <div className="flex items-center mb-1.5" onDragOver={e => e.preventDefault()} onDrop={() => handleAssignPlan(null)}>
+              <span className="w-20 shrink-0 text-[11px] text-slate-500 pl-2">未归类</span>
+              <div className="flex-1 flex items-center gap-1 min-h-[28px] rounded-lg bg-slate-100/50 px-1 py-0.5 overflow-hidden">
+                {unassignedSegs.map(s => renderSegBlock({...s.seg, planId: planSegments.get(s.seg.startTs) || undefined}))}
+                {unassignedSegs.length === 0 && <span className="text-[10px] text-slate-400 px-2">拖拽色块到计划泳道</span>}
+              </div>
+            </div>
+            {plans.map(plan => (
+              <div key={plan.id} className="flex items-center mb-1.5"
+                onDragOver={e => e.preventDefault()} onDrop={() => handleAssignPlan(plan.id)}>
+                <span className="w-20 shrink-0 text-[11px] text-slate-600 pl-2 truncate" title={plan.title}>
+                  {plan.status === 'done' ? '✓ ' : plan.status === 'cancelled' ? '✕ ' : ''}{plan.title}
+                </span>
+                <div className="flex-1 flex items-center gap-1 min-h-[28px] rounded-lg px-1 py-0.5 overflow-hidden"
+                  style={{ background: STATUS_BG[plan.status] || '#f8fafc', border: `1px solid ${STATUS_BORDER[plan.status] || '#e2e8f0'}` }}>
+                  {getPlanSegs(plan.id).map(s => renderSegBlock({...s.seg, planId: plan.id}))}
+                  {getPlanSegs(plan.id).length === 0 && <span className="text-[10px] text-slate-400 px-2">拖拽工作块到此处关联</span>}
+                </div>
+                <span className="w-16 shrink-0 text-right text-[10px] text-slate-400 pr-2">
+                  {coverMin(plan.id)}/{plan.durationMin ?? '—'}m
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* 星图 — 白底卡片 */}
       <section className="glass-card hoverable" style={{ background: '#fff' }}>
         <div className="flex items-center justify-between mb-3 px-1">
@@ -248,30 +326,6 @@ export default function HomeView() {
             ) : lifeChart.nodes.map(n => renderStarNode(n, false))}
           </div>
         </div>
-      </section>
-
-      {/* 时间轴 */}
-      <section className="glass-card hoverable">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-base">⏱️</span>
-            <h3 className="text-[13px] font-semibold text-slate-200">时间轴</h3>
-          </div>
-          <button onClick={() => setTlOpen(!tlOpen)} className="text-[11px] text-slate-500 hover:text-slate-300">{tlOpen ? '收起 ▲' : '展开 ▼'}</button>
-        </div>
-        {tlOpen && (
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {timeline.length === 0 ? <p className="text-[12px] text-slate-600 py-2">暂无数据</p> : timeline.map((e, i) => (
-              <ActionCard key={i}
-                data={{ id: `${e.ts}-${i}`, title: e.title, startTs: e.ts, endTs: e.ts + (e.duration ?? 0) * 60000, app: e.app, type: e.type }}
-                onUpdate={(patch) => {
-                  setTimeline(prev => prev.map((t, idx) => idx === i ? { ...t, title: patch.title ?? t.title, ts: patch.startTs ?? t.ts, duration: patch.endTs ? (patch.endTs - (patch.startTs ?? t.ts)) / 60000 : t.duration } : t))
-                }}
-                onDelete={() => setTimeline(prev => prev.filter((_, idx) => idx !== i))}
-              />
-            ))}
-          </div>
-        )}
       </section>
 
       {/* 标签管理 */}
