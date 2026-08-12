@@ -87,7 +87,7 @@ export default function HomeView() {
   const [hoverCol, setHoverCol] = useState<Column | null>(null)
   const [tagsOpen, setTagsOpen] = useState(false)
   const [newTag, setNewTag] = useState({ app: '', label: '', state: 'focus' as WorkState })
-  const [tlOpen, setTlOpen] = useState(false)
+  const [tlOpen, setTlOpen] = useState(() => { try { return localStorage.getItem('workon.tlOpen') !== '0' } catch { return true } })
   const [starHover, setStarHover] = useState<number | null>(null)
   const [dragSeg, setDragSeg] = useState<number | null>(null)
   const [planSegments, setPlanSegments] = useState<Map<number, string>>(new Map())
@@ -135,16 +135,17 @@ export default function HomeView() {
   )
   const maxTotalMin = useMemo(() => Math.max(60, ...items.map(i => i.seg.durationMin)), [items])
 
-  const renderSegBlock = useCallback((seg: TrailSegment & { planId?: string }) => {
+  const renderSegBlock = useCallback((seg: TrailSegment & { planId?: string }, planTitle?: string) => {
     const w = Math.max(40, (seg.durationMin / maxTotalMin) * 300)
     const senseColor = senseOf(seg.mainState) === 'work' ? '#7c9eff' : senseOf(seg.mainState) === 'slack' ? '#ff7c7c' : '#94a3b8'
     return (
       <div key={seg.startTs} draggable onDragStart={() => setDragSeg(seg.startTs)}
-        className="shrink-0 rounded px-1.5 py-0.5 text-[10px] cursor-grab hover:brightness-110 transition-all"
+        className="shrink-0 rounded px-1.5 py-0.5 text-[10px] cursor-grab hover:brightness-110 transition-all relative"
         style={{ width: w, background: `${senseColor}22`, border: `1px solid ${senseColor}44`, color: '#334155' }}
-        title={`${displayApp(seg.mainApp)} · ${fmtTime(seg.startTs)} · ${fmtDur(seg.durationMin)}${seg.mainTitle ? '\n' + seg.mainTitle : ''}`}>
+        title={`${displayApp(seg.mainApp)} · ${fmtTime(seg.startTs)} · ${fmtDur(seg.durationMin)}${seg.mainTitle ? '\n' + seg.mainTitle : ''}${planTitle ? '\n📋 ' + planTitle : ''}`}>
         {displayApp(seg.mainApp)}
         {(seg as any).microActivity && <span className="text-[9px] ml-1" style={{color:'#94a3b8'}}>{(seg as any).microActivity}</span>}
+        {planTitle && <span className="absolute -top-1 -right-1 text-[8px] px-1 rounded-full" style={{background:'#a78bfa',color:'#fff'}}>↳</span>}
       </div>
     )
   }, [maxTotalMin])
@@ -245,25 +246,29 @@ export default function HomeView() {
       </section>
 
       {/* 时间轴 — 水平泳道 */}
-      <section className="glass-card hoverable" style={{ background: '#fff', maxHeight: 210, overflowY: 'auto' }}>
+      <section className="glass-card hoverable" style={{ background: '#fff', maxHeight: '80vh', overflowY: 'auto' }}>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <span className="text-base">⏱️</span>
             <h3 className="text-[13px] font-semibold text-slate-800">时间轴</h3>
             <span className="text-[10px] text-slate-400">{plans.length} 计划 · {fmtDur(items.reduce((a, i) => a + i.seg.durationMin, 0))}</span>
           </div>
-          <button onClick={() => setTlOpen(!tlOpen)} className="text-[11px] text-slate-500 hover:text-slate-600">{tlOpen ? '收起 ▲' : '展开 ▼'}</button>
+          <button onClick={() => { const v = !tlOpen; setTlOpen(v); try { localStorage.setItem('workon.tlOpen', v ? '1' : '0') } catch {} }} className="text-[11px] text-slate-500 hover:text-slate-600">{tlOpen ? '收起 ▲' : '展开 ▼'}</button>
         </div>
         {tlOpen && (
           <div className="overflow-x-auto" style={{ minHeight: 168 }}>
             <div className="flex text-[10px] text-slate-400 pl-20 pr-4 mb-1">
               {[8,10,12,14,16,18,20,22].map(h => <div key={h} style={{flex:1}}>{h}:00</div>)}
             </div>
-            <div className="flex items-center mb-1.5" onDragOver={e => e.preventDefault()} onDrop={() => handleAssignPlan(null)}>
-              <span className="w-20 shrink-0 text-[11px] text-slate-500 pl-2">未归类</span>
+            <div className="flex items-center mb-1.5">
+              <span className="w-20 shrink-0 text-[11px] text-slate-600 pl-2 font-medium">今日</span>
               <div className="flex-1 flex items-center gap-1 min-h-[28px] rounded-lg bg-slate-100/50 px-1 py-0.5 overflow-hidden">
-                {unassignedSegs.map(s => renderSegBlock({...s.seg, planId: planSegments.get(s.seg.startTs) || undefined}))}
-                {unassignedSegs.length === 0 && <span className="text-[10px] text-slate-400 px-2">拖拽色块到计划泳道</span>}
+                {items.map(item => {
+                  const pid = planSegments.get(item.seg.startTs)
+                  const planTitle = pid ? (plans.find(p => p.id === pid)?.title ?? '') : ''
+                  return renderSegBlock({...item.seg, planId: pid || undefined}, planTitle)
+                })}
+                {items.length === 0 && <span className="text-[10px] text-slate-400 px-2">暂无活动记录</span>}
               </div>
             </div>
             {plans.map(plan => (
@@ -274,8 +279,8 @@ export default function HomeView() {
                 </span>
                 <div className="flex-1 flex items-center gap-1 min-h-[28px] rounded-lg px-1 py-0.5 overflow-hidden"
                   style={{ background: STATUS_BG[plan.status] || '#f8fafc', border: `1px solid ${STATUS_BORDER[plan.status] || '#e2e8f0'}` }}>
-                  {getPlanSegs(plan.id).map(s => renderSegBlock({...s.seg, planId: plan.id}))}
-                  {getPlanSegs(plan.id).length === 0 && <span className="text-[10px] text-slate-400 px-2">拖拽工作块到此处关联</span>}
+                  {getPlanSegs(plan.id).map(s => renderSegBlock({...s.seg, planId: plan.id}, plan.title))}
+                {getPlanSegs(plan.id).length === 0 && <span className="text-[10px] text-slate-400 px-2">拖拽工作块到此处关联</span>}
                 </div>
                 <span className="w-16 shrink-0 text-right text-[10px] text-slate-400 pr-2">
                   {coverMin(plan.id)}/{plan.durationMin ?? '—'}m
