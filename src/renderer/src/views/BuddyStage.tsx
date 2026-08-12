@@ -604,6 +604,7 @@ export default function BuddyStage() {
                 value={settings.widgetOpacity}
                 onChange={(e) => patch({ widgetOpacity: parseFloat(e.target.value) })}
               />
+            </div>
           </div>
         )}
       </section>
