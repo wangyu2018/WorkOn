@@ -167,9 +167,7 @@ export default function HomeView() {
         title={`${node.item.seg.mainApp} · ${fmtTime(node.item.seg.startTs)}-${fmtTime(node.item.seg.endTs)} · ${fmtDur(node.item.seg.durationMin)}${node.item.seg.mainTitle ? '\n' + node.item.seg.mainTitle : ''}`}
       >
         {starHover === node.idx && (
-          <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-black/85 px-2 py-0.5 text-[10px] text-slate-200 pointer-events-none z-20">
-            {node.item.seg.mainApp} · {fmtDur(node.item.seg.durationMin)}
-          </div>
+          <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-ink-900/80 backdrop-blur-md px-2.5 py-1 text-[10px] text-slate-200 pointer-events-none z-20 shadow-lg">{node.item.seg.mainApp} · {fmtDur(node.item.seg.durationMin)}{node.item.seg.mainTitle ? ` · ${node.item.seg.mainTitle}` : ''}</div>
         )}
       </div>
     )
