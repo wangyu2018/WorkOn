@@ -592,6 +592,8 @@ export interface AppSettings {
   folders?: string[] // v3.0 文件夹 ingestion：用户配置的工作目录
   mutualExclusive?: boolean // v3.1 互斥模式：桌面形象与浮窗互相排斥
   city?: string // v3.1 用户城市（天气/通勤提醒用）
+  widgetCompact?: boolean // 浮窗紧凑模式，默认 false
+  reportAutoRefreshMin?: number // 报表自动刷新间隔分钟，0=关闭，默认 120
   
   petVrmUploadEnabled?: boolean // v3.0 VRM 照片生成：入口占位开关，默认 true
 }
@@ -654,7 +656,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   userTypeAuto: true,
   scorePetAdapt: true,
   smartReportAI: true,
-  ocrEngine: 'rapidocr'
+  ocrEngine: 'rapidocr',
+  city: '',
+  widgetCompact: false,
+  reportAutoRefreshMin: 120
 }
 
 // ───────────────────────── 轻问诊 ─────────────────────────

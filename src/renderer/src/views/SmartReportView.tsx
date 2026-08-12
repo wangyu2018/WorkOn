@@ -10,6 +10,7 @@ import type {
   WeeklyGeneratedReport
 } from '@shared/types'
 import { WORK_STATES } from '@shared/stateMeta'
+import { displayApp } from '@shared/appDisplayName'
 import { Icon } from '../components/Icon'
 import type { IconName } from '../components/Icon'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -530,7 +531,7 @@ function ImportTemplateModal({ presets, aiEnabled, onClose, onSelectPreset, onSa
 
 /* ── 智能日报主视图 ── */
 
-function SmartDayReportView() {
+function SmartDayReportView({ onSynced }: { onSynced?: () => void }) {
   const settingsAI = useSettingsStore((s) => s.settings.smartReportAI)
   const aiGloballyEnabled = useSettingsStore((s) => s.settings.aiEnabled)
   const patch = useSettingsStore((s) => s.patch)
@@ -567,7 +568,7 @@ function SmartDayReportView() {
     window.api
       .generateReport(date, selectedTemplateId ?? undefined, aiOn)
       .then((r) => {
-        if (alive) setReport(r as GeneratedReport)
+        if (alive) { setReport(r as GeneratedReport); onSynced?.() }
       })
       .catch(() => {
         if (alive) setReport(null)
@@ -1010,7 +1011,7 @@ const mondayOf = (date: string): string => {
 function WeekEntryCard({ e }: { e: ReportEntry }) {
   const color = WORK_STATES[e.state]?.color ?? '#94A3B8'
   const dims: [string, string | undefined][] = [
-    ['应用', e.app],
+    ['应用', displayApp(e.app)],
     ['对象', e.subject],
     ['内容', e.contentTag],
     ['项目', e.project],
@@ -1048,7 +1049,7 @@ function WeekEntryCard({ e }: { e: ReportEntry }) {
   )
 }
 
-function SmartWeeklyReportView() {
+function SmartWeeklyReportView({ onSynced }: { onSynced?: () => void }) {
   const settingsAI = useSettingsStore((s) => s.settings.smartReportAI)
   const patch = useSettingsStore((s) => s.patch)
 
@@ -1067,7 +1068,7 @@ function SmartWeeklyReportView() {
     window.api
       .generateWeekReport(monday, undefined, aiOn)
       .then((r) => {
-        if (alive) setReport(r as WeeklyGeneratedReport)
+        if (alive) { setReport(r as WeeklyGeneratedReport); onSynced?.() }
       })
       .catch(() => {
         if (alive) setReport(null)
@@ -1191,7 +1192,7 @@ function SmartWeeklyReportView() {
 
 /* ── 入口：day=智能日报（默认），week=智能周报 ── */
 
-export default function SmartReportView({ mode = 'day' }: { mode?: 'day' | 'week' }) {
-  if (mode === 'week') return <SmartWeeklyReportView />
-  return <SmartDayReportView />
+export default function SmartReportView({ mode = 'day', onSynced }: { mode?: 'day' | 'week'; onSynced?: () => void }) {
+  if (mode === 'week') return <SmartWeeklyReportView onSynced={onSynced} />
+  return <SmartDayReportView onSynced={onSynced} />
 }

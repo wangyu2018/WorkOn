@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AttentionScore, MergedTrail, PlanVsActual, WorkState } from '@shared/types'
 import { GRADE_META, gradeOf } from '@shared/attention'
 import { WORK_LIKE_STATES, WORK_STATES } from '@shared/stateMeta'
@@ -13,6 +13,7 @@ import { EmptyState } from '../components/EmptyState'
 import AnalysisView from './AnalysisView'
 import SmartReportView from './SmartReportView'
 import { useSettingsStore } from '../stores/settingsStore'
+import { displayApp } from '@shared/appDisplayName'
 import { WEEK_LABELS, addDays, fmtMin, todayKey } from '../components/utils'
 
 type Tab = 'smart' | 'smartWeekly' | 'ai'
@@ -264,7 +265,7 @@ function DailyReport() {
       workMin: fmtMin(workMin),
       slackMin: fmtMin(slackMin),
       focusMin: fmtMin(best),
-      topApps: topApps.slice(0, 5).map(([a, m], i) => `${i + 1}. ${a}（${fmtMin(m)}）`).join('\n'),
+      topApps: topApps.slice(0, 5).map(([a, m], i) => `${i + 1}. ${displayApp(a)}（${fmtMin(m)}）`).join('\n'),
       bestHours: '',
       achievement: pva && pva.plannedMin > 0 ? `${Math.round(pva.achievement)}%` : '—'
     }
@@ -366,7 +367,7 @@ function DailyReport() {
           <SectionTitle icon="flame" title="TOP 应用榜" />
           <PinButton id="topapps" />
           {topApps.length ? (
-            <TopAppsCard apps={topApps.map(([app, minutes]) => ({ app, minutes }))} />
+            <TopAppsCard apps={topApps.map(([app, minutes]) => ({ app: displayApp(app), minutes }))} />
           ) : (
             <EmptyState emoji="📱" title="暂无应用数据" />
           )}
@@ -424,11 +425,49 @@ export default function ReportHub() {
   const patch = useSettingsStore((s) => s.patch)
   const [tab, setTab] = useState<Tab>('smart')
   const [showSettings, setShowSettings] = useState(false)
+  const [lastSyncAt, setLastSyncAt] = useState<number>(Date.now())
+  const [syncing, setSyncing] = useState(false)
+  const [tabKey, setTabKey] = useState(0)
+  const pollRef = useRef<number | null>(null)
   const TABS: { key: Tab; label: string; icon: 'chart' | 'calendar' | 'sparkles' | 'brain' }[] = [
     { key: 'smart', label: '智能日报', icon: 'sparkles' },
     { key: 'smartWeekly', label: '智能周报', icon: 'sparkles' },
     ...(aiEnabled ? [{ key: 'ai' as Tab, label: 'AI 洞察', icon: 'brain' as const }] : [])
   ]
+
+  const handleRefresh = () => {
+    setSyncing(true)
+    setTabKey((k) => k + 1)
+    setLastSyncAt(Date.now())
+    window.setTimeout(() => setSyncing(false), 1000)
+  }
+
+  const handleSynced = () => {
+    setLastSyncAt(Date.now())
+    setSyncing(false)
+  }
+
+  useEffect(() => {
+    if (pollRef.current) window.clearInterval(pollRef.current)
+    const min = settings.reportAutoRefreshMin ?? 120
+    if (min > 0) {
+      pollRef.current = window.setInterval(() => {
+        setTabKey((k) => k + 1)
+        setLastSyncAt(Date.now())
+      }, min * 60000)
+    }
+    return () => {
+      if (pollRef.current) window.clearInterval(pollRef.current)
+    }
+  }, [settings.reportAutoRefreshMin])
+
+  const relativeTime = (ts: number) => {
+    const diff = Math.round((Date.now() - ts) / 1000)
+    if (diff < 60) return '刚刚'
+    if (diff < 3600) return `${Math.round(diff / 60)}分钟前`
+    if (diff < 86400) return `${Math.round(diff / 3600)}小时前`
+    return `${Math.round(diff / 86400)}天前`
+  }
   return (
     <div className="view-enter flex flex-col gap-5">
       {/* 页面标题区 */}
@@ -453,6 +492,15 @@ export default function ReportHub() {
           </button>
         ))}
         <div className="flex-1" />
+        <span className="text-[11px] text-slate-500">上次同步 {relativeTime(lastSyncAt)}</span>
+        <button
+          className={`glass-btn ${syncing ? 'primary' : ''}`}
+          title="手动刷新"
+          onClick={handleRefresh}
+          disabled={syncing}
+        >
+          <Icon name="refresh" size={13} className={syncing ? 'animate-spin' : ''} />
+        </button>
         {/* 报表设置（从设置中心迁入：排除摸鱼 / 导出模板） */}
         <button className={`glass-btn ${showSettings ? 'primary' : ''}`} title="报表设置" onClick={() => setShowSettings((v) => !v)}>
           <Icon name="settings" size={13} /> 报表设置
@@ -469,6 +517,20 @@ export default function ReportHub() {
             />
             排除摸鱼数据（状态分布与 TOP 应用榜不计入，仅底部标注）
           </label>
+          <label className="flex cursor-pointer items-center gap-2 text-[12px] text-slate-300">
+            <span className="whitespace-nowrap text-slate-400">自动刷新</span>
+            <select
+              className="glass-input !py-1 !text-[11px]"
+              value={settings.reportAutoRefreshMin ?? 120}
+              onChange={(e) => void patch({ reportAutoRefreshMin: Number(e.target.value) })}
+            >
+              <option value={15}>15分钟</option>
+              <option value={30}>30分钟</option>
+              <option value={60}>1小时</option>
+              <option value={120}>2小时（默认）</option>
+              <option value={0}>关闭</option>
+            </select>
+          </label>
           <div>
             <div className="mb-1 text-[12px] font-medium text-slate-300">日报导出模板</div>
             <div className="mb-1.5 text-[10px] leading-relaxed text-slate-500">
@@ -484,11 +546,11 @@ export default function ReportHub() {
           </div>
         </div>
       ) : null}
-      <div key={tab} className="anim-fade-up" style={{ animationDelay: '60ms' }}>
+      <div key={`${tab}-${tabKey}`} className="anim-fade-up" style={{ animationDelay: '60ms' }}>
         {tab === 'smart' ? (
-          <SmartReportView mode="day" />
+          <SmartReportView mode="day" onSynced={handleSynced} />
         ) : tab === 'smartWeekly' ? (
-          <SmartReportView mode="week" />
+          <SmartReportView mode="week" onSynced={handleSynced} />
         ) : (
           <AnalysisView />
         )}

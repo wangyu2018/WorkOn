@@ -605,6 +605,13 @@ export default function BuddyStage() {
                 onChange={(e) => patch({ widgetOpacity: parseFloat(e.target.value) })}
               />
             </div>
+            <div className="-mx-1 flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-white/[0.03]">
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] text-slate-300">紧凑模式</div>
+                <div className="mt-0.5 text-[10px] text-slate-500">隐藏气泡与占位文本，只保留核心状态与活跃告警</div>
+              </div>
+              <Toggle checked={settings.widgetCompact} onChange={(v) => void patch({ widgetCompact: v })} />
+            </div>
           </div>
         )}
       </section>

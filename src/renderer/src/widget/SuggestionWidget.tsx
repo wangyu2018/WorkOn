@@ -47,6 +47,21 @@ export default function SuggestionWidget() {
   const dragRef = useRef<{ x: number; y: number } | null>(null)
   const blurTimer = useRef<number | null>(null)
   const prevAlert = useRef(false)
+  const [petBubble, setPetBubble] = useState<string | null>(null)
+  const petBubbleTimer = useRef<number | null>(null)
+  useEffect(() => {
+    if (pet?.message) {
+      setPetBubble(pet.message)
+      if (petBubbleTimer.current) window.clearTimeout(petBubbleTimer.current)
+      petBubbleTimer.current = window.setTimeout(() => setPetBubble(null), 3000)
+    }
+    return () => {
+      if (petBubbleTimer.current) window.clearTimeout(petBubbleTimer.current)
+    }
+  }, [pet?.message])
+  const [widgetCompact, setWidgetCompact] = useState(false)
+  const [alertCollapsed, setAlertCollapsed] = useState<Record<string, boolean>>({})
+  const [showFocusMinutes, setShowFocusMinutes] = useState(false)
 
   const collapseWidget = () => {
     setWidgetMode('collapsed')
@@ -56,7 +71,7 @@ export default function SuggestionWidget() {
 
   const expandWidget = () => {
     setWidgetMode('expanded')
-    window.api.widgetResize(340, 460)
+    window.api.widgetResize(340, 520)
     window.api.setSettings({ widgetMode: 'expanded' })
   }
 
@@ -66,6 +81,8 @@ export default function SuggestionWidget() {
       setWidgetMode(mode)
       if (mode === 'collapsed') window.api.widgetResize(64, 64)
     }).catch(() => undefined)
+
+    window.api.getSettings().then((s) => setWidgetCompact(!!(s as { widgetCompact?: boolean }).widgetCompact)).catch(() => undefined)
 
     const cleanup = usePresenceStore.getState().init()
     window.api.getQuestion().then((q) => setQuestion(q as SuggestionQuestion | null)).catch(() => undefined)
@@ -142,7 +159,7 @@ export default function SuggestionWidget() {
   const state = presence?.state ?? 'idle'
   const meta = WORK_STATES[state] ?? WORK_STATES.idle
   const focus = presence?.focusLevel ?? 0
-  const R = 21
+  const R = 18
   const CIRC = 2 * Math.PI * R
 
   const answer = (a: 'yes' | 'no') => {
@@ -212,11 +229,11 @@ export default function SuggestionWidget() {
           className={`relative h-[44px] w-[44px] cursor-pointer rounded-full transition-transform hover:scale-105 ${shimmer ? 'shimmer-ring' : ''}`}
           onClick={expandWidget}
         >
-          <svg viewBox="0 0 56 56" className="h-[44px] w-[44px] -rotate-90">
-            <circle cx="28" cy="28" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="4" />
+          <svg viewBox="0 0 48 48" className="h-[44px] w-[44px] -rotate-90">
+            <circle cx="24" cy="24" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3.5" />
             <circle
-              cx="28" cy="28" r={R} fill="none"
-              stroke={meta.color} strokeWidth="4" strokeLinecap="round"
+              cx="24" cy="24" r={R} fill="none"
+              stroke={meta.color} strokeWidth="3.5" strokeLinecap="round"
               strokeDasharray={CIRC}
               strokeDashoffset={CIRC * (1 - focus / 100)}
               style={{ transition: 'stroke-dashoffset 400ms ease-out' }}
@@ -264,26 +281,30 @@ export default function SuggestionWidget() {
           </div>
         </div>
 
-        {welcome && (
+        {welcome && !widgetCompact && (
           <div className="mx-3 mt-2 rounded-lg bg-neon-green/15 px-3 py-1.5 text-center text-xs text-neon-green">
-            欢迎回到正事 🎯
+            欢迎回到正事
           </div>
         )}
 
         {/* 状态区 */}
-        <div className="flex items-center gap-3 px-4 py-3">
-          <div className="relative h-14 w-14 shrink-0">
-            <svg viewBox="0 0 56 56" className="h-14 w-14 -rotate-90">
-              <circle cx="28" cy="28" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="4" />
+        <div
+          className="flex items-center gap-3 px-4 py-3"
+          onMouseEnter={() => setShowFocusMinutes(true)}
+          onMouseLeave={() => setShowFocusMinutes(false)}
+        >
+          <div className="relative h-12 w-12 shrink-0">
+            <svg viewBox="0 0 48 48" className="h-12 w-12 -rotate-90">
+              <circle cx="24" cy="24" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3.5" />
               <circle
-                cx="28" cy="28" r={R} fill="none"
-                stroke={meta.color} strokeWidth="4" strokeLinecap="round"
+                cx="24" cy="24" r={R} fill="none"
+                stroke={meta.color} strokeWidth="3.5" strokeLinecap="round"
                 strokeDasharray={CIRC}
                 strokeDashoffset={CIRC * (1 - focus / 100)}
                 style={{ transition: 'stroke-dashoffset 400ms ease-out' }}
               />
             </svg>
-            <div className="absolute inset-0 flex items-center justify-center text-lg">{meta.emoji}</div>
+            <div className="absolute inset-0 flex items-center justify-center text-sm">{meta.emoji}</div>
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold" style={{ color: meta.color }}>
@@ -298,7 +319,7 @@ export default function SuggestionWidget() {
             <div className="mt-0.5 truncate text-xs text-slate-400">
               {presence?.screens?.find((s) => s.screen === presence.mainScreen)?.title || '等待采集…'}
             </div>
-            {presence && presence.continuousFocusSec > 60 && (
+            {presence && presence.continuousFocusSec > 60 && showFocusMinutes && (
               <div className="mt-0.5 text-xs text-neon-cyan">
                 已专注 {Math.round(presence.continuousFocusSec / 60)} 分钟
               </div>
@@ -348,113 +369,169 @@ export default function SuggestionWidget() {
         ) : null}
 
         {/* 桌宠气泡 */}
-        {pet?.message && (
+        {petBubble && !widgetCompact && (
           <div className="mx-3 mb-2 rounded-xl rounded-bl-sm border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-2 text-xs text-neon-cyan">
-            🐾 {pet.message}
+            🐾 {petBubble}
           </div>
         )}
 
         {/* 浏览器计划匹配确认 */}
-        {bpConfirm ? (
-          <div className="mx-3 mb-2 rounded-xl border border-neon-blue/30 bg-neon-blue/10 p-3">
-            <div className="mb-1 text-[11px] font-medium text-neon-blue">🌐 浏览器检测</div>
-            <div className="mb-2 text-xs leading-relaxed text-slate-200">
-              检测到你在浏览与计划【{bpConfirm.planTitle}】相关的内容，你在做这项计划吗？
-            </div>
-            <div className="flex gap-2">
+        <div className="mx-3 flex max-h-[240px] flex-col gap-2 overflow-y-auto">
+          {bpConfirm ? (
+            <div className="relative rounded-xl border border-neon-blue/30 bg-neon-blue/10 p-2.5">
               <button
-                className="flex-1 rounded-lg bg-neon-green/20 py-1.5 text-xs text-neon-green transition-colors hover:bg-neon-green/30"
-                onClick={() => answerBrowserPlan('yes')}
+                className="absolute right-1.5 top-1.5 rounded p-0.5 text-[10px] text-slate-500 hover:text-slate-300"
+                onClick={() => setAlertCollapsed((c) => ({ ...c, bp: true }))}
+                title="收起"
               >
-                是，在做这个
+                ▾
               </button>
-              <button
-                className="flex-1 rounded-lg bg-white/5 py-1.5 text-xs text-slate-400 transition-colors hover:bg-white/10"
-                onClick={() => answerBrowserPlan('no')}
-              >
-                不是
-              </button>
+              {alertCollapsed['bp'] ? (
+                <div className="text-[11px] text-neon-blue">🌐 浏览器检测（已收起）</div>
+              ) : (
+                <>
+                  <div className="mb-1 text-[11px] font-medium text-neon-blue">🌐 浏览器检测</div>
+                  <div className="mb-2 text-xs leading-relaxed text-slate-200">
+                    检测到你在浏览与计划【{bpConfirm.planTitle}】相关的内容，你在做这项计划吗？
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      className="flex-1 rounded-lg bg-neon-green/20 py-1.5 text-xs text-neon-green transition-colors hover:bg-neon-green/30"
+                      onClick={() => answerBrowserPlan('yes')}
+                    >
+                      是，在做这个
+                    </button>
+                    <button
+                      className="flex-1 rounded-lg bg-white/5 py-1.5 text-xs text-slate-400 transition-colors hover:bg-white/10"
+                      onClick={() => answerBrowserPlan('no')}
+                    >
+                      不是
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
-          </div>
-        ) : null}
+          ) : null}
 
-        {/* 会议检测选项 */}
-        {meetingDetected ? (
-          <div className="mx-3 mb-2 rounded-xl border border-neon-amber/30 bg-neon-amber/10 p-3">
-            <div className="mb-1 text-[11px] font-medium text-neon-amber">👥 会议检测</div>
-            <div className="mb-2 text-xs leading-relaxed text-slate-200">
-              检测到你正在使用 {meetingDetected.app.replace(/\.exe$/i, '')} 开会，选择会议模式：
+          {/* 会议检测选项 */}
+          {meetingDetected ? (
+            <div className="relative rounded-xl border border-neon-amber/30 bg-neon-amber/10 p-2.5">
+              <button
+                className="absolute right-1.5 top-1.5 rounded p-0.5 text-[10px] text-slate-500 hover:text-slate-300"
+                onClick={() => setAlertCollapsed((c) => ({ ...c, md: true }))}
+                title="收起"
+              >
+                ▾
+              </button>
+              {alertCollapsed['md'] ? (
+                <div className="text-[11px] text-neon-amber">👥 会议检测（已收起）</div>
+              ) : (
+                <>
+                  <div className="mb-1 text-[11px] font-medium text-neon-amber">👥 会议检测</div>
+                  <div className="mb-2 text-xs leading-relaxed text-slate-200">
+                    检测到你正在使用 {meetingDetected.app.replace(/\.exe$/i, '')} 开会，选择会议模式：
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button
+                      className="flex-1 rounded-lg bg-white/[0.08] py-1.5 text-[11px] text-slate-200 transition-colors hover:bg-white/[0.14]"
+                      onClick={() => chooseMeetingMode('stealth')}
+                    >
+                      🤫 一键隐身
+                    </button>
+                    <button
+                      className="flex-1 rounded-lg bg-white/[0.08] py-1.5 text-[11px] text-slate-200 transition-colors hover:bg-white/[0.14]"
+                      onClick={() => chooseMeetingMode('quiet')}
+                    >
+                      🔇 免打扰
+                    </button>
+                    <button
+                      className="flex-1 rounded-lg bg-white/[0.08] py-1.5 text-[11px] text-slate-200 transition-colors hover:bg-white/[0.14]"
+                      onClick={() => chooseMeetingMode('assist')}
+                    >
+                      📝 会议辅助
+                    </button>
+                  </div>
+                  <label className="mt-2 flex cursor-pointer items-center gap-1.5 text-[10px] text-slate-500">
+                    <input type="checkbox" checked={meetingSetDefault} onChange={(e) => setMeetingSetDefault(e.target.checked)} />
+                    以后都这样（可在设置中修改）
+                  </label>
+                </>
+              )}
             </div>
-            <div className="flex gap-1.5">
-              <button
-                className="flex-1 rounded-lg bg-white/[0.08] py-1.5 text-[11px] text-slate-200 transition-colors hover:bg-white/[0.14]"
-                onClick={() => chooseMeetingMode('stealth')}
-              >
-                🤫 一键隐身
-              </button>
-              <button
-                className="flex-1 rounded-lg bg-white/[0.08] py-1.5 text-[11px] text-slate-200 transition-colors hover:bg-white/[0.14]"
-                onClick={() => chooseMeetingMode('quiet')}
-              >
-                🔇 免打扰
-              </button>
-              <button
-                className="flex-1 rounded-lg bg-white/[0.08] py-1.5 text-[11px] text-slate-200 transition-colors hover:bg-white/[0.14]"
-                onClick={() => chooseMeetingMode('assist')}
-              >
-                📝 会议辅助
-              </button>
-            </div>
-            <label className="mt-2 flex cursor-pointer items-center gap-1.5 text-[10px] text-slate-500">
-              <input type="checkbox" checked={meetingSetDefault} onChange={(e) => setMeetingSetDefault(e.target.checked)} />
-              以后都这样（可在设置中修改）
-            </label>
-          </div>
-        ) : null}
+          ) : null}
 
-        {/* 会议辅助计时 */}
-        {meetingActive?.mode === 'assist' ? (
-          <div className="mx-3 mb-2 flex items-center gap-2 rounded-xl border border-neon-green/25 bg-neon-green/10 px-3 py-2">
-            <span className="text-xs text-neon-green">📝</span>
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-medium text-neon-green">
-                会议辅助中 · {Math.max(1, Math.round((Date.now() - meetingActive.sinceTs) / 60000))} 分钟
+          {/* 会议辅助计时 */}
+          {meetingActive?.mode === 'assist' ? (
+            <div className="relative flex items-center gap-2 rounded-xl border border-neon-green/25 bg-neon-green/10 px-3 py-2">
+              <button
+                className="absolute right-1.5 top-1.5 rounded p-0.5 text-[10px] text-slate-500 hover:text-slate-300"
+                onClick={() => setAlertCollapsed((c) => ({ ...c, ma: true }))}
+                title="收起"
+              >
+                ▾
+              </button>
+              {alertCollapsed['ma'] ? (
+                <span className="text-xs text-neon-green">📝 会议辅助中（已收起）</span>
+              ) : (
+                <>
+                  <span className="text-xs text-neon-green">📝</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-medium text-neon-green">
+                      会议辅助中 · {Math.max(1, Math.round((Date.now() - meetingActive.sinceTs) / 60000))} 分钟
+                    </div>
+                    <div className="text-[10px] text-neon-green/60">每 15 分钟报时提醒</div>
+                  </div>
+                  <button
+                    className="shrink-0 rounded-lg border border-neon-green/30 px-2 py-1 text-[10px] text-neon-green transition-colors hover:bg-neon-green/15"
+                    onClick={() => applyMeetingMode('assist', false, meetingActive.sinceTs)}
+                  >
+                    结束会议
+                  </button>
+                </>
+              )}
+            </div>
+          ) : null}
+
+          {/* 轻问诊 */}
+          {question ? (
+            <div className="relative rounded-xl border border-neon-violet/30 bg-neon-violet/10 p-2.5">
+              <button
+                className="absolute right-1.5 top-1.5 rounded p-0.5 text-[10px] text-slate-500 hover:text-slate-300"
+                onClick={() => setAlertCollapsed((c) => ({ ...c, q: true }))}
+                title="收起"
+              >
+                ▾
+              </button>
+              {alertCollapsed['q'] ? (
+                <div className="text-[11px] text-neon-violet">📋 轻问诊（已收起）</div>
+              ) : (
+                <>
+                  <div className="mb-2 text-xs leading-relaxed text-slate-200">{question.question}</div>
+                  <div className="flex gap-2">
+                    <button
+                      className="flex-1 rounded-lg bg-neon-green/20 py-1.5 text-xs text-neon-green transition-colors hover:bg-neon-green/30"
+                      onClick={() => answer('yes')}
+                    >
+                      确认
+                    </button>
+                    <button
+                      className="flex-1 rounded-lg bg-white/5 py-1.5 text-xs text-slate-400 transition-colors hover:bg-white/10"
+                      onClick={() => answer('no')}
+                    >
+                      否定
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : !bpConfirm ? (
+            widgetCompact ? null : (
+              <div className="rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2 text-center text-xs text-slate-500">
+                暂无新的情境确认 · 越用越聪明
               </div>
-              <div className="text-[10px] text-neon-green/60">每 15 分钟报时提醒</div>
-            </div>
-            <button
-              className="shrink-0 rounded-lg border border-neon-green/30 px-2 py-1 text-[10px] text-neon-green transition-colors hover:bg-neon-green/15"
-              onClick={() => applyMeetingMode('assist', false, meetingActive.sinceTs)}
-            >
-              结束会议
-            </button>
-          </div>
-        ) : null}
-
-        {/* 轻问诊 */}
-        {question ? (
-          <div className="mx-3 mb-2 rounded-xl border border-neon-violet/30 bg-neon-violet/10 p-3">
-            <div className="mb-2 text-xs leading-relaxed text-slate-200">{question.question}</div>
-            <div className="flex gap-2">
-              <button
-                className="flex-1 rounded-lg bg-neon-green/20 py-1.5 text-xs text-neon-green transition-colors hover:bg-neon-green/30"
-                onClick={() => answer('yes')}
-              >
-                确认
-              </button>
-              <button
-                className="flex-1 rounded-lg bg-white/5 py-1.5 text-xs text-slate-400 transition-colors hover:bg-white/10"
-                onClick={() => answer('no')}
-              >
-                否定
-              </button>
-            </div>
-          </div>
-        ) : !bpConfirm ? (
-          <div className="mx-3 mb-2 rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2 text-center text-xs text-slate-500">
-            暂无新的情境确认 · 越用越聪明
-          </div>
-        ) : null}
+            )
+          ) : null}
+        </div>
 
         <div className="flex-1" />
 

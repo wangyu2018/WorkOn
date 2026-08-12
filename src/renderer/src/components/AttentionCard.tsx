@@ -174,7 +174,7 @@ export function AttentionDailyCard({ score, yesterday }: { score: AttentionScore
       </div>
       {/* 底部：规则洞察 + 可折叠五维详情 */}
       <div className="mt-3 border-t border-white/[0.05] pt-3">
-        <p className="text-[11px] leading-relaxed text-slate-400">
+        <p className="line-clamp-2 text-[11px] leading-relaxed text-slate-400">
           <span className="mr-1">💡</span>
           {insightOf(score)}
         </p>
@@ -182,7 +182,7 @@ export function AttentionDailyCard({ score, yesterday }: { score: AttentionScore
           {showSignals ? '▾ 收起五维详情' : '▸ 五维详情'}
         </button>
         {showSignals ? (
-          <div className="anim-fade-in mt-2 grid grid-cols-2 gap-x-6 gap-y-1 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2">
+          <div className="anim-fade-in mt-2 grid grid-cols-2 gap-x-6 gap-y-0.5 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2">
             {SIGNAL_META.map((m) => (
               <div key={m.key} className="flex items-center justify-between gap-2 text-[10px]">
                 <span className="text-slate-500">{m.label}</span>

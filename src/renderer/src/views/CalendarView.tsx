@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import type { TimeEntry, WorkState, MergedTrail } from '@shared/types'
-import { ALL_STATES, WORK_STATES } from '@shared/stateMeta'
+import { ALL_STATES, WORK_STATES, WORK_LIKE_STATES } from '@shared/stateMeta'
 import { genId } from '@shared/types'
+import { displayApp } from '@shared/appDisplayName'
 import { Icon } from '../components/Icon'
 import { ActivityHoverCard } from '../components/ActivityHoverCard'
 import HeatmapView from './HeatmapView'
@@ -15,6 +16,8 @@ import {
   todayKey,
   weekDays
 } from '../components/utils'
+
+const SLACK_STATES: WorkState[] = ['slack', 'relax', 'break', 'lunch', 'idle', 'away']
 
 type CalMode = 'week' | 'month'
 
@@ -35,11 +38,112 @@ function saveMode(v: CalMode) {
   }
 }
 
+function parseCounterpart(app?: string, title?: string): string | undefined {
+  if (!app || !title) return undefined
+  const a = app.toLowerCase()
+  if (/(wechat|weixin|wchar|wecom|企业微信)/.test(a)) {
+    return title.replace(/\s*[-–]\s*(微信|WeChat|企业微信|WeCom).*$/i, '').trim() || undefined
+  }
+  if (/(chrome|edge|firefox|brave|safari|opera|浏览器)/.test(a)) {
+    return title.replace(/\s*[-–]\s*(Chrome|Edge|Firefox|Brave|Safari|Opera|浏览器).*$/i, '').trim() || undefined
+  }
+  return undefined
+}
+
 const SOURCE_LABEL: Record<TimeEntry['source'], string> = {
   manual: '手动',
   monitor: '监控',
   import: '导入',
   ai: 'AI'
+}
+
+const SLACK_STATES: WorkState[] = ['slack', 'relax', 'break', 'lunch', 'idle', 'away']
+
+function senseOf(state: WorkState): 'work' | 'slack' | 'other' {
+  if (SLACK_STATES.includes(state)) return 'slack'
+  if (WORK_LIKE_STATES.includes(state)) return 'work'
+  return 'other'
+}
+
+const SENSE_META = {
+  work:  { label: '办公', rgb: '124 158 255' },
+  slack: { label: '摸鱼', rgb: '255 124 124' },
+  other: { label: '其他', rgb: '148 163 184' },
+} as const
+
+function ActivityDetailCard({ entry, pos, onEdit, onClose, matchedApp, matchedTitle, counterpart, topic }: {
+  entry: TimeEntry
+  pos: { x: number; y: number }
+  onEdit: () => void
+  onClose: () => void
+  matchedApp?: string
+  matchedTitle?: string
+  counterpart?: string
+  topic?: string
+}) {
+  const meta = WORK_STATES[entry.state] ?? WORK_STATES.idle
+  const sense = SENSE_META[senseOf(entry.state ?? 'idle')]
+  const app = matchedApp ?? displayApp(entry.title)
+  const title = matchedTitle ?? entry.title
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[55]" onClick={onClose} />
+      <div
+        className="fixed z-[56] rounded-xl px-3 py-2 shadow-lg"
+        style={{
+          width: 240,
+          background: '#ffffff',
+          border: `1px solid rgb(${sense.rgb}/0.55)`,
+          boxShadow: '0 4px 18px rgba(15,23,42,0.15)',
+          color: '#1e293b',
+          left: `${pos.x}px`,
+          top: `${pos.y}px`,
+          transform: pos.x + 240 + 16 > window.innerWidth
+            ? 'translate(calc(-100% - 16px), 16px)'
+            : 'translate(0, 16px)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[12px] font-semibold truncate">{app}</span>
+          <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+            style={{ color: `rgb(${sense.rgb})`, background: `rgb(${sense.rgb}/0.12)` }}>
+            {sense.label}
+          </span>
+        </div>
+        <div className="mt-1 text-[11px] leading-snug" style={{ color: '#334155' }}>
+          {title || '（未命名）'}
+        </div>
+        {(counterpart || topic) ? (
+          <div className="mt-1 text-[11px] leading-snug" style={{ color: '#64748b' }}>
+            {counterpart ? <span>与 <b style={{ color: '#334155' }}>{counterpart}</b> 沟通</span> : null}
+            {topic ? <span>查看：<b style={{ color: '#334155' }}>{topic}</b></span> : null}
+          </div>
+        ) : null}
+        <div className="mt-1.5 flex items-center gap-2 text-[10px]" style={{ color: '#64748b' }}>
+          <span>{clockOf(entry.startMin)} – {clockOf(entry.endMin)}</span>
+          <span style={{ color: '#94a3b8' }}>·</span>
+          <span>{fmtMin(entry.endMin - entry.startMin)}</span>
+          <span className="ml-auto rounded px-1 py-0.5" style={{ background: '#f1f5f9', color: '#475569' }}>{SOURCE_LABEL[entry.source]}</span>
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            className="flex-1 rounded-lg border border-slate-200 py-1 text-[10px] text-slate-600 transition-colors hover:bg-slate-100"
+            onClick={onEdit}
+          >
+            ✏️ 编辑
+          </button>
+          <button
+            className="rounded-lg border border-slate-200 px-2 py-1 text-[10px] text-slate-400 transition-colors hover:bg-slate-100"
+            onClick={onClose}
+          >
+            关闭
+          </button>
+        </div>
+      </div>
+    </>
+  )
 }
 
 /* ── 条目编辑弹窗 ── */
@@ -162,6 +266,9 @@ function WeekGrid({ date }: { date: string }) {
   const [editor, setEditor] = useState<{ entry: TimeEntry; isNew: boolean } | null>(null)
   const [hoverEntry, setHoverEntry] = useState<string | null>(null)
   const [mouse, setMouse] = useState({ x: 0, y: 0 })
+  const [detailEntry, setDetailEntry] = useState<TimeEntry | null>(null)
+  const [detailPos, setDetailPos] = useState({ x: 0, y: 0 })
+  const detailRef = useRef<HTMLDivElement | null>(null)
   const days = weekDays(date)
 
   useEffect(() => {
@@ -187,6 +294,59 @@ function WeekGrid({ date }: { date: string }) {
   const refetchDay = async (dayKey: string) => {
     const entries = ((await window.api.listEntries(dayKey)) as TimeEntry[]) ?? []
     setDayEntries((prev) => ({ ...prev, [dayKey]: entries }))
+  }
+
+  const getEntrySegment = (entry: TimeEntry, trail: MergedTrail | null) => {
+    if (!trail) return null
+    const dayTs = new Date(`${entry.date}T00:00:00`).getTime()
+    const sTs = dayTs + entry.startMin * 60000
+    const eTs = dayTs + entry.endMin * 60000
+    let best: (typeof trail.segments)[number] | null = null
+    let bestOverlap = 0
+    for (const seg of trail.segments) {
+      const overlap = Math.max(0, Math.min(eTs, seg.endTs) - Math.max(sTs, seg.startTs))
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap
+        best = seg
+      }
+    }
+    return best
+  }
+
+  const handleEntryClick = (entry: TimeEntry, dayKey: string, trailsData: (MergedTrail | null)[]) => {
+    setDetailPos(mouse)
+    setDetailEntry(entry)
+  }
+
+  const handleHourClick = (dayKey: string, hour: number, trail: MergedTrail | null, e: React.MouseEvent) => {
+    if (!trail) return
+    const dayTs = new Date(`${dayKey}T00:00:00`).getTime()
+    const hStart = dayTs + hour * 3600000
+    const hEnd = hStart + 3600000
+    let best: (typeof trail.segments)[number] | null = null
+    let bestOverlap = 0
+    for (const seg of trail.segments) {
+      const overlap = Math.max(0, Math.min(hEnd, seg.endTs) - Math.max(hStart, seg.startTs))
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap
+        best = seg
+      }
+    }
+    if (best && bestOverlap > 0) {
+      const sMin = new Date(best.startTs).getHours() * 60 + new Date(best.startTs).getMinutes()
+      const eMin = new Date(best.endTs).getHours() * 60 + new Date(best.endTs).getMinutes()
+      setDetailPos({ x: e.clientX, y: e.clientY })
+      setDetailEntry({
+        id: best.id ?? `seg-${best.startTs}`,
+        date: dayKey,
+        startMin: Math.max(sMin, 0),
+        endMin: Math.min(eMin, 1440),
+        title: best.mainApp,
+        state: best.mainState,
+        source: 'monitor',
+        ts: best.startTs
+      })
+    }
   }
 
   /** 每小时主导态 */
@@ -221,6 +381,14 @@ function WeekGrid({ date }: { date: string }) {
   }
 
   const today = todayKey()
+
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDetailEntry(null)
+    }
+    window.addEventListener('keydown', handleEsc)
+    return () => window.removeEventListener('keydown', handleEsc)
+  }, [])
 
   return (
     <div className="anim-fade-up grid grid-cols-7 gap-3" style={{ animationDelay: '120ms' }}>
@@ -272,12 +440,13 @@ function WeekGrid({ date }: { date: string }) {
                 <div
                   key={h}
                   title={`${d} ${h}:00${s ? ` · ${WORK_STATES[s].label}` : ''}`}
-                  className="w-full rounded-lg px-2 py-1 text-[10px]"
+                  className="w-full cursor-pointer rounded-lg px-2 py-1 text-[10px] transition-colors hover:brightness-110"
                   style={{
                     borderLeft: s ? `2px solid ${WORK_STATES[s].color}` : '2px solid transparent',
                     background: s ? `${WORK_STATES[s].color}14` : 'rgba(255,255,255,0.03)',
                     color: s ? '#cbd5e1' : '#475569'
                   }}
+                  onClick={(e) => handleHourClick(d, h, trail, e)}
                 >
                   {String(h).padStart(2, '0')}:00
                   {s ? <span> {WORK_STATES[s].emoji} {WORK_STATES[s].label}</span> : null}
@@ -300,7 +469,7 @@ function WeekGrid({ date }: { date: string }) {
                           borderColor: meta.color,
                           background: `${meta.color}12`
                         }}
-                        onClick={() => setEditor({ entry, isNew: false })}
+                        onClick={() => handleEntryClick(entry, d, trails)}
                         onMouseEnter={() => setHoverEntry(entry.id)}
                         onMouseLeave={() => setHoverEntry(null)}
                         onMouseMove={(e) => setMouse({ x: e.clientX, y: e.clientY })}
@@ -313,17 +482,27 @@ function WeekGrid({ date }: { date: string }) {
                           {clockOf(entry.startMin)}–{clockOf(entry.endMin)} · {fmtMin(entry.endMin - entry.startMin)}
                         </div>
                         {hoverEntry === entry.id && (
-                          <ActivityHoverCard a={{
-                            app: meta.emoji + ' ' + meta.label,
-                            title: entry.title || '（未命名）',
-                            state: entry.state,
-                            startText: clockOf(entry.startMin),
-                            endText: clockOf(entry.endMin),
-                            durationText: fmtMin(entry.endMin - entry.startMin),
-                            source: SOURCE_LABEL[entry.source],
-                            mode: 'fixed',
-                            pos: mouse,
-                          }} />
+                          (() => {
+                            const seg = getEntrySegment(entry, trail)
+                            const app = seg ? displayApp(seg.mainApp) : (meta.emoji + ' ' + meta.label)
+                            const title = seg?.mainTitle ?? entry.title
+                            const counterpart = seg ? parseCounterpart(seg.mainApp, seg.mainTitle) : undefined
+                            return (
+                              <ActivityHoverCard a={{
+                                app,
+                                title: title || '（未命名）',
+                                state: entry.state,
+                                startText: clockOf(entry.startMin),
+                                endText: clockOf(entry.endMin),
+                                durationText: fmtMin(entry.endMin - entry.startMin),
+                                source: SOURCE_LABEL[entry.source],
+                                mode: 'fixed',
+                                pos: mouse,
+                                counterpart: seg && /wechat|weixin|wchar|wecom|企业微信/.test(seg.mainApp.toLowerCase()) ? counterpart : undefined,
+                                topic: seg && /chrome|edge|firefox|brave|safari|opera/i.test(seg.mainApp) ? counterpart : undefined,
+                              }} />
+                            )
+                          })()
                         )}
                       </div>
                     )
@@ -342,6 +521,29 @@ function WeekGrid({ date }: { date: string }) {
             void refetchDay(editor.entry.date)
           }}
         />
+      ) : null}
+      {detailEntry ? (
+        (() => {
+          const dayTrail = trails[days.indexOf(detailEntry.date)] ?? null
+          const seg = getEntrySegment(detailEntry, dayTrail)
+          const app = seg ? displayApp(seg.mainApp) : displayApp(detailEntry.title)
+          const title = seg?.mainTitle ?? detailEntry.title
+          const cpt = seg ? parseCounterpart(seg.mainApp, seg.mainTitle) : undefined
+          const isWechat = seg && /wechat|weixin|wchar|wecom|企业微信/.test(seg.mainApp.toLowerCase())
+          const isBrowser = seg && /chrome|edge|firefox|brave|safari|opera/i.test(seg.mainApp)
+          return (
+            <ActivityDetailCard
+              entry={detailEntry}
+              pos={detailPos}
+              matchedApp={app}
+              matchedTitle={title}
+              counterpart={isWechat ? cpt : undefined}
+              topic={isBrowser ? cpt : undefined}
+              onEdit={() => { setEditor({ entry: detailEntry, isNew: false }); setDetailEntry(null) }}
+              onClose={() => setDetailEntry(null)}
+            />
+          )
+        })()
       ) : null}
     </div>
   )

@@ -330,54 +330,14 @@ export default function SettingsView() {
       )}
       {/* 1. 监控 */}
       <Section title="监控" icon="activity">
-        <Row label="采样间隔" desc="基础轮询周期（智能模式下会按状态自动升降频）。间隔越短，时长记录越准、越能捕捉秒级切窗，但占用略高。">
-          <div className="flex gap-1.5">
-            {(
-              [
-                [2000, '2s'],
-                [5000, '5s'],
-                [10000, '10s'],
-                [30000, '30s']
-              ] as const
-            ).map(([ms, label]) => (
-              <button
-                key={ms}
-                className={`rounded-lg border px-2.5 py-1.5 text-[12px] transition-all ${
-                  settings.monitorInterval === ms ? 'border-white/30 bg-white/[0.08] text-slate-100' : 'border-white/[0.07] text-slate-400 hover:border-white/20'
-                }`}
-                onClick={() => p({ monitorInterval: ms })}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="mt-1.5 space-y-1">
-            {(() => {
-              const intervalMs = settings.monitorInterval
-              const acc = intervalMs <= 2000
-                ? { tier: '高', err: '±2s', note: '能捕捉秒级切窗，时长几乎无误差' }
-                : intervalMs <= 5000
-                ? { tier: '标准', err: '±5s', note: '偶发 &lt;3s 极短聚焦可能漏记' }
-                : { tier: '粗', err: '±10s', note: '时长按 10s 粒度四舍五入，&lt;8s 切窗易漏' }
-              return (
-                <p className="text-[11px] leading-relaxed text-slate-500">
-                  当前精度：<span className="text-slate-300">{acc.tier}</span>（时长误差约 {acc.err}）· {acc.note}
-                </p>
-              )
-            })()}
-            <p className="text-[11px] leading-relaxed text-slate-500">
-              记录分两层：<span className="text-slate-300">时长 / 应用 / 类目 / 当前会话对象</span> 为精确记录；「刷了 N 条」等细颗粒内容属<span className="text-slate-300">估算</span>（需开启深度模式，带置信度标注），非精确事实。
-            </p>
-          </div>
-        </Row>
+        <div className="-mx-1 flex items-center gap-1 rounded-lg px-1 py-1.5 text-[11px] text-slate-500">
+          采样间隔与 OCR 深度模式已移至「隐私与数据管理 → 数据采集频率」
+        </div>
         <Row label="智能轮询" desc="深度专注≥80 自动降频到 10s（省电少打扰）；摸鱼时升频到 3s（及时捕捉）。降频段精度变粗、升频段精度变高，平均精度取决于当天状态分布。">
           <Toggle checked={settings.monitorSmart} onChange={(v) => p({ monitorSmart: v })} />
         </Row>
         <Row label="计划完成预测" desc="监控/日历时间轴上按计划完成概率三色标注（绿=可完成 橙=可能延迟 红=高风险）">
           <Toggle checked={settings.planForecastEnabled} onChange={(v) => p({ planForecastEnabled: v })} />
-        </Row>
-        <Row label="深度模式（OCR）" desc="开启后每30s对屏幕截图做 OCR 文字识别，提升类目/内容推断精度，使估算更准。重启监控后生效。缓存与清理已移至「隐私」模块">
-          <Toggle checked={settings.deepMode} onChange={(v) => p({ deepMode: v })} />
         </Row>
         <Row label="会议模式" desc="检测到会议软件时的默认行为">
           <div className="flex gap-2">

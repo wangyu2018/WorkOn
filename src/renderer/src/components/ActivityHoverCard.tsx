@@ -11,6 +11,8 @@ export interface ActivityInfo {
   source?: string
   mode?: 'anchor' | 'fixed'
   pos?: { x: number; y: number }
+  counterpart?: string
+  topic?: string
 }
 
 const SLACK_STATES: WorkState[] = ['slack', 'relax', 'break', 'lunch', 'idle', 'away']
@@ -60,6 +62,12 @@ export function ActivityHoverCard({ a }: { a: ActivityInfo }) {
       <div className="mt-1 text-[11px] leading-snug" style={{ color: '#334155' }}>
         {a.title || '（未命名）'}
       </div>
+      {(a.counterpart || a.topic) ? (
+        <div className="mt-1 text-[11px] leading-snug" style={{ color: '#64748b' }}>
+          {a.counterpart ? <span>与 <b style={{ color: '#334155' }}>{a.counterpart}</b> 沟通</span> : null}
+          {a.topic ? <span>查看：<b style={{ color: '#334155' }}>{a.topic}</b></span> : null}
+        </div>
+      ) : null}
       <div className="mt-1.5 flex items-center gap-2 text-[10px]" style={{ color: '#64748b' }}>
         <span>{a.startText} – {a.endText}</span>
         <span style={{ color: '#94a3b8' }}>·</span>

@@ -4,6 +4,12 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { Icon } from '../components/Icon'
 import { Toggle } from '../components/Toggle'
 
+function monitorAccuracyOf(intervalMs: number) {
+  if (intervalMs <= 2000) return { tier: '高', err: '±2s', note: '能捕捉秒级切窗，时长几乎无误差' }
+  if (intervalMs <= 5000) return { tier: '标准', err: '±5s', note: '偶发 <3s 极短聚焦可能漏记' }
+  return { tier: '粗', err: '±10s', note: '时长按 10s 粒度四舍五入，<8s 切窗易漏' }
+}
+
 /* ── 分组与行（与设置页同风格） ── */
 function Section({
   title,
@@ -72,6 +78,27 @@ function NumberSetting({ value, onCommit, min, max, suffix }: { value: number; o
       />
       {suffix ? <span className="text-[11px] text-slate-500">{suffix}</span> : null}
     </span>
+  )
+}
+
+function TextSetting({ value, onCommit, placeholder }: { value: string; onCommit: (v: string) => void; placeholder?: string }) {
+  const [v, setV] = useState(value)
+  useEffect(() => setV(value), [value])
+  const commit = () => {
+    if (v !== value) onCommit(v)
+  }
+  return (
+    <input
+      type="text"
+      className="glass-input w-32"
+      value={v}
+      placeholder={placeholder}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+      }}
+    />
   )
 }
 
@@ -319,9 +346,51 @@ export default function PrivacyView() {
               <p className="flex items-center gap-1.5">
                 <Icon name="check" size={11} className="shrink-0 text-neon-green/80" /> 标记不采集的应用：0 条活动记录（历史可一键清理）
               </p>
+              <p className="flex items-center gap-1.5">
+                <Icon name="check" size={11} className="shrink-0 text-neon-green/80" /> 你填写的城市仅用于本地天气/通勤提醒，不上传
+              </p>
             </div>
           </div>
         </div>
+      </Section>
+
+      {/* 1.5 数据采集频率（从设置页监控区迁入） */}
+      <Section title="数据采集频率" icon="activity" delay={60}>
+        <Row label="采样间隔" desc="采集基础周期，越短越准、占用略升">
+          <div className="flex gap-1.5">
+            {([2000, 5000, 10000, 30000] as const).map((ms) => (
+              <button
+                key={ms}
+                className={pillClass(settings.monitorInterval === ms)}
+                onClick={() => p({ monitorInterval: ms })}
+              >
+                {ms / 1000}s
+              </button>
+            ))}
+          </div>
+        </Row>
+        <div className="-mx-2 px-2 py-0.5">
+          {(() => {
+            const acc = monitorAccuracyOf(settings.monitorInterval)
+            return (
+              <p className="text-[11px] leading-relaxed text-slate-500">
+                当前精度：<span className="text-slate-300">{acc.tier}</span>（时长误差约 {acc.err}）· {acc.note}
+              </p>
+            )
+          })()}
+        </div>
+        <Row label="智能轮询" desc="深度专注时自动降频省电，摸鱼时升频捕捉细节">
+          <Toggle checked={settings.monitorSmart} onChange={(v) => p({ monitorSmart: v })} />
+        </Row>
+        <Row label="深度模式（OCR）" desc="开启后每 30s 截屏 OCR 识别文字，提升内容推断精度。截屏缓存与清理见下方 OCR 资源管理">
+          <Toggle checked={settings.deepMode} onChange={(v) => p({ deepMode: v })} />
+        </Row>
+        <details className="-mx-2 px-2 py-1.5">
+          <summary className="cursor-pointer text-[11px] text-slate-500 hover:text-slate-300">记录分层说明</summary>
+          <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+            记录分两层：<span className="text-slate-300">时长 / 应用 / 类目 / 当前会话对象</span> 为精确记录；「刷了 N 条」等细颗粒内容属<span className="text-slate-300">估算</span>（需开启深度模式，带置信度标注），非精确事实。
+          </p>
+        </details>
       </Section>
 
       {/* 2. OCR 资源管理 */}
@@ -395,6 +464,9 @@ export default function PrivacyView() {
       <Section title="数据留存策略" icon="clock" delay={120}>
         <Row label="活动记录留存" desc="原始轨迹保留天数，更早的启动时自动清理">
           <NumberSetting value={settings.activityRetentionDays} min={7} max={180} suffix="天" onCommit={(v) => p({ activityRetentionDays: v })} />
+        </Row>
+        <Row label="我所在的位置" desc="城市名，用于天气与通勤提醒（如 天津）。留空则使用自动定位。">
+          <TextSetting value={settings.city ?? ''} placeholder="如 天津" onCommit={(v: string) => p({ city: v.trim() })} />
         </Row>
       </Section>
 
