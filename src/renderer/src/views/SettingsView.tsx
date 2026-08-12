@@ -612,20 +612,6 @@ export default function SettingsView() {
         </p>
         <WatchedFolders />
       </Section>
-
-      {/* v3.0 VRM 照片生成（入口占位） */}
-      <Section title="VRM 照片生成虚拟人" icon="cat">
-        <p className="mb-3 text-[12px] text-slate-500">
-          上传本人照片，生成接近 1:1 还原的虚拟角色（发型 / 服装 / 比例与照片一致）。功能后续开放，敬请期待。
-        </p>
-        <button
-          className="glass-btn primary"
-          onClick={() => { /* P3 实现 */ }}
-          title="功能后续开放"
-        >
-          📷 上传照片生成虚拟人
-        </button>
-      </Section>
     </div>
   )
 }

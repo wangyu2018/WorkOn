@@ -6,13 +6,13 @@ import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
 import { Toggle } from '../components/Toggle'
 
-/** 当前桌搭角色（VRM 姵儿，单角色） */
+/** 当前搭子角色（VRM 姵儿，单角色） */
 const CHARACTER = {
   id: 'ling',
   name: '姵儿',
   cn: '猫耳耳机少女',
   rarity: 'SSR',
-  tagline: 'VRM 实时 3D 桌搭'
+  tagline: 'VRM 实时 3D 搭子'
 } as const
 
 function PadBar({ label, value, color }: { label: string; value: number; color: string }) {
@@ -34,7 +34,7 @@ function PadBar({ label, value, color }: { label: string; value: number; color: 
 
 /** 首次使用引导（4 步，可跳过） */
 const GUIDE_STEPS = [
-  { emoji: '🐱', title: '这是你的桌搭姵儿', desc: '她会跟随你的工作状态实时变化心情和姿态，常驻屏幕右下角陪伴你工作。' },
+  { emoji: '🐱', title: '这是你的搭子姵儿', desc: '她会跟随你的工作状态实时变化心情和姿态，常驻屏幕右下角陪伴你工作。' },
   { emoji: '👆', title: '点她一下试试', desc: '点击不同部位有不同反应：头发→耳抖眯眼笑、脸→脸红歪头、肩→缩肩、手→挥手打招呼。' },
   { emoji: '💬', title: '右键和她聊天', desc: '右键点她会弹出输入框，输入文字后她会以气泡回复你（支持 AI 问答）。' },
   { emoji: '🖐️', title: '拖拽放她去任何地方', desc: '抓起→跟手→松手有抛物线弹跳。连续 3 分钟不操作，她会自己走回右下角。' }
@@ -156,7 +156,7 @@ function SectionTitle({ icon, title }: { icon: Parameters<typeof Icon>[0]['name'
   )
 }
 
-/** 桌搭：桌搭状态 + 行为控制（互动开关/显示参数）+ 折叠养成指南 */
+/** 搭子：搭子状态 + 行为控制（互动开关/显示参数）+ 折叠养成指南 */
 export default function BuddyStage() {
   const pet = usePresenceStore((s) => s.pet)
   const settings = useSettingsStore((s) => s.settings)
@@ -171,7 +171,7 @@ export default function BuddyStage() {
     return off
   }, [])
 
-  // 首次进入桌搭页：未看过引导则弹出
+  // 首次进入搭子页：未看过引导则弹出
   useEffect(() => {
     if (!settings.petGuideShown) setShowGuide(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -203,7 +203,7 @@ export default function BuddyStage() {
           <Icon name="cat" size={20} />
         </div>
         <div className="min-w-0 flex-1">
-          <h1 className="text-lg font-semibold leading-tight text-slate-100">桌搭</h1>
+          <h1 className="text-lg font-semibold leading-tight text-slate-100">搭子</h1>
           <p className="mt-0.5 text-[12px] text-slate-500">
             {CHARACTER.name} · {CHARACTER.tagline} — 实时状态、互动控制与养成指南
           </p>
@@ -213,7 +213,7 @@ export default function BuddyStage() {
         </span>
       </header>
 
-      {/* 总控卡：桌面形象 + 浮窗 + 互斥模式，三开关并列 */}
+      {/* 总控卡：桌面形象 + 浮窗，两开关并列 */}
       <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '40ms' }}>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-3">
@@ -223,24 +223,16 @@ export default function BuddyStage() {
           <div className="w-px h-6 bg-white/10" />
           <div className="flex items-center gap-3">
             <span className="text-[13px] font-semibold text-slate-200">浮窗与托盘</span>
-            <Toggle checked={settings.petEnabled} onChange={(v) => void patch({ petEnabled: v })} />
-          </div>
-          <div className="flex-1" />
-          <div className="flex items-center gap-3">
-            <span className="text-[11px] text-slate-500">互斥模式</span>
-            <Toggle checked={settings.mutualExclusive ?? false} onChange={(v) => {
-              void patch({ mutualExclusive: v })
-              if (v && settings.petEnabled) void patch({ widgetVisible: false })
-            }} />
+            <Toggle checked={settings.widgetVisible} onChange={(v) => void patch({ widgetVisible: v })} />
           </div>
         </div>
       </section>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        {/* 桌搭状态卡 */}
+        {/* 搭子状态卡 */}
         <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '60ms' }}>
           <div className="mb-3 flex items-center justify-between gap-2">
-            <SectionTitle icon="cat" title="桌搭状态" />
+            <SectionTitle icon="cat" title="搭子状态" />
             <div className="flex items-center gap-2">
               <button
                 className="glass-btn"
@@ -260,7 +252,7 @@ export default function BuddyStage() {
               </button>
               <button className="glass-btn" onClick={() => window.api.togglePet()}>
                 <Icon name={pet?.visible === false ? 'eye' : 'eyeOff'} size={13} />
-                {pet?.visible === false ? '显示桌搭' : '隐藏桌搭'}
+                {pet?.visible === false ? '显示搭子' : '隐藏搭子'}
               </button>
             </div>
           </div>
@@ -317,14 +309,14 @@ export default function BuddyStage() {
               </div>
             </div>
           ) : (
-            <EmptyState emoji="🐱" title="桌搭未连接" hint="启动后这里会实时同步桌搭的状态、情感与气泡消息。" />
+            <EmptyState emoji="🐱" title="搭子未连接" hint="启动后这里会实时同步搭子的状态、情感与气泡消息。" />
           )}
         </section>
 
-        {/* 桌搭行为控制：互动开关（单列+效果描述）+ 显示参数 */}
+        {/* 搭子行为控制：互动开关（单列+效果描述）+ 显示参数 */}
         <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '120ms' }}>
           <div className="mb-3">
-            <SectionTitle icon="sliders" title="桌搭行为控制" />
+            <SectionTitle icon="sliders" title="搭子行为控制" />
           </div>
           <div className="mb-1 text-[11px] text-slate-500">互动开关（关闭即停用对应行为，降低开销）</div>
           <div className="mb-3 flex flex-col divide-y divide-white/[0.05]">
@@ -364,7 +356,7 @@ export default function BuddyStage() {
 
           <div className="flex flex-col gap-2.5 border-t border-white/[0.06] pt-3">
             <div className="flex items-center justify-between text-[12px] text-slate-300">
-              <span>启用桌搭</span>
+              <span>启用搭子</span>
               <Toggle checked={settings.petEnabled} onChange={(v) => void patch({ petEnabled: v })} />
             </div>
             <div className="flex items-center justify-between text-[12px] text-slate-300">
@@ -434,7 +426,7 @@ export default function BuddyStage() {
               <Toggle checked={settings.petClickThrough} onChange={(v) => void patch({ petClickThrough: v })} />
             </div>
             <div className="flex items-center justify-between text-[12px] text-slate-300">
-              <span title="主窗口翻页时桌搭保持当前姿态">页面切换抑制</span>
+              <span title="主窗口翻页时搭子保持当前姿态">页面切换抑制</span>
               <Toggle checked={settings.suppressTransitionOnPageSwitch} onChange={(v) => void patch({ suppressTransitionOnPageSwitch: v })} />
             </div>
             <div className="flex items-center justify-between text-[12px] text-slate-300">
@@ -561,26 +553,17 @@ export default function BuddyStage() {
         )}
       </section>
 
-      {/* 浮窗与托盘 — 与桌搭并列主开关 */}
+      {/* 浮窗与托盘 — 与搭子并列主开关 */}
       <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '140ms' }}>
         <div className="mb-3">
           <SectionTitle icon="monitor" title="浮窗与托盘" />
         </div>
         <div className="mb-2 text-[11px] text-slate-500">
-          托盘图标是桌搭的"手柄"——左键展开状态浮窗，右键弹出快捷菜单。与桌搭伴侣的开关独立但联动。
+          托盘图标是搭子的"手柄"——左键展开状态浮窗，右键弹出快捷菜单。与搭子伴侣的开关独立但联动。
         </div>
 
-        {/* 主开关：浮窗与托盘 */}
-        <div className="-mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-white/[0.03]">
-          <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-semibold text-slate-200">启用托盘与浮窗</div>
-            <div className="mt-0.5 text-[10px] text-slate-500">系统托盘常驻 WorkOn 图标，左键展开/右键菜单</div>
-          </div>
-          <Toggle checked={settings.petEnabled} onChange={(v) => void patch({ petEnabled: v })} />
-        </div>
-
-        {/* 管控细节（开关开启后展开） */}
-        {settings.petEnabled && (
+        {/* 管控细节（总控卡浮窗开关开启后展开） */}
+        {settings.widgetVisible && (
           <div className="mt-2 ml-2 flex flex-col divide-y divide-white/[0.05] border-l border-white/[0.06] pl-3">
             <div className="-mx-1 flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-white/[0.03]">
               <div className="min-w-0 flex-1">
@@ -606,25 +589,6 @@ export default function BuddyStage() {
                 value={settings.widgetOpacity}
                 onChange={(e) => patch({ widgetOpacity: parseFloat(e.target.value) })}
               />
-            </div>
-            <div className="-mx-1 flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-white/[0.03]">
-              <div className="min-w-0 flex-1">
-                <div className="text-[12px] text-slate-300">摸鱼自动隐身</div>
-                <div className="mt-0.5 text-[10px] text-slate-500">持续摸鱼超过设定时长后自动隐藏，回到工作恢复</div>
-              </div>
-              <Toggle checked={settings.slackAutoHide} onChange={(v) => void patch({ slackAutoHide: v })} />
-            </div>
-            {settings.slackAutoHide && (
-              <div className="-mx-1 flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-white/[0.03]">
-                <div className="min-w-0 flex-1">
-                  <div className="text-[12px] text-slate-300">隐身触发时长</div>
-                  <div className="mt-0.5 text-[10px] text-slate-500">摸鱼持续 X 秒后自动隐藏</div>
-                </div>
-                <select className="glass-input w-24" value={settings.slackHideSec} onChange={(e) => void patch({ slackHideSec: Number(e.target.value) })}>
-                  {[30, 60, 120, 180, 300].map((s) => <option key={s} value={s}>{s >= 60 ? `${s/60}分钟` : `${s}秒`}</option>)}
-                </select>
-              </div>
-            )}
           </div>
         )}
       </section>
