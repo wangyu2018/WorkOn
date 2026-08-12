@@ -4,9 +4,9 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { WORK_LIKE_STATES, WORK_STATES } from '@shared/stateMeta'
 import type { MergedTrail, TrailSegment, WorkState, PlanItem } from '@shared/types'
+import ActionCard from '../components/ActionCard'
 
-const CHANNELS = ['CMD', '浏览器', '微信', 'IDE', '其他'] as const
-type Channel = (typeof CHANNELS)[number]
+type Channel = 'CMD' | '浏览器' | '微信' | 'IDE' | '其他'
 type Column = 'work' | 'life'
 
 interface GraphItem {
@@ -36,6 +36,26 @@ function mapChannel(app: string): Channel {
 function fmtTime(ts: number): string { const d = new Date(ts); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }
 function fmtDur(min: number): string { if (min < 1) return '<1m'; if (min < 60) return `${Math.round(min)}m`; const h = Math.floor(min / 60); const m = Math.round(min % 60); return m > 0 ? `${h}h${m}m` : `${h}h` }
 
+interface StarNode { item: GraphItem; idx: number; x: number; y: number; size: number; isCore: boolean }
+interface StarConnection { x1: number; y1: number; x2: number; y2: number }
+
+function computeStarLayout(filtered: GraphItem[], allItems: GraphItem[]): { nodes: StarNode[]; connections: StarConnection[] } {
+  if (filtered.length === 0) return { nodes: [], connections: [] }
+  const sorted = [...filtered].sort((a, b) => b.seg.durationMin - a.seg.durationMin)
+  const maxDur = sorted[0].seg.durationMin || 1
+  const nodes: StarNode[] = [{ item: sorted[0], idx: allItems.indexOf(sorted[0]), x: 50, y: 50, size: 56, isCore: true }]
+  const children = sorted.slice(1)
+  const ring1R = 32; const ring1N = Math.min(children.length, 6); const ring2R = 44
+  children.forEach((item, i) => {
+    const angle = i < ring1N ? (i / ring1N) * 2 * Math.PI - Math.PI / 2 : ((i - ring1N) / Math.max(1, children.length - ring1N)) * 2 * Math.PI - Math.PI / 2 + 0.35
+    const radius = i < ring1N ? ring1R : ring2R
+    const durRatio = item.seg.durationMin / maxDur
+    nodes.push({ item, idx: allItems.indexOf(item), x: 50 + radius * Math.cos(angle), y: 50 + radius * Math.sin(angle), size: Math.max(20, Math.round(24 + durRatio * 14)), isCore: false })
+  })
+  const connections: StarConnection[] = nodes.slice(1).map(n => ({ x1: 50, y1: 50, x2: n.x, y2: n.y }))
+  return { nodes, connections }
+}
+
 function insight(trail: MergedTrail): string {
   if (!trail || trail.totalMin < 1) return '今天刚开始，随着时间推进图谱会自动长出来 ✨'
   const focusMin = (trail.stateMinutes.focus ?? 0) + (trail.stateMinutes.coding ?? 0)
@@ -56,8 +76,7 @@ export default function HomeView() {
   const [tagsOpen, setTagsOpen] = useState(false)
   const [newTag, setNewTag] = useState({ app: '', label: '', state: 'focus' as WorkState })
   const [tlOpen, setTlOpen] = useState(false)
-  const [editCard, setEditCard] = useState<TimelineEntry & { idx: number } | null>(null)
-  const [editTitle, setEditTitle] = useState('')
+  const [starHover, setStarHover] = useState<number | null>(null)
 
   useEffect(() => {
     void (async () => {
@@ -92,6 +111,8 @@ export default function HomeView() {
   const totalWorkMin = useMemo(() => items.filter((i) => i.column === 'work').reduce((a, i) => a + i.seg.durationMin, 0), [items])
   const totalLifeMin = useMemo(() => items.filter((i) => i.column === 'life').reduce((a, i) => a + i.seg.durationMin, 0), [items])
   const insightText = useMemo(() => (trail ? insight(trail) : ''), [trail])
+  const workChart = useMemo(() => computeStarLayout(items.filter(i => i.column === 'work'), items), [items])
+  const lifeChart = useMemo(() => computeStarLayout(items.filter(i => i.column === 'life'), items), [items])
 
   const moveItem = useCallback((idx: number, toCol: Column) => {
     setItems((prev) => {
@@ -111,29 +132,50 @@ export default function HomeView() {
   const toggleTag = useCallback((id: string, enabled: boolean) => { void window.api?.saveRule?.({ id, enabled }).then(() => loadTags()) }, [loadTags])
   const removeTag = useCallback((id: string) => { void window.api?.removeRule?.(id).then(() => loadTags()) }, [loadTags])
 
-  const renderCard = (item: GraphItem, idx: number) => {
-    const { seg, column } = item
-    const stateInfo = WORK_STATES[seg.mainState]
-    const isDragging = dragFrom?.idx === idx
-    return (
-      <div key={`${seg.id}-${idx}`} draggable onDragStart={() => setDragFrom({ idx, col: column })} onDragEnd={() => { setDragFrom(null); setHoverCol(null) }}
-        className={`group relative cursor-grab rounded-xl px-3 py-2 text-[12px] leading-tight transition-all active:cursor-grabbing ${isDragging ? 'opacity-30 scale-95' : ''} ${column === 'work' ? 'bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/15' : 'bg-slate-400/10 border border-slate-400/15 hover:bg-slate-400/15'}`}
-        style={{ minWidth: 80 }}
-        title={`${seg.mainApp} · ${fmtTime(seg.startTs)}-${fmtTime(seg.endTs)} · ${fmtDur(seg.durationMin)}${seg.mainTitle ? `\n${seg.mainTitle}` : ''}`}>
-        <div className="flex items-center gap-1.5"><span className="text-[13px]">{stateInfo?.emoji ?? '📌'}</span><span className="truncate font-medium text-slate-200">{seg.mainApp}</span></div>
-        <div className="mt-0.5 text-[10px] text-slate-300 flex items-center justify-between"><span>{fmtDur(seg.durationMin)}</span><span>{fmtTime(seg.startTs)}</span></div>
-        {seg.mainTitle && <div className="mt-0.5 truncate text-[10px] text-slate-300 max-w-[140px]">{seg.mainTitle}</div>}
-      </div>
-    )
-  }
-
-  const colDropProps = (col: Column) => ({
+  const starDropProps = (col: Column) => ({
     onDragOver: (e: React.DragEvent) => { e.preventDefault(); setHoverCol(col) },
     onDragLeave: () => setHoverCol(null),
     onDrop: () => { if (dragFrom && dragFrom.col !== col) moveItem(dragFrom.idx, col); setHoverCol(null); setDragFrom(null) }
   })
 
-  const tlIcons: Record<string, string> = { focus: '🔵', plan: '📋', switch: '🔄', meeting: '📝' }
+  const renderStarNode = (node: StarNode, isWork: boolean) => {
+    const isDragging = dragFrom?.idx === node.idx
+    const glowColor = isWork ? 'rgba(16,185,129,' : 'rgba(251,191,36,'
+    return (
+      <div
+        key={node.idx}
+        draggable
+        onDragStart={() => setDragFrom({ idx: node.idx, col: node.item.column })}
+        onDragEnd={() => { setDragFrom(null); setHoverCol(null) }}
+        onMouseEnter={() => setStarHover(node.idx)}
+        onMouseLeave={() => setStarHover(null)}
+        className="absolute rounded-full transition-all duration-300 cursor-grab active:cursor-grabbing group"
+        style={{
+          left: `${node.x}%`, top: `${node.y}%`,
+          width: node.size, height: node.size,
+          transform: 'translate(-50%, -50%)',
+          background: node.isCore
+            ? isWork
+              ? 'radial-gradient(circle at 35% 35%, rgba(110,231,183,0.95), rgba(16,185,129,0.5))'
+              : 'radial-gradient(circle at 35% 35%, rgba(252,211,77,0.95), rgba(251,191,36,0.5))'
+            : isWork
+              ? 'radial-gradient(circle at 35% 35%, rgba(16,185,129,0.7), rgba(16,185,129,0.25))'
+              : 'radial-gradient(circle at 35% 35%, rgba(251,191,36,0.7), rgba(251,191,36,0.25))',
+          boxShadow: `0 0 ${node.isCore ? 12 : 6}px ${glowColor}${node.isCore ? 0.7 : 0.4}), 0 0 ${node.isCore ? 28 : 14}px ${glowColor}${node.isCore ? 0.25 : 0.12})`,
+          opacity: isDragging ? 0.25 : 1,
+          zIndex: node.isCore ? 10 : 5,
+          scale: starHover === node.idx ? '1.15' : '1',
+        }}
+        title={`${node.item.seg.mainApp} · ${fmtTime(node.item.seg.startTs)}-${fmtTime(node.item.seg.endTs)} · ${fmtDur(node.item.seg.durationMin)}${node.item.seg.mainTitle ? '\n' + node.item.seg.mainTitle : ''}`}
+      >
+        {starHover === node.idx && (
+          <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-black/85 px-2 py-0.5 text-[10px] text-slate-200 pointer-events-none z-20">
+            {node.item.seg.mainApp} · {fmtDur(node.item.seg.durationMin)}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-auto">
@@ -146,37 +188,38 @@ export default function HomeView() {
         <p className="text-[13px] text-slate-400 leading-relaxed">{insightText || '加载中...'}</p>
       </section>
 
-      {/* 图谱 */}
-      <section className="glass-card hoverable">
-        <div className="flex items-center justify-between mb-3">
+      {/* 星图 */}
+      <section className="glass-card hoverable overflow-hidden">
+        <div className="flex items-center justify-between mb-3 px-1">
           <div className="flex items-center gap-2">
             <span className="text-base">🗂️</span>
-            <h3 className="text-[13px] font-semibold text-slate-200">今日图谱</h3>
+            <h3 className="text-[13px] font-semibold text-slate-200">今日星图</h3>
           </div>
-          <span className="text-[11px] text-slate-500">工作🟢 {fmtDur(totalWorkMin)} · 生活⚪ {fmtDur(totalLifeMin)} · 拖动卡片可纠偏分类</span>
+          <span className="text-[11px] text-slate-500">工作 ✦ {fmtDur(totalWorkMin)} · 生活 ✦ {fmtDur(totalLifeMin)} · 拖动星点可纠偏</span>
         </div>
-        <div className="flex gap-4">
-          <div className={`flex w-1/2 flex-col gap-2 rounded-xl border p-3 transition-all ${hoverCol === 'work' && dragFrom && dragFrom.col !== 'work' ? 'border-emerald-400/40 bg-emerald-500/8' : 'border-transparent bg-slate-500/5'}`} {...colDropProps('work')}>
-            <h4 className="text-[12px] font-semibold text-emerald-400 pb-1">🟢 工作</h4>
-            <div className="flex min-h-0 flex-col gap-1.5">
-              {CHANNELS.map((ch) => {
-                const chItems = items.filter((i) => i.column === 'work' && i.channel === ch)
-                if (chItems.length === 0) return null
-                return <div key={ch} className="flex flex-col gap-1"><span className="text-[10px] uppercase tracking-wider text-slate-600 pl-1">{ch}</span><div className="flex flex-wrap gap-1.5">{chItems.map((item) => renderCard(item, items.indexOf(item)))}</div></div>
-              })}
-              {items.filter((i) => i.column === 'work').length === 0 && <p className="py-8 text-center text-[12px] text-slate-600">从右边拖卡片过来分类 📥</p>}
-            </div>
+        <div className="relative flex rounded-xl overflow-hidden" style={{ minHeight: 320, background: 'radial-gradient(ellipse at center, rgba(15,23,42,0.45) 0%, rgba(3,7,17,0.95) 70%)' }}>
+          <div className="absolute left-1/2 top-4 bottom-4 border-l-2 border-dashed border-white/[0.07] z-10" />
+          <div className={`relative flex-1 min-h-[320px] transition-colors ${hoverCol === 'work' && dragFrom && dragFrom.col !== 'work' ? 'bg-emerald-500/[0.06]' : ''}`} {...starDropProps('work')}>
+            <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+              {workChart.connections.map((c, i) => (
+                <line key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} stroke="rgba(16,185,129,0.12)" strokeWidth="0.3" />
+              ))}
+            </svg>
+            <span className="absolute top-3 left-3 text-[11px] font-semibold text-emerald-400/60 z-10">工作</span>
+            {workChart.nodes.length === 0 ? (
+              <p className="absolute inset-0 flex items-center justify-center text-[12px] text-slate-600">从右边拖星点过来 ✦</p>
+            ) : workChart.nodes.map(n => renderStarNode(n, true))}
           </div>
-          <div className={`flex w-1/2 flex-col gap-2 rounded-xl border p-3 transition-all ${hoverCol === 'life' && dragFrom && dragFrom.col !== 'life' ? 'border-slate-400/30 bg-slate-500/8' : 'border-transparent bg-slate-500/5'}`} {...colDropProps('life')}>
-            <h4 className="text-[12px] font-semibold text-slate-400 pb-1">⚪ 生活</h4>
-            <div className="flex min-h-0 flex-col gap-1.5">
-              {CHANNELS.map((ch) => {
-                const chItems = items.filter((i) => i.column === 'life' && i.channel === ch)
-                if (chItems.length === 0) return null
-                return <div key={ch} className="flex flex-col gap-1"><span className="text-[10px] uppercase tracking-wider text-slate-600 pl-1">{ch}</span><div className="flex flex-wrap gap-1.5">{chItems.map((item) => renderCard(item, items.indexOf(item)))}</div></div>
-              })}
-              {items.filter((i) => i.column === 'life').length === 0 && <p className="py-8 text-center text-[12px] text-slate-600">把左边误判的工作卡片拖过来 🔄</p>}
-            </div>
+          <div className={`relative flex-1 min-h-[320px] transition-colors ${hoverCol === 'life' && dragFrom && dragFrom.col !== 'life' ? 'bg-amber-500/[0.06]' : ''}`} {...starDropProps('life')}>
+            <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+              {lifeChart.connections.map((c, i) => (
+                <line key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} stroke="rgba(251,191,36,0.12)" strokeWidth="0.3" />
+              ))}
+            </svg>
+            <span className="absolute top-3 right-3 text-[11px] font-semibold text-amber-400/60 z-10">生活</span>
+            {lifeChart.nodes.length === 0 ? (
+              <p className="absolute inset-0 flex items-center justify-center text-[12px] text-slate-600">把左边星点拖过来 ✦</p>
+            ) : lifeChart.nodes.map(n => renderStarNode(n, false))}
           </div>
         </div>
       </section>
@@ -193,13 +236,13 @@ export default function HomeView() {
         {tlOpen && (
           <div className="flex gap-2 overflow-x-auto pb-1">
             {timeline.length === 0 ? <p className="text-[12px] text-slate-600 py-2">暂无数据</p> : timeline.map((e, i) => (
-              <div key={i} className="shrink-0 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 min-w-[140px] cursor-pointer hover:bg-white/[0.06] transition-colors" onClick={() => { setEditCard({ ...e, idx: i }); setEditTitle(e.title) }}>
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-300 mb-0.5">
-                  <span>{tlIcons[e.type]}</span><span>{e.type === 'focus' ? e.app : '计划'}</span><span className="ml-auto">{fmtTime(e.ts)}</span>
-                </div>
-                <p className="text-[12px] text-slate-200 truncate">{e.title || '无标题'}</p>
-                {e.duration && <span className="text-[10px] text-slate-300">{fmtDur(e.duration)}</span>}
-              </div>
+              <ActionCard key={i}
+                data={{ id: `${e.ts}-${i}`, title: e.title, startTs: e.ts, endTs: e.ts + (e.duration ?? 0) * 60000, app: e.app, type: e.type }}
+                onUpdate={(patch) => {
+                  setTimeline(prev => prev.map((t, idx) => idx === i ? { ...t, title: patch.title ?? t.title, ts: patch.startTs ?? t.ts, duration: patch.endTs ? (patch.endTs - (patch.startTs ?? t.ts)) / 60000 : t.duration } : t))
+                }}
+                onDelete={() => setTimeline(prev => prev.filter((_, idx) => idx !== i))}
+              />
             ))}
           </div>
         )}
@@ -238,27 +281,6 @@ export default function HomeView() {
         )}
       </section>
 
-      {editCard && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setEditCard(null)}>
-          <div className="glass-card anim-scale-in w-[360px]" onClick={e => e.stopPropagation()}>
-            <h3 className="text-[15px] font-semibold text-slate-200 mb-3">✏️ 编辑动作</h3>
-            <div className="flex flex-col gap-3">
-              <input className="glass-input" placeholder="标题" value={editTitle} onChange={e => setEditTitle(e.target.value)} autoFocus />
-              <div className="flex gap-2 items-center text-[12px] text-slate-400">
-                <span>起止：</span>
-                <input type="datetime-local" className="glass-input flex-1" defaultValue={new Date(editCard.ts).toISOString().slice(0, 16)} />
-              </div>
-              <div className="flex justify-end gap-2 mt-1">
-                <button className="glass-btn text-[12px]" onClick={() => setEditCard(null)}>取消</button>
-                <button className="glass-btn primary text-[12px]" onClick={() => {
-                  void window.api?.saveEntry?.({ date: new Date(editCard.ts).toISOString().slice(0, 10), title: editTitle, startMin: 0, endMin: editCard.duration ?? 0, source: 'manual' })
-                  setEditCard(null)
-                }}>保存</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
   )

@@ -169,6 +169,19 @@ export function deleteActivitiesByApp(appName: string): number {
   return removed
 }
 
+/** 按 startTs 更新活动标题（时间轴编辑）：内存更新后重写 JSONL，返回更新后的记录 */
+export function updateActivityTitleByStartTs(startTs: number, title: string): ActivityRecord | null {
+  const idx = activities.findIndex(a => a.startTs === startTs)
+  if (idx < 0) return null
+  activities[idx] = { ...activities[idx], title }
+  try {
+    fs.writeFileSync(actFile, activities.map((r) => JSON.stringify(r)).join('\n') + (activities.length ? '\n' : ''), 'utf-8')
+  } catch (e) {
+    console.warn('[db] 活动更新重写失败', e)
+  }
+  return activities[idx]
+}
+
 // ── 通用集合 ──
 type JsonCollection = keyof JsonData
 

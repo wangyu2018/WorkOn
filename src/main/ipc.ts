@@ -1,7 +1,7 @@
 /**
  * IPC 注册：window.api 的全部通道
  */
-import { ipcMain, dialog, app } from 'electron'
+import { ipcMain, dialog, app, screen } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import type {
@@ -13,7 +13,8 @@ import { dateKey, buildMergedTrail } from '@shared/trail'
 import { planVsActual, forecastPlan, BUILTIN_CATEGORIES } from '@shared/planAnalysis'
 import { getSettings, setSettings } from './settings'
 import {
-  col, insertInto, updateIn, removeFrom, listActivities, listActivitiesRange, deleteActivitiesByApp
+  col, insertInto, updateIn, removeFrom, listActivities, listActivitiesRange, deleteActivitiesByApp,
+  updateActivityTitleByStartTs
 } from './db'
 import { presence } from './presence'
 import { bus } from './state'
@@ -118,6 +119,11 @@ export function registerIpc(): void {
   ipcMain.handle('trail:get', (_e, date?: string) => {
     const d = date ?? dateKey(Date.now())
     return buildMergedTrail(listActivities(d), d)
+  })
+  ipcMain.handle('trail:update', (_e, startTs: number, patch: { title?: string }) => {
+    if (patch.title === undefined) return { success: false }
+    const updated = updateActivityTitleByStartTs(startTs, patch.title)
+    return updated ? { success: true } : { success: false }
   })
 
   // ── 日历条目 ──
@@ -502,6 +508,13 @@ export function registerIpc(): void {
   ipcMain.on('win:openMain', () => createMainWindow())
   ipcMain.on('widget:opacity', (_e, v: number) => {
     if (widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.setOpacity(v)
+  })
+  ipcMain.on('widget:resize', (_e, w: number, h: number) => {
+    if (widgetWindow && !widgetWindow.isDestroyed()) {
+      widgetWindow.setSize(w, h)
+      const display = screen.getPrimaryDisplay()
+      widgetWindow.setPosition(display.workArea.x + display.workArea.width - w - 16, display.workArea.y + display.workArea.height - h - 16)
+    }
   })
   ipcMain.on('widget:drag', (_e, dx: number, dy: number) => {
     if (widgetWindow && !widgetWindow.isDestroyed()) {

@@ -247,6 +247,7 @@ export default function SettingsView() {
   /** 配置区展开状态：未配置时默认展开（新用户先填参数再谈开启） */
   const [aiExpanded, setAiExpanded] = useState(!settings.aiEnabled)
   const [aiEnabling, setAiEnabling] = useState(false)
+  const [introOpen, setIntroOpen] = useState(false)
   const p = (patchObj: Partial<AppSettings>) => void patch(patchObj)
 
   /** 启用/停用 AI：开启前先校验连通性（有 Key 且能连上才允许开启） */
@@ -316,6 +317,17 @@ export default function SettingsView() {
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
+      {!localStorage.getItem('introBarDismissed') && (
+        <div className="glass-card hoverable flex items-center justify-between px-4 py-2.5 mb-0">
+          <span className="text-[12px] text-slate-400">
+            <span className="text-slate-200 font-medium">WorkOn</span> = 看得见的专注，有人陪你把一天过明白
+          </span>
+          <div className="flex items-center gap-3">
+            <button className="text-[11px] text-neon-cyan hover:underline" onClick={() => setIntroOpen(true)}>查看全部功能</button>
+            <button className="text-slate-500 hover:text-slate-300" onClick={() => { localStorage.setItem('introBarDismissed', '1'); /* force re-render via state */ setIntroOpen(false) }}>✕</button>
+          </div>
+        </div>
+      )}
       {/* 1. 监控 */}
       <Section title="监控" icon="activity">
         <Row label="采样间隔" desc="基础轮询周期（智能模式下会按状态自动升降频）">
@@ -370,9 +382,6 @@ export default function SettingsView() {
               </button>
             ))}
           </div>
-        </Row>
-        <Row label="纠偏规则" desc="已移至「监控」页面的分类管理与纠偏规则管理">
-          <span className="text-[11px] text-slate-500">监控 →</span>
         </Row>
       </Section>
 
@@ -612,6 +621,39 @@ export default function SettingsView() {
         </p>
         <WatchedFolders />
       </Section>
+
+      {introOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setIntroOpen(false)}>
+          <div className="glass-card anim-scale-in w-[440px] max-h-[70vh] overflow-auto p-5" onClick={e => e.stopPropagation()}>
+            <h3 className="text-[17px] font-bold text-slate-100 mb-4">WorkOn 功能介绍</h3>
+            <div className="space-y-4 text-[13px] text-slate-300 leading-relaxed">
+              <p><span className="text-neon-cyan font-semibold">WorkOn</span> = 看得见的专注，有人陪你把一天过明白。</p>
+              <div className="space-y-2">
+                {[
+                  ['✦', '首页 — 每日全景', '工作/生活星图 + 时间轴 + Widget 可编排'],
+                  ['✦', '日历 — 注意力热度', '热力图 + 日/周视图，红色时间线'],
+                  ['✦', '计划 — 从想法到执行', '手动新建 + 会议纪要一键导入'],
+                  ['✦', '报表 — 智能日报周报', '五维评分 + 作业链路，可投送到主页'],
+                  ['✦', '搭子 — 桌面虚拟人', 'ARIA/LUNA/KIRA/ZEN/SHIN 五角色，可拖拽互动'],
+                  ['✦', '浮窗 — 托盘手柄', '收起=注意力图标，展开=迷你面板'],
+                  ['✦', '问答 — AI 增强', '对话内嵌图表 + 快捷指令']
+                ].map(([icon, title, desc], i) => (
+                  <div key={i} className="flex gap-2">
+                    <span className="text-neon-cyan shrink-0">{icon}</span>
+                    <div><span className="text-slate-200 font-medium">{title}</span><br /><span className="text-[11px] text-slate-500">{desc}</span></div>
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-white/10 pt-3 text-[11px] text-slate-500">
+                <p>数据隐私：只分析窗口标题与应用名称，不触碰文件内容或私密信息。注意力评分（五维）完全本地计算，AI 可选开启。</p>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button className="glass-btn primary text-[12px]" onClick={() => setIntroOpen(false)}>知道了</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

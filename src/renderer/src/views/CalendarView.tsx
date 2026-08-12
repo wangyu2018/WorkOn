@@ -545,11 +545,11 @@ function DayGrid({ date, entries, trail, pva, forecasts, filter, hourH, habits, 
                     <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
                       <div className={`h-full rounded-full ${pct >= 80 ? 'bg-neon-green' : pct >= 40 ? 'bg-neon-amber' : 'bg-neon-pink'}`} style={{ width: `${pct}%` }} />
                     </div>
-                    <span className={it.matched ? 'text-neon-green' : 'text-neon-amber'}>{it.matched ? '✓ 已覆盖' : '⚠ 未覆盖'}</span>
+                    <span className={it.matched ? 'text-emerald-400' : 'text-amber-400'}>{it.matched ? '✓ 已覆盖' : '⚠ 未覆盖'}</span>
                   </div>
                   {fc ? (
                     <div className="rounded-lg bg-white/[0.04] px-2.5 py-1.5 text-[11px]">
-                      <span className={fc.completionProb >= 60 ? 'text-neon-green' : fc.completionProb >= 30 ? 'text-neon-amber' : 'text-neon-pink'}>
+                      <span className={fc.completionProb >= 60 ? 'text-emerald-400' : fc.completionProb >= 30 ? 'text-amber-400' : 'text-neon-pink'}>
                         完成概率 {fc.completionProb}%
                       </span>
                       {fc.estimatedEndMin ? <span className="text-slate-400"> · 预计完成 {clockOf(fc.estimatedEndMin)}</span> : null}
@@ -640,19 +640,26 @@ function WeekGrid({ date }: { date: string }) {
             style={isToday ? { boxShadow: '0 0 16px rgba(34,211,238,0.15)' } : undefined}
           >
             <div className="mb-2 text-center">
-              <div className={`text-[11px] ${isToday ? 'font-semibold text-neon-cyan' : 'text-slate-400'}`}>
+              <div className={`text-[11px] ${isToday ? 'font-semibold text-cyan-400' : 'text-slate-400'}`}>
                 周{WEEK_LABELS[i]} {dt.getMonth() + 1}/{dt.getDate()}
               </div>
               <div className="text-[10px] text-slate-500">{trail && trail.totalMin > 0 ? fmtMin(trail.totalMin) : '—'}</div>
             </div>
-            <div className="flex flex-col gap-[2px]">
+            <div className="flex flex-col gap-1">
               {states.map((s, h) => (
                 <div
                   key={h}
                   title={`${d} ${h}:00${s ? ` · ${WORK_STATES[s].label}` : ''}`}
-                  className="h-[13px] w-full rounded-[3px]"
-                  style={{ background: s ? WORK_STATES[s].color : 'rgba(255,255,255,0.03)', opacity: s ? 0.85 : 1 }}
-                />
+                  className="w-full rounded-lg px-2 py-1 text-[10px]"
+                  style={{
+                    borderLeft: s ? `2px solid ${WORK_STATES[s].color}` : '2px solid transparent',
+                    background: s ? `${WORK_STATES[s].color}14` : 'rgba(255,255,255,0.03)',
+                    color: s ? '#cbd5e1' : '#475569'
+                  }}
+                >
+                  {String(h).padStart(2, '0')}:00
+                  {s ? <span> {WORK_STATES[s].emoji} {WORK_STATES[s].label}</span> : null}
+                </div>
               ))}
             </div>
           </div>
@@ -798,14 +805,13 @@ export default function CalendarView() {
             </div>
           </>
         ) : null}
-        <div className="flex rounded-lg border border-white/[0.08] bg-white/[0.03] p-0.5">
+        <div className="flex rounded-full border border-white/10 bg-white/[0.03] p-0.5">
           {MODES.map((m) => (
             <button
               key={m.key}
-              className={`rounded-md px-3 py-1 text-[12px] transition-all ${
-                mode === m.key ? 'bg-neon-cyan/15 font-medium text-neon-cyan' : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-200'
+              className={`rounded-full px-4 py-1.5 text-[12px] ${
+                mode === m.key ? 'bg-white/[0.08] text-slate-200' : 'text-slate-500 hover:text-slate-300'
               }`}
-              style={{ transitionDuration: '150ms' }}
               onClick={() => { setMode(m.key); saveMode(m.key) }}
             >
               {m.label}
@@ -831,8 +837,8 @@ export default function CalendarView() {
             <span className="flex items-center gap-1.5">
               <span className="h-2.5 w-4 rounded-sm border-l-2 border-neon-green bg-neon-green/20" /> 手动记录
             </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-2.5 w-4 rounded-sm border border-dashed border-neon-amber bg-neon-amber/10" /> 计划时段
+              <span className="flex items-center gap-1.5">
+               <span className="h-2.5 w-4 rounded-sm border border-dashed border-amber-400 bg-amber-500/8" /> 计划时段
             </span>
             {/* 状态 mini 图例：当日实际出现过的状态 */}
             {trail
@@ -877,7 +883,7 @@ export default function CalendarView() {
                     ))}
                     <div className="rounded-xl border border-white/[0.05] bg-white/[0.03] px-3 py-2.5 transition-colors hover:bg-white/[0.06]">
                       <div className="text-[10px] text-slate-500">🎯 计划达成</div>
-                      <div className={`text-[15px] font-semibold tabular-nums ${pva && pva.achievement >= 80 ? 'text-neon-green' : pva && pva.achievement >= 40 ? 'text-neon-amber' : 'text-slate-300'}`}>
+                      <div className={`text-[15px] font-semibold tabular-nums ${pva && pva.achievement >= 80 ? 'text-emerald-400' : pva && pva.achievement >= 40 ? 'text-amber-400' : 'text-slate-300'}`}>
                         {pva && pva.plannedMin > 0 ? `${Math.round(pva.achievement)}%` : '—'}
                       </div>
                     </div>

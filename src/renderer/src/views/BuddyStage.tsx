@@ -320,12 +320,26 @@ export default function BuddyStage() {
           </div>
           <div className="mb-1 text-[11px] text-slate-500">互动开关（关闭即停用对应行为，降低开销）</div>
           <div className="mb-3 flex flex-col divide-y divide-white/[0.05]">
+            <div className="text-[10px] uppercase text-slate-600 pt-1">互动</div>
             {(
               [
                 ['click', '点击互动', '点击她时后仰小动作 + 回复气泡（好感度来源）'],
                 ['drag', '拖拽移动', '抓起→跟手→松手停在落点，10 分钟内不被拉回'],
                 ['dragPhysics', '拖拽物理', '拖拽中的摆动与松手抛物线弹跳（默认关，仅跟手位移）'],
-                ['chat', '右键对话', '右键点她弹出输入框，支持 AI 问答'],
+                ['chat', '右键对话', '右键点她弹出输入框，支持 AI 问答']
+              ] as const
+            ).map(([key, label, desc]) => (
+              <div key={key} className="-mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-white/[0.03]">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12px] text-slate-300">{label}</div>
+                  <div className="mt-0.5 text-[10px] leading-relaxed text-slate-500">{desc}</div>
+                </div>
+                <Toggle checked={settings.petInteractions[key]} onChange={(v) => patchInteraction(key, v)} />
+              </div>
+            ))}
+            <div className="text-[10px] uppercase text-slate-600 pt-1">自动化</div>
+            {(
+              [
                 ['emotion', '表情反馈', 'PAD 情感驱动的表情变化（默认关，保留接口）'],
                 ['follow', '页面跟随', '主窗口翻页时她联动换姿态']
               ] as const
@@ -354,7 +368,8 @@ export default function BuddyStage() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-2.5 border-t border-white/[0.06] pt-3">
+          <div className="text-[10px] uppercase text-slate-600 pt-3">显示参数</div>
+          <div className="flex flex-col gap-2.5 border-t border-white/[0.06] pt-2">
             <div className="flex items-center justify-between text-[12px] text-slate-300">
               <span>启用搭子</span>
               <Toggle checked={settings.petEnabled} onChange={(v) => void patch({ petEnabled: v })} />

@@ -26,6 +26,7 @@ const api = {
 
   // 轨迹 / 日历 / 计划
   getTrail: (date?: string) => ipcRenderer.invoke('trail:get', date),
+  updateTrail: (startTs: number, patch: { title?: string }) => ipcRenderer.invoke('trail:update', startTs, patch),
   listEntries: (date: string) => ipcRenderer.invoke('entries:list', date),
   saveEntry: (entry: unknown) => ipcRenderer.invoke('entries:save', entry),
   removeEntry: (id: string) => ipcRenderer.invoke('entries:remove', id),
@@ -131,6 +132,7 @@ const api = {
   togglePet: () => ipcRenderer.send('win:togglePet'),
   openMain: () => ipcRenderer.send('win:openMain'),
   setWidgetOpacity: (v: number) => ipcRenderer.send('widget:opacity', v),
+  widgetResize: (w: number, h: number) => ipcRenderer.send('widget:resize', w, h),
   dragWidget: (dx: number, dy: number) => ipcRenderer.send('widget:drag', dx, dy),
   onOpenPalette: on('open-palette'),
   onWelcomeBack: on('welcome-back'),

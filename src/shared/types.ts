@@ -571,6 +571,7 @@ export interface AppSettings {
   privacyExcludedApps: string[] // 隐私快标：不截屏/不OCR/不记标题的应用
   workChains: string[][] // 已确认的作业链路（应用切换序列，如 ["WeChat","Excel","Browser"]）
   widgetVisible: boolean
+  widgetMode: 'expanded' | 'collapsed'
   widgetOpacity: number // 0.2-1
   launchAtLogin: boolean
   slackHideSec: number // 持续摸鱼自动隐身阈值，默认 180
@@ -643,6 +644,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   privacyExcludedApps: [],
   workChains: [],
   widgetVisible: false, // 悬浮卡片默认隐藏（设置里可手动开启），状态由桌宠对话泡泡提供
+  widgetMode: 'expanded',
   widgetOpacity: 0.92,
   launchAtLogin: false,
   slackHideSec: 180,
