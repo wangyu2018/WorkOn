@@ -9,6 +9,8 @@ export interface ActivityInfo {
   endText: string
   durationText: string
   source?: string
+  mode?: 'anchor' | 'fixed'
+  pos?: { x: number; y: number }
 }
 
 const SLACK_STATES: WorkState[] = ['slack', 'relax', 'break', 'lunch', 'idle', 'away']
@@ -36,9 +38,16 @@ export function ActivityHoverCard({ a }: { a: ActivityInfo }) {
         border: `1px solid rgb(${sense.rgb}/0.55)`,
         boxShadow: '0 4px 18px rgba(15,23,42,0.15)',
         color: '#1e293b',
-        left: '50%',
-        top: '-100%',
-        transform: 'translateX(-50%)',
+        position: a.mode === 'fixed' ? 'fixed' as const : 'absolute' as const,
+        ...(a.mode === 'fixed' && a.pos
+          ? {
+              left: `${a.pos.x}px`,
+              top: `${a.pos.y}px`,
+              transform: a.pos.x + 240 + 16 > window.innerWidth
+                ? 'translate(calc(-100% - 16px), 16px)'
+                : 'translate(16px, 16px)',
+            }
+          : { left: '50%', top: '-100%', transform: 'translateX(-50%)' }),
       }}
     >
       <div className="flex items-center justify-between gap-2">

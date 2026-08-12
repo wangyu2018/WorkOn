@@ -161,6 +161,7 @@ function WeekGrid({ date }: { date: string }) {
   const [dayEntries, setDayEntries] = useState<Record<string, TimeEntry[]>>({})
   const [editor, setEditor] = useState<{ entry: TimeEntry; isNew: boolean } | null>(null)
   const [hoverEntry, setHoverEntry] = useState<string | null>(null)
+  const [mouse, setMouse] = useState({ x: 0, y: 0 })
   const days = weekDays(date)
 
   useEffect(() => {
@@ -302,6 +303,7 @@ function WeekGrid({ date }: { date: string }) {
                         onClick={() => setEditor({ entry, isNew: false })}
                         onMouseEnter={() => setHoverEntry(entry.id)}
                         onMouseLeave={() => setHoverEntry(null)}
+                        onMouseMove={(e) => setMouse({ x: e.clientX, y: e.clientY })}
                       >
                         <div className="flex items-center gap-1">
                           <span>{meta.emoji}</span>
@@ -319,6 +321,8 @@ function WeekGrid({ date }: { date: string }) {
                             endText: clockOf(entry.endMin),
                             durationText: fmtMin(entry.endMin - entry.startMin),
                             source: SOURCE_LABEL[entry.source],
+                            mode: 'fixed',
+                            pos: mouse,
                           }} />
                         )}
                       </div>
