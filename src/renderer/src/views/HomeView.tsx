@@ -36,6 +36,14 @@ function mapChannel(app: string): Channel {
 function fmtTime(ts: number): string { const d = new Date(ts); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }
 function fmtDur(min: number): string { if (min < 1) return '<1m'; if (min < 60) return `${Math.round(min)}m`; const h = Math.floor(min / 60); const m = Math.round(min % 60); return m > 0 ? `${h}h${m}m` : `${h}h` }
 
+type SenseKind = 'work' | 'slack' | 'other'
+function senseOf(state: WorkState): SenseKind {
+  const slackStates: WorkState[] = ['slack', 'relax', 'break', 'lunch', 'idle', 'away']
+  if (slackStates.includes(state)) return 'slack'
+  if (WORK_LIKE_STATES.includes(state)) return 'work'
+  return 'other'
+}
+
 interface StarNode { item: GraphItem; idx: number; x: number; y: number; size: number; isCore: boolean }
 interface StarConnection { x1: number; y1: number; x2: number; y2: number }
 
@@ -140,7 +148,12 @@ export default function HomeView() {
 
   const renderStarNode = (node: StarNode, isWork: boolean) => {
     const isDragging = dragFrom?.idx === node.idx
-    const chroma = isWork ? 'var(--star-work)' : 'var(--star-life)'
+    const chroma = (() => {
+      const s = senseOf(node.item.seg.mainState)
+      if (s === 'work') return '124 158 255'
+      if (s === 'slack') return '255 124 124'
+      return isWork ? 'var(--star-work)' : 'var(--star-life)'
+    })()
     return (
       <div
         key={node.idx}
@@ -163,7 +176,7 @@ export default function HomeView() {
           opacity: isDragging ? 0.25 : 1,
           zIndex: node.isCore ? 10 : 5,
           scale: starHover === node.idx ? '1.15' : '1',
-          border: `1px solid rgb(var(--star-${isWork ? 'work' : 'life'}-fg)/0.25)`,
+          border: `1px solid rgb(${chroma}/0.3)`,
         }}>
 
         {starHover === node.idx && (
@@ -198,6 +211,12 @@ export default function HomeView() {
         </div>
         <div className="relative flex rounded-xl" style={{ minHeight: 320, background: '#ffffff' }}>
           <div className="absolute left-1/2 top-4 bottom-4 border-l-2 border-dashed border-slate-200 z-10" />
+          {/* 图例 */}
+          <div className="absolute bottom-2 left-3 z-20 flex items-center gap-3 text-[10px]" style={{ color: '#475569' }}>
+            <span className="flex items-center gap-1"><i className="inline-block w-2 h-2 rounded-full" style={{ background: '#7c9eff' }} />办公</span>
+            <span className="flex items-center gap-1"><i className="inline-block w-2 h-2 rounded-full" style={{ background: '#ff7c7c' }} />摸鱼</span>
+            <span className="flex items-center gap-1"><i className="inline-block w-2 h-2 rounded-full" style={{ background: '#94a3b8' }} />其他</span>
+          </div>
           <div className={`relative flex-1 min-h-[320px] transition-colors ${hoverCol === 'work' && dragFrom && dragFrom.col !== 'work' ? 'bg-[rgb(var(--star-work)/0.04)]' : ''}`} style={{ background: 'rgb(var(--star-work)/0.03)' }} {...starDropProps('work')}>
             <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
               {workChart.connections.map((c, i) => (
