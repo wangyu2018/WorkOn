@@ -285,3 +285,23 @@ export default function HomeView() {
     </div>
   )
 }
+
+function PinnedWidgets({ trail }: { trail: MergedTrail | null }) {
+  const [pins, setPins] = useState<string[]>(() => { try { return (localStorage.getItem('pinnedWidgets')??'').split(',').filter(Boolean) } catch { return [] } })
+  if (!trail || pins.length === 0) return null
+  const stateMinutes = trail.stateMinutes as Record<string,number>
+  const topApps = Object.entries(trail.segments.filter(s=>!s.glance).reduce<Record<string,number>>((a,s)=>{ a[s.mainApp]=(a[s.mainApp]??0)+s.durationMin; return a },{})).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([a,m])=>({app:a,minutes:m}))
+
+  return (
+    <section className="glass-card hoverable">
+      <div className="flex items-center gap-2 mb-3">
+        <span>📌</span><h3 className="text-[13px] font-semibold text-slate-200">投送的 Widget</h3>
+        <span className="text-[11px] text-slate-500 ml-auto">来自报表页的模块</span>
+      </div>
+      <div className="grid gap-3 lg:grid-cols-2">
+        {pins.includes('state') && <div className="glass-card p-3"><h4 className="text-[11px] text-slate-400 mb-2">状态分布</h4>{Object.entries(stateMinutes).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([s,m])=><div key={s} className="flex justify-between text-[11px] text-slate-300"><span>{s}</span><span>{Math.round(m)}m</span></div>)}</div>}
+        {pins.includes('topapps') && <div className="glass-card p-3"><h4 className="text-[11px] text-slate-400 mb-2">TOP 应用</h4>{topApps.map(a=><div key={a.app} className="flex justify-between text-[11px] text-slate-300"><span>{a.app}</span><span>{Math.round(a.minutes)}m</span></div>)}</div>}
+      </div>
+    </section>
+  )
+}

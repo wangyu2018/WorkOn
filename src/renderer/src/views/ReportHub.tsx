@@ -63,6 +63,24 @@ function Loading() {
   )
 }
 
+/* ── 📌 投送主页工具 ── */
+function PinButton({ id }: { id: string }) {
+  const [pinned, setPinned] = useState(() => {
+    try { return (localStorage.getItem('pinnedWidgets') ?? '').split(',').includes(id) } catch { return false }
+  })
+  const toggle = () => {
+    const next = !pinned
+    setPinned(next)
+    try {
+      const arr = (localStorage.getItem('pinnedWidgets') ?? '').split(',').filter(Boolean)
+      if (next && !arr.includes(id)) arr.push(id)
+      if (!next) { const idx = arr.indexOf(id); if (idx >= 0) arr.splice(idx, 1) }
+      localStorage.setItem('pinnedWidgets', arr.join(','))
+    } catch {}
+  }
+  return <button onClick={toggle} className={`text-[11px] ${pinned ? 'text-neon-cyan' : 'text-slate-600 hover:text-slate-400'}`} title={pinned ? '已投送' : '投送到主页'}>{pinned ? '📌' : '📍'}</button>
+}
+
 /* ── 注意力评分组件（Radar / AttentionDailyCard / SectionTitle / DIM_META / Delta）已抽至 ../components/AttentionCard ── */
 
 /** 周报卡：本周注意力趋势（周均分 + 近 7 天折线 + 五维周均对比） */
@@ -322,7 +340,7 @@ function DailyReport() {
           <p className="py-4 text-center text-[12px] text-slate-500">今天还没有足够的活动数据，先去专注工作一会儿，评分稍后就会出现在这里。</p>
         </section>
       ) : (
-        <AttentionDailyCard score={attention.today} yesterday={yesterdayScore} />
+        <AttentionDailyCard score={attention.today} yesterday={yesterdayScore} pin={<PinButton id="attention" />} />
       )}
 
       {/* v2.6.1 作业链路卡片：注意力评分卡之后，随日报日期刷新 */}
@@ -332,6 +350,7 @@ function DailyReport() {
         {/* 状态分布 */}
         <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '120ms' }}>
           <SectionTitle icon="chart" title="状态分布" />
+          <PinButton id="state" /> <span className="text-[10px] text-slate-500 ml-1">📌 投送主页</span>
           <div className="flex items-start gap-4">
             <div className="shrink-0">
               <Donut data={dist.map(([state, value]) => ({ state, value }))} />
@@ -345,6 +364,7 @@ function DailyReport() {
         {/* TOP 应用榜 */}
         <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '180ms' }}>
           <SectionTitle icon="flame" title="TOP 应用榜" />
+          <PinButton id="topapps" />
           {topApps.length ? (
             <TopAppsCard apps={topApps.map(([app, minutes]) => ({ app, minutes }))} />
           ) : (
