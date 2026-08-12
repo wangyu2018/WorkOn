@@ -195,7 +195,7 @@ export default function HomeView() {
           </div>
           <span className="text-[11px] text-slate-500">工作 ✦ {fmtDur(totalWorkMin)} · 生活 ✦ {fmtDur(totalLifeMin)} · 拖动星点可纠偏</span>
         </div>
-        <div className="relative flex rounded-xl overflow-hidden" style={{ minHeight: 320, background: 'radial-gradient(ellipse at center, rgba(15,28,48,0.4) 0%, rgba(11,20,35,0.5) 70%)' }}>
+        <div className="relative flex rounded-xl overflow-hidden" style={{ minHeight: 320, background: 'radial-gradient(ellipse at center, rgba(30,50,80,0.35) 0%, rgba(15,25,40,0.2) 70%), linear-gradient(180deg, rgba(20,35,55,0.3), rgba(12,20,32,0.25))' }}>
           <div className="absolute left-1/2 top-4 bottom-4 border-l-2 border-dashed border-white/[0.07] z-10" />
           <div className={`relative flex-1 min-h-[320px] transition-colors ${hoverCol === 'work' && dragFrom && dragFrom.col !== 'work' ? 'bg-[rgb(var(--star-work)/0.06)]' : ''}`} {...starDropProps('work')}>
             <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
