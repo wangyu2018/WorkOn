@@ -29,13 +29,13 @@ export function ActivityHoverCard({ a }: { a: ActivityInfo }) {
   const sense = SENSE_META[senseOf(a.state)]
   return (
     <div
-      className="absolute z-30 rounded-xl px-3 py-2 pointer-events-none shadow-lg backdrop-blur-md"
+      className="absolute z-30 rounded-xl px-3 py-2 pointer-events-none shadow-lg"
       style={{
         width: 240,
-        background: 'rgba(17,24,39,0.95)',
+        background: '#ffffff',
         border: `1px solid rgb(${sense.rgb}/0.55)`,
-        boxShadow: `0 4px 18px rgb(${sense.rgb}/0.28)`,
-        color: '#f1f5f9',
+        boxShadow: '0 4px 18px rgba(15,23,42,0.15)',
+        color: '#1e293b',
         left: '50%',
         top: '-100%',
         transform: 'translateX(-50%)',
@@ -44,18 +44,18 @@ export function ActivityHoverCard({ a }: { a: ActivityInfo }) {
       <div className="flex items-center justify-between gap-2">
         <span className="text-[12px] font-semibold truncate">{a.app || '活动'}</span>
         <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
-          style={{ color: `rgb(${sense.rgb})`, background: `rgb(${sense.rgb}/0.14)` }}>
+          style={{ color: `rgb(${sense.rgb})`, background: `rgb(${sense.rgb}/0.12)` }}>
           {sense.label}
         </span>
       </div>
-      <div className="mt-1 text-[11px] leading-snug text-slate-200">
+      <div className="mt-1 text-[11px] leading-snug" style={{ color: '#334155' }}>
         {a.title || '（未命名）'}
       </div>
-      <div className="mt-1.5 flex items-center gap-2 text-[10px] text-slate-400">
+      <div className="mt-1.5 flex items-center gap-2 text-[10px]" style={{ color: '#64748b' }}>
         <span>{a.startText} – {a.endText}</span>
-        <span className="text-slate-500">·</span>
+        <span style={{ color: '#94a3b8' }}>·</span>
         <span>{a.durationText}</span>
-        {a.source && <span className="ml-auto rounded bg-white/10 px-1 py-0.5">{a.source}</span>}
+        {a.source && <span className="ml-auto rounded px-1 py-0.5" style={{ background: '#f1f5f9', color: '#475569' }}>{a.source}</span>}
       </div>
     </div>
   )
