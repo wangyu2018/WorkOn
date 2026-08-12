@@ -57,8 +57,6 @@ const SOURCE_LABEL: Record<TimeEntry['source'], string> = {
   ai: 'AI'
 }
 
-const SLACK_STATES: WorkState[] = ['slack', 'relax', 'break', 'lunch', 'idle', 'away']
-
 function senseOf(state: WorkState): 'work' | 'slack' | 'other' {
   if (SLACK_STATES.includes(state)) return 'slack'
   if (WORK_LIKE_STATES.includes(state)) return 'work'
@@ -500,6 +498,7 @@ function WeekGrid({ date }: { date: string }) {
                                 pos: mouse,
                                 counterpart: seg && /wechat|weixin|wchar|wecom|企业微信/.test(seg.mainApp.toLowerCase()) ? counterpart : undefined,
                                 topic: seg && /chrome|edge|firefox|brave|safari|opera/i.test(seg.mainApp) ? counterpart : undefined,
+                                microActivity: (seg as any)?.microActivity ?? null,
                               }} />
                             )
                           })()

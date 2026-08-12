@@ -8,7 +8,7 @@ import { INPUT_REQUIRED_STATES, WORK_LIKE_STATES, WORK_STATES } from './stateMet
 /** 各状态基础分（presence.ts focusLevel 公式的基础项） */
 export const STATE_FOCUS_BASE: Record<WorkState, number> = {
   focus: 80, coding: 90, aidev: 88, aiqa: 70, writing: 82, meeting: 60,
-  remote: 55, slack: 12, relax: 25, idle: 15, break: 30, lunch: 30, away: 5
+  remote: 55, slack: 12, relax: 25, idle: 15, break: 30, lunch: 30, away: 5, other: 40
 }
 
 /** 工作态持续奖励上限与斜率（presence.ts 同款：每分钟 +0.5，30 分钟拿满 +15） */

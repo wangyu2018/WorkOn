@@ -3,7 +3,7 @@
  * 依据：PRD.md F2「并行屏只按墙钟计一次总时长（不重复累加），保留各屏独立占用分钟」
  */
 import type { ActivityRecord, MergedTrail, TrailSegment, WorkState } from './types'
-import { WORK_LIKE_STATES } from './stateMeta'
+import { WORK_LIKE_STATES, inferMicroActivity } from './stateMeta'
 
 const SEG_GAP_MS = 60 * 1000 // 间隔超 1 分钟切段
 const SEG_CAP_MS = 60 * 60 * 1000 // 单段时长封顶 1h，避免休眠跳变虚高
@@ -103,7 +103,8 @@ export function buildMergedTrail(records: ActivityRecord[], date: string): Merge
       mainTitle: main.title,
       auxTitle: aux ? aux.top.title : undefined,
       screens: [...screenSpan.keys()],
-      glance
+      glance,
+      microActivity: inferMicroActivity(main.state, main.title)
     })
   }
 

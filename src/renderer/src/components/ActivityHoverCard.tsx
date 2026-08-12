@@ -13,6 +13,7 @@ export interface ActivityInfo {
   pos?: { x: number; y: number }
   counterpart?: string
   topic?: string
+  microActivity?: string | null
 }
 
 const SLACK_STATES: WorkState[] = ['slack', 'relax', 'break', 'lunch', 'idle', 'away']
@@ -62,6 +63,11 @@ export function ActivityHoverCard({ a }: { a: ActivityInfo }) {
       <div className="mt-1 text-[11px] leading-snug" style={{ color: '#334155' }}>
         {a.title || '（未命名）'}
       </div>
+      {a.microActivity && (
+        <div className="mt-0.5 text-[10px]" style={{ color: '#94a3b8' }}>
+          {a.microActivity} <span style={{ color: '#cbd5e1' }}>· 推断</span>
+        </div>
+      )}
       {(a.counterpart || a.topic) ? (
         <div className="mt-1 text-[11px] leading-snug" style={{ color: '#64748b' }}>
           {a.counterpart ? <span>与 <b style={{ color: '#334155' }}>{a.counterpart}</b> 沟通</span> : null}

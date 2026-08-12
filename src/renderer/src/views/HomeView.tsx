@@ -190,6 +190,7 @@ export default function HomeView() {
             endText: fmtTime(node.item.seg.endTs),
             durationText: fmtDur(node.item.seg.durationMin),
             source: '监控',
+            microActivity: (node.item.seg as any).microActivity ?? null,
           }} />
         )}
       </div>

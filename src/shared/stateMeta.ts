@@ -17,7 +17,8 @@ export const WORK_STATES: Record<WorkState, WorkStateMeta> = {
   break: { label: '休息', color: '#FBBF24', emoji: '☕' },
   lunch: { label: '午休', color: '#FB923C', emoji: '🍚' },
   remote: { label: '远程协作', color: '#38BDF8', emoji: '🔗' },
-  away: { label: '离开', color: '#475569', emoji: '🚶' }
+  away: { label: '离开', color: '#475569', emoji: '🚶' },
+  other: { label: '其他', color: '#64748B', emoji: '❓' }
 }
 
 export const STATE_LABEL: Record<WorkState, string> = Object.fromEntries(
@@ -82,7 +83,7 @@ export const APP_RULES: AppRule[] = [
   },
   { match: /^(windsurf)\.exe$/i, name: 'Windsurf', state: 'aidev' },
   { match: /^(trae)\.exe$/i, name: 'Trae', state: 'aidev' },
-  { match: /^chrome\.exe$/, name: 'Chrome', state: 'focus', titleState: [
+  { match: /^chrome\.exe$/, name: 'Chrome', state: 'other', titleState: [
       { match: /bilibili|youtube|抖音|douyin|腾讯视频|iqiyi|爱奇艺|netflix/i, state: 'relax' },
       { match: /weibo|微博|知乎|zhihu|贴吧|x\.com|twitter|reddit/i, state: 'slack' },
       { match: /chatgpt|claude|gemini|copilot|kimi|通义|文心|豆包/i, state: 'aiqa' },
@@ -94,7 +95,7 @@ export const APP_RULES: AppRule[] = [
       { match: /github|gitlab|gitee|stackoverflow|掘金|juejin|csdn|npmjs|pypi|maven|dockerhub|k8s|jenkins|jira|confluence|postman|swagger|apifox/i, state: 'coding' }
     ]
   },
-  { match: /^(msedge|firefox|opera|brave|arc)\.exe$/i, name: 'Browser', state: 'focus', titleState: [
+  { match: /^(msedge|firefox|opera|brave|arc)\.exe$/i, name: 'Browser', state: 'other', titleState: [
       { match: /bilibili|youtube|抖音|腾讯视频|爱奇艺|netflix/i, state: 'relax' },
       { match: /weibo|微博|知乎|贴吧|twitter|reddit/i, state: 'slack' },
       { match: /chatgpt|claude|kimi|copilot/i, state: 'aiqa' },
@@ -128,8 +129,8 @@ export const APP_RULES: AppRule[] = [
   },
   { match: /^(postman|apifox|insomnia|fiddler|charles|wireshark|navicat|datagrip|dbeaver|tableplus|redis|mongodb)/i, name: 'DevTool', state: 'coding' },
   { match: /^(filezilla|winscp|mobaxterm|xshell|securecrt|putty|kitty|windterm)/i, name: 'Transfer/SSH', state: 'coding' },
-  { match: /^(everything|listary|utools|wox|powerlauncher)/i, name: 'Launcher', state: 'focus' },
-  { match: /^(obs64|obs|bandicam|camtasia|screenflow)/i, name: 'Recorder', state: 'focus' },
+  { match: /^(everything|listary|utools|wox|powerlauncher)/i, name: 'Launcher', state: 'other' },
+  { match: /^(obs64|obs|bandicam|camtasia|screenflow)/i, name: 'Recorder', state: 'other' },
   { match: /^(jmeter|apipost|loadrunner|k6)/i, name: 'PerfTest', state: 'coding' },
   { match: /^(figma|sketch|photoshop|illustrator|blender|ae|pr|canva)\.exe$/i, name: 'Design', state: 'focus' },
   { match: /^(explorer)\.exe$/i, name: 'Explorer', state: 'idle' },
@@ -169,5 +170,49 @@ export function identifyApp(exe: string, title: string): AppIdentifyResult {
   if (/开发|代码|编程|调试|bug|jira|需求|review|deploy|debug|coding|commit|merge|branch/i.test(title)) {
     return { appName: exe.replace(/\.exe$/i, ''), state: 'coding' }
   }
-  return { appName: exe.replace(/\.exe$/i, ''), state: 'focus' }
+  return { appName: exe.replace(/\.exe$/i, ''), state: 'other' }
+}
+
+export const MICRO_VOCAB: Partial<Record<WorkState, { tag: string; match: RegExp }[]>> = {
+  coding: [
+    { tag: '写码',     match: /\.(tsx?|jsx?|py|go|rs|java|cs|cpp?|vue|rb)$/i },
+    { tag: '调试',     match: /debug|调试|error|报错|exception|栈/i },
+    { tag: 'Code Review', match: /(\bpr\b|pull request|merge request|review|diff|冲突)/i },
+    { tag: '查资料',   match: /stackoverflow|掘金|juejin|csdn|mdn|官方文档|docs\./i },
+    { tag: '部署',     match: /deploy|ci\/cd|jenkins|docker|k8s|发布|上线|构建/i },
+  ],
+  aidev: [
+    { tag: '写 Prompt', match: /prompt|提示词|system|指令|规则/i },
+    { tag: '调 Agent',  match: /agent|composer|自动化|workflow/i },
+  ],
+  aiqa: [
+    { tag: '问问题', match: /(怎么|如何|为什么|what|how|why|\?$)/i },
+  ],
+  writing: [
+    { tag: '写 PRD',   match: /(prd|需求|方案|设计文档|spec)/i },
+    { tag: '记笔记',   match: /(笔记|note|obsidian|思源|notion)/i },
+  ],
+  meeting: [
+    { tag: '开会', match: /(会议|meeting|周会|评审会|站会)/i },
+    { tag: '面试', match: /(面试|interview)/i },
+  ],
+  remote: [
+    { tag: '远程运维', match: /(ssh|rdp|堡垒机|运维|线上|vpn)/i },
+  ],
+  slack: [
+    { tag: '刷社交', match: /(weibo|微博|知乎|zhihu|twitter|朋友圈|群聊)/i },
+    { tag: '逛电商', match: /(淘宝|京东|tmall|pdd|拼多多|amazon)/i },
+  ],
+  relax: [
+    { tag: '听歌',   match: /(music|音乐|网易云|qq音乐|spotify)/i },
+    { tag: '看视频', match: /(bilibili|youtube|抖音|视频|netflix|iqiyi)/i },
+    { tag: '游戏',   match: /(steam|game|原神|lol|王者|epic)/i },
+  ],
+}
+
+export function inferMicroActivity(state: WorkState, title: string): string | null {
+  const vocab = MICRO_VOCAB[state]
+  if (!vocab) return null
+  for (const v of vocab) if (v.match.test(title)) return v.tag
+  return null
 }

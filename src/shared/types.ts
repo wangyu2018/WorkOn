@@ -20,6 +20,7 @@ export type WorkState =
   | 'relax' // 放松（媒体粘性）
   | 'lunch' // 午休
   | 'remote' // 远程协作
+  | 'other' // 其他：未识别/无法判定的诚实态（不假装专注）
 
 export interface WorkStateMeta {
   label: string
@@ -92,6 +93,8 @@ export interface TrailSegment {
   glance?: boolean
   /** v3.0 操作痕迹：OCR 识别的具体操作（如 "VSCode 编辑 monitor.ts"） */
   operation?: string
+  /** 推断的微观活动标签（如 "写码"、"调试"） */
+  microActivity?: string | null
 }
 
 /** 双屏合并轨迹 */
