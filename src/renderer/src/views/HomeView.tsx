@@ -140,7 +140,7 @@ export default function HomeView() {
 
   const renderStarNode = (node: StarNode, isWork: boolean) => {
     const isDragging = dragFrom?.idx === node.idx
-    const glowColor = isWork ? 'rgba(16,185,129,' : 'rgba(251,191,36,'
+    const chroma = isWork ? 'var(--star-work)' : 'var(--star-life)'
     return (
       <div
         key={node.idx}
@@ -155,13 +155,11 @@ export default function HomeView() {
           width: node.size, height: node.size,
           transform: 'translate(-50%, -50%)',
           background: node.isCore
-            ? isWork
-              ? 'radial-gradient(circle at 35% 35%, rgba(110,231,183,0.95), rgba(16,185,129,0.5))'
-              : 'radial-gradient(circle at 35% 35%, rgba(252,211,77,0.95), rgba(251,191,36,0.5))'
-            : isWork
-              ? 'radial-gradient(circle at 35% 35%, rgba(16,185,129,0.7), rgba(16,185,129,0.25))'
-              : 'radial-gradient(circle at 35% 35%, rgba(251,191,36,0.7), rgba(251,191,36,0.25))',
-          boxShadow: `0 0 ${node.isCore ? 12 : 6}px ${glowColor}${node.isCore ? 0.7 : 0.4}), 0 0 ${node.isCore ? 28 : 14}px ${glowColor}${node.isCore ? 0.25 : 0.12})`,
+              ? `radial-gradient(circle at 35% 35%, rgb(${chroma}/0.95), rgb(${chroma}/0.5))`
+              : `radial-gradient(circle at 35% 35%, rgb(${chroma}/0.7), rgb(${chroma}/0.25))`,
+          boxShadow: node.isCore
+            ? `0 0 12px rgb(${chroma}/0.7), 0 0 28px rgb(${chroma}/0.25)`
+            : `0 0 6px rgb(${chroma}/0.4), 0 0 14px rgb(${chroma}/0.12)`,
           opacity: isDragging ? 0.25 : 1,
           zIndex: node.isCore ? 10 : 5,
           scale: starHover === node.idx ? '1.15' : '1',
@@ -197,26 +195,26 @@ export default function HomeView() {
           </div>
           <span className="text-[11px] text-slate-500">工作 ✦ {fmtDur(totalWorkMin)} · 生活 ✦ {fmtDur(totalLifeMin)} · 拖动星点可纠偏</span>
         </div>
-        <div className="relative flex rounded-xl overflow-hidden" style={{ minHeight: 320, background: 'radial-gradient(ellipse at center, rgba(15,23,42,0.45) 0%, rgba(3,7,17,0.95) 70%)' }}>
+        <div className="relative flex rounded-xl overflow-hidden" style={{ minHeight: 320, background: 'radial-gradient(ellipse at center, rgba(15,28,48,0.4) 0%, rgba(11,20,35,0.5) 70%)' }}>
           <div className="absolute left-1/2 top-4 bottom-4 border-l-2 border-dashed border-white/[0.07] z-10" />
-          <div className={`relative flex-1 min-h-[320px] transition-colors ${hoverCol === 'work' && dragFrom && dragFrom.col !== 'work' ? 'bg-emerald-500/[0.06]' : ''}`} {...starDropProps('work')}>
+          <div className={`relative flex-1 min-h-[320px] transition-colors ${hoverCol === 'work' && dragFrom && dragFrom.col !== 'work' ? 'bg-[rgb(var(--star-work)/0.06)]' : ''}`} {...starDropProps('work')}>
             <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
               {workChart.connections.map((c, i) => (
-                <line key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} stroke="rgba(16,185,129,0.12)" strokeWidth="0.3" />
+                <line key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} strokeWidth="0.3" stroke={`rgb(var(--star-work)/0.12)`} />
               ))}
             </svg>
-            <span className="absolute top-3 left-3 text-[11px] font-semibold text-emerald-400/60 z-10">工作</span>
+            <span className="absolute top-3 left-3 text-[11px] font-semibold z-10" style={{ color: 'rgb(var(--star-work))' }}>工作</span>
             {workChart.nodes.length === 0 ? (
               <p className="absolute inset-0 flex items-center justify-center text-[12px] text-slate-600">从右边拖星点过来 ✦</p>
             ) : workChart.nodes.map(n => renderStarNode(n, true))}
           </div>
-          <div className={`relative flex-1 min-h-[320px] transition-colors ${hoverCol === 'life' && dragFrom && dragFrom.col !== 'life' ? 'bg-amber-500/[0.06]' : ''}`} {...starDropProps('life')}>
+          <div className={`relative flex-1 min-h-[320px] transition-colors ${hoverCol === 'life' && dragFrom && dragFrom.col !== 'life' ? 'bg-[rgb(var(--star-life)/0.06)]' : ''}`} {...starDropProps('life')}>
             <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
               {lifeChart.connections.map((c, i) => (
-                <line key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} stroke="rgba(251,191,36,0.12)" strokeWidth="0.3" />
+                <line key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} strokeWidth="0.3" stroke={`rgb(var(--star-life)/0.12)`} />
               ))}
             </svg>
-            <span className="absolute top-3 right-3 text-[11px] font-semibold text-amber-400/60 z-10">生活</span>
+            <span className="absolute top-3 right-3 text-[11px] font-semibold z-10" style={{ color: 'rgb(var(--star-life))' }}>生活</span>
             {lifeChart.nodes.length === 0 ? (
               <p className="absolute inset-0 flex items-center justify-center text-[12px] text-slate-600">把左边星点拖过来 ✦</p>
             ) : lifeChart.nodes.map(n => renderStarNode(n, false))}

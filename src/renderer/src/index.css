@@ -8,6 +8,9 @@
   --bg-surface: #111a2e;
   --bg-elevated: #1a2540;
   --border-subtle: rgba(255, 255, 255, 0.06);
+  /* 星图语义色（RGB通道，方便rgba(var(--star-x)/opacity)派生） */
+  --star-work: 16 185 129;
+  --star-life: 251 191 36;
   --border-active: rgba(34, 211, 238, 0.35);
   --text-primary: #e8edf5;
   --text-secondary: #8a93a6;
