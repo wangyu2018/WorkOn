@@ -11,6 +11,9 @@
   /* 星图语义色（RGB通道，方便rgba(var(--star-x)/opacity)派生） */
   --star-work: 16 185 129;
   --star-life: 251 191 36;
+  /* 星图白底墨色文字（白底基准，高对比） */
+  --star-work-fg: 6 95 70;
+  --star-life-fg: 180 83 9;
   --border-active: rgba(34, 211, 238, 0.35);
   --text-primary: #e8edf5;
   --text-secondary: #8a93a6;
@@ -347,10 +350,10 @@ textarea {
 [data-theme='amber'] input[type='range']::-webkit-slider-thumb { background: #fbbf24; box-shadow: 0 0 8px rgba(251, 191, 36, 0.6); }
 
 /* 星图主题色联动：切换主题时 work/life 星图整体换色 */
-[data-theme='cyan']   { --star-work: 6 182 212; --star-life: 236 72 153; }
-[data-theme='violet'] { --star-work: 139 92 246; --star-life: 245 158 11; }
-[data-theme='green']  { --star-work: 16 185 129; --star-life: 251 191 36; }
-[data-theme='amber']  { --star-work: 251 191 36; --star-life: 239 68 68; }
+[data-theme='cyan']   { --star-work: 6 182 212; --star-life: 236 72 153; --star-work-fg: 14 116 144; --star-life-fg: 190 18 60; }
+[data-theme='violet'] { --star-work: 139 92 246; --star-life: 245 158 11; --star-work-fg: 109 40 217; --star-life-fg: 194 65 12; }
+[data-theme='green']  { --star-work: 16 185 129; --star-life: 251 191 36; --star-work-fg: 6 95 70; --star-life-fg: 180 83 9; }
+[data-theme='amber']  { --star-work: 251 191 36; --star-life: 239 68 68; --star-work-fg: 180 83 9; --star-life-fg: 185 28 28; }
 
 /* ── 亮色模式（data-mode=light，覆盖少量硬编码工具类） ── */
 [data-mode='light'] body {
