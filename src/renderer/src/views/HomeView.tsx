@@ -6,6 +6,7 @@ import { WORK_LIKE_STATES, WORK_STATES } from '@shared/stateMeta'
 import type { MergedTrail, TrailSegment, WorkState, PlanItem } from '@shared/types'
 import ActionCard from '../components/ActionCard'
 import { ActivityHoverCard } from '../components/ActivityHoverCard'
+import { displayApp } from '@shared/appDisplayName'
 
 type Channel = 'CMD' | '浏览器' | '微信' | 'IDE' | '其他'
 type Column = 'work' | 'life'
@@ -182,7 +183,7 @@ export default function HomeView() {
 
         {starHover === node.idx && (
           <ActivityHoverCard a={{
-            app: node.item.seg.mainApp,
+            app: displayApp(node.item.seg.mainApp),
             title: node.item.seg.mainTitle ?? '',
             state: node.item.seg.mainState,
             startText: fmtTime(node.item.seg.startTs),
