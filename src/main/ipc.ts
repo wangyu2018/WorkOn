@@ -42,7 +42,7 @@ import {
   mainWindow, widgetWindow, petWindow, toggleWidget, togglePet,
   setPetIgnoreMouse, setPetModal, createMainWindow, createPetWindow, closePetWindow, sendTo
 } from './windows'
-import type { UserAnalysis, MergedTrail, CustomCategory, UserHabits, Achievement, UserType, ReportTemplate, CategoryInference } from '@shared/types'
+import type { UserAnalysis, MergedTrail, CustomCategory, UserHabits, Achievement, UserType, ReportTemplate, CategoryInference, SegmentPlanLink } from '@shared/types'
 import { generateReport, generateWeeklyReport } from './report/engine'
 import { listTemplates } from './report/templates'
 import { parseUserTemplate } from './report/templateParser'
@@ -133,14 +133,21 @@ export function registerIpc(): void {
     return updated ? { success: true } : { success: false }
   })
 
-  const segmentPlanMap = new Map<number, string>()
   ipcMain.handle('trail:assignPlan', (_e, segStartTs: number, planId: string | null) => {
+    const date = dateKey(segStartTs)
+    const id = `${date}:${segStartTs}`
     if (planId) {
-      segmentPlanMap.set(segStartTs, planId)
+      const existing = col<SegmentPlanLink>('segmentPlans').find((x) => x.id === id)
+      if (existing) updateIn<SegmentPlanLink>('segmentPlans', id, { planId })
+      else insertInto<SegmentPlanLink>('segmentPlans', { id, date, segStartTs, planId, ts: Date.now() })
     } else {
-      segmentPlanMap.delete(segStartTs)
+      removeFrom('segmentPlans', id)
     }
     return { success: true }
+  })
+  ipcMain.handle('trail:getSegmentPlans', (_e, date?: string) => {
+    const d = date ?? dateKey(Date.now())
+    return col<SegmentPlanLink>('segmentPlans').filter((x) => x.date === d).map((x) => ({ segStartTs: x.segStartTs, planId: x.planId }))
   })
 
   // ── 日历条目 ──

@@ -175,8 +175,10 @@ export function identifyApp(exe: string, title: string): AppIdentifyResult {
   for (const rule of APP_RULES) {
     if (rule.match.test(key)) {
       let appName = rule.name
-      // 终端类：从标题提取当前工作目录名作为项目标识（如 "PS C:\dev\workon" → Terminal · workon）
+      // 终端类：标题含 AI CLI 工具时识别为独立应用（opencode/claude code/kimi…），否则从标题提取工作目录名
       if (rule.name === 'Terminal') {
+        const cli = title.match(/(opencode|claude[ -]?code|codex|aider|cursor-agent|kimi|copilot-cli)/i)
+        if (cli) return { appName: cli[1].toLowerCase(), state: 'aidev' }
         const pathMatch = title.match(/([A-Za-z]:[\\/][^\s"']+)|((?:~|\/)[^\s"']+)/)
         if (pathMatch) {
           const folder = pathMatch[0].replace(/[\\/]+$/, '').split(/[\\/]/).filter(Boolean).pop()

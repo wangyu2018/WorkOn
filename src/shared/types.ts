@@ -181,6 +181,15 @@ export interface CategoryInference {
   ts: number
 }
 
+/** 时间轴段 → 计划 拖拽关联（持久化，重启后保持） */
+export interface SegmentPlanLink {
+  id: string            // `${date}:${segStartTs}` 去重键
+  date: string
+  segStartTs: number
+  planId: string
+  ts: number
+}
+
 export interface UserHabits {
   lunchTime?: string // 如 "12:00-13:00"
   meetingTimes?: string[] // 如 ["10:00", "14:30"]

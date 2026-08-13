@@ -14,7 +14,7 @@ export interface ActivityInfo {
   counterpart?: string
   topic?: string
   microActivity?: string | null
-  aiHint?: { label: string; confidence: number } | null
+  aiInfer?: { label: string; confidence: number } | null
 }
 
 const SLACK_STATES: WorkState[] = ['slack', 'relax', 'break', 'lunch', 'idle', 'away']
@@ -69,9 +69,10 @@ export function ActivityHoverCard({ a }: { a: ActivityInfo }) {
           {a.microActivity} <span style={{ color: '#cbd5e1' }}>· 推断</span>
         </div>
       )}
-      {a.aiHint && (
+      {a.aiInfer && (
         <div className="mt-0.5 text-[10px]" style={{ color: '#94a3b8' }}>
-          AI 疑似：{a.aiHint.label} <span style={{ color: '#cbd5e1' }}>· 低置信 {Math.round(a.aiHint.confidence * 100)}%</span>
+          {a.aiInfer.confidence >= 0.6 ? 'AI推断' : 'AI疑似'}：{a.aiInfer.label}
+          {a.aiInfer.confidence < 0.6 && <span style={{ color: '#cbd5e1' }}> · 低置信 {Math.round(a.aiInfer.confidence * 100)}%</span>}
         </div>
       )}
       {(a.counterpart || a.topic) ? (

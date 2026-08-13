@@ -37,6 +37,24 @@ const fmtMin = (min?: number) =>
   min == null ? '—' : `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
 
 const LABEL_W = 80
+const LANE_W = 760
+
+// 双区淡框（"不明显"：淡底 + 1px 极淡描边 + 左上角小标签，无阴影无粗边）
+const ZONE_TODAY = {
+  background: 'rgba(15,23,42,0.028)',
+  border: '1px solid rgba(148,163,184,0.28)',
+  borderRadius: 10,
+  padding: '8px 8px 4px',
+  position: 'relative' as const,
+}
+const ZONE_PLAN = {
+  background: 'rgba(124,158,255,0.045)',
+  border: '1px solid rgba(124,158,255,0.30)',
+  borderRadius: 10,
+  padding: '8px 8px 4px',
+  position: 'relative' as const,
+}
+const ZONE_LABEL_STYLE = { fontSize: 11, fontWeight: 600, letterSpacing: 0.3 } as const
 
 function makeDragImage(app: string, ma?: string | null): HTMLDivElement {
   const el = document.createElement('div')
@@ -53,9 +71,9 @@ function makeDragImage(app: string, ma?: string | null): HTMLDivElement {
 
 function STATE_COLOR_OF(seg: TrailSegment) {
   const s = senseOf(seg.mainState)
-  if (s === 'work') return { bg: '#7c9eff22', border: '#7c9eff44', text: '#4c6ed9' }
-  if (s === 'slack') return { bg: '#ff7c7c22', border: '#ff7c7c44', text: '#d94c4c' }
-  return { bg: '#94a3b822', border: '#94a3b844', text: '#64748b' }
+  if (s === 'work') return { bg: '#7c9eff22', border: '#7c9eff44', text: '#4c6ed9', band: '#7c9eff' }
+  if (s === 'slack') return { bg: '#ff7c7c22', border: '#ff7c7c44', text: '#d94c4c', band: '#ff7c7c' }
+  return { bg: '#94a3b822', border: '#94a3b844', text: '#64748b', band: '#94a3b8' }
 }
 
 type SenseKind = 'work' | 'slack' | 'other'
@@ -142,7 +160,16 @@ export default function HomeView() {
       if (t) {
         setTrail(t)
         const segs = t.segments.filter((s) => !s.glance && s.durationMin > 0)
-        setItems(segs.map((seg) => ({ seg, channel: mapChannel(seg.mainApp), column: WORK_LIKE_STATES.includes(seg.mainState) ? 'work' : 'life' })))
+        // 主屏 + 副屏都进今日池：副屏重要工作（如 opencode）也显示为独立行，双屏并行一眼看清
+        const list: GraphItem[] = []
+        for (const s of segs) {
+          list.push({ seg: s, channel: mapChannel(s.mainApp), column: WORK_LIKE_STATES.includes(s.mainState) ? 'work' : 'life' })
+          if (s.auxApp && s.auxApp !== s.mainApp) {
+            const auxSeg: TrailSegment = { ...s, id: s.id + ':aux', mainApp: s.auxApp, mainState: s.auxState ?? 'other', mainTitle: s.auxTitle ?? '' }
+            list.push({ seg: auxSeg, channel: mapChannel(auxSeg.mainApp), column: WORK_LIKE_STATES.includes(auxSeg.mainState) ? 'work' : 'life' })
+          }
+        }
+        setItems(list)
         if (p) setPlans(p)
       }
       void window.api?.getInferences?.().then((infs) => {
@@ -152,6 +179,13 @@ export default function HomeView() {
       const d = new Date()
       setNowMin(d.getHours() * 60 + d.getMinutes())
     })()
+  }, [])
+
+  useEffect(() => {
+    void window.api?.getSegmentPlans?.().then((links) => {
+      const list = (links as Array<{ segStartTs: number; planId: string }>) ?? []
+      if (list.length) setPlanSegments(new Map(list.map((l) => [l.segStartTs, l.planId])))
+    }).catch(() => undefined)
   }, [])
 
   useEffect(() => {
@@ -201,6 +235,17 @@ export default function HomeView() {
     [items, planSegments]
   )
 
+  // 今日：按产品(mainApp)分行，每行一个产品；某产品块全部关联后该行自然消失
+  const todayByApp = useMemo(() => {
+    const m = new Map<string, GraphItem[]>()
+    for (const i of todaySegs) {
+      const k = i.seg.mainApp
+      if (!m.has(k)) m.set(k, [])
+      m.get(k)!.push(i)
+    }
+    return [...m.entries()]
+  }, [todaySegs])
+
   const getPlanSegs = useCallback((planId: string) =>
     items.filter(i => planSegments.get(i.seg.startTs) === planId),
     [items, planSegments]
@@ -208,7 +253,7 @@ export default function HomeView() {
 
   const ruler = useMemo(() => {
     const lo = rangeLo, hi = rangeHi
-    const PAD = 8, W = 760, span = hi - lo || 1
+    const PAD = 8, W = LANE_W, span = hi - lo || 1
     return {
       lo, hi,
       minToX: (m: number) => PAD + ((m - lo) / span) * (W - PAD * 2),
@@ -221,8 +266,6 @@ export default function HomeView() {
     const ma = (seg as any).microActivity
     const c = STATE_COLOR_OF(seg)
     const ghost = dragTs === seg.startTs
-    const inf = inferences.get(seg.id ?? 's' + seg.startTs)
-    const infHigh = inf && inf.confidence >= 0.6 ? inf : null
     return (
       <div key={seg.startTs}
         draggable
@@ -237,17 +280,14 @@ export default function HomeView() {
         onMouseEnter={e => !dragTs && setTlHover({ seg, rect: e.currentTarget.getBoundingClientRect() })}
         onMouseLeave={() => setTlHover(null)}
         title={`${app}${ma ? ' · ' + ma : ''} · ${fmtTime(seg.startTs)}`}
-        style={{ position: 'absolute', left, width, top: 2, bottom: 2,
-                 background: ghost ? 'rgba(148,163,184,0.12)' : c.bg,
-                 border: `1px ${ghost ? 'dashed' : 'solid'} ${ghost ? '#94a3b8' : c.border}`,
-                 borderRadius: 6, overflow: 'hidden', padding: '0 4px',
-                 display: 'flex', alignItems: 'center', fontSize: 10, color: c.text,
+        style={{ position: 'absolute', left, width, top: 3, bottom: 3,
+                 background: ghost ? 'rgba(148,163,184,0.12)' : c.band,
+                 border: ghost ? '1px dashed #94a3b8' : 'none',
+                 borderRadius: 5,
                  cursor: dragTs ? 'grabbing' : 'grab',
-                 opacity: ghost ? 0.35 : 1, transition: 'opacity .1s' }}>
-        <span className="truncate">{app}{ma && <span style={{ opacity: 0.7 }}> · {ma}</span>}{infHigh && <span style={{ opacity: 0.85 }}> · {WORK_STATES[infHigh.category]?.label ?? 'AI'}（AI推断）</span>}</span>
-      </div>
+                 opacity: ghost ? 0.35 : 1, transition: 'opacity .1s' }} />
     )
-  }, [setTlHover, dragTs, inferences])
+  }, [setTlHover, dragTs])
 
   const rangeRef = useRef<HTMLDivElement>(null)
   const hourTicks = useMemo(() => {
@@ -376,9 +416,10 @@ export default function HomeView() {
           <span className="text-[10px] text-slate-400">{plans.length} 计划 · {fmtDur(items.reduce((a, i) => a + i.seg.durationMin, 0))}</span>
         </div>
           <div style={{ overflowX: 'auto', overflowY: 'visible', position: 'relative' }}>
+            <div className="relative" style={{ width: LABEL_W + LANE_W }}>
             <div className="flex items-center mb-1.5">
-              <span className="w-20 shrink-0 text-[11px] text-slate-500 pl-2">范围 {fmtHHMM(rangeLo)}–{fmtHHMM(rangeHi)}</span>
-              <div ref={rangeRef} className="flex-1 relative" style={{ height: 18, cursor: 'pointer' }}>
+              <span style={{ width: LABEL_W }} className="shrink-0 text-[11px] text-slate-500 pl-2">范围 {fmtHHMM(rangeLo)}–{fmtHHMM(rangeHi)}</span>
+              <div ref={rangeRef} className="relative" style={{ width: LANE_W, height: 18, cursor: 'pointer' }}>
                 <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5" style={{ background: '#e2e8f0' }} />
                 {hourTicks.map(t => (
                   <div key={t} className="absolute top-0 bottom-0" style={{ left: ruler.minToX(t) }}>
@@ -392,66 +433,93 @@ export default function HomeView() {
                      style={{ left: ruler.minToX(rangeHi), background: '#7c9eff', boxShadow: '0 0 0 1px #fff' }} title="拖拽调整结束时间" />
               </div>
             </div>
-            <div className="flex items-center mb-1.5">
-              <span className="w-20 shrink-0 text-[11px] text-slate-500 pl-2">今日</span>
-              <div className="flex-1 relative" style={{
-                   height: 30, borderRadius: 8, overflow: 'hidden',
-                   background: dragOverLane === 'today' ? 'rgba(124,158,255,0.07)' : '#f8fafc',
-                   boxShadow: dragOverLane === 'today' ? 'inset 0 0 0 2px rgba(124,158,255,0.55)' : 'none',
-                   transition: 'background .12s, box-shadow .12s',
-                 }}
-                onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane('today') }}
-                onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverLane(null) }}
-                onDrop={e => {
-                  e.preventDefault(); setDragOverLane(null)
-                  const ts = parseInt(e.dataTransfer.getData('text/start-ts'))
-                  if (!isNaN(ts)) handleAssignPlan(null, ts)
-                }}>
-                {dragOverLane === 'today' && (
-                  <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] px-2 py-0.5 rounded-full"
-                        style={{ background: '#7c9eff', color: '#fff' }}>松开归入 · 今日</span>
-                )}
-                {todaySegs.map(s => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 30)))}
-                {todaySegs.length === 0 && (
-                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">今日活动已全部归入计划 ✓</span>
-                )}
-              </div>
-            </div>
-            {plans.map(plan => {
-              const segs = getPlanSegs(plan.id)
-              const covered = segs.reduce((a, s) => a + (s.seg.durationMin || 0), 0)
-              return (
-                <div key={plan.id} className="flex items-center mb-1.5">
-                  <span className="w-20 shrink-0 text-[11px] pl-2 truncate" style={{ color: STATUS_TEXT[plan.status] || '#475569' }}>{plan.title}</span>
-                  <div className="flex-1 relative" style={{
-                           height: 30, borderRadius: 8, overflow: 'hidden',
-                           borderLeft: `3px solid ${STATUS_BORDER[plan.status] || '#e2e8f0'}`,
-                           background: dragOverLane === plan.id ? 'rgba(124,158,255,0.07)' : '#fff',
-                           boxShadow: dragOverLane === plan.id ? 'inset 0 0 0 2px rgba(124,158,255,0.55)' : 'none',
-                           transition: 'background .12s, box-shadow .12s',
-                         }}
-                    onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane(plan.id) }}
+            {/* —— 今日操作区（淡框） —— */}
+            <div style={ZONE_TODAY} className="mb-2">
+              <span style={{ ...ZONE_LABEL_STYLE, color: '#64748b', background: '#fff' }} className="absolute -top-2 left-3 px-1">今日 · 未归类操作</span>
+              {todayByApp.length === 0 ? (
+                <div className="flex items-center mb-1.5">
+                  <span style={{ width: LABEL_W }} className="shrink-0 text-[11px] text-slate-500 pl-2">今日</span>
+                  <div className="relative" style={{
+                       width: LANE_W, height: 30, borderRadius: 8, overflow: 'hidden', background: '#f8fafc',
+                     }}
+                    onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane('today') }}
                     onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverLane(null) }}
                     onDrop={e => {
                       e.preventDefault(); setDragOverLane(null)
                       const ts = parseInt(e.dataTransfer.getData('text/start-ts'))
-                      if (!isNaN(ts)) handleAssignPlan(plan.id, ts)
+                      if (!isNaN(ts)) handleAssignPlan(null, ts)
                     }}>
-                    {dragOverLane === plan.id && (
-                      <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] px-2 py-0.5 rounded-full"
-                            style={{ background: '#7c9eff', color: '#fff' }}>松开归入 · {plan.title}</span>
-                    )}
-                    <div style={{ position: 'absolute', left: ruler.minToX(plan.startMin ?? 0), width: ruler.durToW(plan.durationMin ?? 60),
-                                 top: 2, bottom: 2, background: STATUS_BG[plan.status] || '#f8fafc',
-                                 border: `1px dashed ${STATUS_BORDER[plan.status] || '#e2e8f0'}`, borderRadius: 6 }} />
-                    {segs.map(s => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 30)))}
-                    <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-slate-400">
-                      {plan.startMin != null ? `${String(Math.floor(plan.startMin / 60)).padStart(2, '0')}:${String(plan.startMin % 60).padStart(2, '0')}` : '—'} · {Math.round((plan.completionRatio ?? 0) * 100)}% · {covered}/{plan.durationMin ?? '—'}m
-                    </span>
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">今日活动已全部归入计划 ✓</span>
                   </div>
                 </div>
-              )
-            })}
+              ) : todayByApp.map(([app, segsArr]) => (
+                <div key={app} className="flex items-center mb-1.5">
+                  <span style={{ width: LABEL_W, color: '#475569' }} className="shrink-0 text-[11px] pl-2 truncate">{displayApp(app)}</span>
+                  <div className="relative" style={{
+                       width: LANE_W, height: 30, borderRadius: 8, overflow: 'hidden',
+                       background: dragOverLane === 'today' ? 'rgba(124,158,255,0.07)' : '#f8fafc',
+                       boxShadow: dragOverLane === 'today' ? 'inset 0 0 0 2px rgba(124,158,255,0.55)' : 'none',
+                       transition: 'background .12s, box-shadow .12s',
+                     }}
+                    onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane('today') }}
+                    onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverLane(null) }}
+                    onDrop={e => {
+                      e.preventDefault(); setDragOverLane(null)
+                      const ts = parseInt(e.dataTransfer.getData('text/start-ts'))
+                      if (!isNaN(ts)) handleAssignPlan(null, ts)
+                    }}>
+                    {dragOverLane === 'today' && (
+                      <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] px-2 py-0.5 rounded-full"
+                            style={{ background: '#7c9eff', color: '#fff' }}>松开归入 · 今日</span>
+                    )}
+                    {segsArr.map(s => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 30)))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* —— 计划泳道区（淡框） —— */}
+            <div style={ZONE_PLAN} className="mb-1">
+              <span style={{ ...ZONE_LABEL_STYLE, color: '#5b78d6', background: '#fff' }} className="absolute -top-2 left-3 px-1">计划泳道</span>
+              {plans.map(plan => {
+                const segs = getPlanSegs(plan.id)
+                const covered = segs.reduce((a, s) => a + (s.seg.durationMin || 0), 0)
+                return (
+                  <div key={plan.id} className="flex items-center mb-1.5">
+                    <span style={{ width: LABEL_W, color: STATUS_TEXT[plan.status] || '#475569' }} className="shrink-0 text-[11px] pl-2 truncate">{plan.title}</span>
+                    <div className="relative" style={{
+                             width: LANE_W, height: 30, borderRadius: 8, overflow: 'hidden',
+                             borderLeft: `3px solid ${STATUS_BORDER[plan.status] || '#e2e8f0'}`,
+                             background: dragOverLane === plan.id ? 'rgba(124,158,255,0.07)' : '#fff',
+                             boxShadow: dragOverLane === plan.id ? 'inset 0 0 0 2px rgba(124,158,255,0.55)' : 'none',
+                             transition: 'background .12s, box-shadow .12s',
+                           }}
+                      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane(plan.id) }}
+                      onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverLane(null) }}
+                      onDrop={e => {
+                        e.preventDefault(); setDragOverLane(null)
+                        const ts = parseInt(e.dataTransfer.getData('text/start-ts'))
+                        if (!isNaN(ts)) handleAssignPlan(plan.id, ts)
+                      }}>
+                      {dragOverLane === plan.id && (
+                        <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] px-2 py-0.5 rounded-full"
+                              style={{ background: '#7c9eff', color: '#fff' }}>松开归入 · {plan.title}</span>
+                      )}
+                      <div style={{ position: 'absolute', left: ruler.minToX(plan.startMin ?? 0), width: ruler.durToW(plan.durationMin ?? 60),
+                                   top: 2, bottom: 2, background: STATUS_BG[plan.status] || '#f8fafc',
+                                   border: `1px dashed ${STATUS_BORDER[plan.status] || '#e2e8f0'}`, borderRadius: 6 }} />
+                      {segs.map(s => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 30)))}
+                      <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-slate-400">
+                        {[
+                          plan.startMin != null ? fmtHHMM(plan.startMin) : null,
+                          plan.durationMin != null ? `${covered}/${plan.durationMin}m` : null,
+                          (plan.completionRatio != null && plan.completionRatio > 0) ? `${Math.round(plan.completionRatio * 100)}%` : null
+                        ].filter(Boolean).join(' · ') || '待办'}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
             {nowMin >= rangeLo && nowMin <= rangeHi && (() => {
               const x = LABEL_W + ruler.minToX(nowMin)
               return (
@@ -468,6 +536,7 @@ export default function HomeView() {
                 </div>
               )
             })()}
+            </div>
           </div>
       </section>
 
@@ -481,9 +550,9 @@ export default function HomeView() {
           durationText: fmtDur(tlHover.seg.durationMin),
           source: '监控',
           microActivity: (tlHover.seg as any).microActivity ?? null,
-          aiHint: (() => {
+          aiInfer: (() => {
             const i = inferences.get(tlHover.seg.id ?? 's' + tlHover.seg.startTs)
-            return i && i.confidence < 0.6 ? { label: WORK_STATES[i.category]?.label ?? i.category, confidence: i.confidence } : undefined
+            return i ? { label: WORK_STATES[i.category]?.label ?? i.category, confidence: i.confidence } : undefined
           })(),
           counterpart: (tlHover.seg as any).counterpart ?? undefined,
           topic: (tlHover.seg as any).topic ?? undefined,
