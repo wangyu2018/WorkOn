@@ -122,9 +122,11 @@ export function computeDailyScore(date: string): AttentionScore {
   const userType = effectiveUserType()
   const s = getSettings()
   const meta = USER_TYPE_META[userType]
+  const EMPLOY_MULT: Record<string, number> = { full: 1, part: 0.65, student: 0.5 }
+  const mult = EMPLOY_MULT[s.employmentMode ?? 'full']
   const goals = {
-    targetWorkMin: s.targetWorkMin ?? meta.targetWorkMin,
-    targetPomodoros: s.targetPomodoros ?? meta.targetPomodoros
+    targetWorkMin: Math.round((s.targetWorkMin ?? meta.targetWorkMin) * mult),
+    targetPomodoros: Math.round((s.targetPomodoros ?? meta.targetPomodoros) * mult)
   }
 
   const trail = buildMergedTrail(listActivities(date), date)

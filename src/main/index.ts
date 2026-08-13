@@ -136,7 +136,8 @@ app.whenReady().then(() => {
   const splashAt = Date.now()
   createSplashWindow()
   createMainWindow({ deferShow: true })
-  createWidgetWindow()
+  const ww = createWidgetWindow()
+  if (ww && !ww.isDestroyed() && getSettings().widgetVisible) ww.show()
   createTray()
   registerShortcuts()
 

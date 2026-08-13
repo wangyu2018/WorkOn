@@ -1,7 +1,7 @@
 /**
  * OCR 深度模式：截图 → 落盘 → OCR 引擎识别 → 关键词提取 → 增强状态推断
  * 支持 Tesseract.js（默认回退）和 RapidOCR-json（5x 提速）
- * 仅在 deepMode 开启时运行，每 30s 执行一次（避免过热）
+ * 仅在 deepMode 开启时运行，变化驱动采样 + 每应用自适应频率
  */
 import { desktopCapturer, app } from 'electron'
 import sharp from 'sharp'
@@ -177,40 +177,111 @@ export function classifyOcrText(lines: string[]): string | null {
 let ocrTimer: NodeJS.Timeout | null = null
 let lastOcrText = ''
 let ocrRunning = false
-/** 上次 OCR 时的前台窗口签名（app+title）与时间：窗口没变就不重复截屏识别，
- *  避免 desktopCapturer 每 30s 全屏捕获造成的周期性系统卡顿 */
-let lastOcrSig = ''
-let lastOcrAt = 0
-const OCR_SAME_WINDOW_SKIP_MS = 3 * 60_000
+let lastOcrSig = ''            // 最近一次前台窗口签名（app|title），用于检测窗口切换
+let lastOcrAt = 0              // 最近一次真正执行 OCR 的时间戳，用于防抖节流
+let lastShotHash = ''          // 最近一次屏幕感知哈希，用于画面内容变化检测
+const OCR_MIN_INTERVAL = 1500  // 两次 OCR 之间最小间隔，防滚动抖动触发 OCR 风暴
+const HASH_DIM = 8             // 感知哈希维度 8x8 = 64bit
+const HASH_CHANGE_THRESHOLD = 5 // 64bit 中差异位数 >= 该值视为画面变化
+// —— P1 自适应频率 ——
+const DELAY_ACTIVE_MS = 1000   // 前台 app 高频变化时探测间隔（高帧率）
+const DELAY_IDLE_MS = 8000     // 前台 app 稳定时探测间隔（低帧率）
+const APP_ACTIVITY_ALPHA = 0.2 // 活跃度 EMA 系数（0~1，越大越快学习）
+const appActivity: Record<string, number> = {}  // 应用变化活跃度 EMA，0~1，默认 0.5（中性）
+
+/** 汉明距离：两个等長二进制串的差异位数 */
+function hamming(a: string, b: string): number {
+  let d = 0
+  const n = Math.min(a.length, b.length)
+  for (let i = 0; i < n; i++) if (a[i] !== b[i]) d++
+  return d
+}
+
+/** 轻量截图并算感知哈希（aHash）。不落盘、不识别文字，仅用于变化检测，开销极小。 */
+async function captureHash(): Promise<string> {
+  const sources = await desktopCapturer.getSources({
+    types: ['screen'],
+    thumbnailSize: { width: 320, height: 180 }
+  })
+  if (!sources.length) return ''
+  const buf = sources[0].thumbnail.toPNG()
+  const { data } = await sharp(buf)
+    .resize(HASH_DIM, HASH_DIM, { fit: 'fill' })
+    .grayscale()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+  const avg = data.reduce((s: number, v: number) => s + v, 0) / data.length
+  let bits = ''
+  for (const v of data) bits += v >= avg ? '1' : '0'
+  return bits
+}
+
+/** 活跃度指数滑动平均：hit=1 本拍画面/窗口有变化，0 本拍无变化；返回 0~1 */
+function appEma(prev: number | undefined, hit: number): number {
+  const p = prev ?? 0.5
+  return p + APP_ACTIVITY_ALPHA * (hit - p)
+}
+
+/** 根据当前前台 app 的活跃度算下一次探测延迟：活跃度高→密（高帧率），稳定→稀（低帧率） */
+function nextPollDelay(): number {
+  const snap = presence.getSnapshot()
+  const main = snap.screens.find((s) => s.screen === snap.mainScreen)
+  const app = main?.app ?? ''
+  const act = appActivity[app] ?? 0.5
+  return Math.round(DELAY_IDLE_MS + (DELAY_ACTIVE_MS - DELAY_IDLE_MS) * act)
+}
+
+/** 轻量探测：窗口切换 OR 画面哈希变化 → 才触发全截 OCR；否则零成本跳过 */
+async function detectAndMaybeOcr(): Promise<void> {
+  if (ocrRunning) return
+  if (presence.excludedActive) { lastShotHash = ''; return }
+  const snap = presence.getSnapshot()
+  const main = snap.screens.find((s) => s.screen === snap.mainScreen)
+  const sig = main ? `${main.app}|${main.title}` : ''
+  const app = main?.app ?? ''
+  let hash = ''
+  try { hash = await captureHash() } catch { /* 截图失败则按窗口变化兜底 */ }
+  const windowChanged = sig !== lastOcrSig
+  const hashChanged = !!hash && !!lastShotHash && hamming(hash, lastShotHash) >= HASH_CHANGE_THRESHOLD
+  lastOcrSig = sig
+  lastShotHash = hash
+  // P1：更新本应用变化活跃度（EMA）—— 画面/窗口有变化记为 1，否则 0
+  const hit = windowChanged || hashChanged ? 1 : 0
+  appActivity[app] = appEma(appActivity[app], hit)
+  if (!windowChanged && !hashChanged) return
+  if (Date.now() - lastOcrAt < OCR_MIN_INTERVAL) return
+  void runOcr()
+}
+
+/** 自调度探测循环：每次探测完成后，按前台 app 活跃度计算下一次延迟并递归 setTimeout */
+function scheduleNext(): void {
+  if (!ocrTimer) return
+  ocrTimer = setTimeout(() => {
+    void detectAndMaybeOcr().finally(scheduleNext)
+  }, nextPollDelay())
+}
 
 /** 启动 OCR 周期任务（deepMode 开启后调用） */
 export function startOcr(): void {
   if (ocrTimer) return
-  console.log('[ocr] 深度模式已启动，每 30s 分析屏幕内容')
-  void runOcr()
-  ocrTimer = setInterval(() => {
-    void runOcr()
-  }, 30_000)
+  console.log('[ocr] 深度模式已启动：变化驱动 + 每应用自适应频率')
+  ocrTimer = setTimeout(() => {
+    void detectAndMaybeOcr().finally(scheduleNext)
+  }, 0)
 }
 
 /** 停止 OCR */
 export function stopOcr(): void {
-  if (ocrTimer) { clearInterval(ocrTimer); ocrTimer = null }
+  if (ocrTimer) { clearTimeout(ocrTimer); ocrTimer = null }
   console.log('[ocr] 深度模式已停止')
 }
 
 /** 执行一次 OCR 并返回分类结果 */
 async function runOcr(): Promise<void> {
   if (ocrRunning) return
-  // 前台窗口签名未变化且距上次识别 <3min → 跳过（内容分类沿用上次结果）
-  const snap = presence.getSnapshot()
-  const main = snap.screens.find((s) => s.screen === snap.mainScreen)
-  const sig = main ? `${main.app}|${main.title}` : ''
-  if (sig && sig === lastOcrSig && Date.now() - lastOcrAt < OCR_SAME_WINDOW_SKIP_MS) return
   ocrRunning = true
   try {
     const lines = await ocrScreen()
-    lastOcrSig = sig
     lastOcrAt = Date.now()
     if (lines.length > 0) {
       const classified = classifyOcrText(lines)
@@ -219,6 +290,8 @@ async function runOcr(): Promise<void> {
         console.log(`[ocr] 内容识别: ${classified} (${lastOcrText})`)
       }
       // 广播给订阅者（v2.9 报表 OCR 采集）；订阅者异常不阻塞 OCR 主流程
+      const snap = presence.getSnapshot()
+      const main = snap.screens.find((s) => s.screen === snap.mainScreen)
       for (const cb of ocrLinesListeners) {
         try {
           cb(lines, main?.app ?? '', snap.state)

@@ -23,9 +23,9 @@ type CalMode = 'week' | 'month'
 
 function savedMode(): CalMode {
   try {
-    const v = localStorage.getItem('calMode') as CalMode | null
-    if (v === 'day' || v === 'heat') return 'week'
-    return (v as CalMode) ?? 'week'
+    const v = localStorage.getItem('calMode')
+    if (v === 'week' || v === 'month') return v
+    return 'week'
   } catch {
     return 'week'
   }
@@ -79,7 +79,7 @@ function ActivityDetailCard({ entry, pos, onEdit, onClose, matchedApp, matchedTi
   counterpart?: string
   topic?: string
 }) {
-  const meta = WORK_STATES[entry.state] ?? WORK_STATES.idle
+  const meta = WORK_STATES[entry.state ?? 'idle'] ?? WORK_STATES.idle
   const sense = SENSE_META[senseOf(entry.state ?? 'idle')]
   const app = matchedApp ?? displayApp(entry.title)
   const title = matchedTitle ?? entry.title
@@ -458,7 +458,7 @@ function WeekGrid({ date }: { date: string }) {
                 entries
                   .sort((a, b) => a.endMin - b.endMin)
                   .map((entry) => {
-                    const meta = WORK_STATES[entry.state]
+                    const meta = WORK_STATES[entry.state ?? 'idle'] ?? WORK_STATES.idle
                     return (
                        <div
                         key={entry.id}
@@ -489,7 +489,7 @@ function WeekGrid({ date }: { date: string }) {
                               <ActivityHoverCard a={{
                                 app,
                                 title: title || '（未命名）',
-                                state: entry.state,
+                                state: entry.state ?? 'idle',
                                 startText: clockOf(entry.startMin),
                                 endText: clockOf(entry.endMin),
                                 durationText: fmtMin(entry.endMin - entry.startMin),

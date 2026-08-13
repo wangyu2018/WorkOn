@@ -309,7 +309,7 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
         const plans = col<import('@shared/types').PlanItem>('plans')
         const plan = plans.find((p) => p.id === planId)
         if (!plan) return JSON.stringify({ success: false, error: '计划不存在' })
-        updateIn('plans', planId, { status: 'done', completionRatio: 1 })
+        updateIn<import('@shared/types').PlanItem>('plans', planId, { status: 'done', completionRatio: 1 })
         const { sendTo } = await import('./windows')
         sendTo('main', 'plan-updated')
         return JSON.stringify({ success: true, message: `已完成计划：${plan.title}` })

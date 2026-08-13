@@ -12,6 +12,7 @@
 import { execFile } from 'child_process'
 import fs from 'fs'
 import path from 'path'
+import os from 'os'
 import { app } from 'electron'
 import { getSettings } from './settings'
 
@@ -30,14 +31,11 @@ let rapidocrChecked = false
 
 /** RapidOCR-json 可执行文件路径 */
 function rapidocrExePath(): string {
-  // 开发环境：assets/rapidocr/RapidOCR-json.exe
-  // 生产环境：resources/assets/rapidocr/RapidOCR-json.exe
   const devPath = path.join(app.getAppPath(), 'assets', 'rapidocr', 'RapidOCR-json.exe')
   if (fs.existsSync(devPath)) return devPath
-  // electron-builder 打包后 assets 在 resources 下
   const prodPath = path.join(process.resourcesPath || '', 'assets', 'rapidocr', 'RapidOCR-json.exe')
   if (fs.existsSync(prodPath)) return prodPath
-  return devPath // 返回开发路径（existsSync 会返回 false）
+  return devPath
 }
 
 /** 检查 RapidOCR-json 是否可用 */
@@ -66,24 +64,39 @@ export function getActiveEngine(): OcrEngine {
   return cachedEngine
 }
 
-/** RapidOCR-json 调用：传入图片 Buffer，返回识别文本 */
+/** RapidOCR-json 调用：写入临时文件 → 传入路径识别 */
 function runRapidOCR(imageBuffer: Buffer): Promise<string> {
   return new Promise((resolve, reject) => {
     const exe = rapidocrExePath()
     const exeDir = path.dirname(exe)
-    // RapidOCR-json 支持 stdin 模式：-i=- 表示从 stdin 读取
-    // 输出格式：JSON 数组 [text, confidence, [[x1,y1],[x2,y2],...]], ...]
-    const child = execFile(
+    const tmpFile = path.join(os.tmpdir(), `rapidocr_${Date.now()}_${Math.random().toString(36).slice(2)}.png`)
+
+    try {
+      fs.writeFileSync(tmpFile, imageBuffer)
+    } catch (e) {
+      reject(new Error(`RapidOCR 写临时文件失败: ${(e as Error).message}`))
+      return
+    }
+
+    execFile(
       exe,
-      ['-i=-', '--format=json', '--det=true', '--rec=true', '--cls=true'],
+      [
+        '--models=.',
+        `--det=ch_PP-OCRv4_det_infer.onnx`,
+        `--cls=ch_ppocr_mobile_v2.0_cls_infer.onnx`,
+        `--rec=rec_ch_PP-OCRv4_infer.onnx`,
+        `--keys=ppocr_keys_v1.txt`,
+        `--image_path=${tmpFile}`
+      ],
       {
         timeout: 15000,
         windowsHide: true,
         maxBuffer: 1024 * 512,
         encoding: 'utf8',
-        cwd: exeDir // RapidOCR 需要在 exe 目录下运行（找 models/）
+        cwd: exeDir
       },
-      (err, stdout, stderr) => {
+      (err, stdout, _stderr) => {
+        try { fs.unlinkSync(tmpFile) } catch { /* ignore */ }
         if (err) {
           reject(new Error(`RapidOCR 执行失败: ${err.message}`))
           return
@@ -91,30 +104,21 @@ function runRapidOCR(imageBuffer: Buffer): Promise<string> {
         resolve(stdout.trim())
       }
     )
-    // 通过 stdin 传入图片
-    if (child.stdin) {
-      child.stdin.write(imageBuffer)
-      child.stdin.end()
-    }
   })
 }
 
-/** 解析 RapidOCR-json 输出为文本行 */
+/** 解析 RapidOCR-json 输出为文本行
+ *  输出格式：{"code":100,"data":"第一行\n第二行"} 或 {"code":101,"data":"No text found in image."} */
 function parseRapidOCRJson(jsonStr: string): string[] {
   try {
     const data = JSON.parse(jsonStr)
-    if (!Array.isArray(data)) return []
-    // 每项格式：[text, confidence, boxCoords]
-    const lines: string[] = []
-    for (const item of data) {
-      if (Array.isArray(item) && typeof item[0] === 'string') {
-        const text = item[0] as string
-        if (text.trim()) lines.push(text.trim())
-      }
-    }
-    return lines
+    if (!data || typeof data.code !== 'number') return []
+
+    if (data.code !== 100) return []
+
+    const text = typeof data.data === 'string' ? data.data : ''
+    return text.split('\n').map((l: string) => l.trim()).filter(Boolean)
   } catch {
-    // 非 JSON 输出（可能是错误信息）
     return []
   }
 }

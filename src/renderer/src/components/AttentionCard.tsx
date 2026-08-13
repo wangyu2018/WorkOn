@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { AttentionScore } from '@shared/types'
 import { GRADE_META, USER_TYPE_META } from '@shared/attention'
 import { Icon } from './Icon'
@@ -125,13 +125,14 @@ function insightOf(s: AttentionScore): string {
 }
 
 /** 日报卡：今日注意力评分（总分 + 雷达 + 五维条 + 规则洞察） */
-export function AttentionDailyCard({ score, yesterday }: { score: AttentionScore; yesterday: AttentionScore | null }) {
+export function AttentionDailyCard({ score, yesterday, pin }: { score: AttentionScore; yesterday: AttentionScore | null; pin?: ReactNode }) {
   const [showSignals, setShowSignals] = useState(false)
   const gm = GRADE_META[score.grade]
   const typeMeta = USER_TYPE_META[score.userType]
   return (
     <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '60ms' }}>
       <SectionTitle icon="activity" title="今日注意力评分" hint={`${typeMeta.emoji} ${typeMeta.label}`} />
+      {pin}
       <div className="flex flex-wrap items-center gap-5">
         {/* 左：总分 + 等级徽章 + 对比 */}
         <div className="flex w-32 shrink-0 flex-col items-center gap-1.5 text-center">

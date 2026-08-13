@@ -27,8 +27,8 @@ function SourceMark({ plan }: { plan: PlanItem }) {
 }
 
 /* ── 新建分类弹窗 ── */
-function CategoryForm({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [label, setLabel] = useState('')
+function CategoryForm({ onClose, onSaved, initialLabel }: { onClose: () => void; onSaved: () => void; initialLabel?: string }) {
+  const [label, setLabel] = useState(initialLabel ?? '')
   const [color, setColor] = useState(CAT_COLORS[0])
   const [emoji, setEmoji] = useState('📌')
   const [hints, setHints] = useState<Set<string>>(new Set())
@@ -313,6 +313,8 @@ export default function PlanView() {
   const [statusFilter, setStatusFilter] = useState<'all' | PlanStatus>('all')
   const [editor, setEditor] = useState<{ plan: Partial<PlanItem> & { date: string }; isNew: boolean } | null>(null)
   const [catForm, setCatForm] = useState(false)
+  const [sug, setSug] = useState<{ app: string; min: number }[]>([])
+  const [newCatName, setNewCatName] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [delayOpen, setDelayOpen] = useState<string | null>(null)
   const [delayDate, setDelayDate] = useState('')
@@ -351,6 +353,16 @@ export default function PlanView() {
   }, [loadCats])
 
   useEffect(() => {
+    void (async () => {
+      try {
+        setSug(((await window.api.suggestOtherApps()) as { app: string; min: number }[]) ?? [])
+      } catch {
+        setSug([])
+      }
+    })()
+  }, [])
+
+  useEffect(() => {
     void load()
   }, [load])
 
@@ -374,8 +386,9 @@ export default function PlanView() {
   }
 
   useEffect(() => {
-    const off = window.api?.onScanProgress?.((p: { pct: number; file: string }) => {
-      setScanProgress(p.pct); setScanFile(p.file)
+    const off = window.api?.onScanProgress?.((p) => {
+      const info = p as { pct: number; file: string }
+      setScanProgress(info.pct); setScanFile(info.file)
     })
     return off
   }, [])
@@ -517,6 +530,26 @@ export default function PlanView() {
           </div>
         </div>
       </section>
+
+      {sug.length > 0 && (
+        <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '160ms' }}>
+          <div className="mb-2 text-[12px] text-slate-400">这些应用最近常掉进「其他」，建议为它们建分类：</div>
+          <div className="flex flex-wrap gap-2">
+            {sug.map((x) => (
+              <div key={x.app} className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[12px]">
+                <span className="text-slate-300">{x.app}</span>
+                <span className="text-slate-500">· {Math.round(x.min)}分钟</span>
+                <button
+                  className="rounded-lg border border-neon-cyan/30 bg-neon-cyan/10 px-2 py-0.5 text-[11px] text-neon-cyan hover:bg-neon-cyan/20"
+                  onClick={() => { setNewCatName(x.app); setCatForm(true) }}
+                >
+                  建分类
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* 筛选 */}
       <div className="anim-fade-up flex flex-wrap items-center gap-2" style={{ animationDelay: '180ms' }}>
@@ -774,10 +807,12 @@ export default function PlanView() {
       ) : null}
       {catForm ? (
         <CategoryForm
-          onClose={() => setCatForm(false)}
+          initialLabel={newCatName}
+          onClose={() => { setCatForm(false); setNewCatName('') }}
           onSaved={() => {
             void loadCats()
             void load()
+            setNewCatName('')
           }}
         />
       ) : null}

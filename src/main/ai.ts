@@ -5,12 +5,12 @@
  *  - 轻问诊 genQuestion：已确认（answer='yes'）的情境不再追问
  *  - 用量统计 UsageStat（token / 问答 / 估算 USD）
  */
-import type { MergedTrail, PlanItem, UserAnalysis, UserFeedback, UserHabits, QAMessage, UsageStat, ProfileReference } from '@shared/types'
+import type { MergedTrail, PlanItem, UserAnalysis, UserFeedback, UserHabits, QAMessage, UsageStat, ProfileReference, WorkState, CategoryInference } from '@shared/types'
 import { bus } from './state'
 import { genId } from '@shared/types'
-import { WORK_LIKE_STATES, SLACK_STATES, STATE_LABEL } from '@shared/stateMeta'
-import { dateKey } from '@shared/trail'
-import { col, insertInto, updateIn } from './db'
+import { WORK_LIKE_STATES, SLACK_STATES, STATE_LABEL, ALL_STATES } from '@shared/stateMeta'
+import { dateKey, buildMergedTrail } from '@shared/trail'
+import { col, insertInto, updateIn, listActivities } from './db'
 import { getSettings } from './settings'
 import { genQuestion as genQuestionImpl, recordFeedback as recordFeedbackImpl } from './qa/questionGenerator'
 import { requestPersonaData } from './desensitize'
@@ -699,11 +699,49 @@ export async function analyzeDay(trail: MergedTrail): Promise<UserAnalysis> {
   ], 45000, 'complex')
   if (!text) return fallback
   const lines = text.split('\n').map((l) => l.replace(/^[-*\d.\s]+/, '').trim()).filter(Boolean)
+  void inferOtherCategories(trail.date)
   return {
     ...fallback,
     daily: lines[0] ?? fallback.daily,
     suggestions: lines.slice(1, 4).length ? lines.slice(1, 4) : fallback.suggestions,
     source: 'llm'
+  }
+}
+
+/** AI 分类兜底：对「other」且标题非通用的段批量推断主态，存独立推断表（不污染热轨迹） */
+export async function inferOtherCategories(date: string): Promise<void> {
+  const s = getSettings()
+  if (!s.aiEnabled || !s.aiApiKey) return
+  const trail = buildMergedTrail(listActivities(date), date)
+  const cands = trail.segments.filter(
+    (sg) => sg.mainState === 'other' && !!sg.mainTitle && sg.mainTitle.length > 3 && !/^(explorer|workon|workbuddy)$/i.test(sg.mainApp)
+  )
+  if (!cands.length) return
+  const prompt =
+    `你是分类助手。对以下"其他"态工作段，推断最可能的主态(从 focus/coding/aidev/aiqa/writing/meeting/remote/slack/relax 中选)与微活动标签。返回 JSON 数组，每项 {seg:序号,category,mic,conf}。段：\n` +
+    cands.map((c, i) => `${i}. [${c.mainApp}] ${c.mainTitle}`).join('\n')
+  const text = await llmChat(
+    [{ role: 'system', content: '只返回 JSON 数组，不要解释。' }, { role: 'user', content: prompt }],
+    30000, 'fast'
+  )
+  if (!text) return
+  const arr = extractJson<{ seg: number; category: string; mic?: string; conf: number }[]>(text)
+  if (!arr) return
+  for (const it of arr) {
+    const c = cands[it.seg]
+    if (!c) continue
+    const cat = (ALL_STATES as string[]).includes(it.category) ? (it.category as WorkState) : 'other'
+    insertInto<CategoryInference>('categoryInferences', {
+      id: `${date}:${c.id ?? 's' + c.startTs}`,
+      date,
+      segId: c.id ?? 's' + c.startTs,
+      app: c.mainApp,
+      title: c.mainTitle ?? '',
+      category: cat,
+      microActivity: it.mic ?? null,
+      confidence: Math.max(0, Math.min(1, it.conf ?? 0.5)),
+      ts: Date.now()
+    })
   }
 }
 

@@ -371,6 +371,8 @@ const ENTREPRENEUR_TEMPLATES: ChainTemplate[] = [
     userType: 'entrepreneur',
     requireOutput: false,
     steps: [
+      { appPattern: '^(Claude|ChatGPT|AI Dev)$', role: 'process', minDurationMin: 10 },
+      { appPattern: BROWSER, role: 'process', titleKeywords: ['chatgpt', 'claude', 'copilot', '代码', '实现', '重构', 'vibe', 'vibecoding', '需求', '项目'] },
       { appPattern: `${IDE}|${OFFICE}|${NOTES}|${DESIGN}|DevTool`, role: 'process', minDurationMin: 15 },
       { appPattern: `${IDE}|${OFFICE}|${NOTES}|${DESIGN}|DevTool`, role: 'process' },
       { appPattern: COMM, role: 'communication', titleExclude: CHAT_EXCLUDE }

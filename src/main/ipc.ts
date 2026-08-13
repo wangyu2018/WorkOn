@@ -42,7 +42,7 @@ import {
   mainWindow, widgetWindow, petWindow, toggleWidget, togglePet,
   setPetIgnoreMouse, setPetModal, createMainWindow, createPetWindow, closePetWindow, sendTo
 } from './windows'
-import type { UserAnalysis, MergedTrail, CustomCategory, UserHabits, Achievement, UserType, ReportTemplate } from '@shared/types'
+import type { UserAnalysis, MergedTrail, CustomCategory, UserHabits, Achievement, UserType, ReportTemplate, CategoryInference } from '@shared/types'
 import { generateReport, generateWeeklyReport } from './report/engine'
 import { listTemplates } from './report/templates'
 import { parseUserTemplate } from './report/templateParser'
@@ -92,7 +92,13 @@ export function registerIpc(): void {
       else closePetWindow()
     }
     if (patch.petEnabled !== undefined || patch.widgetVisible !== undefined) refreshTray()
-    if (patch.widgetVisible !== undefined) syncTrayFromSettings()
+    if (patch.widgetVisible !== undefined) {
+      syncTrayFromSettings()
+      if (widgetWindow && !widgetWindow.isDestroyed()) {
+        if (patch.widgetVisible) widgetWindow.show()
+        else widgetWindow.hide()
+      }
+    }
     // 桌宠相关设置实时同步到桌宠窗（缩放 / 游荡开关 / 帧率档位 / 互动开关）
     if (
       patch.petScale !== undefined ||
@@ -409,6 +415,27 @@ export function registerIpc(): void {
     }
     return removeFrom('categories', id)
   })
+  // 智能建议：聚合近 N 天主态为 other 的高频应用，供分类页引导自建
+  ipcMain.handle('categories:suggestOtherApps', (_e, days = 14) => {
+    const shift = (date: string, delta: number) => {
+      const [y, m, d] = date.split('-').map(Number)
+      return dateKey(new Date(y, m - 1, d + delta, 12).getTime())
+    }
+    const out: Record<string, number> = {}
+    for (let i = 0; i < days; i++) {
+      const d = shift(dateKey(Date.now()), -i)
+      const trail = buildMergedTrail(listActivities(d), d)
+      for (const s of trail.segments) {
+        if (s.mainState === 'other' && s.mainApp) out[s.mainApp] = (out[s.mainApp] ?? 0) + s.durationMin
+      }
+    }
+    return Object.entries(out).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([app, min]) => ({ app, min }))
+  })
+  // AI 分类推断结果（独立表，展示层按 segId 关联）
+  ipcMain.handle('inferences:get', (_e, date?: string) => {
+    const d = date ?? dateKey(Date.now())
+    return col<CategoryInference>('categoryInferences').filter((x) => x.date === d)
+  })
 
   // 计划完成/延期预测（规则引擎）
   ipcMain.handle('plans:forecast', (_e, date?: string) => {
@@ -522,17 +549,30 @@ export function registerIpc(): void {
   ipcMain.on('widget:opacity', (_e, v: number) => {
     if (widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.setOpacity(v)
   })
+  ipcMain.on('widget:penetration', (_e, v: boolean) => {
+    if (widgetWindow && !widgetWindow.isDestroyed()) {
+      widgetWindow.setIgnoreMouseEvents(v, v ? { forward: true } : undefined)
+    }
+  })
   ipcMain.on('widget:resize', (_e, w: number, h: number) => {
     if (widgetWindow && !widgetWindow.isDestroyed()) {
+      const [x, y] = widgetWindow.getPosition()
+      const [, curH] = widgetWindow.getSize()
       widgetWindow.setSize(w, h)
-      const display = screen.getPrimaryDisplay()
-      widgetWindow.setPosition(display.workArea.x + display.workArea.width - w - 16, display.workArea.y + display.workArea.height - h - 16)
+      const wa = screen.getPrimaryDisplay().workArea
+      const ny = Math.min(Math.max(y + curH - h, wa.y), Math.max(wa.y, wa.y + wa.height - h))
+      const nx = Math.min(Math.max(x, wa.x), Math.max(wa.x, wa.x + wa.width - w))
+      widgetWindow.setPosition(Math.round(nx), Math.round(ny))
     }
   })
   ipcMain.on('widget:drag', (_e, dx: number, dy: number) => {
     if (widgetWindow && !widgetWindow.isDestroyed()) {
       const [x, y] = widgetWindow.getPosition()
-      widgetWindow.setPosition(x + dx, y + dy)
+      const [w, h] = widgetWindow.getSize()
+      const wa = screen.getPrimaryDisplay().workArea
+      const nx = Math.min(Math.max(x + dx, wa.x), Math.max(wa.x, wa.x + wa.width - w))
+      const ny = Math.min(Math.max(y + dy, wa.y), Math.max(wa.y, wa.y + wa.height - h))
+      widgetWindow.setPosition(Math.round(nx), Math.round(ny))
     }
   })
 

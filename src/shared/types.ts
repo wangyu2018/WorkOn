@@ -168,6 +168,19 @@ export interface CustomCategory {
   ts: number
 }
 
+/** AI 分类推断结果（独立存储，不污染热轨迹；仅展示用） */
+export interface CategoryInference {
+  id: string            // `${date}:${segId}` 去重键
+  date: string
+  segId: string
+  app: string
+  title: string
+  category: WorkState   // AI 推断主态（仅展示，不参与评分/链路）
+  microActivity: string | null
+  confidence: number    // 0-1
+  ts: number
+}
+
 export interface UserHabits {
   lunchTime?: string // 如 "12:00-13:00"
   meetingTimes?: string[] // 如 ["10:00", "14:30"]
@@ -576,8 +589,9 @@ export interface AppSettings {
   privacyExcludedApps: string[] // 隐私快标：不截屏/不OCR/不记标题的应用
   workChains: string[][] // 已确认的作业链路（应用切换序列，如 ["WeChat","Excel","Browser"]）
   widgetVisible: boolean
-  widgetMode: 'expanded' | 'collapsed'
+  widgetMode: 'mini' | 'compact' | 'full'
   widgetOpacity: number // 0.2-1
+  widgetPenetration: boolean
   launchAtLogin: boolean
   slackHideSec: number // 持续摸鱼自动隐身阈值，默认 180
   slackAutoHide: boolean // 启用摸鱼自动隐身，默认开
@@ -587,6 +601,7 @@ export interface AppSettings {
   userTypeAuto: boolean // 自动识别用户类型，默认开
   targetWorkMin?: number // 覆盖类型默认目标工作时长（分钟）
   targetPomodoros?: number // 覆盖类型默认目标番茄钟数
+  employmentMode?: 'full' | 'part' | 'student' // 全职/兼职/兼读；默认 full
   scorePetAdapt: boolean // 评分驱动桌宠策略，默认开
   // ── v2.8 智能报表 ──
   smartReportAI: boolean // 智能日报 AI 增强开关，默认 true
@@ -651,14 +666,16 @@ export const DEFAULT_SETTINGS: AppSettings = {
   privacyExcludedApps: [],
   workChains: [],
   widgetVisible: false, // 悬浮卡片默认隐藏（设置里可手动开启），状态由桌宠对话泡泡提供
-  widgetMode: 'expanded',
+  widgetMode: 'mini',
   widgetOpacity: 0.92,
+  widgetPenetration: false,
   launchAtLogin: false,
   slackHideSec: 180,
   slackAutoHide: true,
   cmdPaletteEnabled: true,
   // v2.6：userType/targetWorkMin/targetPomodoros 留空 = 自动识别 / 用类型默认值
   userTypeAuto: true,
+  employmentMode: 'full',
   scorePetAdapt: true,
   smartReportAI: true,
   ocrEngine: 'rapidocr',

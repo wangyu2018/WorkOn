@@ -39,7 +39,7 @@ $gpu = Get-CimInstance Win32_VideoController | Select-Object -First 2 Name, Adap
 $gpu | ConvertTo-Json -Compress
 `
 
-const ENCODED_GPU = Buffer.from(PS_GPU_SCRIPT, 'utf16le').toString('base')
+const ENCODED_GPU = Buffer.from(PS_GPU_SCRIPT, 'utf16le').toString('base64')
 
 let cachedInfo: HardwareInfo | null = null
 

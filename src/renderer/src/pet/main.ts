@@ -748,7 +748,7 @@ async function boot(): Promise<void> {
 
   // ── VRM 角色动态切换：收到 reload 信号时重载窗口（最可靠的全量重建方式） ──
   if (window.api?.onReloadVrm) {
-    window.api.onReloadVrm((_vrmPath: string) => {
+    window.api.onReloadVrm(() => {
       // 重载页面，boot() 会读取新的 petVrmPath
       location.reload()
     })

@@ -1,9 +1,11 @@
 /**
  * 首页 — 今日图谱 + 工作/生活时间轴 + 标签面板（PRD v3.1 G+H）
  */
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { WORK_LIKE_STATES, WORK_STATES } from '@shared/stateMeta'
 import type { MergedTrail, TrailSegment, WorkState, PlanItem } from '@shared/types'
+import { dateKey } from '@shared/trail'
 import { ActivityHoverCard } from '../components/ActivityHoverCard'
 import { displayApp } from '@shared/appDisplayName'
 
@@ -31,6 +33,30 @@ function mapChannel(app: string): Channel {
 
 function fmtTime(ts: number): string { const d = new Date(ts); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }
 function fmtDur(min: number): string { if (min < 1) return '<1m'; if (min < 60) return `${Math.round(min)}m`; const h = Math.floor(min / 60); const m = Math.round(min % 60); return m > 0 ? `${h}h${m}m` : `${h}h` }
+const fmtMin = (min?: number) =>
+  min == null ? '—' : `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+
+const LABEL_W = 80
+
+function makeDragImage(app: string, ma?: string | null): HTMLDivElement {
+  const el = document.createElement('div')
+  el.textContent = ma ? `${app} · ${ma}` : app
+  Object.assign(el.style, {
+    position: 'absolute', top: '-1000px', left: '-1000px',
+    padding: '4px 8px', borderRadius: '6px', fontSize: '11px',
+    background: '#fff', border: '1px solid #cbd5e1', color: '#1e293b',
+    boxShadow: '0 2px 8px rgba(15,23,42,0.18)', whiteSpace: 'nowrap',
+  })
+  document.body.appendChild(el)
+  return el
+}
+
+function STATE_COLOR_OF(seg: TrailSegment) {
+  const s = senseOf(seg.mainState)
+  if (s === 'work') return { bg: '#7c9eff22', border: '#7c9eff44', text: '#4c6ed9' }
+  if (s === 'slack') return { bg: '#ff7c7c22', border: '#ff7c7c44', text: '#d94c4c' }
+  return { bg: '#94a3b822', border: '#94a3b844', text: '#64748b' }
+}
 
 type SenseKind = 'work' | 'slack' | 'other'
 function senseOf(state: WorkState): SenseKind {
@@ -68,6 +94,10 @@ const STATUS_BORDER: Record<string,string> = {
   planned: '#bfdbfe', in_progress: '#a7f3d0', partial: '#fde68a',
   done: '#bbf7d0', delayed: '#fecaca', cancelled: '#e2e8f0'
 }
+const STATUS_TEXT: Record<string,string> = {
+  planned: '#3b82f6', in_progress: '#10b981', partial: '#f59e0b',
+  done: '#22c55e', delayed: '#ef4444', cancelled: '#94a3b8'
+}
 
 function insight(trail: MergedTrail): string {
   if (!trail || trail.totalMin < 1) return '今天刚开始，随着时间推进图谱会自动长出来 ✨'
@@ -85,27 +115,67 @@ export default function HomeView() {
   const [plans, setPlans] = useState<PlanItem[]>([])
   const [dragFrom, setDragFrom] = useState<{ idx: number; col: Column } | null>(null)
   const [hoverCol, setHoverCol] = useState<Column | null>(null)
+  const [tlHover, setTlHover] = useState<{ seg: TrailSegment; rect: DOMRect } | null>(null)
+  const WORK_START = 9 * 60
+  const WORK_END = 18 * 60
+  const [rangeLo, setRangeLo] = useState(WORK_START)
+  const [rangeHi, setRangeHi] = useState(WORK_END)
   const [tagsOpen, setTagsOpen] = useState(false)
   const [newTag, setNewTag] = useState({ app: '', label: '', state: 'focus' as WorkState })
-  const [tlOpen, setTlOpen] = useState(() => { try { return localStorage.getItem('workon.tlOpen') !== '0' } catch { return true } })
   const [starHover, setStarHover] = useState<number | null>(null)
   const [dragSeg, setDragSeg] = useState<number | null>(null)
   const [planSegments, setPlanSegments] = useState<Map<number, string>>(new Map())
+  const [nowMin, setNowMin] = useState(() => {
+    const d = new Date(); return d.getHours() * 60 + d.getMinutes()
+  })
+  const [dragTs, setDragTs] = useState<number | null>(null)
+  const [dragOverLane, setDragOverLane] = useState<'today' | string | null>(null)
+  const [inferences, setInferences] = useState<Map<string, { category: WorkState; microActivity: string | null; confidence: number }>>(new Map())
 
-  useEffect(() => {
+  const lastPresenceRefresh = useRef<number>(0)
+  const trailingRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const refresh = useCallback(() => {
     void (async () => {
       const t = await window.api?.getTrail?.() as MergedTrail | undefined
-      const p = await window.api?.listPlans?.() as PlanItem[] | undefined
+      const p = await window.api?.listPlans?.(dateKey(Date.now())) as PlanItem[] | undefined
       if (t) {
         setTrail(t)
         const segs = t.segments.filter((s) => !s.glance && s.durationMin > 0)
         setItems(segs.map((seg) => ({ seg, channel: mapChannel(seg.mainApp), column: WORK_LIKE_STATES.includes(seg.mainState) ? 'work' : 'life' })))
-        if (p) {
-          setPlans(p)
-        }
+        if (p) setPlans(p)
       }
+      void window.api?.getInferences?.().then((infs) => {
+        const list = (infs as Array<{ segId: string; category: WorkState; microActivity: string | null; confidence: number }>) ?? []
+        setInferences(new Map(list.map((i) => [i.segId, { category: i.category, microActivity: i.microActivity, confidence: i.confidence }])))
+      }).catch(() => undefined)
+      const d = new Date()
+      setNowMin(d.getHours() * 60 + d.getMinutes())
     })()
   }, [])
+
+  useEffect(() => {
+    refresh()
+    const poll = setInterval(refresh, 30000)
+    const off = window.api?.onPresence?.(() => {
+      const now = Date.now()
+      if (now - lastPresenceRefresh.current >= 2000) {
+        lastPresenceRefresh.current = now
+        refresh()
+      } else {
+        if (trailingRefreshTimer.current) clearTimeout(trailingRefreshTimer.current)
+        trailingRefreshTimer.current = setTimeout(() => {
+          lastPresenceRefresh.current = Date.now()
+          refresh()
+        }, 2000 - (now - lastPresenceRefresh.current))
+      }
+    })
+    return () => {
+      clearInterval(poll)
+      off?.()
+      if (trailingRefreshTimer.current) clearTimeout(trailingRefreshTimer.current)
+    }
+  }, [refresh])
 
   const loadTags = useCallback(() => {
     void window.api?.listRules?.().then((rules) => {
@@ -121,42 +191,95 @@ export default function HomeView() {
   const workChart = useMemo(() => computeStarLayout(items.filter(i => i.column === 'work'), items), [items])
   const lifeChart = useMemo(() => computeStarLayout(items.filter(i => i.column === 'life'), items), [items])
 
-  const unassignedSegs = useMemo(() =>
-    items.filter(i => !planSegments.has(i.seg.startTs)),
+  const startMinOf = (seg: TrailSegment) => {
+    const d = new Date(seg.startTs)
+    return d.getHours() * 60 + d.getMinutes()
+  }
+
+  const todaySegs = useMemo(
+    () => items.filter(i => !planSegments.has(i.seg.startTs)),
     [items, planSegments]
   )
+
   const getPlanSegs = useCallback((planId: string) =>
     items.filter(i => planSegments.get(i.seg.startTs) === planId),
     [items, planSegments]
   )
-  const coverMin = useCallback((planId: string) =>
-    getPlanSegs(planId).reduce((a, i) => a + i.seg.durationMin, 0),
-    [getPlanSegs]
-  )
-  const maxTotalMin = useMemo(() => Math.max(60, ...items.map(i => i.seg.durationMin)), [items])
 
-  const renderSegBlock = useCallback((seg: TrailSegment & { planId?: string }, planTitle?: string) => {
-    const w = Math.max(40, (seg.durationMin / maxTotalMin) * 300)
-    const senseColor = senseOf(seg.mainState) === 'work' ? '#7c9eff' : senseOf(seg.mainState) === 'slack' ? '#ff7c7c' : '#94a3b8'
+  const ruler = useMemo(() => {
+    const lo = rangeLo, hi = rangeHi
+    const PAD = 8, W = 760, span = hi - lo || 1
+    return {
+      lo, hi,
+      minToX: (m: number) => PAD + ((m - lo) / span) * (W - PAD * 2),
+      durToW: (dur: number) => Math.max(16, (dur / span) * (W - PAD * 2)),
+    }
+  }, [items, plans, rangeLo, rangeHi])
+
+  const renderSegBlock = useCallback((seg: TrailSegment, left: number, width: number) => {
+    const app = displayApp(seg.mainApp)
+    const ma = (seg as any).microActivity
+    const c = STATE_COLOR_OF(seg)
+    const ghost = dragTs === seg.startTs
+    const inf = inferences.get(seg.id ?? 's' + seg.startTs)
+    const infHigh = inf && inf.confidence >= 0.6 ? inf : null
     return (
-      <div key={seg.startTs} draggable onDragStart={() => setDragSeg(seg.startTs)}
-        className="shrink-0 rounded px-1.5 py-0.5 text-[10px] cursor-grab hover:brightness-110 transition-all relative"
-        style={{ width: w, background: `${senseColor}22`, border: `1px solid ${senseColor}44`, color: '#334155' }}
-        title={`${displayApp(seg.mainApp)} · ${fmtTime(seg.startTs)} · ${fmtDur(seg.durationMin)}${seg.mainTitle ? '\n' + seg.mainTitle : ''}${planTitle ? '\n📋 ' + planTitle : ''}`}>
-        {displayApp(seg.mainApp)}
-        {(seg as any).microActivity && <span className="text-[9px] ml-1" style={{color:'#94a3b8'}}>{(seg as any).microActivity}</span>}
-        {planTitle && <span className="absolute -top-1 -right-1 text-[8px] px-1 rounded-full" style={{background:'#a78bfa',color:'#fff'}}>↳</span>}
+      <div key={seg.startTs}
+        draggable
+        onDragStart={e => {
+          e.dataTransfer.setData('text/start-ts', String(seg.startTs))
+          e.dataTransfer.effectAllowed = 'move'
+          const img = makeDragImage(app, ma); e.dataTransfer.setDragImage(img, 8, 12)
+          setTimeout(() => img.remove(), 0)
+          setTlHover(null); setDragTs(seg.startTs)
+        }}
+        onDragEnd={() => { setDragTs(null); setDragOverLane(null) }}
+        onMouseEnter={e => !dragTs && setTlHover({ seg, rect: e.currentTarget.getBoundingClientRect() })}
+        onMouseLeave={() => setTlHover(null)}
+        title={`${app}${ma ? ' · ' + ma : ''} · ${fmtTime(seg.startTs)}`}
+        style={{ position: 'absolute', left, width, top: 2, bottom: 2,
+                 background: ghost ? 'rgba(148,163,184,0.12)' : c.bg,
+                 border: `1px ${ghost ? 'dashed' : 'solid'} ${ghost ? '#94a3b8' : c.border}`,
+                 borderRadius: 6, overflow: 'hidden', padding: '0 4px',
+                 display: 'flex', alignItems: 'center', fontSize: 10, color: c.text,
+                 cursor: dragTs ? 'grabbing' : 'grab',
+                 opacity: ghost ? 0.35 : 1, transition: 'opacity .1s' }}>
+        <span className="truncate">{app}{ma && <span style={{ opacity: 0.7 }}> · {ma}</span>}{infHigh && <span style={{ opacity: 0.85 }}> · {WORK_STATES[infHigh.category]?.label ?? 'AI'}（AI推断）</span>}</span>
       </div>
     )
-  }, [maxTotalMin])
+  }, [setTlHover, dragTs, inferences])
 
-  const handleAssignPlan = useCallback(async (planId: string | null) => {
-    if (dragSeg === null) return
-    await window.api?.assignSegmentPlan?.(dragSeg, planId)
+  const rangeRef = useRef<HTMLDivElement>(null)
+  const hourTicks = useMemo(() => {
+    const arr: number[] = []
+    for (let t = rangeLo; t <= rangeHi; t += 60) arr.push(t)
+    return arr
+  }, [rangeLo, rangeHi])
+  const fmtHHMM = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+  const onHandleDown = (which: 'lo' | 'hi') => (e: React.PointerEvent) => {
+    e.preventDefault(); e.stopPropagation()
+    const el = rangeRef.current; if (!el) return
+    const rect = el.getBoundingClientRect()
+    const lo0 = rangeLo, hi0 = rangeHi
+    const move = (ev: PointerEvent) => {
+      const ratio = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width))
+      const m = Math.round(lo0 + ratio * (hi0 - lo0))
+      if (which === 'lo') setRangeLo(Math.min(m, hi0 - 30))
+      else setRangeHi(Math.max(m, lo0 + 30))
+    }
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
+  const handleAssignPlan = useCallback(async (planId: string | null, startTs?: number) => {
+    const ts = startTs ?? dragSeg
+    if (ts === null || ts === undefined) return
+    await window.api?.assignSegmentPlan?.(ts, planId)
     if (planId) {
-      setPlanSegments(prev => { const next = new Map(prev); next.set(dragSeg, planId); return next })
+      setPlanSegments(prev => { const next = new Map(prev); next.set(ts, planId); return next })
     } else {
-      setPlanSegments(prev => { const next = new Map(prev); next.delete(dragSeg); return next })
+      setPlanSegments(prev => { const next = new Map(prev); next.delete(ts); return next })
     }
     setDragSeg(null)
   }, [dragSeg])
@@ -247,49 +370,128 @@ export default function HomeView() {
 
       {/* 时间轴 — 水平泳道 */}
       <section className="glass-card hoverable" style={{ background: '#fff' }}>
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <span className="text-base">⏱️</span>
-            <h3 className="text-[13px] font-semibold text-slate-800">时间轴</h3>
-            <span className="text-[10px] text-slate-400">{plans.length} 计划 · {fmtDur(items.reduce((a, i) => a + i.seg.durationMin, 0))}</span>
-          </div>
-          <button onClick={() => { const v = !tlOpen; setTlOpen(v); try { localStorage.setItem('workon.tlOpen', v ? '1' : '0') } catch {} }} className="text-[11px] text-slate-500 hover:text-slate-600">{tlOpen ? '收起 ▲' : '展开 ▼'}</button>
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-base">⏱️</span>
+          <h3 className="text-[13px] font-semibold text-slate-800">时间轴</h3>
+          <span className="text-[10px] text-slate-400">{plans.length} 计划 · {fmtDur(items.reduce((a, i) => a + i.seg.durationMin, 0))}</span>
         </div>
-        {tlOpen && (
-          <div className="overflow-x-auto" style={{ minHeight: 168 }}>
-            <div className="flex text-[10px] text-slate-400 pl-20 pr-4 mb-1">
-              {[8,10,12,14,16,18,20,22].map(h => <div key={h} style={{flex:1}}>{h}:00</div>)}
+          <div style={{ overflowX: 'auto', overflowY: 'visible', position: 'relative' }}>
+            <div className="flex items-center mb-1.5">
+              <span className="w-20 shrink-0 text-[11px] text-slate-500 pl-2">范围 {fmtHHMM(rangeLo)}–{fmtHHMM(rangeHi)}</span>
+              <div ref={rangeRef} className="flex-1 relative" style={{ height: 18, cursor: 'pointer' }}>
+                <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5" style={{ background: '#e2e8f0' }} />
+                {hourTicks.map(t => (
+                  <div key={t} className="absolute top-0 bottom-0" style={{ left: ruler.minToX(t) }}>
+                    <div className="w-px h-2" style={{ background: '#cbd5e1' }} />
+                    <span className="absolute top-2 left-1/2 -translate-x-1/2 text-[9px]" style={{ color: '#94a3b8' }}>{String(Math.floor(t / 60)).padStart(2, '0')}</span>
+                  </div>
+                ))}
+                <div onPointerDown={onHandleDown('lo')} className="absolute top-0 bottom-0 -ml-1 w-2 rounded cursor-ew-resize"
+                     style={{ left: ruler.minToX(rangeLo), background: '#7c9eff', boxShadow: '0 0 0 1px #fff' }} title="拖拽调整起始时间" />
+                <div onPointerDown={onHandleDown('hi')} className="absolute top-0 bottom-0 -ml-1 w-2 rounded cursor-ew-resize"
+                     style={{ left: ruler.minToX(rangeHi), background: '#7c9eff', boxShadow: '0 0 0 1px #fff' }} title="拖拽调整结束时间" />
+              </div>
             </div>
             <div className="flex items-center mb-1.5">
-              <span className="w-20 shrink-0 text-[11px] text-slate-600 pl-2 font-medium">今日</span>
-              <div className="flex-1 flex items-center gap-1 min-h-[28px] rounded-lg bg-slate-100/50 px-1 py-0.5 overflow-hidden">
-                {items.map(item => {
-                  const pid = planSegments.get(item.seg.startTs)
-                  const planTitle = pid ? (plans.find(p => p.id === pid)?.title ?? '') : ''
-                  return renderSegBlock({...item.seg, planId: pid || undefined}, planTitle)
-                })}
-                {items.length === 0 && <span className="text-[10px] text-slate-400 px-2">暂无活动记录</span>}
+              <span className="w-20 shrink-0 text-[11px] text-slate-500 pl-2">今日</span>
+              <div className="flex-1 relative" style={{
+                   height: 30, borderRadius: 8, overflow: 'hidden',
+                   background: dragOverLane === 'today' ? 'rgba(124,158,255,0.07)' : '#f8fafc',
+                   boxShadow: dragOverLane === 'today' ? 'inset 0 0 0 2px rgba(124,158,255,0.55)' : 'none',
+                   transition: 'background .12s, box-shadow .12s',
+                 }}
+                onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane('today') }}
+                onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverLane(null) }}
+                onDrop={e => {
+                  e.preventDefault(); setDragOverLane(null)
+                  const ts = parseInt(e.dataTransfer.getData('text/start-ts'))
+                  if (!isNaN(ts)) handleAssignPlan(null, ts)
+                }}>
+                {dragOverLane === 'today' && (
+                  <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] px-2 py-0.5 rounded-full"
+                        style={{ background: '#7c9eff', color: '#fff' }}>松开归入 · 今日</span>
+                )}
+                {todaySegs.map(s => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 30)))}
+                {todaySegs.length === 0 && (
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">今日活动已全部归入计划 ✓</span>
+                )}
               </div>
             </div>
-            {plans.map(plan => (
-              <div key={plan.id} className="flex items-center mb-1.5"
-                onDragOver={e => e.preventDefault()} onDrop={() => handleAssignPlan(plan.id)}>
-                <span className="w-20 shrink-0 text-[11px] text-slate-600 pl-2 truncate" title={plan.title}>
-                  {plan.status === 'done' ? '✓ ' : plan.status === 'cancelled' ? '✕ ' : ''}{plan.title}
-                </span>
-                <div className="flex-1 flex items-center gap-1 min-h-[28px] rounded-lg px-1 py-0.5 overflow-hidden"
-                  style={{ background: STATUS_BG[plan.status] || '#f8fafc', border: `1px solid ${STATUS_BORDER[plan.status] || '#e2e8f0'}` }}>
-                  {getPlanSegs(plan.id).map(s => renderSegBlock({...s.seg, planId: plan.id}, plan.title))}
-                {getPlanSegs(plan.id).length === 0 && <span className="text-[10px] text-slate-400 px-2">拖拽工作块到此处关联</span>}
+            {plans.map(plan => {
+              const segs = getPlanSegs(plan.id)
+              const covered = segs.reduce((a, s) => a + (s.seg.durationMin || 0), 0)
+              return (
+                <div key={plan.id} className="flex items-center mb-1.5">
+                  <span className="w-20 shrink-0 text-[11px] pl-2 truncate" style={{ color: STATUS_TEXT[plan.status] || '#475569' }}>{plan.title}</span>
+                  <div className="flex-1 relative" style={{
+                           height: 30, borderRadius: 8, overflow: 'hidden',
+                           borderLeft: `3px solid ${STATUS_BORDER[plan.status] || '#e2e8f0'}`,
+                           background: dragOverLane === plan.id ? 'rgba(124,158,255,0.07)' : '#fff',
+                           boxShadow: dragOverLane === plan.id ? 'inset 0 0 0 2px rgba(124,158,255,0.55)' : 'none',
+                           transition: 'background .12s, box-shadow .12s',
+                         }}
+                    onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane(plan.id) }}
+                    onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverLane(null) }}
+                    onDrop={e => {
+                      e.preventDefault(); setDragOverLane(null)
+                      const ts = parseInt(e.dataTransfer.getData('text/start-ts'))
+                      if (!isNaN(ts)) handleAssignPlan(plan.id, ts)
+                    }}>
+                    {dragOverLane === plan.id && (
+                      <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] px-2 py-0.5 rounded-full"
+                            style={{ background: '#7c9eff', color: '#fff' }}>松开归入 · {plan.title}</span>
+                    )}
+                    <div style={{ position: 'absolute', left: ruler.minToX(plan.startMin ?? 0), width: ruler.durToW(plan.durationMin ?? 60),
+                                 top: 2, bottom: 2, background: STATUS_BG[plan.status] || '#f8fafc',
+                                 border: `1px dashed ${STATUS_BORDER[plan.status] || '#e2e8f0'}`, borderRadius: 6 }} />
+                    {segs.map(s => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 30)))}
+                    <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-slate-400">
+                      {plan.startMin != null ? `${String(Math.floor(plan.startMin / 60)).padStart(2, '0')}:${String(plan.startMin % 60).padStart(2, '0')}` : '—'} · {Math.round((plan.completionRatio ?? 0) * 100)}% · {covered}/{plan.durationMin ?? '—'}m
+                    </span>
+                  </div>
                 </div>
-                <span className="w-16 shrink-0 text-right text-[10px] text-slate-400 pr-2">
-                  {coverMin(plan.id)}/{plan.durationMin ?? '—'}m
-                </span>
-              </div>
-            ))}
+              )
+            })}
+            {nowMin >= rangeLo && nowMin <= rangeHi && (() => {
+              const x = LABEL_W + ruler.minToX(nowMin)
+              return (
+                <div style={{ position: 'absolute', left: x, top: 0, bottom: 0, width: 2,
+                              background: '#ef4444', zIndex: 50, pointerEvents: 'none' }}>
+                  <div style={{ position: 'absolute', top: -2, left: '50%', transform: 'translateX(-50%)',
+                                background: '#fff', border: '1px solid #ef4444', color: '#ef4444',
+                                fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 999,
+                                whiteSpace: 'nowrap' }}>
+                    现在 {String(Math.floor(nowMin / 60)).padStart(2,'0')}:{String(nowMin % 60).padStart(2,'0')}
+                  </div>
+                  <div style={{ position: 'absolute', bottom: 0, left: -1, width: 4, height: 18,
+                                background: 'linear-gradient(to bottom, rgba(239,68,68,0), #ef4444)' }} />
+                </div>
+              )
+            })()}
           </div>
-        )}
       </section>
+
+      {tlHover && createPortal(
+        <ActivityHoverCard a={{
+          app: displayApp(tlHover.seg.mainApp),
+          title: tlHover.seg.mainTitle ?? '(未命名)',
+          state: tlHover.seg.mainState,
+          startText: fmtTime(tlHover.seg.startTs),
+          endText: fmtTime(tlHover.seg.endTs),
+          durationText: fmtDur(tlHover.seg.durationMin),
+          source: '监控',
+          microActivity: (tlHover.seg as any).microActivity ?? null,
+          aiHint: (() => {
+            const i = inferences.get(tlHover.seg.id ?? 's' + tlHover.seg.startTs)
+            return i && i.confidence < 0.6 ? { label: WORK_STATES[i.category]?.label ?? i.category, confidence: i.confidence } : undefined
+          })(),
+          counterpart: (tlHover.seg as any).counterpart ?? undefined,
+          topic: (tlHover.seg as any).topic ?? undefined,
+          mode: 'fixed',
+          pos: { x: tlHover.rect.left + tlHover.rect.width / 2, y: tlHover.rect.top },
+        }} />,
+        document.body
+      )}
 
       {/* 星图 — 白底卡片 */}
       <section className="glass-card hoverable" style={{ background: '#fff' }}>

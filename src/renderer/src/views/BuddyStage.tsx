@@ -228,6 +228,7 @@ export default function BuddyStage() {
         </div>
       </section>
 
+      {settings.petEnabled ? (
       <div className="grid gap-5 lg:grid-cols-2">
         {/* 搭子状态卡 */}
         <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '60ms' }}>
@@ -469,6 +470,14 @@ export default function BuddyStage() {
           </div>
         </section>
       </div>
+      ) : (
+        <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '60ms' }}>
+          <div className="mb-3"><SectionTitle icon="cat" title="搭子状态" /></div>
+          <div className="text-[12px] leading-relaxed text-slate-500">
+            虚拟角色未启用。在上方总控卡开启「桌面形象」后，这里会显示其实时状态、情感与行为控制。
+          </div>
+        </section>
+      )}
 
       {/* 虚拟人资源占用（调试模式：设置 → 开发者选项 开启后显示） */}
       {settings.devMode && petStats ? (
@@ -610,7 +619,14 @@ export default function BuddyStage() {
                 <div className="text-[12px] text-slate-300">紧凑模式</div>
                 <div className="mt-0.5 text-[10px] text-slate-500">隐藏气泡与占位文本，只保留核心状态与活跃告警</div>
               </div>
-              <Toggle checked={settings.widgetCompact} onChange={(v) => void patch({ widgetCompact: v })} />
+              <Toggle checked={!!settings.widgetCompact} onChange={(v) => void patch({ widgetCompact: v })} />
+            </div>
+            <div className="-mx-1 flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-white/[0.03]">
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] text-slate-300">鼠标穿透</div>
+                <div className="mt-0.5 text-[10px] text-slate-500">开启后浮窗不挡桌面操作（关闭需在桌搭页操作）</div>
+              </div>
+              <Toggle checked={settings.widgetPenetration} onChange={(v) => void patch({ widgetPenetration: v })} />
             </div>
           </div>
         )}

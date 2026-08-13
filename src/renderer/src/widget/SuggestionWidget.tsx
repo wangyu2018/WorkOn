@@ -18,7 +18,17 @@ interface BrowserPlanConfirm {
 }
 
 type AskState = 'hidden' | 'input' | 'thinking' | 'answer'
-type WidgetMode = 'collapsed' | 'expanded'
+type WidgetMode = 'mini' | 'compact' | 'full'
+const SIZES = {
+  mini:    { w: 210, h: 44 },
+  compact: { w: 300, h: 150 },
+  full:    { w: 340, h: 520 },
+} as const
+const MAX_FULL_H = 760
+
+function restoreWidgetOpacity(): void {
+  window.api.getSettings().then((s) => window.api.setWidgetOpacity(s.widgetOpacity)).catch(() => undefined)
+}
 
 export default function SuggestionWidget() {
   const presence = usePresenceStore((s) => s.presence)
@@ -37,8 +47,8 @@ export default function SuggestionWidget() {
     const t = window.setInterval(() => setTimerTick((n) => n + 1), 30_000)
     return () => window.clearInterval(t)
   }, [meetingActive])
-  const [opacity, setOpacity] = useState(0.92)
-  const [widgetMode, setWidgetMode] = useState<WidgetMode>('expanded')
+  const [widgetMode, setWidgetMode] = useState<WidgetMode>('mini')
+  const [penetration, setPenetration] = useState(false)
   const [shimmer, setShimmer] = useState(false)
   const [welcome, setWelcome] = useState(false)
   const [askState, setAskState] = useState<AskState>('hidden')
@@ -63,23 +73,19 @@ export default function SuggestionWidget() {
   const [alertCollapsed, setAlertCollapsed] = useState<Record<string, boolean>>({})
   const [showFocusMinutes, setShowFocusMinutes] = useState(false)
 
-  const collapseWidget = () => {
-    setWidgetMode('collapsed')
-    window.api.widgetResize(64, 64)
-    window.api.setSettings({ widgetMode: 'collapsed' })
-  }
-
-  const expandWidget = () => {
-    setWidgetMode('expanded')
-    window.api.widgetResize(340, 520)
-    window.api.setSettings({ widgetMode: 'expanded' })
+  const setMode = (mode: WidgetMode) => {
+    setWidgetMode(mode)
+    const s = SIZES[mode]
+    window.api.widgetResize(s.w, s.h)
+    window.api.setSettings({ widgetMode: mode })
   }
 
   useEffect(() => {
     window.api.getSettings().then((s) => {
-      const mode = (s as { widgetMode?: WidgetMode }).widgetMode ?? 'expanded'
+      const mode = (s as { widgetMode?: WidgetMode }).widgetMode ?? 'mini'
       setWidgetMode(mode)
-      if (mode === 'collapsed') window.api.widgetResize(64, 64)
+      const sz = SIZES[mode] ?? SIZES.mini
+      window.api.widgetResize(sz.w, sz.h)
     }).catch(() => undefined)
 
     window.api.getSettings().then((s) => setWidgetCompact(!!(s as { widgetCompact?: boolean }).widgetCompact)).catch(() => undefined)
@@ -110,10 +116,10 @@ export default function SuggestionWidget() {
       if (cur) {
         window.api.meetingApply({ mode: cur.mode, active: false, sinceTs: cur.sinceTs })
         setMeetingActive(null)
-        setOpacity(0.92)
+        restoreWidgetOpacity()
       }
     })
-    window.api.getSettings().then((s) => setOpacity(s.widgetOpacity)).catch(() => undefined)
+    window.api.getSettings().then((s) => setPenetration(!!(s as { widgetPenetration?: boolean }).widgetPenetration)).catch(() => undefined)
 
     return () => {
       cleanup()
@@ -135,6 +141,23 @@ export default function SuggestionWidget() {
     }
     prevAlert.current = hasAlert
   }, [question, bpConfirm, meetingDetected])
+
+  // 动态高度：问答/告警出现时窗口从底部往上顶
+  useEffect(() => {
+    const mode = widgetMode
+    const hasContent = !!(question || bpConfirm || meetingDetected || askState !== 'hidden' || petBubble)
+    if (mode === 'mini') {
+      if (hasContent) setMode('compact')
+      return
+    }
+    const base = SIZES[mode].h
+    const extra = hasContent ? Math.min(220,
+      (question ? 90 : 0) + (bpConfirm ? 110 : 0) + (meetingDetected ? 130 : 0) + (askState !== 'hidden' ? 60 : 0)
+    ) : 0
+    const target = Math.min(mode === 'full' ? MAX_FULL_H : base + extra, base + extra)
+    const sz = SIZES[mode]
+    window.api.widgetResize(sz.w, target)
+  }, [widgetMode, question, bpConfirm, meetingDetected, askState, petBubble])
 
   // 拖拽
   useEffect(() => {
@@ -185,11 +208,11 @@ export default function SuggestionWidget() {
     window.api.meetingApply({ mode, active, sinceTs: active ? undefined : sinceTs })
     if (active) {
       setMeetingActive({ mode, sinceTs })
-      if (mode === 'quiet') setOpacity(0.3)
+      if (mode === 'quiet') window.api.setWidgetOpacity(0.3)
       setMeetingDetected(null)
     } else {
       setMeetingActive(null)
-      setOpacity(0.92)
+      restoreWidgetOpacity()
     }
   }
 
@@ -221,25 +244,29 @@ export default function SuggestionWidget() {
     blurTimer.current = window.setTimeout(() => setAskState('hidden'), 3000)
   }
 
-  // ── 收起态：仅环 ──
-  if (widgetMode === 'collapsed') {
+  // ── mini 态：状态环 + 实时工作内容 ──
+  if (widgetMode === 'mini') {
+    const liveTitle = presence?.screens?.find((s) => s.screen === presence.mainScreen)?.title || meta.label
     return (
-      <div className="flex h-screen w-screen items-center justify-center" style={{ opacity }}>
+      <div className="flex h-screen w-screen items-end justify-end p-3">
         <div
-          className={`relative h-[44px] w-[44px] cursor-pointer rounded-full transition-transform hover:scale-105 ${shimmer ? 'shimmer-ring' : ''}`}
-          onClick={expandWidget}
+          className={`flex h-11 w-[210px] cursor-pointer items-center gap-2 rounded-2xl border border-white/10 bg-ink-900/80 px-3 shadow-glass backdrop-blur-md ${shimmer ? 'shimmer-ring' : ''}`}
+          onClick={() => setMode('compact')}
         >
-          <svg viewBox="0 0 48 48" className="h-[44px] w-[44px] -rotate-90">
-            <circle cx="24" cy="24" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3.5" />
-            <circle
-              cx="24" cy="24" r={R} fill="none"
-              stroke={meta.color} strokeWidth="3.5" strokeLinecap="round"
-              strokeDasharray={CIRC}
-              strokeDashoffset={CIRC * (1 - focus / 100)}
-              style={{ transition: 'stroke-dashoffset 400ms ease-out' }}
-            />
-          </svg>
-          <div className="absolute inset-0 flex items-center justify-center text-sm">{meta.emoji}</div>
+          <div className="relative h-7 w-7 shrink-0">
+            <svg viewBox="0 0 48 48" className="h-7 w-7 -rotate-90">
+              <circle cx="24" cy="24" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3.5" />
+              <circle cx="24" cy="24" r={R} fill="none" stroke={meta.color} strokeWidth="3.5" strokeLinecap="round"
+                strokeDasharray={CIRC} strokeDashoffset={CIRC * (1 - focus / 100)} style={{ transition: 'stroke-dashoffset 400ms ease-out' }} />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center text-[10px]">{meta.emoji}</div>
+          </div>
+          <span className="min-w-0 flex-1 truncate text-xs text-slate-200">{liveTitle}</span>
+          <button
+            className={`shrink-0 rounded p-1 text-[10px] ${penetration ? 'text-neon-cyan' : 'text-slate-500'} hover:bg-white/10`}
+            title={penetration ? '穿透中（桌搭页关闭）' : '开启鼠标穿透'}
+            onClick={(e) => { e.stopPropagation(); const v = !penetration; setPenetration(v); const api = window.api as Record<string, any>; if (typeof api.setWidgetPenetration === 'function') api.setWidgetPenetration(v); void window.api.setSettings({ widgetPenetration: v }) }}
+          >⊘</button>
         </div>
         <style>{`
           .shimmer-ring { animation: shimmer 2s ease-out; }
@@ -253,9 +280,71 @@ export default function SuggestionWidget() {
     )
   }
 
-  // ── 展开态：完整面板 ──
+  // ── compact 态：状态区 + 一行 microActivity ──
+  if (widgetMode === 'compact') {
+    return (
+      <div className="flex h-screen w-screen items-end justify-end p-3">
+        <div className="glass relative flex w-[300px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-ink-900/80 shadow-glass backdrop-blur-md">
+          <div className="flex h-8 shrink-0 cursor-move items-center justify-between border-b border-white/5 px-3 select-none"
+               onMouseDown={(e) => (dragRef.current = { x: e.clientX, y: e.clientY })}>
+            <span className="text-[11px] font-medium tracking-wider text-slate-400">WorkOn</span>
+            <div className="flex items-center gap-1">
+              <button className="rounded p-1 text-slate-500 hover:bg-white/10 hover:text-slate-300" title="展开" onClick={() => setMode('full')}>▴</button>
+              <button className={`rounded p-1 ${penetration ? 'text-neon-cyan' : 'text-slate-500'} hover:bg-white/10`} title="鼠标穿透"
+                onClick={() => { const v = !penetration; setPenetration(v); const api = window.api as Record<string, any>; if (typeof api.setWidgetPenetration === 'function') api.setWidgetPenetration(v); void window.api.setSettings({ widgetPenetration: v }) }}>⊘</button>
+              <button className="rounded p-1 text-slate-500 hover:bg-white/10 hover:text-slate-300" title="收起到最小" onClick={() => setMode('mini')}>▾</button>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="relative h-12 w-12 shrink-0">
+              <svg viewBox="0 0 48 48" className="h-12 w-12 -rotate-90">
+                <circle cx="24" cy="24" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3.5" />
+                <circle cx="24" cy="24" r={R} fill="none" stroke={meta.color} strokeWidth="3.5" strokeLinecap="round"
+                  strokeDasharray={CIRC} strokeDashoffset={CIRC * (1 - focus / 100)} style={{ transition: 'stroke-dashoffset 400ms ease-out' }} />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center text-sm">{meta.emoji}</div>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold" style={{ color: meta.color }}>{meta.label}
+                <span className="text-xs text-slate-500"> · 专注度 {focus} · {attentionGrade(focus).grade}</span>
+              </div>
+              <div className="mt-0.5 truncate text-xs text-slate-400">{presence?.screens?.find((s) => s.screen === presence.mainScreen)?.title || '等待采集…'}</div>
+              {aiEnabled ? (
+                <button className="mt-1 rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-neon-cyan" title="问点什么…"
+                  onClick={() => setAskState(askState === 'hidden' ? 'input' : 'hidden')}>💬</button>
+              ) : null}
+            </div>
+          </div>
+          <div className="mx-3 mb-3 flex flex-col gap-2 overflow-y-auto" style={{ maxHeight: 120 }}>
+            {askState !== 'hidden' ? (
+              <div className="transition-all">
+                {askState === 'input' ? (
+                  <input autoFocus className="w-full rounded-full border border-neon-cyan/30 bg-white/[0.06] px-3 py-1.5 text-xs text-slate-200 outline-none placeholder:text-slate-600"
+                    placeholder="问点什么…（回车发送）" value={askText}
+                    onChange={(e) => { setAskText(e.target.value); if (blurTimer.current) window.clearTimeout(blurTimer.current) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') void submitAsk(); if (e.key === 'Escape') setAskState('hidden') }}
+                    onBlur={onAskBlur} />
+                ) : askState === 'thinking' ? (
+                  <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-400">
+                    <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-neon-cyan" />思考中…
+                  </div>
+                ) : (
+                  <div className="max-h-20 overflow-hidden rounded-xl rounded-bl-sm border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-2 text-xs leading-relaxed text-neon-cyan">{askAnswer}</div>
+                )}
+              </div>
+            ) : null}
+            {petBubble && !widgetCompact && (
+              <div className="rounded-xl rounded-bl-sm border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-2 text-xs text-neon-cyan">🐾 {petBubble}</div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── full 态：完整面板 ──
   return (
-    <div className="flex h-screen w-screen items-stretch justify-center p-2" style={{ opacity }}>
+    <div className="flex h-screen w-screen items-end justify-end p-3">
       <div className="glass relative flex w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-ink-900/80 shadow-glass backdrop-blur-md">
         {/* 拖动区 */}
         <div
@@ -265,12 +354,15 @@ export default function SuggestionWidget() {
           <span className="text-xs font-medium tracking-wider text-slate-400">WorkOn</span>
           <div className="flex items-center gap-1">
             <button
+              className={`rounded p-1 ${penetration ? 'text-neon-cyan' : 'text-slate-500'} hover:bg-white/10`}
+              onClick={() => { const v = !penetration; setPenetration(v); const api = window.api as Record<string, any>; if (typeof api.setWidgetPenetration === 'function') api.setWidgetPenetration(v); void window.api.setSettings({ widgetPenetration: v }) }}
+              title="鼠标穿透"
+            >⊘</button>
+            <button
               className="rounded p-1 text-slate-500 hover:bg-white/10 hover:text-slate-300"
-              onClick={collapseWidget}
+              onClick={() => setMode('mini')}
               title="收起"
-            >
-              ▾
-            </button>
+            >▾</button>
             <button
               className="rounded p-1 text-slate-500 hover:bg-white/10 hover:text-slate-300"
               onClick={() => window.api.toggleWidget()}
@@ -533,27 +625,6 @@ export default function SuggestionWidget() {
           ) : null}
         </div>
 
-        <div className="flex-1" />
-
-        {/* 底部控制 */}
-        <div className="flex items-center gap-2 border-t border-white/5 px-4 py-2.5">
-          <span className="text-[10px] text-slate-500">透明度</span>
-          <input
-            type="range"
-            min={0.2}
-            max={1}
-            step={0.02}
-            value={opacity}
-            className="h-1 flex-1 accent-neon-cyan"
-            onChange={(e) => {
-              const v = Number(e.target.value)
-              setOpacity(v)
-              window.api.setWidgetOpacity(v)
-              void window.api.setSettings({ widgetOpacity: v })
-            }}
-          />
-          <span className="w-8 text-right text-[10px] text-slate-500">{Math.round(opacity * 100)}%</span>
-        </div>
       </div>
     </div>
   )

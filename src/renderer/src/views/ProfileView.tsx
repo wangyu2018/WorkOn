@@ -808,6 +808,21 @@ export default function ProfileView() {
         <SettingRow label="自动识别类型" desc="根据应用组合、作息与计划关键词自动判断用户类型">
           <Toggle checked={settings.userTypeAuto} onChange={(v) => void patchSettings({ userTypeAuto: v })} />
         </SettingRow>
+        <SettingRow label="就业状态" desc="全职按类型默认目标；兼职/兼读自动下调目标基线，不影响分类">
+          <div className="flex gap-1.5">
+            {([['full', '全职'], ['part', '兼职'], ['student', '兼读']] as const).map(([v, l]) => (
+              <button
+                key={v}
+                onClick={() => void patchSettings({ employmentMode: v })}
+                className={`rounded-lg border px-2.5 py-1.5 text-[12px] transition-all ${
+                  settings.employmentMode === v ? 'border-white/30 bg-white/[0.08] text-slate-100' : 'border-white/[0.07] text-slate-400 hover:border-white/20'
+                }`}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+        </SettingRow>
         <SettingRow label="每日目标工作时长" desc="影响持续力与节奏感的计分基准">
           <NumberSetting
             value={Math.round((settings.targetWorkMin ?? USER_TYPE_META[curType].targetWorkMin) / 60)}
