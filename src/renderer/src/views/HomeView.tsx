@@ -1,9 +1,9 @@
 /**
- * 首页 — 今日图谱 + 工作/生活时间轴 + 标签面板（PRD v3.1 G+H）
+ * 首页 — 今日图谱 + 工作/生活时间轴（PRD v3.1 G+H）
  */
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { WORK_LIKE_STATES, WORK_STATES } from '@shared/stateMeta'
+import { WORK_LIKE_STATES } from '@shared/stateMeta'
 import type { MergedTrail, TrailSegment, WorkState, PlanItem } from '@shared/types'
 import { dateKey } from '@shared/trail'
 import { ActivityHoverCard } from '../components/ActivityHoverCard'
@@ -16,10 +16,6 @@ interface GraphItem {
   seg: TrailSegment
   channel: Channel
   column: Column
-}
-
-interface TagRule {
-  id: string; app: string; label: string; state: WorkState; hitCount: number; enabled: boolean
 }
 
 function mapChannel(app: string): Channel {
@@ -129,7 +125,6 @@ function insight(trail: MergedTrail): string {
 export default function HomeView() {
   const [trail, setTrail] = useState<MergedTrail | null>(null)
   const [items, setItems] = useState<GraphItem[]>([])
-  const [tags, setTags] = useState<TagRule[]>([])
   const [plans, setPlans] = useState<PlanItem[]>([])
   const [dragFrom, setDragFrom] = useState<{ idx: number; col: Column } | null>(null)
   const [hoverCol, setHoverCol] = useState<Column | null>(null)
@@ -138,8 +133,6 @@ export default function HomeView() {
   const WORK_END = 18 * 60
   const [rangeLo, setRangeLo] = useState(WORK_START)
   const [rangeHi, setRangeHi] = useState(WORK_END)
-  const [tagsOpen, setTagsOpen] = useState(false)
-  const [newTag, setNewTag] = useState({ app: '', label: '', state: 'focus' as WorkState })
   const [starHover, setStarHover] = useState<number | null>(null)
   const [dragSeg, setDragSeg] = useState<number | null>(null)
   const [planSegments, setPlanSegments] = useState<Map<number, string>>(new Map())
@@ -148,7 +141,6 @@ export default function HomeView() {
   })
   const [dragTs, setDragTs] = useState<number | null>(null)
   const [dragOverLane, setDragOverLane] = useState<'today' | string | null>(null)
-  const [inferences, setInferences] = useState<Map<string, { category: WorkState; microActivity: string | null; confidence: number }>>(new Map())
 
   const lastPresenceRefresh = useRef<number>(0)
   const trailingRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -172,10 +164,6 @@ export default function HomeView() {
         setItems(list)
         if (p) setPlans(p)
       }
-      void window.api?.getInferences?.().then((infs) => {
-        const list = (infs as Array<{ segId: string; category: WorkState; microActivity: string | null; confidence: number }>) ?? []
-        setInferences(new Map(list.map((i) => [i.segId, { category: i.category, microActivity: i.microActivity, confidence: i.confidence }])))
-      }).catch(() => undefined)
       const d = new Date()
       setNowMin(d.getHours() * 60 + d.getMinutes())
     })()
@@ -210,14 +198,6 @@ export default function HomeView() {
       if (trailingRefreshTimer.current) clearTimeout(trailingRefreshTimer.current)
     }
   }, [refresh])
-
-  const loadTags = useCallback(() => {
-    void window.api?.listRules?.().then((rules) => {
-      const mapped = (rules as Array<Record<string, unknown>>)?.map((r) => ({ id: r.id as string, app: r.matchApp as string, label: (r.setState ?? 'focus') as WorkState, state: (r.setState ?? 'focus') as WorkState, hitCount: (r.hitCount ?? 0) as number, enabled: (r.enabled ?? true) as boolean })) ?? []
-      setTags(mapped)
-    })
-  }, [])
-  useEffect(() => { loadTags() }, [loadTags])
 
   const totalWorkMin = useMemo(() => items.filter((i) => i.column === 'work').reduce((a, i) => a + i.seg.durationMin, 0), [items])
   const totalLifeMin = useMemo(() => items.filter((i) => i.column === 'life').reduce((a, i) => a + i.seg.durationMin, 0), [items])
@@ -328,19 +308,9 @@ export default function HomeView() {
     setItems((prev) => {
       const next = [...prev]; const item = next[idx]
       next[idx] = { ...item, column: toCol }
-      void window.api?.saveRule?.({ screen: 0, matchApp: item.seg.mainApp, matchTitleContains: '', setState: toCol === 'work' ? 'coding' : 'slack' as WorkState, weight: 1, enabled: true }).then(() => loadTags())
       return next
     })
-  }, [loadTags])
-
-  const addTagRule = useCallback(async () => {
-    if (!newTag.app.trim() || !newTag.label.trim()) return
-    await window.api?.saveRule?.({ screen: 0, matchApp: newTag.app.trim(), matchTitleContains: newTag.label.trim(), setState: newTag.state, weight: 1, enabled: true })
-    setNewTag({ app: '', label: '', state: 'focus' }); loadTags()
-  }, [newTag, loadTags])
-
-  const toggleTag = useCallback((id: string, enabled: boolean) => { void window.api?.saveRule?.({ id, enabled }).then(() => loadTags()) }, [loadTags])
-  const removeTag = useCallback((id: string) => { void window.api?.removeRule?.(id).then(() => loadTags()) }, [loadTags])
+  }, [])
 
   const starDropProps = (col: Column) => ({
     onDragOver: (e: React.DragEvent) => { e.preventDefault(); setHoverCol(col) },
@@ -550,10 +520,6 @@ export default function HomeView() {
           durationText: fmtDur(tlHover.seg.durationMin),
           source: '监控',
           microActivity: (tlHover.seg as any).microActivity ?? null,
-          aiInfer: (() => {
-            const i = inferences.get(tlHover.seg.id ?? 's' + tlHover.seg.startTs)
-            return i ? { label: WORK_STATES[i.category]?.label ?? i.category, confidence: i.confidence } : undefined
-          })(),
           counterpart: (tlHover.seg as any).counterpart ?? undefined,
           topic: (tlHover.seg as any).topic ?? undefined,
           mode: 'fixed',
@@ -569,7 +535,7 @@ export default function HomeView() {
             <span className="text-base">🗂️</span>
             <h3 className="text-[13px] font-semibold text-slate-800">今日星图</h3>
           </div>
-          <span className="text-[11px] text-slate-500">工作 ✦ {fmtDur(totalWorkMin)} · 生活 ✦ {fmtDur(totalLifeMin)} · 拖动星点可纠偏</span>
+          <span className="text-[11px] text-slate-500">工作 ✦ {fmtDur(totalWorkMin)} · 生活 ✦ {fmtDur(totalLifeMin)} · 拖动星点调整</span>
         </div>
         <div className="relative flex rounded-xl" style={{ minHeight: 320, background: '#ffffff' }}>
           <div className="absolute left-1/2 top-4 bottom-4 border-l-2 border-dashed border-slate-200 z-10" />
@@ -603,40 +569,6 @@ export default function HomeView() {
           </div>
         </div>
       </section>
-
-      {/* 标签管理 */}
-      <section className="glass-card hoverable">
-        <button onClick={() => setTagsOpen(!tagsOpen)} className="flex w-full items-center justify-between text-left">
-          <div className="flex items-center gap-2"><span className="text-base">🏷️</span><h3 className="text-[13px] font-semibold text-slate-200">分类标签</h3><span className="text-[11px] text-slate-500">{tags.length} 条规则</span></div>
-          <span className="text-[11px] text-slate-500">{tagsOpen ? '收起 ▲' : '展开 ▼'}</span>
-        </button>
-        {tagsOpen && (
-          <div className="mt-3 space-y-2">
-            {tags.length === 0 ? <p className="text-[12px] text-slate-500 py-2">图谱中拖拽卡片会自动创建规则；也可以手动添加。</p> : (
-              <div className="flex flex-wrap gap-2">
-                {tags.map((t) => (
-                  <div key={t.id} className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] ${t.enabled ? 'bg-neon-cyan/10 border border-neon-cyan/20' : 'bg-slate-500/5 border border-slate-500/10 opacity-50'}`}>
-                    <span className="text-slate-200">{WORK_STATES[t.state]?.emoji ?? '📌'} {t.app}</span>
-                    <span className="text-slate-400">→ {WORK_STATES[t.state]?.label ?? t.state}</span>
-                    <span className="text-slate-500">({t.hitCount}次)</span>
-                    <button onClick={() => toggleTag(t.id, !t.enabled)} className="text-slate-500 hover:text-slate-300">{t.enabled ? '✓' : '○'}</button>
-                    <button onClick={() => removeTag(t.id)} className="text-slate-500 hover:text-red-400">✕</button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="mt-3 flex items-center gap-2 flex-wrap">
-              <input className="w-28 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] text-slate-200 placeholder-slate-500 outline-none" placeholder="应用名" value={newTag.app} onChange={(e) => setNewTag({ ...newTag, app: e.target.value })} />
-              <input className="w-28 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] text-slate-200 placeholder-slate-500 outline-none" placeholder="关键词" value={newTag.label} onChange={(e) => setNewTag({ ...newTag, label: e.target.value })} />
-              <select className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] text-slate-300 outline-none" value={newTag.state} onChange={(e) => setNewTag({ ...newTag, state: e.target.value as WorkState })}>
-                {Object.entries(WORK_STATES).map(([k, v]) => <option key={k} value={k}>{v.emoji} {v.label}</option>)}
-              </select>
-              <button onClick={addTagRule} className="rounded-lg bg-neon-cyan/15 border border-neon-cyan/25 px-3 py-1 text-[11px] text-neon-cyan hover:bg-neon-cyan/25">+ 添加</button>
-            </div>
-          </div>
-        )}
-      </section>
-
 
     </div>
   )

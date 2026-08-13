@@ -4,7 +4,6 @@ import { GRADE_META, gradeOf } from '@shared/attention'
 import { WORK_LIKE_STATES, WORK_STATES } from '@shared/stateMeta'
 import { AttentionDailyCard, DIM_META, Delta, SectionTitle } from '../components/AttentionCard'
 import type { DimKey } from '../components/AttentionCard'
-import { ChainCard } from '../components/ChainCard'
 import StateDistCard from '../components/StateDistCard'
 import TopAppsCard from '../components/TopAppsCard'
 import DailyOverviewCard from '../components/DailyOverviewCard'
@@ -343,9 +342,6 @@ function DailyReport() {
       ) : (
         <AttentionDailyCard score={attention.today} yesterday={yesterdayScore} pin={<PinButton id="attention" />} />
       )}
-
-      {/* v2.6.1 作业链路卡片：注意力评分卡之后，随日报日期刷新 */}
-      <ChainCard date={trail.date} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* 状态分布 */}

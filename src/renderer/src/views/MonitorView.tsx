@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { AttentionScore, CorrectionRule, MergedTrail, PlanForecast, PlanVsActual, WorkState } from '@shared/types'
-import { ALL_STATES, SLACK_STATES, WORK_LIKE_STATES, WORK_STATES } from '@shared/stateMeta'
-import { genId } from '@shared/types'
-import { describeChain, extractChains } from '@shared/chain'
+import type { AttentionScore, MergedTrail, PlanForecast, PlanVsActual, WorkState } from '@shared/types'
+import { SLACK_STATES, WORK_LIKE_STATES, WORK_STATES } from '@shared/stateMeta'
 import { usePresenceStore } from '../stores/presenceStore'
 import { useAppStore } from '../stores/appStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -11,7 +9,6 @@ import { StateBadge } from '../components/StateBadge'
 import { EmptyState } from '../components/EmptyState'
 import { AttentionDailyCard } from '../components/AttentionCard'
 import { Icon } from '../components/Icon'
-import { Toggle } from '../components/Toggle'
 import { clockOf, fmtMin, minutesOfDay } from '../components/utils'
 import { attentionGrade, focusAdvice, focusScoreLine } from '@shared/focusMeta'
 
@@ -124,152 +121,6 @@ function MiniTrailBar({ trail, plans, forecasts }: { trail: MergedTrail; plans: 
   )
 }
 
-/** 分类管理：今日应用清单 → 一键生成纠偏规则（工作/个人等状态重分类） */
-function ClassifyCard({ trail }: { trail: MergedTrail }) {
-  interface Draft {
-    screen: number
-    state: WorkState | ''
-    keyword: string
-  }
-  const [drafts, setDrafts] = useState<Record<string, Draft>>({})
-  const [saved, setSaved] = useState<string | null>(null)
-  const [rules, setRules] = useState<CorrectionRule[]>([])
-
-  useEffect(() => {
-    window.api
-      .listRules()
-      .then((r) => setRules((r as CorrectionRule[]) ?? []))
-      .catch(() => setRules([]))
-  }, [])
-
-  // 按应用聚合：总时长 + 子状态分布（内容覆盖率）
-  const apps = new Map<string, { min: number; states: Map<WorkState, number> }>()
-  for (const seg of trail.segments) {
-    if (!seg.mainApp) continue
-    const cur = apps.get(seg.mainApp) ?? { min: 0, states: new Map<WorkState, number>() }
-    cur.min += seg.durationMin
-    cur.states.set(seg.mainState, (cur.states.get(seg.mainState) ?? 0) + seg.durationMin)
-    apps.set(seg.mainApp, cur)
-  }
-  const rows = [...apps.entries()].sort((a, b) => b[1].min - a[1].min).slice(0, 8)
-
-  const save = async (app: string) => {
-    const d = drafts[app] ?? { screen: 0, state: '', keyword: '' }
-    if (!d.state) return
-    // 去重覆盖：同屏+同应用+同关键词的已有规则直接覆盖，避免重复规则堆叠
-    const kw = d.keyword.trim()
-    const dup = rules.find(
-      (r) =>
-        r.screen === d.screen &&
-        r.matchApp.toLowerCase() === app.toLowerCase() &&
-        r.matchTitleContains.toLowerCase() === kw.toLowerCase()
-    )
-    if (dup) {
-      await window.api.saveRule({ ...dup, setState: d.state as WorkState, enabled: true })
-      setSaved(app + '!')
-    } else {
-      const rule: Partial<CorrectionRule> & { screen: number; matchApp: string; matchTitleContains: string } = {
-        screen: d.screen,
-        matchApp: app,
-        matchTitleContains: kw,
-        setState: d.state as WorkState
-      }
-      await window.api.saveRule(rule)
-      setSaved(app)
-    }
-    window.setTimeout(() => setSaved(null), 1600)
-    // 刷新本地规则缓存
-    window.api
-      .listRules()
-      .then((r) => setRules((r as CorrectionRule[]) ?? []))
-      .catch(() => undefined)
-  }
-
-  if (rows.length === 0) return <EmptyState emoji="🏷️" title="暂无应用数据" hint="采集到活动后，可在这里把应用/标题重分类为工作或个人需求。" />
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="text-[11px] leading-relaxed text-slate-500">
-        把应用重新归类（如 Vibecoding → 个人、项目开发 → 编程、刷抖音 → 放松）。规则对之后的记录即时生效，历史不改写；可在「设置 → 纠错规则」管理。
-      </div>
-      {rows.map(([app, info]) => {
-        const d = drafts[app] ?? { screen: 0, state: '', keyword: '' }
-        const set = (p: Partial<Draft>) => setDrafts((m) => ({ ...m, [app]: { ...d, ...p } }))
-        const stateEntries = [...info.states.entries()].sort((a, b) => b[1] - a[1])
-        const topState = stateEntries[0]?.[0]
-        const cur = WORK_STATES[topState ?? 'focus']
-        return (
-          <div key={app} className="rounded-lg border border-white/[0.05] bg-white/[0.03] px-2.5 py-2 text-[12px] transition-colors hover:border-white/[0.1] hover:bg-white/[0.05]">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="w-28 truncate font-medium text-slate-200" title={app}>
-                {app}
-              </span>
-              <span className="chip shrink-0" title="当前识别">
-                {cur.emoji} {cur.label}
-              </span>
-              <span className="w-14 shrink-0 text-right text-slate-500">{fmtMin(info.min)}</span>
-              <input
-                className="glass-input !w-32 !py-1 !text-[11px]"
-                placeholder="标题包含（可空）"
-                value={d.keyword}
-                onChange={(e) => set({ keyword: e.target.value })}
-              />
-              <select
-                className="glass-input !w-28 !py-1 !text-[11px]"
-                value={d.state}
-                onChange={(e) => set({ state: e.target.value as WorkState | '' })}
-              >
-                <option value="">改为状态…</option>
-                {ALL_STATES.map((s) => (
-                  <option key={s} value={s}>
-                    {WORK_STATES[s].emoji} {WORK_STATES[s].label}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="glass-input !w-16 !py-1 !text-[11px]"
-                value={d.screen}
-                onChange={(e) => set({ screen: Number(e.target.value) })}
-              >
-                {[0, 1, 2, 3].map((s) => (
-                  <option key={s} value={s}>
-                    屏{s + 1}
-                  </option>
-                ))}
-              </select>
-              <button className="glass-btn primary !px-2 !py-1 !text-[11px]" disabled={!d.state} onClick={() => void save(app)}>
-                {saved === app + '!' ? '已覆盖 ✓' : saved === app ? '已生效 ✓' : '设为规则'}
-              </button>
-            </div>
-            {/* 内容覆盖率：子状态分布（IDE/浏览器等混合内容应用） */}
-            {stateEntries.length > 1 ? (
-              <div className="mt-1.5 flex flex-col gap-1 pl-1">
-                {stateEntries.map(([st, min]) => {
-                  const m = WORK_STATES[st]
-                  const pct = Math.round((min / info.min) * 100)
-                  return (
-                    <div key={st} className="flex items-center gap-2 text-[10px] text-slate-500">
-                      <span className="w-16 shrink-0">
-                        {m.emoji} {m.label}
-                      </span>
-                      <div className="h-1 w-40 overflow-hidden rounded-full bg-white/[0.06]">
-                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: m.color }} />
-                      </div>
-                      <span>
-                        {fmtMin(min)} · {pct}%
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : null}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 /** 计划进度行：今日计划 vs 监控实际（融合进今日时间轴卡片，与虚线计划标记对应） */
 function PlanProgressRows({ pva }: { pva: PlanVsActual }) {
   const setView = useAppStore((s) => s.setView)
@@ -310,167 +161,6 @@ function PlanProgressRows({ pva }: { pva: PlanVsActual }) {
         })}
       </div>
     </>
-  )
-}
-
-/** 纠偏规则管理（从设置页迁移到监控页，含冲突覆盖检测） */
-function RulesCard() {
-  const [rules, setRules] = useState<CorrectionRule[]>([])
-  const [draft, setDraft] = useState({ screen: 0, matchApp: '', matchTitleContains: '', setApp: '', setState: '' })
-  const [note, setNote] = useState<string | null>(null)
-
-  const load = useCallback(async () => {
-    try {
-      setRules(((await window.api.listRules()) as CorrectionRule[]) ?? [])
-    } catch {
-      setRules([])
-    }
-  }, [])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  const flash = (text: string) => {
-    setNote(text)
-    window.setTimeout(() => setNote(null), 2000)
-  }
-
-  const add = async () => {
-    if (!draft.matchApp.trim() || !draft.matchTitleContains.trim()) return
-    // 冲突检测：同屏 + 同应用 + 同关键词 → 覆盖已有规则
-    const dup = rules.find(
-      (r) =>
-        r.screen === draft.screen &&
-        r.matchApp.toLowerCase() === draft.matchApp.trim().toLowerCase() &&
-        r.matchTitleContains.toLowerCase() === draft.matchTitleContains.trim().toLowerCase()
-    )
-    if (dup) {
-      await window.api.saveRule({
-        ...dup,
-        setApp: draft.setApp.trim() || undefined,
-        setState: (draft.setState || undefined) as WorkState | undefined,
-        enabled: true
-      })
-      flash('已覆盖同条件规则 ✓')
-    } else {
-      await window.api.saveRule({
-        id: genId('rule'),
-        screen: draft.screen,
-        matchApp: draft.matchApp.trim(),
-        matchTitleContains: draft.matchTitleContains.trim(),
-        setApp: draft.setApp.trim() || undefined,
-        setState: (draft.setState || undefined) as WorkState | undefined,
-        enabled: true,
-        ts: Date.now()
-      })
-      flash('规则已创建 ✓')
-    }
-    setDraft({ screen: 0, matchApp: '', matchTitleContains: '', setApp: '', setState: '' })
-    void load()
-  }
-
-  return (
-    <div className="flex flex-col gap-2 pt-1">
-      {note ? <div className="anim-fade-in text-[11px] text-neon-green">{note}</div> : null}
-      {rules.length > 0 ? (
-        <div className="text-[11px] text-slate-500">
-          累计命中 <span className="text-neon-cyan">{rules.reduce((a, r) => a + (r.hitCount ?? 0), 0)}</span> 次
-          {rules.some((r) => r.lastHitAt)
-            ? ` · 最近命中 ${new Date(Math.max(...rules.map((r) => r.lastHitAt ?? 0)) ).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
-            : ' · 今日暂无命中（规则可能未生效，检查条件是否过严）'}
-        </div>
-      ) : null}
-      {rules.length > 0 ? (
-        <div className="overflow-hidden rounded-xl border border-white/[0.06]">
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr className="bg-white/[0.03] text-left text-[11px] text-slate-500">
-                <th className="px-2.5 py-2 font-medium">屏</th>
-                <th className="px-2.5 py-2 font-medium">匹配应用</th>
-                <th className="px-2.5 py-2 font-medium">标题包含</th>
-                <th className="px-2.5 py-2 font-medium">改为应用</th>
-                <th className="px-2.5 py-2 font-medium">改为状态</th>
-                <th className="px-2.5 py-2 font-medium">命中</th>
-                <th className="px-2.5 py-2 font-medium">启用</th>
-                <th className="px-2.5 py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {rules.map((r) => (
-                <tr key={r.id} className="border-t border-white/[0.05] text-slate-300 transition-colors hover:bg-white/[0.03]">
-                  <td className="px-2.5 py-1.5">{r.screen + 1}</td>
-                  <td className="px-2.5 py-1.5">{r.matchApp}</td>
-                  <td className="max-w-[140px] truncate px-2.5 py-1.5">{r.matchTitleContains}</td>
-                  <td className="px-2.5 py-1.5">{r.setApp ?? '—'}</td>
-                  <td className="px-2.5 py-1.5">{r.setState ? `${WORK_STATES[r.setState].emoji} ${WORK_STATES[r.setState].label}` : '—'}</td>
-                  <td className="px-2.5 py-1.5">
-                    <span className={r.hitCount ? 'text-neon-cyan' : 'text-slate-600'}>{r.hitCount ?? 0}次</span>
-                  </td>
-                  <td className="px-2.5 py-1.5">
-                    <Toggle checked={r.enabled} onChange={(v) => void window.api.saveRule({ ...r, enabled: v }).then(load)} />
-                  </td>
-                  <td className="px-2.5 py-1.5 text-right">
-                    <button className="glass-btn danger !px-2 !py-0.5" onClick={() => void window.api.removeRule(r.id).then(load)}>
-                      <Icon name="trash" size={12} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="py-2 text-[12px] text-slate-600">暂无规则。命中条件（屏 + 应用 + 标题关键词）全部满足才会改写，宁漏勿误。</div>
-      )}
-      {/* 新增行 */}
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-white/10 p-2.5">
-        <select
-          className="glass-input !w-16"
-          value={draft.screen}
-          onChange={(e) => setDraft((d) => ({ ...d, screen: Number(e.target.value) }))}
-        >
-          {[0, 1, 2, 3].map((s) => (
-            <option key={s} value={s}>
-              屏{s + 1}
-            </option>
-          ))}
-        </select>
-        <input
-          className="glass-input !w-32"
-          placeholder="应用（如 chrome.exe）"
-          value={draft.matchApp}
-          onChange={(e) => setDraft((d) => ({ ...d, matchApp: e.target.value }))}
-        />
-        <input
-          className="glass-input !w-36"
-          placeholder="标题包含"
-          value={draft.matchTitleContains}
-          onChange={(e) => setDraft((d) => ({ ...d, matchTitleContains: e.target.value }))}
-        />
-        <input
-          className="glass-input !w-28"
-          placeholder="改为应用（可空）"
-          value={draft.setApp}
-          onChange={(e) => setDraft((d) => ({ ...d, setApp: e.target.value }))}
-        />
-        <select
-          className="glass-input !w-28"
-          value={draft.setState}
-          onChange={(e) => setDraft((d) => ({ ...d, setState: e.target.value }))}
-        >
-          <option value="">状态（可空）</option>
-          {ALL_STATES.map((s) => (
-            <option key={s} value={s}>
-              {WORK_STATES[s].emoji} {WORK_STATES[s].label}
-            </option>
-          ))}
-        </select>
-        <button className="glass-btn primary" disabled={!draft.matchApp.trim() || !draft.matchTitleContains.trim()} onClick={() => void add()}>
-          <Icon name="plus" size={13} /> 添加
-        </button>
-      </div>
-    </div>
   )
 }
 
@@ -576,7 +266,7 @@ export default function MonitorView() {
         </span>
         <div className="min-w-0">
           <h1 className="text-[18px] font-bold leading-tight text-slate-100">实时监控</h1>
-          <p className="mt-0.5 text-[12px] text-slate-500">活动状态 · 今日时间轴 · 应用分类与纠偏</p>
+          <p className="mt-0.5 text-[12px] text-slate-500">活动状态 · 今日时间轴 · 应用明细与状态</p>
         </div>
       </header>
 
@@ -843,44 +533,7 @@ export default function MonitorView() {
             <PlanProgressRows pva={pva} />
           </div>
         ) : null}
-        {/* 今日作业链：应用流转路径 + 每环节时长 + 自然语言描述（短切换已过滤 {trail && trail.glanceMin > 0 ? `· 已过滤短切换 ${fmtMin(trail.glanceMin)}` : ''}） */}
-        {trail && trail.segments.some((s) => !s.glance) ? (
-          <div className="mt-3 border-t border-white/[0.05] pt-3">
-            <div className="mb-2 flex items-center gap-2 text-[11px] text-slate-500">
-              <span>🔗 今日作业链（自动生成）</span>
-              {trail.glanceMin > 0 ? <span className="text-slate-600">已过滤短切换 {fmtMin(trail.glanceMin)}</span> : null}
-            </div>
-            <div className="flex flex-col gap-1.5">
-              {extractChains(trail.segments, 3).map((chain, i) => (
-                <div
-                  key={i}
-                  className="rounded-lg border border-white/[0.05] bg-white/[0.03] px-3 py-2 text-[12px] leading-relaxed text-slate-300 transition-colors hover:border-white/[0.1] hover:bg-white/[0.05]"
-                >
-                  {describeChain(chain)}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
       </section>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* 分类管理：应用 → 状态 纠偏规则入口 */}
-        <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '300ms' }}>
-          <h2 className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-slate-200">
-            <Icon name="edit" size={15} className="text-neon-cyan" /> 分类管理
-          </h2>
-          {trail ? <ClassifyCard trail={trail} /> : <div className="py-4 text-slate-500">加载中…</div>}
-        </section>
-
-        {/* 纠偏规则管理 */}
-        <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '420ms' }}>
-          <h2 className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-slate-200">
-            <Icon name="sliders" size={15} className="text-neon-cyan" /> 纠偏规则管理
-          </h2>
-          <RulesCard />
-        </section>
-      </div>
     </div>
   )
 }

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { CustomCategory, PlanCategory, PlanForecast, PlanItem, PlanStatus, PlanVsActual, WorkState } from '@shared/types'
-import { ALL_STATES, WORK_STATES } from '@shared/stateMeta'
+import type { PlanForecast, PlanItem, PlanStatus, PlanVsActual } from '@shared/types'
 import { Icon } from '../components/Icon'
 import { EmptyState } from '../components/EmptyState'
 import { ProgressRing } from '../components/ProgressRing'
@@ -16,8 +15,6 @@ const STATUS_LABEL: Record<PlanStatus, string> = {
   cancelled: '已取消'
 }
 
-const CAT_COLORS = ['#8B5CF6', '#3B82F6', '#F59E0B', '#10B981', '#EC4899', '#22D3EE', '#FBBF24', '#64748B']
-
 /** 计划来源标记（浏览器确认 🌐 / 手动确认 💬 / 手动创建 ✏️ / 其他同步源） */
 function SourceMark({ plan }: { plan: PlanItem }) {
   if (plan.browserDerived) return <span className="chip !py-0" title="浏览器行为确认">🌐 浏览器确认</span>
@@ -26,115 +23,16 @@ function SourceMark({ plan }: { plan: PlanItem }) {
   return <span className="chip !py-0">{plan.source}</span>
 }
 
-/* ── 新建分类弹窗 ── */
-function CategoryForm({ onClose, onSaved, initialLabel }: { onClose: () => void; onSaved: () => void; initialLabel?: string }) {
-  const [label, setLabel] = useState(initialLabel ?? '')
-  const [color, setColor] = useState(CAT_COLORS[0])
-  const [emoji, setEmoji] = useState('📌')
-  const [hints, setHints] = useState<Set<string>>(new Set())
-
-  const toggleHint = (s: string) => {
-    setHints((prev) => {
-      const next = new Set(prev)
-      if (next.has(s)) next.delete(s)
-      else next.add(s)
-      return next
-    })
-  }
-
-  const save = async () => {
-    if (!label.trim()) return
-    await window.api.createCategory({ label: label.trim(), color, emoji: emoji.trim() || '📌', stateHints: [...hints] })
-    onSaved()
-    onClose()
-  }
-
-  return (
-    <div className="anim-fade-in fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="glass-card anim-scale-in w-[400px]" onClick={(e) => e.stopPropagation()}>
-        <h3 className="mb-4 flex items-center gap-2.5 text-[15px] font-semibold text-slate-100">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/[0.08] bg-neon-cyan/10 text-neon-cyan">
-            <Icon name="plus" size={14} />
-          </span>
-          新建分类
-        </h3>
-        <div className="flex flex-col gap-3.5">
-          <div className="grid grid-cols-[1fr_64px] gap-2">
-            <input
-              className="glass-input"
-              placeholder="分类名称（如 学习提升）"
-              autoFocus
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-            />
-            <input
-              className="glass-input text-center"
-              placeholder="emoji"
-              maxLength={4}
-              value={emoji}
-              onChange={(e) => setEmoji(e.target.value)}
-            />
-          </div>
-          <div>
-            <div className="mb-1.5 text-[11px] font-medium text-slate-500">颜色</div>
-            <div className="flex gap-1.5">
-              {CAT_COLORS.map((c) => (
-                <button
-                  key={c}
-                  className={`h-6 w-6 rounded-full transition-transform ${color === c ? 'scale-125 ring-2 ring-white/40' : 'hover:scale-110'}`}
-                  style={{ background: c, boxShadow: color === c ? `0 0 10px ${c}` : undefined }}
-                  onClick={() => setColor(c)}
-                />
-              ))}
-            </div>
-          </div>
-          <div>
-            <div className="mb-1.5 text-[11px] font-medium text-slate-500">关联工作状态（计划 vs 实际匹配用，可多选）</div>
-            <div className="grid grid-cols-4 gap-1.5">
-              {ALL_STATES.map((s) => {
-                const m = WORK_STATES[s]
-                const active = hints.has(s)
-                return (
-                  <button
-                    key={s}
-                    className={`rounded-lg border px-1 py-1 text-[11px] transition-all ${
-                      active ? 'border-neon-cyan/60 bg-neon-cyan/10 text-slate-100 shadow-glow' : 'border-white/[0.07] text-slate-400 hover:bg-white/[0.05]'
-                    }`}
-                    onClick={() => toggleHint(s)}
-                  >
-                    {m.emoji} {m.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-          <div className="mt-1 flex items-center justify-end gap-2 border-t border-white/[0.06] pt-3">
-            <button className="glass-btn" onClick={onClose}>
-              取消
-            </button>
-            <button className="glass-btn primary" disabled={!label.trim()} onClick={() => void save()}>
-              <Icon name="check" size={13} /> 创建
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 /* ── 新建 / 编辑弹窗 ── */
 interface PlanEditorProps {
   plan: Partial<PlanItem> & { date: string }
   isNew: boolean
-  cats: CustomCategory[]
-  onNewCategory: () => void
   onClose: () => void
   onSaved: (savedDate: string) => void
 }
 
-function PlanEditor({ plan, isNew, cats, onNewCategory, onClose, onSaved }: PlanEditorProps) {
+function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
   const [title, setTitle] = useState(plan.title ?? '')
-  const [category, setCategory] = useState<PlanCategory>(plan.category ?? 'other')
   const [planDate, setPlanDate] = useState(plan.date)
   const [start, setStart] = useState(plan.startMin !== undefined ? clockOf(plan.startMin) : '')
   const [end, setEnd] = useState(plan.endMin !== undefined ? clockOf(plan.endMin) : '')
@@ -171,7 +69,6 @@ function PlanEditor({ plan, isNew, cats, onNewCategory, onClose, onSaved }: Plan
       ...plan,
       date: savedDate,
       title: t,
-      category,
       note: note.trim() || undefined
     }
     if (startMin !== undefined && endMin !== undefined && endMin > startMin) {
@@ -231,31 +128,6 @@ function PlanEditor({ plan, isNew, cats, onNewCategory, onClose, onSaved }: Plan
               if (e.key === 'Escape') onClose()
             }}
           />
-          <div>
-            <div className="mb-1.5 flex items-center justify-between text-[11px] font-medium text-slate-500">
-              <span>类别</span>
-              <button className="glass-btn !px-1.5 !py-0.5 !text-[10px]" onClick={onNewCategory}>
-                <Icon name="plus" size={11} /> 新建分类
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {cats.map((c) => {
-                const active = category === c.id
-                return (
-                  <button
-                    key={c.id}
-                    className={`rounded-full border px-2.5 py-1 text-[11px] transition-all ${
-                      active ? 'text-slate-100' : 'border-white/[0.08] text-slate-400 hover:bg-white/[0.05]'
-                    }`}
-                    style={active ? { borderColor: c.color, background: `${c.color}22`, boxShadow: `0 0 10px ${c.color}33` } : undefined}
-                    onClick={() => setCategory(c.id)}
-                  >
-                    {c.emoji} {c.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
           <label className="text-[11px] font-medium text-slate-500">
             日期
             <input type="date" className="glass-input mt-1" value={planDate} onChange={(e) => setPlanDate(e.target.value)} />
@@ -307,14 +179,9 @@ export default function PlanView() {
   const [date, setDate] = useState(todayKey())
   const [plans, setPlans] = useState<PlanItem[]>([])
   const [pva, setPva] = useState<PlanVsActual | null>(null)
-  const [cats, setCats] = useState<CustomCategory[]>([])
   const [forecasts, setForecasts] = useState<Map<string, PlanForecast>>(new Map())
-  const [catFilter, setCatFilter] = useState<'all' | PlanCategory>('all')
   const [statusFilter, setStatusFilter] = useState<'all' | PlanStatus>('all')
   const [editor, setEditor] = useState<{ plan: Partial<PlanItem> & { date: string }; isNew: boolean } | null>(null)
-  const [catForm, setCatForm] = useState(false)
-  const [sug, setSug] = useState<{ app: string; min: number }[]>([])
-  const [newCatName, setNewCatName] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [delayOpen, setDelayOpen] = useState<string | null>(null)
   const [delayDate, setDelayDate] = useState('')
@@ -323,14 +190,6 @@ export default function PlanView() {
   const [folderDirs, setFolderDirs] = useState<string[]>([])
   const [scanProgress, setScanProgress] = useState(0)
   const [scanFile, setScanFile] = useState('')
-
-  const loadCats = useCallback(async () => {
-    try {
-      setCats(((await window.api.listCategories()) as CustomCategory[]) ?? [])
-    } catch {
-      setCats([])
-    }
-  }, [])
 
   const load = useCallback(async () => {
     try {
@@ -347,20 +206,6 @@ export default function PlanView() {
       setPva(null)
     }
   }, [date])
-
-  useEffect(() => {
-    void loadCats()
-  }, [loadCats])
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        setSug(((await window.api.suggestOtherApps()) as { app: string; min: number }[]) ?? [])
-      } catch {
-        setSug([])
-      }
-    })()
-  }, [])
 
   useEffect(() => {
     void load()
@@ -421,17 +266,7 @@ export default function PlanView() {
     void load()
   }
 
-  const removeCategory = async (c: CustomCategory) => {
-    await window.api.deleteCategory(c.id)
-    void loadCats()
-    void load()
-  }
-
-  const catOf = (id: string): CustomCategory =>
-    cats.find((c) => c.id === id) ?? { id, label: id, color: '#64748B', emoji: '📋', isBuiltIn: false, ts: 0 }
-
   const filtered = plans
-    .filter((p) => (catFilter === 'all' ? true : p.category === catFilter))
     .filter((p) => (statusFilter === 'all' ? true : p.status === statusFilter))
     .sort((a, b) => (a.startMin ?? 9999) - (b.startMin ?? 9999))
 
@@ -531,55 +366,11 @@ export default function PlanView() {
         </div>
       </section>
 
-      {sug.length > 0 && (
-        <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '160ms' }}>
-          <div className="mb-2 text-[12px] text-slate-400">这些应用最近常掉进「其他」，建议为它们建分类：</div>
-          <div className="flex flex-wrap gap-2">
-            {sug.map((x) => (
-              <div key={x.app} className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[12px]">
-                <span className="text-slate-300">{x.app}</span>
-                <span className="text-slate-500">· {Math.round(x.min)}分钟</span>
-                <button
-                  className="rounded-lg border border-neon-cyan/30 bg-neon-cyan/10 px-2 py-0.5 text-[11px] text-neon-cyan hover:bg-neon-cyan/20"
-                  onClick={() => { setNewCatName(x.app); setCatForm(true) }}
-                >
-                  建分类
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
       {/* 筛选 */}
       <div className="anim-fade-up flex flex-wrap items-center gap-2" style={{ animationDelay: '180ms' }}>
         <span className="mr-0.5 flex items-center gap-1 text-[11px] font-medium text-slate-500">
           <Icon name="sliders" size={12} /> 筛选
         </span>
-        <button
-          className={`chip ${catFilter === 'all' ? '!border-neon-cyan/50 !text-neon-cyan' : ''}`}
-          onClick={() => setCatFilter('all')}
-        >
-          全部类别
-        </button>
-        {cats.map((c) => (
-          <button
-            key={c.id}
-            className={`chip group ${catFilter === c.id ? '!text-slate-100' : ''}`}
-            style={catFilter === c.id ? { borderColor: c.color, background: `${c.color}22` } : undefined}
-            onClick={() => setCatFilter(catFilter === c.id ? 'all' : c.id)}
-            title={c.isBuiltIn ? c.label : `${c.label}（自定义，双击删除）`}
-            onDoubleClick={() => {
-              if (!c.isBuiltIn) void removeCategory(c)
-            }}
-          >
-            {c.emoji} {c.label}
-          </button>
-        ))}
-        <button className="chip !border-dashed" title="新建分类" onClick={() => setCatForm(true)}>
-          <Icon name="plus" size={11} />
-        </button>
-        <span className="mx-1 h-4 w-px bg-white/10" />
         {(['all', 'planned', 'in_progress', 'done', 'delayed', 'cancelled'] as const).map((s) => (
           <button
             key={s}
@@ -603,7 +394,6 @@ export default function PlanView() {
       ) : (
         <div className="flex flex-col gap-2.5">
           {filtered.map((p, idx) => {
-            const cat = catOf(p.category)
             const done = p.status === 'done'
             const cancelled = p.status === 'cancelled'
             const fc = forecasts.get(p.id)
@@ -612,7 +402,7 @@ export default function PlanView() {
               <div
                 key={p.id}
                 className="glass-card hoverable anim-fade-up !p-3.5"
-                style={{ animationDelay: `${240 + Math.min(idx * 40, 240)}ms`, borderLeftWidth: 3, borderLeftColor: `${cat.color}88` }}
+                style={{ animationDelay: `${240 + Math.min(idx * 40, 240)}ms`, borderLeftWidth: 3, borderLeftColor: '#3B82F6' }}
               >
                 <div className="flex items-center gap-3">
                   <button
@@ -628,9 +418,6 @@ export default function PlanView() {
                   <button className="min-w-0 flex-1 text-left" onClick={() => setExpanded(isExpanded ? null : p.id)}>
                     <div className={`text-[13px] font-medium ${done || cancelled ? 'text-slate-500 line-through' : 'text-slate-200'}`}>{p.title}</div>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                      <span className="chip !py-0" style={{ borderColor: `${cat.color}55`, color: cat.color }}>
-                        {cat.emoji} {cat.label}
-                      </span>
                       {p.startMin !== undefined && p.endMin !== undefined ? (
                         <span className="flex items-center gap-1">
                           <Icon name="clock" size={11} />
@@ -795,24 +582,11 @@ export default function PlanView() {
         <PlanEditor
           plan={editor.plan}
           isNew={editor.isNew}
-          cats={cats}
-          onNewCategory={() => setCatForm(true)}
           onClose={() => setEditor(null)}
           onSaved={(savedDate) => {
             // 保存到其他日期时把视图切过去（setDate 会触发 load）
             if (savedDate !== date) setDate(savedDate)
             else void load()
-          }}
-        />
-      ) : null}
-      {catForm ? (
-        <CategoryForm
-          initialLabel={newCatName}
-          onClose={() => { setCatForm(false); setNewCatName('') }}
-          onSaved={() => {
-            void loadCats()
-            void load()
-            setNewCatName('')
           }}
         />
       ) : null}

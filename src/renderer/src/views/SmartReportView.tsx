@@ -20,7 +20,7 @@ import { WEEK_LABELS, addDays, clockOf, fmtDateLabel, fmtMin, todayKey } from '.
 
 const SECTION_TYPE_LABELS: Record<SectionType, string> = {
   time_block: '时间段',
-  category_group: '分类分组',
+  category_group: '应用分组',
   project_summary: '项目汇总',
   achievement: '成果亮点',
   plan_tomorrow: '明日计划',

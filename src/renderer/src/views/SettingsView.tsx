@@ -452,7 +452,7 @@ export default function SettingsView() {
             <div className="mt-2 rounded-xl border border-white/10 p-3">
               <div className="grid grid-cols-3 gap-2 text-[11px]">
                 <div className="font-medium text-slate-300">功能</div><div className="font-medium text-slate-400 text-center">无需 AI</div><div className="font-medium text-emerald-400 text-center">开启 AI 后增强</div>
-                {['日报/周报生成|65% 覆盖|95% + 摘要/拆解','工作/生活分类|✓ 规则+拖拽|LLM 自动归类','作业链路|✓ 闭环规则|LLM 命名','快捷推荐|✗|AI 推荐','注意力曲线|✓ 算法|—','位置提醒|✓ 天气 API|—','文件夹解析|✓ 正则|LLM 归纳','标签体系|✓ 规则+拖拽|AI 发现新标签'].map((r,i)=>{const [n,w,a]=r.split('|');return <Fragment key={i}><div className="text-slate-200">{n}</div><div className="text-slate-400 text-center">{w}</div><div className="text-emerald-400 text-center">{a}</div></Fragment>})}
+                {['日报/周报生成|65% 覆盖|95% + 摘要/拆解','实际活动记录|✓ 本地规则|LLM 增强','快捷推荐|✗|AI 推荐','注意力曲线|✓ 算法|—','位置提醒|✓ 天气 API|—','文件夹解析|✓ 正则|LLM 归纳'].map((r,i)=>{const [n,w,a]=r.split('|');return <Fragment key={i}><div className="text-slate-200">{n}</div><div className="text-slate-400 text-center">{w}</div><div className="text-emerald-400 text-center">{a}</div></Fragment>})}
               </div>
             </div>
           </details>
@@ -611,7 +611,7 @@ export default function SettingsView() {
                   ['✦', '首页 — 每日全景', '工作/生活星图 + 时间轴 + Widget 可编排'],
                   ['✦', '日历 — 注意力热度', '热力图 + 日/周视图，红色时间线'],
                   ['✦', '计划 — 从想法到执行', '手动新建 + 会议纪要一键导入'],
-                  ['✦', '报表 — 智能日报周报', '五维评分 + 作业链路，可投送到主页'],
+                  ['✦', '报表 — 智能日报周报', '五维评分 + 实际活动记录，可投送到主页'],
                   ['✦', '搭子 — 桌面虚拟人', 'ARIA/LUNA/KIRA/ZEN/SHIN 五角色，可拖拽互动'],
                   ['✦', '浮窗 — 托盘手柄', '收起=注意力图标，展开=迷你面板'],
                   ['✦', '问答 — AI 增强', '对话内嵌图表 + 快捷指令']

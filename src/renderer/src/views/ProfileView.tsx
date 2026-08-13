@@ -552,7 +552,7 @@ export default function ProfileView() {
           <InfoRow label="周末模式">{WEEKEND_LABEL[b.dailyRhythm.weekendPattern] ?? b.dailyRhythm.weekendPattern}</InfoRow>
           <InfoRow label="应用切换频率">{b.appUsagePattern.appSwitchFrequency ? `${b.appUsagePattern.appSwitchFrequency} 次/小时` : '—'}</InfoRow>
           <div className="-mx-2 rounded-lg px-2 py-2 transition-colors hover:bg-white/[0.03]">
-            <div className="mb-1.5 text-[12px] text-slate-500">主要应用类别（日均时长）</div>
+            <div className="mb-1.5 text-[12px] text-slate-500">主要应用（日均时长）</div>
             {b.appUsagePattern.primaryApps.length > 0 ? (
               <div className="flex flex-col gap-1.5">
                 {b.appUsagePattern.primaryApps.map((a) => (
@@ -808,7 +808,7 @@ export default function ProfileView() {
         <SettingRow label="自动识别类型" desc="根据应用组合、作息与计划关键词自动判断用户类型">
           <Toggle checked={settings.userTypeAuto} onChange={(v) => void patchSettings({ userTypeAuto: v })} />
         </SettingRow>
-        <SettingRow label="就业状态" desc="全职按类型默认目标；兼职/兼读自动下调目标基线，不影响分类">
+        <SettingRow label="就业状态" desc="全职按类型默认目标；兼职/兼读自动下调目标基线">
           <div className="flex gap-1.5">
             {([['full', '全职'], ['part', '兼职'], ['student', '兼读']] as const).map(([v, l]) => (
               <button

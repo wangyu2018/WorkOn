@@ -699,7 +699,6 @@ export async function analyzeDay(trail: MergedTrail): Promise<UserAnalysis> {
   ], 45000, 'complex')
   if (!text) return fallback
   const lines = text.split('\n').map((l) => l.replace(/^[-*\d.\s]+/, '').trim()).filter(Boolean)
-  void inferOtherCategories(trail.date)
   return {
     ...fallback,
     daily: lines[0] ?? fallback.daily,
