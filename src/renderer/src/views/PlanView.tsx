@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { PlanForecast, PlanItem, PlanStatus, PlanVsActual } from '@shared/types'
+import type { PlanForecast, PlanItem, PlanStatus, PlanType, PlanVsActual } from '@shared/types'
 import { Icon } from '../components/Icon'
 import { EmptyState } from '../components/EmptyState'
 import { ProgressRing } from '../components/ProgressRing'
@@ -13,6 +13,24 @@ const STATUS_LABEL: Record<PlanStatus, string> = {
   done: '已完成',
   delayed: '已延期',
   cancelled: '已取消'
+}
+
+const PLAN_TYPE_LABEL: Record<PlanType, string> = {
+  reminder: '提醒',
+  phase: '持续工作',
+  task: '待办'
+}
+
+/** 计划类型图标：reminder ◆紫 / phase ▬绿 / task ☐琥珀 */
+function planTypeIcon(t: PlanType): string {
+  if (t === 'reminder') return '◆'
+  if (t === 'phase') return '▬'
+  return '☐'
+}
+function planTypeColor(t: PlanType): string {
+  if (t === 'reminder') return '#A78BFA'
+  if (t === 'phase') return '#10B981'
+  return '#F59E0B'
 }
 
 /** 计划来源标记（浏览器确认 🌐 / 手动确认 💬 / 手动创建 ✏️ / 其他同步源） */
@@ -40,6 +58,7 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
   const [note, setNote] = useState(plan.note ?? '')
   const [smartText, setSmartText] = useState('')
   const [smartHint, setSmartHint] = useState('')
+  const [planType, setPlanType] = useState<PlanType>(plan.planType ?? 'phase')
 
   /** 一句话智能解析：把识别到的字段填入表单（用户可再改） */
   const applySmartParse = () => {
@@ -55,6 +74,10 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
     if (r.startMin !== undefined) setStart(clockOf(r.startMin))
     if (r.endMin !== undefined) setEnd(clockOf(r.endMin))
     if (r.durationMin !== undefined && r.startMin === undefined) setDuration(String(r.durationMin))
+    // 识别到具体时刻 + 提醒类关键词 → 自动选 reminder（宁缺毋滥，其余留给手选）
+    if (r.startMin !== undefined && r.endMin === undefined && /提醒|通知|叫我|喊我|记得/.test(text)) {
+      setPlanType('reminder')
+    }
     setTitle(r.title)
     setSmartHint(`已识别：${r.matched.join(' · ')}`)
   }
@@ -69,17 +92,28 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
       ...plan,
       date: savedDate,
       title: t,
-      note: note.trim() || undefined
+      note: note.trim() || undefined,
+      planType
     }
-    if (startMin !== undefined && endMin !== undefined && endMin > startMin) {
+    if (planType === 'reminder') {
       payload.startMin = startMin
-      payload.endMin = endMin
-      payload.durationMin = endMin - startMin
-    } else {
+      payload.endMin = undefined
+      payload.durationMin = undefined
+    } else if (planType === 'task') {
       payload.startMin = undefined
       payload.endMin = undefined
-      const dur = Number(duration)
-      payload.durationMin = Number.isFinite(dur) && dur > 0 ? Math.round(dur) : undefined
+      payload.durationMin = undefined
+    } else {
+      if (startMin !== undefined && endMin !== undefined && endMin > startMin) {
+        payload.startMin = startMin
+        payload.endMin = endMin
+        payload.durationMin = endMin - startMin
+      } else {
+        payload.startMin = undefined
+        payload.endMin = undefined
+        const dur = Number(duration)
+        payload.durationMin = Number.isFinite(dur) && dur > 0 ? Math.round(dur) : undefined
+      }
     }
     await window.api.savePlan(payload)
     onSaved(savedDate)
@@ -128,31 +162,58 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
               if (e.key === 'Escape') onClose()
             }}
           />
+          {/* 计划类型选择器 */}
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              { v: 'reminder', label: '提醒', desc: '到点触发' },
+              { v: 'phase', label: '持续工作', desc: '阶段验证' },
+              { v: 'task', label: '待办', desc: '无时间绑定' },
+            ] as const).map((t) => (
+              <button
+                key={t.v}
+                type="button"
+                onClick={() => setPlanType(t.v)}
+                className={`glass-btn !px-2 !py-2 flex flex-col items-center gap-0.5 ${planType === t.v ? '!border-neon-cyan/60 !text-neon-cyan' : ''}`}
+              >
+                <span className="text-[13px] font-medium">{t.label}</span>
+                <span className="text-[10px] text-slate-500">{t.desc}</span>
+              </button>
+            ))}
+          </div>
           <label className="text-[11px] font-medium text-slate-500">
             日期
             <input type="date" className="glass-input mt-1" value={planDate} onChange={(e) => setPlanDate(e.target.value)} />
           </label>
-          <div className="grid grid-cols-2 gap-2">
+          {planType === 'reminder' ? (
             <label className="text-[11px] font-medium text-slate-500">
-              开始（可选）
+              触发时间
               <input type="time" className="glass-input mt-1" value={start} onChange={(e) => setStart(e.target.value)} />
             </label>
-            <label className="text-[11px] font-medium text-slate-500">
-              结束（可选）
-              <input type="time" className="glass-input mt-1" value={end} onChange={(e) => setEnd(e.target.value)} />
-            </label>
-          </div>
-          <label className="text-[11px] font-medium text-slate-500">
-            或时长（分钟）
-            <input
-              type="number"
-              min={0}
-              className="glass-input mt-1"
-              placeholder="如 120"
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-            />
-          </label>
+          ) : planType === 'phase' ? (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-[11px] font-medium text-slate-500">
+                  开始（可选）
+                  <input type="time" className="glass-input mt-1" value={start} onChange={(e) => setStart(e.target.value)} />
+                </label>
+                <label className="text-[11px] font-medium text-slate-500">
+                  结束（可选）
+                  <input type="time" className="glass-input mt-1" value={end} onChange={(e) => setEnd(e.target.value)} />
+                </label>
+              </div>
+              <label className="text-[11px] font-medium text-slate-500">
+                或时长（分钟）
+                <input
+                  type="number"
+                  min={0}
+                  className="glass-input mt-1"
+                  placeholder="如 120"
+                  value={duration}
+                  onChange={(e) => setDuration(e.target.value)}
+                />
+              </label>
+            </>
+          ) : null}
           <textarea
             className="glass-input resize-none"
             rows={2}
@@ -402,9 +463,15 @@ export default function PlanView() {
               <div
                 key={p.id}
                 className="glass-card hoverable anim-fade-up !p-3.5"
-                style={{ animationDelay: `${240 + Math.min(idx * 40, 240)}ms`, borderLeftWidth: 3, borderLeftColor: '#3B82F6' }}
+                style={{ animationDelay: `${240 + Math.min(idx * 40, 240)}ms`, borderLeftWidth: 3, borderLeftColor: planTypeColor(p.planType ?? 'phase') }}
               >
                 <div className="flex items-center gap-3">
+                  <span
+                    title={PLAN_TYPE_LABEL[p.planType ?? 'phase']}
+                    style={{ color: planTypeColor(p.planType ?? 'phase'), fontSize: 13, width: 14, textAlign: 'center', flexShrink: 0 }}
+                  >
+                    {planTypeIcon(p.planType ?? 'phase')}
+                  </span>
                   <button
                     className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all ${
                       done ? 'border-neon-green bg-neon-green/20 text-neon-green shadow-glow' : 'border-white/20 text-transparent hover:scale-110 hover:border-neon-green/60'
@@ -418,15 +485,26 @@ export default function PlanView() {
                   <button className="min-w-0 flex-1 text-left" onClick={() => setExpanded(isExpanded ? null : p.id)}>
                     <div className={`text-[13px] font-medium ${done || cancelled ? 'text-slate-500 line-through' : 'text-slate-200'}`}>{p.title}</div>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                      {p.startMin !== undefined && p.endMin !== undefined ? (
-                        <span className="flex items-center gap-1">
-                          <Icon name="clock" size={11} />
-                          {clockOf(p.startMin)}–{clockOf(p.endMin)}
-                        </span>
+                      {(p.planType ?? 'phase') === 'reminder' ? (
+                        p.startMin !== undefined ? (
+                          <span className="flex items-center gap-1" style={{ color: '#A78BFA' }}>
+                            <Icon name="bell" size={11} />
+                            {clockOf(p.startMin)} 提醒
+                          </span>
+                        ) : null
+                      ) : (p.planType ?? 'phase') === 'phase' ? (
+                        <>
+                          {p.startMin !== undefined && p.endMin !== undefined ? (
+                            <span className="flex items-center gap-1">
+                              <Icon name="clock" size={11} />
+                              {clockOf(p.startMin)}–{clockOf(p.endMin)}
+                            </span>
+                          ) : null}
+                          {p.durationMin !== undefined ? <span>{fmtMin(p.durationMin)}</span> : null}
+                        </>
                       ) : null}
-                      {p.durationMin !== undefined ? <span>{fmtMin(p.durationMin)}</span> : null}
                       <SourceMark plan={p} />
-                      {fc && !done ? (
+                      {fc && !done && (p.planType ?? 'phase') === 'phase' ? (
                         <span
                           className={`chip !py-0 ${
                             fc.completionProb > 70 ? '!border-neon-green/50 !text-neon-green' : fc.completionProb >= 40 ? '!border-neon-amber/50 !text-neon-amber' : '!border-neon-red/50 !text-neon-red'
@@ -435,6 +513,7 @@ export default function PlanView() {
                           {fc.completionProb > 70 ? '大概率完成' : fc.completionProb >= 40 ? '有风险' : '可能延期'} {fc.completionProb}%
                         </span>
                       ) : null}
+                      {p.fired && !done ? <span className="text-slate-600">已提醒</span> : null}
                       {cancelled ? <span className="text-slate-600">已取消</span> : null}
                     </div>
                     {p.note ? <div className="mt-0.5 truncate text-[11px] text-slate-600">{p.note}</div> : null}
@@ -451,7 +530,7 @@ export default function PlanView() {
                 {/* 展开面板：预测详情 + 完成比例拖动 + 延期 */}
                 {isExpanded ? (
                   <div className="anim-fade-in mt-3 border-t border-white/[0.06] pt-3">
-                    {fc ? (
+                    {fc && (p.planType ?? 'phase') === 'phase' ? (
                       <>
                         <div className="mb-2 flex items-center gap-3 text-[11px]">
                           <div className="flex-1">
@@ -496,24 +575,26 @@ export default function PlanView() {
                         </div>
                       </>
                     ) : null}
-                    {/* 完成比例拖动（半完成管理） */}
-                    <div className="mt-2 flex items-center gap-2 border-t border-white/[0.05] pt-2.5">
-                      <span className="w-16 shrink-0 text-[11px] text-slate-500">完成比例</span>
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        step={5}
-                        value={Math.round((p.completionRatio ?? (done ? 1 : 0)) * 100)}
-                        className="flex-1"
-                        onChange={(e) => {
-                          void window.api.updatePlanProgress(p.id, Number(e.target.value) / 100).then(() => void load())
-                        }}
-                      />
-                      <span className="w-10 text-right text-[11px] font-semibold text-neon-cyan">
-                        {Math.round((p.completionRatio ?? (done ? 1 : 0)) * 100)}%
-                      </span>
-                    </div>
+                    {/* 完成比例拖动（半完成管理，仅 phase） */}
+                    {(p.planType ?? 'phase') === 'phase' ? (
+                      <div className="mt-2 flex items-center gap-2 border-t border-white/[0.05] pt-2.5">
+                        <span className="w-16 shrink-0 text-[11px] text-slate-500">完成比例</span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          step={5}
+                          value={Math.round((p.completionRatio ?? (done ? 1 : 0)) * 100)}
+                          className="flex-1"
+                          onChange={(e) => {
+                            void window.api.updatePlanProgress(p.id, Number(e.target.value) / 100).then(() => void load())
+                          }}
+                        />
+                        <span className="w-10 text-right text-[11px] font-semibold text-neon-cyan">
+                          {Math.round((p.completionRatio ?? (done ? 1 : 0)) * 100)}%
+                        </span>
+                      </div>
+                    ) : null}
                     {/* 延期到指定日期 */}
                     {!done && !cancelled ? (
                       <div className="mt-1.5 flex items-center gap-2">

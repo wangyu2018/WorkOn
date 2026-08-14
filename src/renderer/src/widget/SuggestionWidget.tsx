@@ -2,7 +2,7 @@
  * 右下角悬浮窗（PRD F12 + 问题 7/12）：
  * 三态浮窗：collapsed（收起·环）、expanded（展开·完整面板）、notification（通知·环闪烁）
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import type { SuggestionQuestion } from '@shared/types'
 import { WORK_STATES } from '@shared/stateMeta'
 import { attentionGrade, focusScoreLine } from '@shared/focusMeta'
@@ -25,6 +25,13 @@ const SIZES = {
   full:    { w: 340, h: 520 },
 } as const
 const MAX_FULL_H = 760
+const APP_DRAG = { WebkitAppRegion: 'drag' } as unknown as CSSProperties
+const APP_NO_DRAG = { WebkitAppRegion: 'no-drag' } as unknown as CSSProperties
+
+function hexAlpha(hex: string, a: number): string {
+  const n = Math.round(Math.min(1, Math.max(0, a)) * 255).toString(16).padStart(2, '0')
+  return (hex.length === 7 ? hex : hex + 'F'.repeat(7 - hex.length)) + n
+}
 
 function restoreWidgetOpacity(): void {
   window.api.getSettings().then((s) => window.api.setWidgetOpacity(s.widgetOpacity)).catch(() => undefined)
@@ -49,12 +56,13 @@ export default function SuggestionWidget() {
   }, [meetingActive])
   const [widgetMode, setWidgetMode] = useState<WidgetMode>('mini')
   const [penetration, setPenetration] = useState(false)
+  const [accent, setAccent] = useState('#22D3EE')
   const [shimmer, setShimmer] = useState(false)
   const [welcome, setWelcome] = useState(false)
   const [askState, setAskState] = useState<AskState>('hidden')
   const [askText, setAskText] = useState('')
   const [askAnswer, setAskAnswer] = useState('')
-  const dragRef = useRef<{ x: number; y: number } | null>(null)
+  const resizeRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null)
   const blurTimer = useRef<number | null>(null)
   const prevAlert = useRef(false)
   const [petBubble, setPetBubble] = useState<string | null>(null)
@@ -75,17 +83,14 @@ export default function SuggestionWidget() {
 
   const setMode = (mode: WidgetMode) => {
     setWidgetMode(mode)
-    const s = SIZES[mode]
-    window.api.widgetResize(s.w, s.h)
-    window.api.setSettings({ widgetMode: mode })
+    window.api.widgetSetMode(mode)
   }
 
   useEffect(() => {
     window.api.getSettings().then((s) => {
       const mode = (s as { widgetMode?: WidgetMode }).widgetMode ?? 'mini'
       setWidgetMode(mode)
-      const sz = SIZES[mode] ?? SIZES.mini
-      window.api.widgetResize(sz.w, sz.h)
+      window.api.widgetSetMode(mode)
     }).catch(() => undefined)
 
     window.api.getSettings().then((s) => setWidgetCompact(!!(s as { widgetCompact?: boolean }).widgetCompact)).catch(() => undefined)
@@ -120,6 +125,13 @@ export default function SuggestionWidget() {
       }
     })
     window.api.getSettings().then((s) => setPenetration(!!(s as { widgetPenetration?: boolean }).widgetPenetration)).catch(() => undefined)
+    window.api.getSettings().then((s) => {
+      const a = (s as { widgetAccent?: string }).widgetAccent
+      if (a) setAccent(a)
+    }).catch(() => undefined)
+    const offAccent = window.api.onWidgetAccent((a) => {
+      if (typeof a === 'string' && a) setAccent(a)
+    })
 
     return () => {
       cleanup()
@@ -128,6 +140,7 @@ export default function SuggestionWidget() {
       offW()
       offMD()
       offME()
+      offAccent()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -145,9 +158,11 @@ export default function SuggestionWidget() {
   // 动态高度：问答/告警出现时窗口从底部往上顶
   useEffect(() => {
     const mode = widgetMode
-    const hasContent = !!(question || bpConfirm || meetingDetected || askState !== 'hidden' || petBubble)
+    const hasAlert = !!(question || bpConfirm || meetingDetected)
+    const hasContent = hasAlert || askState !== 'hidden' || petBubble
     if (mode === 'mini') {
-      if (hasContent) setMode('compact')
+      // 仅「需要用户回应的告警」才展开；闲聊气泡不顶开；穿透态保持不动
+      if (hasAlert && !penetration) setMode('compact')
       return
     }
     const base = SIZES[mode].h
@@ -156,28 +171,23 @@ export default function SuggestionWidget() {
     ) : 0
     const target = Math.min(mode === 'full' ? MAX_FULL_H : base + extra, base + extra)
     const sz = SIZES[mode]
-    window.api.widgetResize(sz.w, target)
-  }, [widgetMode, question, bpConfirm, meetingDetected, askState, petBubble])
+    window.api.widgetResizeTransient(sz.w, target)
+  }, [widgetMode, question, bpConfirm, meetingDetected, askState, petBubble, penetration])
 
-  // 拖拽
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!dragRef.current) return
-      const dx = e.clientX - dragRef.current.x
-      const dy = e.clientY - dragRef.current.y
-      if (dx || dy) {
-        window.api.dragWidget(dx, dy)
-        dragRef.current = { x: e.clientX, y: e.clientY }
-      }
-    }
-    const onUp = () => { dragRef.current = null }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-  }, [])
+  // 右下角拖拽改大小（pointer capture：鼠标移出窗口仍持续触发，避免缩放中断）
+  const onResizePointerDown = (e: ReactPointerEvent) => {
+    e.preventDefault(); e.stopPropagation()
+    const base = SIZES[widgetMode]
+    resizeRef.current = { x: e.clientX, y: e.clientY, w: base.w, h: base.h }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  const onResizePointerMove = (e: ReactPointerEvent) => {
+    if (!resizeRef.current) return
+    const w = Math.max(200, Math.min(640, Math.round(resizeRef.current.w + (e.clientX - resizeRef.current.x))))
+    const h = Math.max(120, Math.min(900, Math.round(resizeRef.current.h + (e.clientY - resizeRef.current.y))))
+    window.api.widgetResize(w, h)
+  }
+  const onResizePointerUp = () => { resizeRef.current = null }
 
   const state = presence?.state ?? 'idle'
   const meta = WORK_STATES[state] ?? WORK_STATES.idle
@@ -248,9 +258,9 @@ export default function SuggestionWidget() {
   if (widgetMode === 'mini') {
     const liveTitle = presence?.screens?.find((s) => s.screen === presence.mainScreen)?.title || meta.label
     return (
-      <div className="flex h-screen w-screen items-end justify-end p-3">
+      <div className="flex h-screen w-screen items-end justify-end">
         <div
-          className={`flex h-11 w-[210px] cursor-pointer items-center gap-2 rounded-2xl border border-white/10 bg-ink-900/80 px-3 shadow-glass backdrop-blur-md ${shimmer ? 'shimmer-ring' : ''}`}
+          className={`flex h-11 w-full cursor-pointer items-center gap-2 rounded-2xl border border-white/10 bg-ink-900/80 px-3 shadow-glass backdrop-blur-md ${shimmer ? 'shimmer-ring' : ''}`}
           onClick={() => setMode('compact')}
         >
           <div className="relative h-7 w-7 shrink-0">
@@ -263,8 +273,9 @@ export default function SuggestionWidget() {
           </div>
           <span className="min-w-0 flex-1 truncate text-xs text-slate-200">{liveTitle}</span>
           <button
-            className={`shrink-0 rounded p-1 text-[10px] ${penetration ? 'text-neon-cyan' : 'text-slate-500'} hover:bg-white/10`}
-            title={penetration ? '穿透中（桌搭页关闭）' : '开启鼠标穿透'}
+            className={`shrink-0 rounded p-1 text-[10px] ${penetration ? '' : 'text-slate-500'} hover:bg-white/10`}
+            style={{ color: penetration ? accent : undefined }}
+            title={penetration ? '穿透中（桌搭页关闭）' : '开启鼠标穿透（穿透后需在桌搭页关闭）'}
             onClick={(e) => { e.stopPropagation(); const v = !penetration; setPenetration(v); const api = window.api as Record<string, any>; if (typeof api.setWidgetPenetration === 'function') api.setWidgetPenetration(v); void window.api.setSettings({ widgetPenetration: v }) }}
           >⊘</button>
         </div>
@@ -285,20 +296,19 @@ export default function SuggestionWidget() {
     return (
       <div className="flex h-screen w-screen items-end justify-end p-3">
         <div className="glass relative flex w-[300px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-ink-900/80 shadow-glass backdrop-blur-md">
-          <div className="flex h-8 shrink-0 cursor-move items-center justify-between border-b border-white/5 px-3 select-none"
-               onMouseDown={(e) => (dragRef.current = { x: e.clientX, y: e.clientY })}>
+          <div className="flex h-8 shrink-0 cursor-move items-center justify-between border-b border-white/5 px-3 select-none" style={APP_DRAG}>
             <span className="text-[11px] font-medium tracking-wider text-slate-400">WorkOn</span>
             <div className="flex items-center gap-1">
-              <button className="rounded p-1 text-slate-500 hover:bg-white/10 hover:text-slate-300" title="展开" onClick={() => setMode('full')}>▴</button>
-              <button className={`rounded p-1 ${penetration ? 'text-neon-cyan' : 'text-slate-500'} hover:bg-white/10`} title="鼠标穿透"
+              <button className="rounded p-1 text-slate-500 hover:bg-white/10 hover:text-slate-300" style={APP_NO_DRAG} title="展开" onClick={() => setMode('full')}>▴</button>
+              <button className={`rounded p-1 ${penetration ? '' : 'text-slate-500'} hover:bg-white/10`} style={{ ...APP_NO_DRAG, color: penetration ? accent : undefined }} title={penetration ? '穿透中（桌搭页关闭）' : '开启鼠标穿透（穿透后需在桌搭页关闭）'}
                 onClick={() => { const v = !penetration; setPenetration(v); const api = window.api as Record<string, any>; if (typeof api.setWidgetPenetration === 'function') api.setWidgetPenetration(v); void window.api.setSettings({ widgetPenetration: v }) }}>⊘</button>
-              <button className="rounded p-1 text-slate-500 hover:bg-white/10 hover:text-slate-300" title="收起到最小" onClick={() => setMode('mini')}>▾</button>
+              <button className="rounded p-1 text-slate-500 hover:bg-white/10 hover:text-slate-300" style={APP_NO_DRAG} title="收起到最小" onClick={() => setMode('mini')}>▾</button>
             </div>
           </div>
           <div className="flex items-center gap-3 px-4 py-3">
             <div className="relative h-12 w-12 shrink-0">
               <svg viewBox="0 0 48 48" className="h-12 w-12 -rotate-90">
-                <circle cx="24" cy="24" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3.5" />
+                <circle cx="24" cy="24" r={R} fill="none" stroke={hexAlpha(accent, 0.18)} strokeWidth="3.5" />
                 <circle cx="24" cy="24" r={R} fill="none" stroke={meta.color} strokeWidth="3.5" strokeLinecap="round"
                   strokeDasharray={CIRC} strokeDashoffset={CIRC * (1 - focus / 100)} style={{ transition: 'stroke-dashoffset 400ms ease-out' }} />
               </svg>
@@ -310,7 +320,7 @@ export default function SuggestionWidget() {
               </div>
               <div className="mt-0.5 truncate text-xs text-slate-400">{presence?.screens?.find((s) => s.screen === presence.mainScreen)?.title || '等待采集…'}</div>
               {aiEnabled ? (
-                <button className="mt-1 rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-neon-cyan" title="问点什么…"
+                <button className="mt-1 rounded-lg p-1 text-slate-400 hover:bg-white/10" title="问点什么…"
                   onClick={() => setAskState(askState === 'hidden' ? 'input' : 'hidden')}>💬</button>
               ) : null}
             </div>
@@ -319,23 +329,34 @@ export default function SuggestionWidget() {
             {askState !== 'hidden' ? (
               <div className="transition-all">
                 {askState === 'input' ? (
-                  <input autoFocus className="w-full rounded-full border border-neon-cyan/30 bg-white/[0.06] px-3 py-1.5 text-xs text-slate-200 outline-none placeholder:text-slate-600"
+                  <input autoFocus className="w-full rounded-full border bg-white/[0.06] px-3 py-1.5 text-xs text-slate-200 outline-none placeholder:text-slate-600" style={{ borderColor: hexAlpha(accent, 0.35) }}
                     placeholder="问点什么…（回车发送）" value={askText}
                     onChange={(e) => { setAskText(e.target.value); if (blurTimer.current) window.clearTimeout(blurTimer.current) }}
                     onKeyDown={(e) => { if (e.key === 'Enter') void submitAsk(); if (e.key === 'Escape') setAskState('hidden') }}
                     onBlur={onAskBlur} />
                 ) : askState === 'thinking' ? (
                   <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-400">
-                    <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-neon-cyan" />思考中…
+                    <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full" style={{ background: accent }} />思考中…
                   </div>
                 ) : (
-                  <div className="max-h-20 overflow-hidden rounded-xl rounded-bl-sm border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-2 text-xs leading-relaxed text-neon-cyan">{askAnswer}</div>
+                  <div className="max-h-20 overflow-hidden rounded-xl rounded-bl-sm border px-3 py-2 text-xs leading-relaxed" style={{ borderColor: hexAlpha(accent, 0.2), background: hexAlpha(accent, 0.1), color: accent }}>{askAnswer}</div>
                 )}
               </div>
             ) : null}
             {petBubble && !widgetCompact && (
-              <div className="rounded-xl rounded-bl-sm border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-2 text-xs text-neon-cyan">🐾 {petBubble}</div>
+              <div className="rounded-xl rounded-bl-sm border px-3 py-2 text-xs" style={{ borderColor: hexAlpha(accent, 0.2), background: hexAlpha(accent, 0.1), color: accent }}>🐾 {petBubble}</div>
             )}
+          </div>
+          <div
+            className="absolute bottom-0 right-0 z-20 h-6 w-6 cursor-nwse-resize rounded-bl-xl transition-colors hover:bg-white/10"
+            onPointerDown={onResizePointerDown}
+            onPointerMove={onResizePointerMove}
+            onPointerUp={onResizePointerUp}
+            title="拖动改变大小"
+          >
+            <svg viewBox="0 0 24 24" className="h-6 w-6" style={{ color: 'rgba(148,163,184,0.9)' }}>
+              <path d="M24 0 L24 24 L0 24" fill="none" stroke="currentColor" strokeWidth="2" />
+            </svg>
           </div>
         </div>
       </div>
@@ -349,22 +370,25 @@ export default function SuggestionWidget() {
         {/* 拖动区 */}
         <div
           className="flex h-9 shrink-0 cursor-move items-center justify-between border-b border-white/5 px-3 select-none"
-          onMouseDown={(e) => (dragRef.current = { x: e.clientX, y: e.clientY })}
+          style={APP_DRAG}
         >
           <span className="text-xs font-medium tracking-wider text-slate-400">WorkOn</span>
           <div className="flex items-center gap-1">
             <button
-              className={`rounded p-1 ${penetration ? 'text-neon-cyan' : 'text-slate-500'} hover:bg-white/10`}
+              className={`rounded p-1 ${penetration ? '' : 'text-slate-500'} hover:bg-white/10`}
+              style={{ ...APP_NO_DRAG, color: penetration ? accent : undefined }}
               onClick={() => { const v = !penetration; setPenetration(v); const api = window.api as Record<string, any>; if (typeof api.setWidgetPenetration === 'function') api.setWidgetPenetration(v); void window.api.setSettings({ widgetPenetration: v }) }}
-              title="鼠标穿透"
+              title={penetration ? '穿透中（桌搭页关闭）' : '开启鼠标穿透（穿透后需在桌搭页关闭）'}
             >⊘</button>
             <button
               className="rounded p-1 text-slate-500 hover:bg-white/10 hover:text-slate-300"
+              style={APP_NO_DRAG}
               onClick={() => setMode('mini')}
               title="收起"
             >▾</button>
             <button
               className="rounded p-1 text-slate-500 hover:bg-white/10 hover:text-slate-300"
+              style={APP_NO_DRAG}
               onClick={() => window.api.toggleWidget()}
               title="隐藏悬浮窗"
             >
@@ -412,14 +436,14 @@ export default function SuggestionWidget() {
               {presence?.screens?.find((s) => s.screen === presence.mainScreen)?.title || '等待采集…'}
             </div>
             {presence && presence.continuousFocusSec > 60 && showFocusMinutes && (
-              <div className="mt-0.5 text-xs text-neon-cyan">
+              <div className="mt-0.5 text-xs" style={{ color: accent }}>
                 已专注 {Math.round(presence.continuousFocusSec / 60)} 分钟
               </div>
             )}
           </div>
           {aiEnabled ? (
             <button
-              className="shrink-0 rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-neon-cyan"
+              className="shrink-0 rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/10"
               title="问点什么…"
               onClick={() => setAskState(askState === 'hidden' ? 'input' : 'hidden')}
             >
@@ -434,7 +458,8 @@ export default function SuggestionWidget() {
             {askState === 'input' ? (
               <input
                 autoFocus
-                className="w-full rounded-full border border-neon-cyan/30 bg-white/[0.06] px-3 py-1.5 text-xs text-slate-200 outline-none placeholder:text-slate-600"
+                className="w-full rounded-full border bg-white/[0.06] px-3 py-1.5 text-xs text-slate-200 outline-none placeholder:text-slate-600"
+                style={{ borderColor: hexAlpha(accent, 0.35) }}
                 placeholder="问点什么…（回车发送）"
                 value={askText}
                 onChange={(e) => {
@@ -449,11 +474,11 @@ export default function SuggestionWidget() {
               />
             ) : askState === 'thinking' ? (
               <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-400">
-                <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-neon-cyan" />
+                <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full" style={{ background: accent }} />
                 思考中…
               </div>
             ) : (
-              <div className="max-h-20 overflow-hidden rounded-xl rounded-bl-sm border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-2 text-xs leading-relaxed text-neon-cyan">
+              <div className="max-h-20 overflow-hidden rounded-xl rounded-bl-sm border px-3 py-2 text-xs leading-relaxed" style={{ borderColor: hexAlpha(accent, 0.2), background: hexAlpha(accent, 0.1), color: accent }}>
                 {askAnswer}
               </div>
             )}
@@ -462,7 +487,7 @@ export default function SuggestionWidget() {
 
         {/* 桌宠气泡 */}
         {petBubble && !widgetCompact && (
-          <div className="mx-3 mb-2 rounded-xl rounded-bl-sm border border-neon-cyan/20 bg-neon-cyan/10 px-3 py-2 text-xs text-neon-cyan">
+          <div className="mx-3 mb-2 rounded-xl rounded-bl-sm border px-3 py-2 text-xs" style={{ borderColor: hexAlpha(accent, 0.2), background: hexAlpha(accent, 0.1), color: accent }}>
             🐾 {petBubble}
           </div>
         )}
@@ -604,13 +629,13 @@ export default function SuggestionWidget() {
                       className="flex-1 rounded-lg bg-neon-green/20 py-1.5 text-xs text-neon-green transition-colors hover:bg-neon-green/30"
                       onClick={() => answer('yes')}
                     >
-                      确认
+                      是
                     </button>
                     <button
                       className="flex-1 rounded-lg bg-white/5 py-1.5 text-xs text-slate-400 transition-colors hover:bg-white/10"
                       onClick={() => answer('no')}
                     >
-                      否定
+                      不是
                     </button>
                   </div>
                 </>
@@ -625,6 +650,18 @@ export default function SuggestionWidget() {
           ) : null}
         </div>
 
+        {/* 右下角缩放手柄 */}
+        <div
+          className="absolute bottom-0 right-0 z-20 h-6 w-6 cursor-nwse-resize rounded-bl-xl transition-colors hover:bg-white/10"
+          onPointerDown={onResizePointerDown}
+          onPointerMove={onResizePointerMove}
+          onPointerUp={onResizePointerUp}
+          title="拖动改变大小"
+        >
+          <svg viewBox="0 0 24 24" className="h-6 w-6" style={{ color: 'rgba(148,163,184,0.9)' }}>
+            <path d="M24 0 L24 24 L0 24" fill="none" stroke="currentColor" strokeWidth="2" />
+          </svg>
+        </div>
       </div>
     </div>
   )

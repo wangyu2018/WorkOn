@@ -37,7 +37,18 @@ export function buildMergedTrail(records: ActivityRecord[], date: string): Merge
   const buckets: Bucket[] = []
 
   for (const r of sorted) {
-    if (!cur || r.ts - cur.endTs > SEG_GAP_MS) {
+    // 切段条件：时间 gap 超 1 分钟，或主屏（active）应用发生变化（短切换独立成段，与悬浮窗一致）
+    let screenAppChanged = false
+    if (cur && r.active) {
+      const list = cur.byScreen.get(r.screen) ?? []
+      for (let i = list.length - 1; i >= 0; i--) {
+        if (list[i].active) {
+          if (list[i].app !== r.app) screenAppChanged = true
+          break
+        }
+      }
+    }
+    if (!cur || r.ts - cur.endTs > SEG_GAP_MS || screenAppChanged) {
       if (cur) buckets.push(cur)
       cur = { startTs: r.ts, endTs: r.ts, byScreen: new Map() }
     }

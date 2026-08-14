@@ -1,7 +1,7 @@
 /**
  * IPC 注册：window.api 的全部通道
  */
-import { ipcMain, dialog, app, screen } from 'electron'
+import { ipcMain, dialog, app } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import type {
@@ -39,7 +39,8 @@ import {
 import { listAccessLogs, clearAccessLogs } from './desensitize'
 import { ACHIEVEMENT_DEFS } from '@shared/achievements'
 import {
-  mainWindow, widgetWindow, petWindow, toggleWidget, togglePet,
+  mainWindow, widgetWindow, petWindow, toggleWidget, togglePet, setWidgetPenetration,
+  setWidgetMode, resizeWidget, resizeWidgetTransient, moveWidgetBy,
   setPetIgnoreMouse, setPetModal, createMainWindow, createPetWindow, closePetWindow, sendTo
 } from './windows'
 import type { UserAnalysis, MergedTrail, CustomCategory, UserHabits, Achievement, UserType, ReportTemplate, CategoryInference, SegmentPlanLink } from '@shared/types'
@@ -82,6 +83,13 @@ export function registerIpc(): void {
     if (patch.petCharacter) bus.setPet({ characterId: patch.petCharacter })
     if (patch.widgetOpacity !== undefined && widgetWindow && !widgetWindow.isDestroyed()) {
       widgetWindow.setOpacity(patch.widgetOpacity)
+    }
+    if (patch.widgetPenetration !== undefined) {
+      setWidgetPenetration(patch.widgetPenetration)
+      refreshTray()
+    }
+    if (patch.widgetAccent !== undefined) {
+      sendTo('widget', 'widget:accent', patch.widgetAccent)
     }
     if (patch.launchAtLogin !== undefined) {
       import('electron').then(({ app }) => app.setLoginItemSettings({ openAtLogin: patch.launchAtLogin! }))
@@ -395,6 +403,9 @@ export function registerIpc(): void {
       })
       bus.setPet({ message: '好的，我会帮你记录这段时间~' })
       sendTo('main', 'plan-updated')
+    } else {
+      // 用户拒绝：标记已确认，当天不再重复询问该计划
+      updateIn<PlanItem>('plans', planId, { confirmedFromQA: true })
     }
     return plan
   })
@@ -557,30 +568,19 @@ export function registerIpc(): void {
     if (widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.setOpacity(v)
   })
   ipcMain.on('widget:penetration', (_e, v: boolean) => {
-    if (widgetWindow && !widgetWindow.isDestroyed()) {
-      widgetWindow.setIgnoreMouseEvents(v, v ? { forward: true } : undefined)
-    }
+    setWidgetPenetration(v)
   })
   ipcMain.on('widget:resize', (_e, w: number, h: number) => {
-    if (widgetWindow && !widgetWindow.isDestroyed()) {
-      const [x, y] = widgetWindow.getPosition()
-      const [, curH] = widgetWindow.getSize()
-      widgetWindow.setSize(w, h)
-      const wa = screen.getPrimaryDisplay().workArea
-      const ny = Math.min(Math.max(y + curH - h, wa.y), Math.max(wa.y, wa.y + wa.height - h))
-      const nx = Math.min(Math.max(x, wa.x), Math.max(wa.x, wa.x + wa.width - w))
-      widgetWindow.setPosition(Math.round(nx), Math.round(ny))
-    }
+    resizeWidget(w, h)
+  })
+  ipcMain.on('widget:resizeTransient', (_e, w: number, h: number) => {
+    resizeWidgetTransient(w, h)
+  })
+  ipcMain.on('widget:setMode', (_e, mode: 'mini' | 'compact' | 'full') => {
+    setWidgetMode(mode)
   })
   ipcMain.on('widget:drag', (_e, dx: number, dy: number) => {
-    if (widgetWindow && !widgetWindow.isDestroyed()) {
-      const [x, y] = widgetWindow.getPosition()
-      const [w, h] = widgetWindow.getSize()
-      const wa = screen.getPrimaryDisplay().workArea
-      const nx = Math.min(Math.max(x + dx, wa.x), Math.max(wa.x, wa.x + wa.width - w))
-      const ny = Math.min(Math.max(y + dy, wa.y), Math.max(wa.y, wa.y + wa.height - h))
-      widgetWindow.setPosition(Math.round(nx), Math.round(ny))
-    }
+    moveWidgetBy(dx, dy)
   })
 
   // ── OCR 资源管理 ──

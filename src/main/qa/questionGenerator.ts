@@ -19,7 +19,7 @@ const QUESTION_TEMPLATES: Record<string, string> = {
   focus: '你已连续专注很久，要不要开启番茄休息提醒？',
   slack: '最近摸鱼时间有点长，需要我提醒你回到工作吗？',
   meeting: '会议中，需要我帮你记录会议时长吗？',
-  default: '当前这种状态（{ctx}）是你的常态工作方式吗？'
+  default: '你现在的工作节奏是你的常态吗？'
 }
 
 /** persona_gap 补充问题池（画像字段缺失时补问，Yes/No 可答） */

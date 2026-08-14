@@ -15,6 +15,8 @@ const CHARACTER = {
   tagline: 'VRM 实时 3D 搭子'
 } as const
 
+const WIDGET_ACCENTS = ['#22D3EE', '#A78BFA', '#34D399', '#FBBF24', '#F472B6'] as const
+
 function PadBar({ label, value, color }: { label: string; value: number; color: string }) {
   // PAD -1..1 → 0..100
   const pct = Math.round(((value + 1) / 2) * 100)
@@ -613,6 +615,35 @@ export default function BuddyStage() {
                 value={settings.widgetOpacity}
                 onChange={(e) => patch({ widgetOpacity: parseFloat(e.target.value) })}
               />
+            </div>
+            <div className="-mx-1 rounded-lg px-1 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12px] text-slate-300">悬浮窗颜色</div>
+                  <div className="mt-0.5 text-[10px] text-slate-500">状态环与气泡的强调色</div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {WIDGET_ACCENTS.map((c) => {
+                    const cur = (settings.widgetAccent ?? '#22D3EE').toUpperCase()
+                    return (
+                      <button
+                        key={c}
+                        className={`h-5 w-5 rounded-full border transition-transform ${cur === c ? 'scale-110 border-white' : 'border-white/20 hover:scale-105'}`}
+                        style={{ background: c }}
+                        onClick={() => void patch({ widgetAccent: c })}
+                        title={c}
+                      />
+                    )
+                  })}
+                  <input
+                    type="color"
+                    className="h-5 w-5 cursor-pointer rounded-full border border-white/20 bg-transparent p-0"
+                    value={settings.widgetAccent ?? '#22D3EE'}
+                    onChange={(e) => void patch({ widgetAccent: e.target.value })}
+                    title="自定义颜色"
+                  />
+                </div>
+              </div>
             </div>
             <div className="-mx-1 flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-white/[0.03]">
               <div className="min-w-0 flex-1">

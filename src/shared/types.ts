@@ -130,6 +130,7 @@ export interface TimeEntry {
 }
 
 export type PlanStatus = 'planned' | 'in_progress' | 'partial' | 'done' | 'delayed' | 'cancelled'
+export type PlanType = 'reminder' | 'phase' | 'task'
 export type PlanSource = 'manual' | 'oner' | 'import' | 'qa-confirm'
 export type PlanCategory = string // 内置分类 id（ai-dev/work-customer/leader/personal/other）或自定义分类 id
 
@@ -143,6 +144,10 @@ export interface PlanItem {
   durationMin?: number
   status: PlanStatus
   source: PlanSource
+  /** 计划类型：reminder=提醒(里程碑) / phase=持续工作(默认) / task=待办 */
+  planType?: PlanType
+  /** reminder 是否已触发（触发一次后不再重复弹通知） */
+  fired?: boolean
   /** 完成比例 0-1（拖动设置；1=完成） */
   completionRatio?: number
   /** 延期目标日期与原因 */
@@ -541,6 +546,8 @@ export interface ProfileReference { layer: PrivacyLevel; field: string; logId: s
 
 // ───────────────────────── 设置 ─────────────────────────
 
+export type WidgetMode = 'mini' | 'compact' | 'full'
+
 export interface AppSettings {
   theme: 'cyan' | 'violet' | 'green' | 'amber' // 强调色主题，默认 cyan
   appearanceMode: 'light' | 'dark' | 'auto' // 亮暗模式，默认 dark
@@ -598,9 +605,13 @@ export interface AppSettings {
   privacyExcludedApps: string[] // 隐私快标：不截屏/不OCR/不记标题的应用
   workChains: string[][] // 已确认的作业链路（应用切换序列，如 ["WeChat","Excel","Browser"]）
   widgetVisible: boolean
-  widgetMode: 'mini' | 'compact' | 'full'
+  widgetMode: WidgetMode
   widgetOpacity: number // 0.2-1
   widgetPenetration: boolean
+  widgetAccent?: string // 悬浮窗强调色（hex，如 #22D3EE）；空 = 默认 cyan
+  widgetPosX?: number // 悬浮窗位置 X（-1 = 未保存）
+  widgetPosY?: number // 悬浮窗位置 Y
+  widgetSizes?: Partial<Record<WidgetMode, { w: number; h: number }>> // 每个模式的自定义尺寸
   launchAtLogin: boolean
   slackHideSec: number // 持续摸鱼自动隐身阈值，默认 180
   slackAutoHide: boolean // 启用摸鱼自动隐身，默认开
@@ -678,6 +689,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   widgetMode: 'mini',
   widgetOpacity: 0.92,
   widgetPenetration: false,
+  widgetPosX: -1,
+  widgetPosY: -1,
   launchAtLogin: false,
   slackHideSec: 180,
   slackAutoHide: true,

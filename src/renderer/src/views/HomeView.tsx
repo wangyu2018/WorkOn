@@ -35,22 +35,14 @@ const fmtMin = (min?: number) =>
 const LABEL_W = 80
 const LANE_W = 760
 
-// 双区淡框（"不明显"：淡底 + 1px 极淡描边 + 左上角小标签，无阴影无粗边）
-const ZONE_TODAY = {
-  background: 'rgba(15,23,42,0.028)',
-  border: '1px solid rgba(148,163,184,0.28)',
-  borderRadius: 10,
-  padding: '8px 8px 4px',
-  position: 'relative' as const,
-}
-const ZONE_PLAN = {
-  background: 'rgba(124,158,255,0.045)',
-  border: '1px solid rgba(124,158,255,0.30)',
-  borderRadius: 10,
-  padding: '8px 8px 4px',
-  position: 'relative' as const,
-}
-const ZONE_LABEL_STYLE = { fontSize: 11, fontWeight: 600, letterSpacing: 0.3 } as const
+// 时间轴缩放档位：从全天到 1 小时
+const ZOOM_STOPS = [
+  { label: '全天', span: 1440 },
+  { label: '12h', span: 720 },
+  { label: '6h', span: 360 },
+  { label: '3h', span: 180 },
+  { label: '1h', span: 60 },
+] as const
 
 function makeDragImage(app: string, ma?: string | null): HTMLDivElement {
   const el = document.createElement('div')
@@ -67,9 +59,9 @@ function makeDragImage(app: string, ma?: string | null): HTMLDivElement {
 
 function STATE_COLOR_OF(seg: TrailSegment) {
   const s = senseOf(seg.mainState)
-  if (s === 'work') return { bg: '#7c9eff22', border: '#7c9eff44', text: '#4c6ed9', band: '#7c9eff' }
-  if (s === 'slack') return { bg: '#ff7c7c22', border: '#ff7c7c44', text: '#d94c4c', band: '#ff7c7c' }
-  return { bg: '#94a3b822', border: '#94a3b844', text: '#64748b', band: '#94a3b8' }
+  if (s === 'work') return { fillVar: '--tl-work-fill', strokeVar: '--tl-work-stroke', textVar: '--tl-work-text' }
+  if (s === 'slack') return { fillVar: '--tl-slack-fill', strokeVar: '--tl-slack-stroke', textVar: '--tl-slack-text' }
+  return { fillVar: '--tl-other-fill', strokeVar: '--tl-other-stroke', textVar: '--tl-other-text' }
 }
 
 type SenseKind = 'work' | 'slack' | 'other'
@@ -80,21 +72,21 @@ function senseOf(state: WorkState): SenseKind {
   return 'other'
 }
 
-interface StarNode { item: GraphItem; idx: number; x: number; y: number; size: number; isCore: boolean }
+interface StarNode { item: GraphItem; key: string; x: number; y: number; size: number; isCore: boolean }
 interface StarConnection { x1: number; y1: number; x2: number; y2: number }
 
 function computeStarLayout(filtered: GraphItem[], allItems: GraphItem[]): { nodes: StarNode[]; connections: StarConnection[] } {
   if (filtered.length === 0) return { nodes: [], connections: [] }
   const sorted = [...filtered].sort((a, b) => b.seg.durationMin - a.seg.durationMin)
   const maxDur = sorted[0].seg.durationMin || 1
-  const nodes: StarNode[] = [{ item: sorted[0], idx: allItems.indexOf(sorted[0]), x: 50, y: 50, size: 56, isCore: true }]
+  const nodes: StarNode[] = [{ item: sorted[0], key: sorted[0].seg.mainApp, x: 50, y: 50, size: 56, isCore: true }]
   const children = sorted.slice(1)
   const ring1R = 32; const ring1N = Math.min(children.length, 6); const ring2R = 44
   children.forEach((item, i) => {
     const angle = i < ring1N ? (i / ring1N) * 2 * Math.PI - Math.PI / 2 : ((i - ring1N) / Math.max(1, children.length - ring1N)) * 2 * Math.PI - Math.PI / 2 + 0.35
     const radius = i < ring1N ? ring1R : ring2R
     const durRatio = item.seg.durationMin / maxDur
-    nodes.push({ item, idx: allItems.indexOf(item), x: 50 + radius * Math.cos(angle), y: 50 + radius * Math.sin(angle), size: Math.max(20, Math.round(24 + durRatio * 14)), isCore: false })
+    nodes.push({ item, key: item.seg.mainApp, x: 50 + radius * Math.cos(angle), y: 50 + radius * Math.sin(angle), size: Math.max(20, Math.round(24 + durRatio * 14)), isCore: false })
   })
   const connections: StarConnection[] = nodes.slice(1).map(n => ({ x1: 50, y1: 50, x2: n.x, y2: n.y }))
   return { nodes, connections }
@@ -126,19 +118,18 @@ export default function HomeView() {
   const [trail, setTrail] = useState<MergedTrail | null>(null)
   const [items, setItems] = useState<GraphItem[]>([])
   const [plans, setPlans] = useState<PlanItem[]>([])
-  const [dragFrom, setDragFrom] = useState<{ idx: number; col: Column } | null>(null)
+  const [dragFrom, setDragFrom] = useState<{ app: string; col: Column } | null>(null)
   const [hoverCol, setHoverCol] = useState<Column | null>(null)
   const [tlHover, setTlHover] = useState<{ seg: TrailSegment; rect: DOMRect } | null>(null)
-  const WORK_START = 9 * 60
-  const WORK_END = 18 * 60
-  const [rangeLo, setRangeLo] = useState(WORK_START)
-  const [rangeHi, setRangeHi] = useState(WORK_END)
-  const [starHover, setStarHover] = useState<number | null>(null)
-  const [dragSeg, setDragSeg] = useState<number | null>(null)
-  const [planSegments, setPlanSegments] = useState<Map<number, string>>(new Map())
   const [nowMin, setNowMin] = useState(() => {
     const d = new Date(); return d.getHours() * 60 + d.getMinutes()
   })
+  // 默认以「现在」为核心居中，前后各 3 小时
+  const [rangeLo, setRangeLo] = useState(() => Math.max(0, nowMin - 180))
+  const [rangeHi, setRangeHi] = useState(() => Math.min(1440, nowMin + 180))
+  const [starHover, setStarHover] = useState<string | null>(null)
+  const [dragSeg, setDragSeg] = useState<number | null>(null)
+  const [planSegments, setPlanSegments] = useState<Map<number, string>>(new Map())
   const [dragTs, setDragTs] = useState<number | null>(null)
   const [dragOverLane, setDragOverLane] = useState<'today' | string | null>(null)
 
@@ -151,7 +142,8 @@ export default function HomeView() {
       const p = await window.api?.listPlans?.(dateKey(Date.now())) as PlanItem[] | undefined
       if (t) {
         setTrail(t)
-        const segs = t.segments.filter((s) => !s.glance && s.durationMin > 0)
+        // 只保留「有实际工作」的段：过滤短切换(<30s glance)、前台无操作(idle/away)
+        const segs = t.segments.filter((s) => s.durationMin > 0 && !s.glance && s.mainState !== 'idle' && s.mainState !== 'away')
         // 主屏 + 副屏都进今日池：副屏重要工作（如 opencode）也显示为独立行，双屏并行一眼看清
         const list: GraphItem[] = []
         for (const s of segs) {
@@ -192,9 +184,11 @@ export default function HomeView() {
         }, 2000 - (now - lastPresenceRefresh.current))
       }
     })
+    const offPlan = window.api?.onPlanUpdated?.(() => refresh())
     return () => {
       clearInterval(poll)
       off?.()
+      offPlan?.()
       if (trailingRefreshTimer.current) clearTimeout(trailingRefreshTimer.current)
     }
   }, [refresh])
@@ -202,8 +196,22 @@ export default function HomeView() {
   const totalWorkMin = useMemo(() => items.filter((i) => i.column === 'work').reduce((a, i) => a + i.seg.durationMin, 0), [items])
   const totalLifeMin = useMemo(() => items.filter((i) => i.column === 'life').reduce((a, i) => a + i.seg.durationMin, 0), [items])
   const insightText = useMemo(() => (trail ? insight(trail) : ''), [trail])
-  const workChart = useMemo(() => computeStarLayout(items.filter(i => i.column === 'work'), items), [items])
-  const lifeChart = useMemo(() => computeStarLayout(items.filter(i => i.column === 'life'), items), [items])
+
+  // 星图按应用聚合：一个应用一个节点（累计时长），不用时间段
+  const starItems = useMemo(() => {
+    const m = new Map<string, GraphItem>()
+    for (const i of items) {
+      const ex = m.get(i.seg.mainApp)
+      if (ex) {
+        ex.seg = { ...ex.seg, durationMin: (ex.seg.durationMin ?? 0) + (i.seg.durationMin ?? 0) }
+      } else {
+        m.set(i.seg.mainApp, { ...i, seg: { ...i.seg } })
+      }
+    }
+    return [...m.values()]
+  }, [items])
+  const workChart = useMemo(() => computeStarLayout(starItems.filter(i => i.column === 'work'), starItems), [starItems])
+  const lifeChart = useMemo(() => computeStarLayout(starItems.filter(i => i.column === 'life'), starItems), [starItems])
 
   const startMinOf = (seg: TrailSegment) => {
     const d = new Date(seg.startTs)
@@ -231,6 +239,10 @@ export default function HomeView() {
     [items, planSegments]
   )
 
+  // 计划三类型分流：reminder 走里程碑轨道，phase 走泳道，task 不显示
+  const reminders = useMemo(() => plans.filter(p => (p.planType ?? 'phase') === 'reminder' && p.startMin != null), [plans])
+  const phasePlans = useMemo(() => plans.filter(p => (p.planType ?? 'phase') === 'phase'), [plans])
+
   const ruler = useMemo(() => {
     const lo = rangeLo, hi = rangeHi
     const PAD = 8, W = LANE_W, span = hi - lo || 1
@@ -246,6 +258,7 @@ export default function HomeView() {
     const ma = (seg as any).microActivity
     const c = STATE_COLOR_OF(seg)
     const ghost = dragTs === seg.startTs
+    const glance = !!seg.glance
     return (
       <div key={seg.startTs}
         draggable
@@ -259,28 +272,49 @@ export default function HomeView() {
         onDragEnd={() => { setDragTs(null); setDragOverLane(null) }}
         onMouseEnter={e => !dragTs && setTlHover({ seg, rect: e.currentTarget.getBoundingClientRect() })}
         onMouseLeave={() => setTlHover(null)}
-        title={`${app}${ma ? ' · ' + ma : ''} · ${fmtTime(seg.startTs)}`}
-        style={{ position: 'absolute', left, width, top: 3, bottom: 3,
-                 background: ghost ? 'rgba(148,163,184,0.12)' : c.band,
-                 border: ghost ? '1px dashed #94a3b8' : 'none',
-                 borderRadius: 5,
+        title={`${app}${ma ? ' · ' + ma : ''} · ${fmtTime(seg.startTs)}${glance ? ' · 短切换' : ''}`}
+        style={{ position: 'absolute', left, width, top: 4, bottom: 4,
+                 background: ghost ? 'rgba(136,135,128,0.10)' : `var(${c.fillVar})`,
+                 border: ghost ? '1px dashed var(--tl-other-stroke)' : `0.5px solid var(${c.strokeVar})`,
+                 borderRadius: 6,
                  cursor: dragTs ? 'grabbing' : 'grab',
-                 opacity: ghost ? 0.35 : 1, transition: 'opacity .1s' }} />
+                 opacity: ghost ? 0.35 : glance ? 0.35 : 1,
+                 transition: 'opacity .12s, box-shadow .12s',
+                 boxShadow: ghost ? 'none' : 'inset 0 1px 0 rgba(255,255,255,0.25)',
+                 display: 'flex', alignItems: 'center', justifyContent: 'center',
+                 overflow: 'hidden' }}
+      >
+        {!ghost && !glance && width > 44 && (
+          <span style={{
+            fontSize: 11, fontWeight: 500,
+            color: `var(${c.textVar})`,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            padding: '0 4px', pointerEvents: 'none',
+          }}>
+            {app.length > Math.floor(width / 7) ? app.slice(0, Math.floor(width / 7) - 1) + '…' : app}
+          </span>
+        )}
+      </div>
     )
   }, [setTlHover, dragTs])
 
   const rangeRef = useRef<HTMLDivElement>(null)
   const hourTicks = useMemo(() => {
     const arr: number[] = []
-    for (let t = rangeLo; t <= rangeHi; t += 60) arr.push(t)
+    const start = Math.ceil(rangeLo / 60) * 60
+    for (let t = start; t <= rangeHi; t += 60) arr.push(t)
     return arr
   }, [rangeLo, rangeHi])
   const fmtHHMM = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+  const panRef = useRef<{ x: number; lo: number; hi: number } | null>(null)
+
+  // 范围手柄：pointer capture，拖动调整起止时间
   const onHandleDown = (which: 'lo' | 'hi') => (e: React.PointerEvent) => {
     e.preventDefault(); e.stopPropagation()
     const el = rangeRef.current; if (!el) return
     const rect = el.getBoundingClientRect()
     const lo0 = rangeLo, hi0 = rangeHi
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     const move = (ev: PointerEvent) => {
       const ratio = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width))
       const m = Math.round(lo0 + ratio * (hi0 - lo0))
@@ -291,6 +325,116 @@ export default function HomeView() {
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
   }
+
+  // 时间轴平移：在刻度条空白处按住拖动，整体平移可视时间范围
+  const onRulerPointerDown = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest('[data-handle]')) return
+    e.preventDefault()
+    const el = rangeRef.current; if (!el) return
+    el.setPointerCapture(e.pointerId)
+    panRef.current = { x: e.clientX, lo: rangeLo, hi: rangeHi }
+  }
+  const onRulerPointerMove = (e: React.PointerEvent) => {
+    if (!panRef.current) return
+    const el = rangeRef.current; if (!el) return
+    const rect = el.getBoundingClientRect()
+    const span = panRef.current.hi - panRef.current.lo
+    const dt = -((e.clientX - panRef.current.x) / rect.width) * span
+    let lo = panRef.current.lo + dt
+    let hi = panRef.current.hi + dt
+    if (lo < 0) { lo = 0; hi = span }
+    if (hi > 1440) { hi = 1440; lo = 1440 - span }
+    setRangeLo(Math.round(lo))
+    setRangeHi(Math.round(hi))
+  }
+  const onRulerPointerUp = () => { panRef.current = null }
+
+  // 滚轮缩放：以鼠标位置为中心缩放时间范围
+  const onRulerWheel = (e: React.WheelEvent) => {
+    e.preventDefault()
+    const el = rangeRef.current; if (!el) return
+    const rect = el.getBoundingClientRect()
+    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
+    const anchor = rangeLo + ratio * (rangeHi - rangeLo)
+    const factor = e.deltaY < 0 ? 0.85 : 1.18
+    let lo = anchor - (anchor - rangeLo) * factor
+    let hi = anchor + (rangeHi - anchor) * factor
+    const minSpan = 60
+    if (hi - lo < minSpan) { lo = anchor - minSpan / 2; hi = anchor + minSpan / 2 }
+    if (hi - lo > 1440) { lo = 0; hi = 1440 }
+    if (lo < 0) { hi -= lo; lo = 0 }
+    if (hi > 1440) { lo -= (hi - 1440); hi = 1440 }
+    setRangeLo(Math.round(lo))
+    setRangeHi(Math.round(hi))
+  }
+
+  const overviewRef = useRef<HTMLDivElement>(null)
+  const overviewPanRef = useRef<{ x: number; lo: number; hi: number } | null>(null)
+
+  const clampRange = (lo: number, hi: number) => {
+    const span = hi - lo
+    if (span >= 1440) return { lo: 0, hi: 1440 }
+    let a = lo, b = hi
+    if (a < 0) { a = 0; b = span }
+    if (b > 1440) { b = 1440; a = 1440 - span }
+    return { lo: Math.round(a), hi: Math.round(b) }
+  }
+
+  // 缩放档位：以当前范围中心为锚，缩放到目标跨度
+  const zoomToSpan = (span: number) => {
+    const center = (rangeLo + rangeHi) / 2
+    const r = clampRange(center - span / 2, center + span / 2)
+    setRangeLo(r.lo)
+    setRangeHi(r.hi)
+  }
+
+  // 左右平移按钮：移动半个可视范围
+  const panBy = (dir: -1 | 1) => {
+    const span = rangeHi - rangeLo
+    const r = clampRange(rangeLo + (dir * span) / 2, rangeHi + (dir * span) / 2)
+    setRangeLo(r.lo)
+    setRangeHi(r.hi)
+  }
+
+  // 回到现在：让「现在」绿线居中
+  const centerOnNow = () => {
+    const span = rangeHi - rangeLo
+    const r = clampRange(nowMin - span / 2, nowMin + span / 2)
+    setRangeLo(r.lo)
+    setRangeHi(r.hi)
+  }
+
+  // 迷你地图（全天概览）：点击定位 + 拖动平移可视窗口
+  const onOverviewPointerDown = (e: React.PointerEvent) => {
+    e.preventDefault()
+    const el = overviewRef.current; if (!el) return
+    const rect = el.getBoundingClientRect()
+    el.setPointerCapture(e.pointerId)
+    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
+    const center = ratio * 1440
+    const span = rangeHi - rangeLo
+    let lo = center - span / 2
+    let hi = center + span / 2
+    if (lo < 0) { lo = 0; hi = span }
+    if (hi > 1440) { hi = 1440; lo = 1440 - span }
+    setRangeLo(Math.round(lo))
+    setRangeHi(Math.round(hi))
+    overviewPanRef.current = { x: e.clientX, lo, hi }
+  }
+  const onOverviewPointerMove = (e: React.PointerEvent) => {
+    if (!overviewPanRef.current) return
+    const el = overviewRef.current; if (!el) return
+    const rect = el.getBoundingClientRect()
+    const span = overviewPanRef.current.hi - overviewPanRef.current.lo
+    const dt = ((e.clientX - overviewPanRef.current.x) / rect.width) * 1440
+    let lo = overviewPanRef.current.lo + dt
+    let hi = overviewPanRef.current.hi + dt
+    if (lo < 0) { lo = 0; hi = span }
+    if (hi > 1440) { hi = 1440; lo = 1440 - span }
+    setRangeLo(Math.round(lo))
+    setRangeHi(Math.round(hi))
+  }
+  const onOverviewPointerUp = () => { overviewPanRef.current = null }
 
   const handleAssignPlan = useCallback(async (planId: string | null, startTs?: number) => {
     const ts = startTs ?? dragSeg
@@ -304,22 +448,19 @@ export default function HomeView() {
     setDragSeg(null)
   }, [dragSeg])
 
-  const moveItem = useCallback((idx: number, toCol: Column) => {
-    setItems((prev) => {
-      const next = [...prev]; const item = next[idx]
-      next[idx] = { ...item, column: toCol }
-      return next
-    })
+  const moveItem = useCallback((appKey: string, toCol: Column) => {
+    setItems((prev) => prev.map((i) => (i.seg.mainApp === appKey ? { ...i, column: toCol } : i)))
   }, [])
 
   const starDropProps = (col: Column) => ({
     onDragOver: (e: React.DragEvent) => { e.preventDefault(); setHoverCol(col) },
     onDragLeave: () => setHoverCol(null),
-    onDrop: () => { if (dragFrom && dragFrom.col !== col) moveItem(dragFrom.idx, col); setHoverCol(null); setDragFrom(null) }
+    onDrop: () => { if (dragFrom && dragFrom.col !== col) moveItem(dragFrom.app, col); setHoverCol(null); setDragFrom(null) }
   })
 
   const renderStarNode = (node: StarNode, isWork: boolean) => {
-    const isDragging = dragFrom?.idx === node.idx
+    const isDragging = dragFrom?.app === node.key
+    const isGlance = !!node.item.seg.glance
     const chroma = (() => {
       const s = senseOf(node.item.seg.mainState)
       if (s === 'work') return '124 158 255'
@@ -328,11 +469,11 @@ export default function HomeView() {
     })()
     return (
       <div
-        key={node.idx}
+        key={node.key}
         draggable
-        onDragStart={() => setDragFrom({ idx: node.idx, col: node.item.column })}
+        onDragStart={() => setDragFrom({ app: node.key, col: node.item.column })}
         onDragEnd={() => { setDragFrom(null); setHoverCol(null) }}
-        onMouseEnter={() => setStarHover(node.idx)}
+        onMouseEnter={() => setStarHover(node.key)}
         onMouseLeave={() => setStarHover(null)}
         className="absolute rounded-full transition-all duration-300 cursor-grab active:cursor-grabbing group"
         style={{
@@ -345,13 +486,13 @@ export default function HomeView() {
           boxShadow: node.isCore
             ? `0 0 12px rgb(${chroma}/0.7), 0 0 28px rgb(${chroma}/0.25)`
             : `0 0 6px rgb(${chroma}/0.4), 0 0 14px rgb(${chroma}/0.12)`,
-          opacity: isDragging ? 0.25 : 1,
+          opacity: isDragging ? 0.25 : isGlance ? 0.3 : 1,
           zIndex: node.isCore ? 10 : 5,
-          scale: starHover === node.idx ? '1.15' : '1',
+          scale: starHover === node.key ? '1.15' : '1',
           border: `1px solid rgb(${chroma}/0.3)`,
         }}>
 
-        {starHover === node.idx && (
+        {starHover === node.key && (
           <ActivityHoverCard a={{
             app: displayApp(node.item.seg.mainApp),
             title: node.item.seg.mainTitle ?? '',
@@ -379,130 +520,231 @@ export default function HomeView() {
       </section>
 
       {/* 时间轴 — 水平泳道 */}
-      <section className="glass-card hoverable" style={{ background: '#fff' }}>
+      <section className="glass-card">
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-base">⏱️</span>
-          <h3 className="text-[13px] font-semibold text-slate-800">时间轴</h3>
-          <span className="text-[10px] text-slate-400">{plans.length} 计划 · {fmtDur(items.reduce((a, i) => a + i.seg.durationMin, 0))}</span>
-        </div>
-          <div style={{ overflowX: 'auto', overflowY: 'visible', position: 'relative' }}>
-            <div className="relative" style={{ width: LABEL_W + LANE_W }}>
-            <div className="flex items-center mb-1.5">
-              <span style={{ width: LABEL_W }} className="shrink-0 text-[11px] text-slate-500 pl-2">范围 {fmtHHMM(rangeLo)}–{fmtHHMM(rangeHi)}</span>
-              <div ref={rangeRef} className="relative" style={{ width: LANE_W, height: 18, cursor: 'pointer' }}>
-                <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5" style={{ background: '#e2e8f0' }} />
-                {hourTicks.map(t => (
-                  <div key={t} className="absolute top-0 bottom-0" style={{ left: ruler.minToX(t) }}>
-                    <div className="w-px h-2" style={{ background: '#cbd5e1' }} />
-                    <span className="absolute top-2 left-1/2 -translate-x-1/2 text-[9px]" style={{ color: '#94a3b8' }}>{String(Math.floor(t / 60)).padStart(2, '0')}</span>
-                  </div>
-                ))}
-                <div onPointerDown={onHandleDown('lo')} className="absolute top-0 bottom-0 -ml-1 w-2 rounded cursor-ew-resize"
-                     style={{ left: ruler.minToX(rangeLo), background: '#7c9eff', boxShadow: '0 0 0 1px #fff' }} title="拖拽调整起始时间" />
-                <div onPointerDown={onHandleDown('hi')} className="absolute top-0 bottom-0 -ml-1 w-2 rounded cursor-ew-resize"
-                     style={{ left: ruler.minToX(rangeHi), background: '#7c9eff', boxShadow: '0 0 0 1px #fff' }} title="拖拽调整结束时间" />
-              </div>
-            </div>
-            {/* —— 今日操作区（淡框） —— */}
-            <div style={ZONE_TODAY} className="mb-2">
-              <span style={{ ...ZONE_LABEL_STYLE, color: '#64748b', background: '#fff' }} className="absolute -top-2 left-3 px-1">今日 · 未归类操作</span>
-              {todayByApp.length === 0 ? (
-                <div className="flex items-center mb-1.5">
-                  <span style={{ width: LABEL_W }} className="shrink-0 text-[11px] text-slate-500 pl-2">今日</span>
-                  <div className="relative" style={{
-                       width: LANE_W, height: 30, borderRadius: 8, overflow: 'hidden', background: '#f8fafc',
-                     }}
-                    onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane('today') }}
-                    onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverLane(null) }}
-                    onDrop={e => {
-                      e.preventDefault(); setDragOverLane(null)
-                      const ts = parseInt(e.dataTransfer.getData('text/start-ts'))
-                      if (!isNaN(ts)) handleAssignPlan(null, ts)
-                    }}>
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">今日活动已全部归入计划 ✓</span>
-                  </div>
-                </div>
-              ) : todayByApp.map(([app, segsArr]) => (
-                <div key={app} className="flex items-center mb-1.5">
-                  <span style={{ width: LABEL_W, color: '#475569' }} className="shrink-0 text-[11px] pl-2 truncate">{displayApp(app)}</span>
-                  <div className="relative" style={{
-                       width: LANE_W, height: 30, borderRadius: 8, overflow: 'hidden',
-                       background: dragOverLane === 'today' ? 'rgba(124,158,255,0.07)' : '#f8fafc',
-                       boxShadow: dragOverLane === 'today' ? 'inset 0 0 0 2px rgba(124,158,255,0.55)' : 'none',
-                       transition: 'background .12s, box-shadow .12s',
-                     }}
-                    onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane('today') }}
-                    onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverLane(null) }}
-                    onDrop={e => {
-                      e.preventDefault(); setDragOverLane(null)
-                      const ts = parseInt(e.dataTransfer.getData('text/start-ts'))
-                      if (!isNaN(ts)) handleAssignPlan(null, ts)
-                    }}>
-                    {dragOverLane === 'today' && (
-                      <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] px-2 py-0.5 rounded-full"
-                            style={{ background: '#7c9eff', color: '#fff' }}>松开归入 · 今日</span>
-                    )}
-                    {segsArr.map(s => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 30)))}
-                  </div>
-                </div>
-              ))}
-            </div>
-            {/* —— 计划泳道区（淡框） —— */}
-            <div style={ZONE_PLAN} className="mb-1">
-              <span style={{ ...ZONE_LABEL_STYLE, color: '#5b78d6', background: '#fff' }} className="absolute -top-2 left-3 px-1">计划泳道</span>
-              {plans.map(plan => {
-                const segs = getPlanSegs(plan.id)
-                const covered = segs.reduce((a, s) => a + (s.seg.durationMin || 0), 0)
+          <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--tl-ruler-label)' }}>时间轴</span>
+          <span style={{ fontSize: 12, color: 'var(--tl-ruler-label)' }}>{plans.length} 计划 · {fmtDur(items.reduce((a, i) => a + i.seg.durationMin, 0))}</span>
+          <div className="ml-auto flex items-center gap-2">
+            <div className="flex items-center gap-0.5 rounded-lg p-0.5"
+              style={{ background: 'var(--tl-lane-today-bg)', border: '0.5px solid var(--tl-lane-border)' }}>
+              {ZOOM_STOPS.map((z) => {
+                const active = Math.round(rangeHi - rangeLo) === z.span
                 return (
-                  <div key={plan.id} className="flex items-center mb-1.5">
-                    <span style={{ width: LABEL_W, color: STATUS_TEXT[plan.status] || '#475569' }} className="shrink-0 text-[11px] pl-2 truncate">{plan.title}</span>
-                    <div className="relative" style={{
-                             width: LANE_W, height: 30, borderRadius: 8, overflow: 'hidden',
-                             borderLeft: `3px solid ${STATUS_BORDER[plan.status] || '#e2e8f0'}`,
-                             background: dragOverLane === plan.id ? 'rgba(124,158,255,0.07)' : '#fff',
-                             boxShadow: dragOverLane === plan.id ? 'inset 0 0 0 2px rgba(124,158,255,0.55)' : 'none',
-                             transition: 'background .12s, box-shadow .12s',
-                           }}
-                      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane(plan.id) }}
-                      onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverLane(null) }}
-                      onDrop={e => {
-                        e.preventDefault(); setDragOverLane(null)
-                        const ts = parseInt(e.dataTransfer.getData('text/start-ts'))
-                        if (!isNaN(ts)) handleAssignPlan(plan.id, ts)
-                      }}>
-                      {dragOverLane === plan.id && (
-                        <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[10px] px-2 py-0.5 rounded-full"
-                              style={{ background: '#7c9eff', color: '#fff' }}>松开归入 · {plan.title}</span>
-                      )}
-                      <div style={{ position: 'absolute', left: ruler.minToX(plan.startMin ?? 0), width: ruler.durToW(plan.durationMin ?? 60),
-                                   top: 2, bottom: 2, background: STATUS_BG[plan.status] || '#f8fafc',
-                                   border: `1px dashed ${STATUS_BORDER[plan.status] || '#e2e8f0'}`, borderRadius: 6 }} />
-                      {segs.map(s => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 30)))}
-                      <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-slate-400">
-                        {[
-                          plan.startMin != null ? fmtHHMM(plan.startMin) : null,
-                          plan.durationMin != null ? `${covered}/${plan.durationMin}m` : null,
-                          (plan.completionRatio != null && plan.completionRatio > 0) ? `${Math.round(plan.completionRatio * 100)}%` : null
-                        ].filter(Boolean).join(' · ') || '待办'}
-                      </span>
-                    </div>
-                  </div>
+                  <button
+                    key={z.span}
+                    onClick={() => zoomToSpan(z.span)}
+                    style={{
+                      borderRadius: 5,
+                      padding: '2px 8px',
+                      fontSize: 11,
+                      fontWeight: active ? 500 : 400,
+                      background: active ? 'var(--tl-accent)' : 'transparent',
+                      color: active ? '#ffffff' : 'var(--tl-ruler-label)',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'all .12s',
+                    }}
+                  >
+                    {z.label}
+                  </button>
                 )
               })}
             </div>
+            <button onClick={() => panBy(-1)}
+              style={{ width: 28, height: 28, borderRadius: 6, border: '0.5px solid var(--tl-lane-border)', background: 'transparent', color: 'var(--tl-ruler-label)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              title="向左平移">◀</button>
+            <button onClick={centerOnNow}
+              style={{ height: 28, padding: '0 12px', borderRadius: 6, border: '0.5px solid var(--tl-now)', background: 'transparent', color: 'var(--tl-now)', fontSize: 11, fontWeight: 500, cursor: 'pointer' }}
+              title="回到当前时间">现在</button>
+            <button onClick={() => panBy(1)}
+              style={{ width: 28, height: 28, borderRadius: 6, border: '0.5px solid var(--tl-lane-border)', background: 'transparent', color: 'var(--tl-ruler-label)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              title="向右平移">▶</button>
+          </div>
+        </div>
+          <div style={{ overflowX: 'auto', overflowY: 'visible', position: 'relative' }}>
+            <div className="relative" style={{ width: LABEL_W + LANE_W }}>
+            <div className="flex items-center mb-1">
+              <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-ruler-label)', paddingLeft: 8 }} className="shrink-0">全天</span>
+              <div ref={overviewRef} className="relative"
+                style={{ width: LANE_W, height: 16, borderRadius: 8, background: 'var(--tl-lane-today-bg)', cursor: 'grab', touchAction: 'none' }}
+                onPointerDown={onOverviewPointerDown}
+                onPointerMove={onOverviewPointerMove}
+                onPointerUp={onOverviewPointerUp}
+                onPointerCancel={onOverviewPointerUp}
+                title="全天概览 · 点击定位 · 拖动平移">
+                {[360, 720, 1080].map((m) => (
+                  <div key={m} className="absolute top-0 bottom-0" style={{ left: `${(m / 1440) * 100}%`, width: 0.5, background: 'var(--tl-lane-border)' }} />
+                ))}
+                <div className="absolute top-0 bottom-0" style={{
+                  left: `${(rangeLo / 1440) * 100}%`,
+                  width: `${((rangeHi - rangeLo) / 1440) * 100}%`,
+                  background: 'rgba(55,138,221,0.30)',
+                  border: '0.5px solid var(--tl-accent)',
+                  borderRadius: 6,
+                  boxSizing: 'border-box',
+                }} />
+              </div>
+            </div>
+            <div className="flex items-center mb-1.5">
+              <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-ruler-label)', paddingLeft: 8 }} className="shrink-0">{fmtHHMM(rangeLo)}–{fmtHHMM(rangeHi)}</span>
+              <div ref={rangeRef} className="relative"
+                style={{ width: LANE_W, height: 32, cursor: panRef.current ? 'grabbing' : 'grab', touchAction: 'none' }}
+                onPointerDown={onRulerPointerDown}
+                onPointerMove={onRulerPointerMove}
+                onPointerUp={onRulerPointerUp}
+                onPointerCancel={onRulerPointerUp}
+                onWheel={onRulerWheel}
+                title="按住拖动平移时间轴 · 滚轮缩放">
+                <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2" style={{ height: 0.5, background: 'var(--tl-ruler-line)' }} />
+                {hourTicks.map(t => (
+                  <div key={t} className="absolute top-0 bottom-0" style={{ left: ruler.minToX(t) }}>
+                    <div style={{ width: 0.5, height: 8, background: 'var(--tl-ruler-tick)' }} />
+                    <span className="absolute" style={{ top: 12, left: '50%', transform: 'translateX(-50%)', fontSize: 11, color: 'var(--tl-ruler-label)', fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontVariantNumeric: 'tabular-nums' }}>
+                      {String(Math.floor(t / 60))}
+                    </span>
+                  </div>
+                ))}
+                <div data-handle onPointerDown={onHandleDown('lo')} className="absolute top-0 bottom-0"
+                     style={{ left: ruler.minToX(rangeLo) - 3, width: 6, borderRadius: 3, background: 'var(--tl-accent)', boxShadow: '0 0 0 1.5px rgba(255,255,255,0.9)', cursor: 'ew-resize' }} title="拖拽调整起始时间" />
+                <div data-handle onPointerDown={onHandleDown('hi')} className="absolute top-0 bottom-0"
+                     style={{ left: ruler.minToX(rangeHi) - 3, width: 6, borderRadius: 3, background: 'var(--tl-accent)', boxShadow: '0 0 0 1.5px rgba(255,255,255,0.9)', cursor: 'ew-resize' }} title="拖拽调整结束时间" />
+              </div>
+            </div>
+            {/* 今日操作区 header */}
+            <div className="flex items-center gap-1.5 mb-2">
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--tl-accent)', display: 'inline-block' }} />
+              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--tl-ruler-label)' }}>今日操作</span>
+            </div>
+            {todayByApp.length === 0 ? (
+              <div className="flex items-center mb-1.5">
+                <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-other-text)', paddingLeft: 8 }} className="shrink-0">今日</span>
+                <div className="relative" style={{
+                     width: LANE_W, height: 30, borderRadius: 8, overflow: 'hidden',
+                     background: 'var(--tl-lane-today-bg)',
+                     boxShadow: 'inset 0 0 0 0.5px var(--tl-lane-border)',
+                   }}
+                  onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane('today') }}
+                  onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverLane(null) }}
+                  onDrop={e => {
+                    e.preventDefault(); setDragOverLane(null)
+                    const ts = parseInt(e.dataTransfer.getData('text/start-ts'))
+                    if (!isNaN(ts)) handleAssignPlan(null, ts)
+                  }}>
+                  <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--tl-ruler-label)' }}>今日活动已全部归入计划 ✓</span>
+                </div>
+              </div>
+            ) : todayByApp.map(([app, segsArr]) => (
+              <div key={app} className="flex items-center mb-1.5">
+                <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-other-text)', paddingLeft: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} className="shrink-0">{displayApp(app)}</span>
+                <div className="relative" style={{
+                     width: LANE_W, height: 30, borderRadius: 8, overflow: 'hidden',
+                     background: dragOverLane === 'today' ? 'rgba(55,138,221,0.08)' : 'var(--tl-lane-today-bg)',
+                     boxShadow: dragOverLane === 'today' ? 'inset 0 0 0 1.5px var(--tl-accent)' : 'inset 0 0 0 0.5px var(--tl-lane-border)',
+                     transition: 'background .12s, box-shadow .12s',
+                   }}
+                  onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane('today') }}
+                  onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverLane(null) }}
+                  onDrop={e => {
+                    e.preventDefault(); setDragOverLane(null)
+                    const ts = parseInt(e.dataTransfer.getData('text/start-ts'))
+                    if (!isNaN(ts)) handleAssignPlan(null, ts)
+                  }}>
+                  {dragOverLane === 'today' && (
+                    <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', background: 'var(--tl-accent)', color: '#fff', fontSize: 11, fontWeight: 500, borderRadius: 999, padding: '2px 8px' }}>松开归入 · 今日</span>
+                  )}
+                  {segsArr.map(s => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 30)))}
+                </div>
+              </div>
+            ))}
+            {/* 里程碑 · 提醒轨道 */}
+            {reminders.length > 0 && (
+              <>
+                <div className="flex items-center gap-1.5 mb-2 mt-3">
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#A78BFA', display: 'inline-block' }} />
+                  <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--tl-ruler-label)' }}>里程碑 · 提醒</span>
+                </div>
+                <div className="flex items-center mb-1.5">
+                  <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-ruler-label)', paddingLeft: 8 }} className="shrink-0">定时提醒</span>
+                  <div className="relative" style={{ width: LANE_W, height: 24, borderRadius: 8, overflow: 'hidden', background: 'transparent', border: '0.5px dashed var(--tl-lane-border)' }}>
+                    {reminders.map(r => {
+                      const t = r.startMin
+                      if (t === undefined) return null
+                      const x = ruler.minToX(t)
+                      const rDone = r.status === 'done'
+                      const rCancelled = r.status === 'cancelled'
+                      return (
+                        <div key={r.id} title={`${r.title} · ${fmtHHMM(t)}${rDone ? ' · 已完成' : ''}`}
+                             style={{ position: 'absolute', left: x - 5, top: 2, bottom: 2, display: 'flex', alignItems: 'center', gap: 3, pointerEvents: 'auto', cursor: 'pointer' }}
+                             onClick={() => void window.api?.setPlanStatus?.(r.id, rDone ? 'planned' : 'done')}>
+                          <div style={{ width: 10, height: 10, transform: 'rotate(45deg)', background: rDone ? 'var(--tl-lane-plan-bg)' : '#A78BFA', border: `1px solid ${rDone ? 'var(--tl-lane-border)' : '#7C3AED'}`, borderRadius: 2, opacity: rCancelled ? 0.4 : 1 }} />
+                          <span style={{ fontSize: 11, color: rDone ? 'var(--tl-ruler-label)' : '#A78BFA', textDecoration: rDone ? 'line-through' : 'none', whiteSpace: 'nowrap', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {fmtHHMM(t)} {r.title}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+            {/* 计划泳道区 header */}
+            <div className="flex items-center gap-1.5 mb-2 mt-3">
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--tl-now)', display: 'inline-block' }} />
+              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--tl-ruler-label)' }}>计划泳道</span>
+            </div>
+            {phasePlans.map(plan => {
+              const segs = getPlanSegs(plan.id)
+              const covered = segs.reduce((a, s) => a + (s.seg.durationMin || 0), 0)
+              return (
+                <div key={plan.id} className="flex items-center mb-1.5">
+                  <span style={{ width: LABEL_W, fontSize: 11, color: STATUS_TEXT[plan.status] || 'var(--tl-other-text)', paddingLeft: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} className="shrink-0">{plan.title}</span>
+                  <div className="relative" style={{
+                           width: LANE_W, height: 30, borderRadius: 8, overflow: 'hidden',
+                           borderLeft: `3px solid ${STATUS_BORDER[plan.status] || 'var(--tl-lane-border)'}`,
+                           background: dragOverLane === plan.id ? 'rgba(55,138,221,0.08)' : 'var(--tl-lane-plan-bg)',
+                           boxShadow: dragOverLane === plan.id ? 'inset 0 0 0 1.5px var(--tl-accent)' : 'inset 0 0 0 0.5px var(--tl-lane-border)',
+                           transition: 'background .12s, box-shadow .12s',
+                         }}
+                    onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane(plan.id) }}
+                    onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverLane(null) }}
+                    onDrop={e => {
+                      e.preventDefault(); setDragOverLane(null)
+                      const ts = parseInt(e.dataTransfer.getData('text/start-ts'))
+                      if (!isNaN(ts)) handleAssignPlan(plan.id, ts)
+                    }}>
+                    {dragOverLane === plan.id && (
+                      <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', background: 'var(--tl-accent)', color: '#fff', fontSize: 11, fontWeight: 500, borderRadius: 999, padding: '2px 8px' }}>松开归入 · {plan.title}</span>
+                    )}
+                    <div style={{ position: 'absolute', left: ruler.minToX(plan.startMin ?? 0), width: ruler.durToW(plan.durationMin ?? 60),
+                                 top: 2, bottom: 2, background: `${STATUS_BG[plan.status] || 'var(--tl-lane-today-bg)'}55`,
+                                 border: `0.5px dashed ${STATUS_BORDER[plan.status] || 'var(--tl-lane-border)'}`, borderRadius: 6 }} />
+                    {segs.map(s => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 30)))}
+                    <span style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--tl-ruler-label)' }}>
+                      {[
+                        plan.startMin != null ? fmtHHMM(plan.startMin) : null,
+                        plan.durationMin != null ? `${covered}/${plan.durationMin}m` : null,
+                        (plan.completionRatio != null && plan.completionRatio > 0) ? `${Math.round(plan.completionRatio * 100)}%` : null
+                      ].filter(Boolean).join(' · ') || '待办'}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
             {nowMin >= rangeLo && nowMin <= rangeHi && (() => {
               const x = LABEL_W + ruler.minToX(nowMin)
               return (
-                <div style={{ position: 'absolute', left: x, top: 0, bottom: 0, width: 2,
-                              background: '#ef4444', zIndex: 50, pointerEvents: 'none' }}>
-                  <div style={{ position: 'absolute', top: -2, left: '50%', transform: 'translateX(-50%)',
-                                background: '#fff', border: '1px solid #ef4444', color: '#ef4444',
-                                fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 999,
+                <div style={{ position: 'absolute', left: x, top: 0, bottom: 0,
+                              width: 1.5, background: 'var(--tl-now)', zIndex: 50, pointerEvents: 'none' }}>
+                  <div style={{ position: 'absolute', top: -3, left: '50%', transform: 'translateX(-50%)',
+                                width: 7, height: 7, borderRadius: '50%', background: 'var(--tl-now)' }} />
+                  <div style={{ position: 'absolute', top: -18, left: '50%', transform: 'translateX(-50%)',
+                                background: 'var(--tl-now)', color: '#ffffff',
+                                fontSize: 11, fontWeight: 500, padding: '1px 8px', borderRadius: 8,
                                 whiteSpace: 'nowrap' }}>
-                    现在 {String(Math.floor(nowMin / 60)).padStart(2,'0')}:{String(nowMin % 60).padStart(2,'0')}
+                    {String(Math.floor(nowMin / 60)).padStart(2,'0')}:{String(nowMin % 60).padStart(2,'0')}
                   </div>
-                  <div style={{ position: 'absolute', bottom: 0, left: -1, width: 4, height: 18,
-                                background: 'linear-gradient(to bottom, rgba(239,68,68,0), #ef4444)' }} />
+                  <div style={{ position: 'absolute', bottom: 0, left: -1.5, width: 4.5, height: 18,
+                                background: 'linear-gradient(to bottom, transparent, var(--tl-now))' }} />
                 </div>
               )
             })()}

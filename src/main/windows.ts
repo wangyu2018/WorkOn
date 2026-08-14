@@ -6,7 +6,41 @@
 import { BrowserWindow, screen, shell, app, nativeImage } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import { getSettings } from './settings'
+import { getSettings, setSettings } from './settings'
+import type { WidgetMode } from '@shared/types'
+
+let widgetPenetration = false
+
+const WIDGET_DEFAULT_SIZE: Record<WidgetMode, { w: number; h: number }> = {
+  mini: { w: 210, h: 44 },
+  compact: { w: 300, h: 150 },
+  full: { w: 340, h: 520 },
+}
+
+function resizeWidgetWindow(w: number, h: number): void {
+  if (!widgetWindow || widgetWindow.isDestroyed()) return
+  const [x, y] = widgetWindow.getPosition()
+  const [, curH] = widgetWindow.getSize()
+  widgetWindow.setSize(Math.round(w), Math.round(h))
+  const wa = screen.getPrimaryDisplay().workArea
+  const ny = Math.min(Math.max(y + curH - h, wa.y), Math.max(wa.y, wa.y + wa.height - h))
+  const nx = Math.min(Math.max(x, wa.x), Math.max(wa.x, wa.x + wa.width - w))
+  widgetWindow.setPosition(Math.round(nx), Math.round(ny))
+}
+
+let saveWidgetTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleWidgetBoundsSave(): void {
+  if (saveWidgetTimer) clearTimeout(saveWidgetTimer)
+  saveWidgetTimer = setTimeout(() => {
+    if (!widgetWindow || widgetWindow.isDestroyed()) return
+    const [x, y] = widgetWindow.getPosition()
+    const [w, h] = widgetWindow.getSize()
+    const s = getSettings()
+    const sizes = { ...(s.widgetSizes ?? {}) }
+    sizes[s.widgetMode] = { w, h }
+    setSettings({ widgetPosX: x, widgetPosY: y, widgetSizes: sizes })
+  }, 400)
+}
 
 export let mainWindow: BrowserWindow | null = null
 export let widgetWindow: BrowserWindow | null = null
@@ -108,13 +142,24 @@ export function createWidgetWindow(): BrowserWindow {
   if (widgetWindow && !widgetWindow.isDestroyed()) return widgetWindow
   const s = getSettings()
   const display = screen.getPrimaryDisplay()
-  const w = 340
-  const h = 460
+  const wa = display.workArea
+  const mode: WidgetMode = s.widgetMode ?? 'mini'
+  const size = s.widgetSizes?.[mode] ?? WIDGET_DEFAULT_SIZE[mode]
+  const w = size.w
+  const h = size.h
+  let x = wa.x + wa.width - w - 16
+  let y = wa.y + wa.height - h - 16
+  const sx = s.widgetPosX ?? -1
+  const sy = s.widgetPosY ?? -1
+  if (sx >= 0 && sy >= 0 && sx >= wa.x - w + 40 && sx <= wa.x + wa.width - 40 && sy >= wa.y && sy <= wa.y + wa.height - 40) {
+    x = sx
+    y = sy
+  }
   widgetWindow = new BrowserWindow({
     width: w,
     height: h,
-    x: display.workArea.x + display.workArea.width - w - 16,
-    y: display.workArea.y + display.workArea.height - h - 16,
+    x,
+    y,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -133,6 +178,8 @@ export function createWidgetWindow(): BrowserWindow {
     }
   })
   load(widgetWindow, 'widget')
+  widgetPenetration = !!s.widgetPenetration
+  if (widgetPenetration) widgetWindow.setIgnoreMouseEvents(true)
   return widgetWindow
 }
 
@@ -188,10 +235,55 @@ export function setPetModal(active: boolean): void {
   }
 }
 
+export function setWidgetPenetration(v: boolean): void {
+  widgetPenetration = v
+  if (widgetWindow && !widgetWindow.isDestroyed()) {
+    widgetWindow.setIgnoreMouseEvents(v)
+  }
+}
+
+/** 切换悬浮窗模式：resize 到该模式的自定义尺寸（或默认） */
+export function setWidgetMode(mode: WidgetMode): void {
+  const s = getSettings()
+  const size = s.widgetSizes?.[mode] ?? WIDGET_DEFAULT_SIZE[mode]
+  if (widgetWindow && !widgetWindow.isDestroyed()) resizeWidgetWindow(size.w, size.h)
+  setSettings({ widgetMode: mode })
+}
+
+/** 手动缩放：应用尺寸并记忆到当前模式 + 位置 */
+export function resizeWidget(w: number, h: number): void {
+  resizeWidgetWindow(w, h)
+  scheduleWidgetBoundsSave()
+}
+
+/** 临时缩放（动态高度，如告警弹出）：不记忆尺寸 */
+export function resizeWidgetTransient(w: number, h: number): void {
+  resizeWidgetWindow(w, h)
+}
+
+/** 拖动：应用位移并记忆位置 */
+export function moveWidgetBy(dx: number, dy: number): void {
+  if (!widgetWindow || widgetWindow.isDestroyed()) return
+  const [x, y] = widgetWindow.getPosition()
+  const [w, h] = widgetWindow.getSize()
+  const wa = screen.getPrimaryDisplay().workArea
+  const nx = Math.min(Math.max(x + dx, wa.x), Math.max(wa.x, wa.x + wa.width - w))
+  const ny = Math.min(Math.max(y + dy, wa.y), Math.max(wa.y, wa.y + wa.height - h))
+  widgetWindow.setPosition(Math.round(nx), Math.round(ny))
+  scheduleWidgetBoundsSave()
+}
+
 export function toggleWidget(): void {
   if (!widgetWindow || widgetWindow.isDestroyed()) return
-  if (widgetWindow.isVisible()) widgetWindow.hide()
-  else widgetWindow.show()
+  if (widgetWindow.isVisible()) {
+    widgetWindow.hide()
+    setSettings({ widgetVisible: false })
+  } else {
+    widgetWindow.show()
+    setSettings({ widgetVisible: true })
+    // 显式唤出时解除穿透，方便交互
+    setWidgetPenetration(false)
+  }
 }
 
 export function togglePet(): void {

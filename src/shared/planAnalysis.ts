@@ -27,9 +27,15 @@ export function categoryStateHints(category: string, categories?: CustomCategory
   return CATEGORY_STATE_HINT[category] ?? []
 }
 
+/** 是否计入达成率/预测统计：仅 phase（持续工作）计入；reminder/task 排除 */
+export function isTimedPlan(p: Pick<PlanItem, 'planType'>): boolean {
+  return (p.planType ?? 'phase') === 'phase'
+}
+
 export function planVsActual(plans: PlanItem[], trail: MergedTrail, categories?: CustomCategory[]): PlanVsActual {
   // 排除 cancelled 与 delayed：延期的原计划由目标日期副本承担，不计入本日分母（防双计）
-  const dayPlans = plans.filter((p) => p.date === trail.date && p.status !== 'cancelled' && p.status !== 'delayed')
+  // 同时只统计 phase（持续工作）；reminder/task 不参与达成率
+  const dayPlans = plans.filter((p) => p.date === trail.date && p.status !== 'cancelled' && p.status !== 'delayed' && isTimedPlan(p))
 
   // 实际工作分钟（墙钟）：工作类状态的总和
   const actualWorkMin = WORK_LIKE_STATES.reduce((a, s) => a + (trail.stateMinutes[s] ?? 0), 0)
@@ -93,6 +99,10 @@ export function forecastPlan(
   nowMin: number,
   categories?: CustomCategory[]
 ): PlanForecast {
+  if (!isTimedPlan(plan)) {
+    return { planId: plan.id, completionProb: 100, delayProb: 0, factors: [], recommendation: '非持续工作计划，不参与预测', estimatedEndMin: undefined }
+  }
+
   const factors: ForecastFactor[] = []
   let score = 50
 

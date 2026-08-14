@@ -2,7 +2,7 @@
  * WorkOn 主进程入口
  * 启动顺序：设置 → 存储 → 窗口 → 监控 → 集成服务 → 托盘 → 快捷键 → 周期任务
  */
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, Notification } from 'electron'
 import { initSettings, getSettings } from './settings'
 import { initDb, flushNow } from './db'
 import { createMainWindow, createWidgetWindow, createPetWindow, createSplashWindow, closeSplash, sendTo, widgetWindow, mainWindow } from './windows'
@@ -21,8 +21,8 @@ import { startFolderWatch } from './folderWatcher'
 import { presence } from './presence'
 import { genQuestion, analyzeDay, deriveHabits } from './ai'
 import { genPersonaGapQuestion } from './qa/questionGenerator'
-import { listActivities, insertInto } from './db'
-import type { UserHabits } from '@shared/types'
+import { listActivities, insertInto, col, updateIn } from './db'
+import type { UserHabits, PlanItem } from '@shared/types'
 import { dateKey, buildMergedTrail } from '@shared/trail'
 import { genId } from '@shared/types'
 
@@ -81,7 +81,7 @@ function startPeriodicJobs(): void {
     return nonEmpty.length >= 3 ? deriveHabits(nonEmpty) : null
   }
 
-  // 轻问诊：每 3 分钟评估一次（AI 启用且已确认情境自动跳过；优先补用户画像缺口）
+  // 轻问诊：每 30 分钟评估一次（AI 启用且已确认情境自动跳过；优先补用户画像缺口）
   setInterval(() => {
     if (!getSettings().aiEnabled) return
     const snap = presence.getSnapshot()
@@ -94,7 +94,7 @@ function startPeriodicJobs(): void {
     }
     const q = genQuestion(snap.context)
     if (q) bus.setQuestion({ id: q.id, ctx: q.ctx, question: q.question, ts: Date.now() })
-  }, 3 * 60 * 1000)
+  }, 30 * 60 * 1000)
 
   // 画像自动刷新（间隔可在设置中配置：15/30/60 分钟或关闭；默认 30 分钟，省 token）
   let lastAutoRefresh = 0
@@ -110,6 +110,33 @@ function startPeriodicJobs(): void {
     lastAutoRefresh = now
     void analyzeDay(trail).then((ana) => insertInto('analyses', ana))
   }, 60 * 1000)
+
+  // reminder 到点通知：30s 检查一次，5 分钟窗口防重复（触发后标记 fired，不自动置 done）
+  setInterval(() => {
+    try {
+      const now = new Date()
+      const d = dateKey(now.getTime())
+      const nowMin = now.getHours() * 60 + now.getMinutes()
+      const due = col<PlanItem>('plans').filter((p) =>
+        p.date === d &&
+        (p.planType ?? 'phase') === 'reminder' &&
+        p.status === 'planned' &&
+        !p.fired &&
+        p.startMin != null &&
+        p.startMin <= nowMin &&
+        p.startMin > nowMin - 5
+      )
+      for (const r of due) {
+        updateIn<PlanItem>('plans', r.id, { fired: true })
+        if (Notification.isSupported()) {
+          new Notification({ title: 'WorkOn 提醒', body: r.title }).show()
+        }
+        sendTo('main', 'plan-updated')
+      }
+    } catch (e) {
+      console.warn('[reminder] 检查失败', e)
+    }
+  }, 30 * 1000)
 }
 
 app.whenReady().then(() => {

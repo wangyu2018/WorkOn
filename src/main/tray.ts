@@ -4,8 +4,8 @@
 import { app, Menu, Tray, nativeImage } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import { createMainWindow, toggleWidget, togglePet, sendTo } from './windows'
-import { getSettings } from './settings'
+import { createMainWindow, toggleWidget, togglePet, sendTo, setWidgetPenetration } from './windows'
+import { getSettings, setSettings } from './settings'
 
 let tray: Tray | null = null
 
@@ -40,6 +40,16 @@ function buildMenu(): void {
   ]
   if (s.widgetVisible) {
     items.push({ label: '悬浮窗 显/隐', click: () => toggleWidget() })
+    items.push({
+      label: '鼠标穿透',
+      type: 'checkbox',
+      checked: !!s.widgetPenetration,
+      click: (item) => {
+        const v = !!item.checked
+        setSettings({ widgetPenetration: v })
+        setWidgetPenetration(v)
+      }
+    })
   }
   if (s.petEnabled) {
     items.push({ label: '桌搭 显/隐', click: () => togglePet() })
