@@ -9,6 +9,7 @@ import { StateBadge } from '../components/StateBadge'
 import { EmptyState } from '../components/EmptyState'
 import { AttentionDailyCard } from '../components/AttentionCard'
 import { Icon } from '../components/Icon'
+import { PageHeader } from '../components/PageHeader'
 import { clockOf, fmtMin, minutesOfDay } from '../components/utils'
 import { attentionGrade, focusAdvice, focusScoreLine } from '@shared/focusMeta'
 
@@ -260,15 +261,7 @@ export default function MonitorView() {
   return (
     <div className="view-enter flex flex-col gap-5">
       {/* 页面标题区 */}
-      <header className="anim-fade-up flex items-center gap-3 px-1">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] shadow-glow">
-          <Icon name="activity" size={18} className="text-neon-cyan" />
-        </span>
-        <div className="min-w-0">
-          <h1 className="text-[18px] font-bold leading-tight text-slate-100">实时监控</h1>
-          <p className="mt-0.5 text-[12px] text-slate-500">活动状态 · 今日时间轴 · 应用明细与状态</p>
-        </div>
-      </header>
+      <PageHeader icon="activity" title="实时监控" desc="活动状态 · 今日时间轴 · 应用明细与状态" />
 
       {/* 当前实时状态卡（订阅 onPresence） */}
       <section className="glass-card anim-fade-up flex items-center gap-5" style={{ animationDelay: '60ms' }}>

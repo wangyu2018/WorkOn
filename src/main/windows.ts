@@ -114,11 +114,13 @@ export function createMainWindow(opts?: { deferShow?: boolean }): BrowserWindow 
 /** 开启动画窗：独立 BrowserWindow 播放 assets/splash.html（约 8s，播完自动关闭） */
 export function createSplashWindow(): BrowserWindow {
   splashWindow = new BrowserWindow({
-    width: 640,
-    height: 420,
+    width: 700,
+    height: 460,
     resizable: false,
     frame: false,
-    backgroundColor: '#000713',
+    transparent: true,
+    hasShadow: false,
+    backgroundColor: '#00000000',
     alwaysOnTop: true,
     show: true,
     title: 'WorkOn',

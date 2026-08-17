@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { AppSettings } from '@shared/types'
 import { useSettingsStore } from '../stores/settingsStore'
 import { Icon } from '../components/Icon'
+import { PageHeader } from '../components/PageHeader'
 import { Toggle } from '../components/Toggle'
 
 function monitorAccuracyOf(intervalMs: number) {
@@ -118,11 +119,7 @@ function fmtBytes(bytes: number): string {
 
 /** 选项胶囊按钮（自动清理周期 / 缓存上限共用样式） */
 function pillClass(active: boolean): string {
-  return `rounded-lg border px-2.5 py-1.5 text-[12px] transition-all ${
-    active
-      ? 'border-neon-cyan/40 bg-neon-cyan/10 text-neon-cyan shadow-[0_0_10px_rgba(34,211,238,0.15)]'
-      : 'border-white/[0.07] text-slate-400 hover:border-white/20 hover:text-slate-200'
-  }`
+  return `pill-btn${active ? ' active' : ''}`
 }
 
 /** 隐私快标预置应用（与主进程别名匹配） */
@@ -252,15 +249,7 @@ export default function PrivacyView() {
   return (
     <div className="view-enter mx-auto flex w-full max-w-[960px] flex-col gap-5">
       {/* 页面标题区 */}
-      <header className="flex items-center gap-3.5 px-1">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 text-neon-cyan shadow-glow">
-          <Icon name="shield" size={20} />
-        </div>
-        <div className="min-w-0">
-          <h1 className="text-[17px] font-semibold tracking-wide text-slate-100">隐私与数据管理</h1>
-          <p className="mt-0.5 text-[12px] text-slate-500">应用级采集控制 · OCR 资源 · 本地数据留存与画像</p>
-        </div>
-      </header>
+      <PageHeader icon="shield" title="隐私与数据管理" desc="应用级采集控制 · OCR 资源 · 本地数据留存与画像" />
 
       {/* 1. 应用级不采集 */}
       <Section title="隐私保护" icon="shield">
@@ -470,13 +459,6 @@ export default function PrivacyView() {
         </Row>
       </Section>
 
-      <section className="glass-card hoverable mt-4">
-        <h3 className="mb-2 text-[14px] font-semibold text-slate-200">📁 工作文件夹</h3>
-        <p className="mb-2 text-[12px] text-slate-500">配置后，会议纪要和随手记自动融入智能日报。</p>
-        <button className="glass-btn primary text-[12px]" onClick={async () => { const paths = await window.api?.selectFolders?.() as string[]|undefined; if (paths?.length) { await window.api?.setSettings?.({folders:paths}); alert('已添加') } }}>
-          📂 选择文件夹
-        </button>
-      </section>
     </div>
   )
 }

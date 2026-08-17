@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useState, Fragment } from 'react'
+import { useEffect, useState, Fragment } from 'react'
 import type { AppSettings } from '@shared/types'
 import { useSettingsStore } from '../stores/settingsStore'
 import { Icon } from '../components/Icon'
 import { Toggle } from '../components/Toggle'
-import { fmtMin } from '../components/utils'
 
 function WatchedFolders() {
   const [dirs, setDirs] = useState<string[]>([])
@@ -50,8 +49,14 @@ function WatchedFolders() {
 function Section({ title, icon, children }: { title: string; icon: Parameters<typeof Icon>[0]['name']; children: React.ReactNode }) {
   return (
     <section className="glass-card hoverable">
-      <h2 className="mb-3 flex items-center gap-2 text-[14px] font-semibold text-slate-200">
-        <Icon name={icon} size={15} className="text-neon-cyan" /> {title}
+      <h2 className="mb-2 flex items-center gap-2.5 text-[13px] font-semibold text-slate-200">
+        <span
+          className="flex h-6 w-6 items-center justify-center rounded-lg border"
+          style={{ background: 'var(--accent-softer)', borderColor: 'var(--border-active)', color: 'var(--accent)' }}
+        >
+          <Icon name={icon} size={13} />
+        </span>
+        {title}
       </h2>
       <div className="flex flex-col divide-y divide-white/[0.05]">{children}</div>
     </section>
@@ -183,26 +188,6 @@ function NumberSetting({
   )
 }
 
-interface OcrStats {
-  shotCount: number
-  shotBytes: number
-  modelBytes: number
-  totalBytes: number
-  active: boolean
-}
-
-interface UserProfileSummary {
-  monitorDays: number
-  focusMin: number
-  bestFocusDay: string | null
-  bestFocusDayMin: number
-  topSlackDay: string | null
-  topSlackDayMin: number
-  longestFocusMin: number
-  longestFocusDate: string | null
-  topApps: { name: string; pct: number }[]
-}
-
 /** AI 提示词三层上下文调试面板（开发者选项开启时显示） */
 function PromptLayers() {
   const [layers, setLayers] = useState<{ title: string; data: unknown }[] | null>(null)
@@ -330,12 +315,6 @@ export default function SettingsView() {
       )}
       {/* 1. 监控 */}
       <Section title="监控" icon="activity">
-        <div className="-mx-1 flex items-center gap-1 rounded-lg px-1 py-1.5 text-[11px] text-slate-500">
-          采样间隔与 OCR 深度模式已移至「隐私与数据管理 → 数据采集频率」
-        </div>
-        <Row label="智能轮询" desc="深度专注≥80 自动降频到 10s（省电少打扰）；摸鱼时升频到 3s（及时捕捉）。降频段精度变粗、升频段精度变高，平均精度取决于当天状态分布。">
-          <Toggle checked={settings.monitorSmart} onChange={(v) => p({ monitorSmart: v })} />
-        </Row>
         <Row label="计划完成预测" desc="监控/日历时间轴上按计划完成概率三色标注（绿=可完成 橙=可能延迟 红=高风险）">
           <Toggle checked={settings.planForecastEnabled} onChange={(v) => p({ planForecastEnabled: v })} />
         </Row>
@@ -351,9 +330,7 @@ export default function SettingsView() {
             ).map(([id, label]) => (
               <button
                 key={id}
-                className={`rounded-lg border px-2.5 py-1.5 text-[12px] transition-all ${
-                  settings.meetingMode === id ? 'border-white/30 bg-white/[0.08] text-slate-100' : 'border-white/[0.07] text-slate-400 hover:border-white/20'
-                }`}
+                className={`pill-btn${settings.meetingMode === id ? ' active' : ''}`}
                 onClick={() => p({ meetingMode: id })}
               >
                 {label}
@@ -415,9 +392,7 @@ export default function SettingsView() {
                   ).map(([min, label]) => (
                     <button
                       key={min}
-                      className={`rounded-lg border px-2.5 py-1.5 text-[12px] transition-all ${
-                        settings.aiAutoRefreshMin === min ? 'border-white/30 bg-white/[0.08] text-slate-100' : 'border-white/[0.07] text-slate-400 hover:border-white/20'
-                      }`}
+                      className={`pill-btn${settings.aiAutoRefreshMin === min ? ' active' : ''}`}
                       onClick={() => p({ aiAutoRefreshMin: min })}
                     >
                       {label}
@@ -473,10 +448,7 @@ export default function SettingsView() {
             ).map(([id, color, label]) => (
               <button
                 key={id}
-                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] transition-all ${
-                  settings.theme === id ? 'border-white/30 bg-white/[0.08] text-slate-100' : 'border-white/[0.07] text-slate-400 hover:border-white/20'
-                }`}
-                style={settings.theme === id ? { boxShadow: `0 0 10px ${color}44` } : undefined}
+                className={`pill-btn flex items-center gap-1.5${settings.theme === id ? ' active' : ''}`}
                 onClick={() => p({ theme: id })}
               >
                 <span className="h-3 w-3 rounded-full" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />
@@ -496,9 +468,7 @@ export default function SettingsView() {
             ).map(([id, emoji, label]) => (
               <button
                 key={id}
-                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] transition-all ${
-                  settings.appearanceMode === id ? 'border-white/30 bg-white/[0.08] text-slate-100' : 'border-white/[0.07] text-slate-400 hover:border-white/20'
-                }`}
+                className={`pill-btn flex items-center gap-1.5${settings.appearanceMode === id ? ' active' : ''}`}
                 onClick={() => p({ appearanceMode: id })}
               >
                 <span>{emoji}</span>
@@ -512,14 +482,7 @@ export default function SettingsView() {
         </Row>
       </Section>
 
-      {/* 5. 悬浮窗 — 已移至「桌搭」页统一管理 */}
-      <Section title="悬浮窗" icon="monitor">
-        <p className="text-[12px] text-slate-500 py-2">
-          浮窗与托盘的管控已移至「桌搭」页面的"浮窗与托盘"分区，与桌搭伴侣统一管理。
-        </p>
-      </Section>
-
-      {/* 8. Oner 数据同步（能力 + 开关 + 折叠详情） */}
+      {/* Oner 数据同步（能力 + 开关 + 折叠详情） */}
       <IntegrationSection
         title="Oner 数据同步"
         icon="refresh"

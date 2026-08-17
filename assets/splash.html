@@ -13,7 +13,7 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       width: 100%; height: 100%;
-      background: var(--bg);
+      background: transparent;
       overflow: hidden;
       font-family: "JetBrains Mono", "SFMono-Regular", ui-monospace, Consolas, "Courier New", monospace;
       -webkit-font-smoothing: antialiased;
@@ -27,66 +27,53 @@
       will-change: transform;
     }
 
-    /* 透视网格层 */
-    .grid {
-      position: fixed; inset: -60px;
-      background-image:
-        linear-gradient(rgba(255, 200, 140, 0.05) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 200, 140, 0.05) 1px, transparent 1px);
-      background-size: 52px 52px;
-      mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 30%, transparent 75%);
-      -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 30%, transparent 75%);
-      animation: gridDrift 14s linear infinite;
+    /* 2D 桌宠立绘（姵儿）：右下角常驻，挥手问候 + 轻微浮动 */
+    .peier {
+      position: fixed;
+      right: 6px;
+      bottom: 4px;
+      height: 88%;
+      width: auto;
+      opacity: 0.92;
+      filter: drop-shadow(0 0 18px rgba(255, 179, 107, 0.18));
+      transition: opacity 0.22s ease;
       pointer-events: none;
-      mix-blend-mode: screen;
+      animation: peierFloat 5s ease-in-out infinite;
+      z-index: 2;
     }
-    @keyframes gridDrift {
-      from { transform: translateY(0); }
-      to   { transform: translateY(52px); }
+    @keyframes peierFloat {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-7px); }
     }
 
-    /* 暗角 */
-    .vignette {
-      position: fixed; inset: 0;
-      background: radial-gradient(ellipse 90% 85% at 50% 46%, transparent 55%, rgba(20, 10, 5, 0.75) 100%);
+    /* 对话气泡 */
+    .bubble {
+      position: fixed;
+      right: 132px;
+      top: 12%;
+      max-width: 236px;
+      padding: 10px 14px;
+      border-radius: 14px 14px 14px 4px;
+      border: 1px solid rgba(255, 210, 160, 0.25);
+      background: rgba(20, 14, 8, 0.42);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      color: rgba(255, 232, 200, 0.92);
+      font-size: 13px;
+      line-height: 1.5;
+      letter-spacing: 0.02em;
+      opacity: 0;
+      transition: opacity 0.5s ease, transform 0.5s ease;
+      transform: translateY(6px);
       pointer-events: none;
+      z-index: 3;
     }
-
-    /* 胶片噪点 */
-    .grain {
-      position: fixed; inset: -100px;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
-      opacity: 0.05;
-      pointer-events: none;
-      animation: grainShift 0.9s steps(4) infinite;
-    }
-    @keyframes grainShift {
-      0% { transform: translate(0, 0); }
-      25% { transform: translate(-28px, 14px); }
-      50% { transform: translate(16px, -22px); }
-      75% { transform: translate(-10px, -30px); }
-      100% { transform: translate(24px, 18px); }
-    }
-
-    /* 扫描线闪烁 */
-    .scanline {
-      position: fixed; left: 0; right: 0; height: 120px;
-      background: linear-gradient(180deg, transparent, rgba(255, 179, 107, 0.045), transparent);
-      animation: scan 5.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-      pointer-events: none;
-      mix-blend-mode: screen;
-    }
-    @keyframes scan {
-      0% { top: -15%; opacity: 0; }
-      12% { opacity: 1; }
-      55% { top: 105%; opacity: 0.6; }
-      100% { top: 105%; opacity: 0; }
-    }
+    .bubble.show { opacity: 1; transform: translateY(0); }
 
     /* HUD：状态行 + 进度条 */
     .hud {
       position: fixed;
-      left: 50%; bottom: 13%;
+      left: 34%; bottom: 13%;
       transform: translateX(-50%) translateY(18px);
       display: flex; flex-direction: column; align-items: center; gap: 14px;
       opacity: 0;
@@ -141,7 +128,7 @@
 
     .hint {
       position: fixed;
-      left: 50%; bottom: 5.5%;
+      left: 34%; bottom: 5.5%;
       transform: translateX(-50%);
       font-size: 9px;
       letter-spacing: 0.4em;
@@ -161,10 +148,8 @@
 </head>
 <body>
   <canvas id="stage"></canvas>
-  <div class="grid"></div>
-  <div class="scanline"></div>
-  <div class="vignette"></div>
-  <div class="grain"></div>
+  <img class="peier" id="peier" alt="姵儿" />
+  <div class="bubble" id="bubble"><span id="bubbleText">你好呀，我是姵儿！</span></div>
 
   <div class="hud" id="hud">
     <div class="status" id="status">BOOT SEQUENCE</div>
@@ -310,7 +295,7 @@ function makeParticle(tgt) {
   // 从画面外圆周生成
   const ang = Math.random() * Math.PI * 2;
   const R = Math.hypot(W, H) * rand(0.68, 0.95);
-  const cx = W / 2, cy = H / 2;
+  const cx = W * 0.36, cy = H * 0.46;
   const size = iconSize();
   const tx = cx + (tgt.u - 0.5) * size;
   const ty = cy + (tgt.v - 0.5) * size;
@@ -337,7 +322,7 @@ let flashAt = -1; // 完成闪光时间
 let shockDone = false;
 
 function spawnArc() {
-  const cx = W / 2, cy = H / 2, size = iconSize();
+  const cx = W * 0.36, cy = H * 0.46, size = iconSize();
   const a = Math.random() * Math.PI * 2;
   const r0 = size * rand(0.38, 0.52);
   const x0 = cx + Math.cos(a) * r0;
@@ -383,10 +368,9 @@ function reset() {
   fillEl.style.width = "0%";
   pctEl.textContent = "0%";
   statusEl.textContent = "BOOT SEQUENCE";
-  // 清屏（去掉上一轮的拖尾）
+  // 清屏（透明背景，去掉上一轮的拖尾）
   ctx.globalCompositeOperation = "source-over";
-  ctx.fillStyle = "#160c06";
-  ctx.fillRect(0, 0, W, H);
+  ctx.clearRect(0, 0, W, H);
 }
 
 window.addEventListener("click", () => {
@@ -400,13 +384,12 @@ function frame(now) {
   requestAnimationFrame(frame);
   tNow = (now - t0) / 1000;
   const t = tNow;
-  const cx = W / 2, cy = H / 2;
+  const cx = W * 0.36, cy = H * 0.46;
   const size = iconSize();
 
-  /* --- 拖尾式背景衰减 --- */
+  /* --- 透明背景（无界）：每帧清屏，不做拖尾填充 --- */
   ctx.globalCompositeOperation = "source-over";
-  ctx.fillStyle = "rgba(22, 12, 6, 0.34)";
-  ctx.fillRect(0, 0, W, H);
+  ctx.clearRect(0, 0, W, H);
 
   /* --- 背景光晕呼吸 --- */
   const hazeA = 0.55 + 0.2 * Math.sin(t * 0.7);
@@ -580,6 +563,45 @@ icon.onload = () => {
     requestAnimationFrame(frame);
   }
 };
+
+/* ---------- 2D 桌宠立绘循环（挥手互动） ---------- */
+const peier = document.getElementById("peier");
+const bubbleEl = document.getElementById("bubble");
+const bubbleText = document.getElementById("bubbleText");
+const FRAMES = [
+  "peier-splash/frame-greet.png",
+  "peier-splash/frame-idle.png",
+  "peier-splash/frame-relaxed.png",
+  "peier-splash/frame-idle.png"
+];
+let frameIdx = 0;
+peier.src = FRAMES[0];
+setInterval(() => {
+  frameIdx = (frameIdx + 1) % FRAMES.length;
+  peier.style.opacity = "0.3";
+  setTimeout(() => {
+    peier.src = FRAMES[frameIdx];
+    peier.style.opacity = "0.92";
+  }, 220);
+}, 1500);
+
+/* 气泡文案轮播 */
+const BUBBLES = [
+  ["你好呀，我是姵儿！", 2800],
+  ["正在唤醒你的工作台…", 2600]
+];
+let bubbleIdx = 0;
+function nextBubble() {
+  if (bubbleIdx >= BUBBLES.length) {
+    bubbleEl.classList.remove("show");
+    return;
+  }
+  const [text, hold] = BUBBLES[bubbleIdx++];
+  bubbleText.textContent = text;
+  bubbleEl.classList.add("show");
+  setTimeout(nextBubble, hold);
+}
+setTimeout(nextBubble, 300);
 
 </script>
 </body>

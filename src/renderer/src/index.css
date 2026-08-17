@@ -2,12 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── CSS 变量体系（暗色科技感） ── */
+/* ── CSS 变量体系（静谧深空 · 暗色默认） ── */
 :root {
-  --bg-deep: #0b1220;
-  --bg-surface: #111a2e;
-  --bg-elevated: #1a2540;
-  --border-subtle: rgba(255, 255, 255, 0.06);
+  --bg-deep: #0b101b;
+  --bg-surface: #121826;
+  --bg-elevated: #1a2233;
+  --border-subtle: rgba(255, 255, 255, 0.07);
   /* 星图语义色（RGB通道，方便rgba(var(--star-x)/opacity)派生） */
   --star-work: 16 185 129;
   --star-life: 251 191 36;
@@ -43,6 +43,12 @@
   --tl-accent: #378add;
 }
 
+/* 提醒时间点竖线：越临近越闪烁 */
+@keyframes tl-reminder-pulse {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 1; }
+}
+
 html,
 body,
 #root {
@@ -65,19 +71,11 @@ body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   user-select: none;
-  /* 层次感背景：深空渐变 + 顶部青辉 + 底部绿辉 + 细网格 */
+  /* 静谧深空：柔和双辉光 + 纵向微渐变，无网格噪音 */
   background:
-    radial-gradient(1200px 500px at 70% -10%, rgba(34, 211, 238, 0.09), transparent 60%),
-    radial-gradient(900px 420px at 15% 110%, rgba(80, 200, 120, 0.07), transparent 60%),
-    linear-gradient(rgba(255, 255, 255, 0.016) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.016) 1px, transparent 1px),
-    linear-gradient(160deg, #0c1426 0%, #0b1220 55%, #0a0f1c 100%);
-  background-size:
-    auto,
-    auto,
-    44px 44px,
-    44px 44px,
-    auto;
+    radial-gradient(1100px 480px at 78% -12%, rgba(56, 120, 200, 0.1), transparent 62%),
+    radial-gradient(880px 420px at 8% 112%, rgba(52, 211, 153, 0.05), transparent 60%),
+    linear-gradient(165deg, #0d1322 0%, #0b101b 52%, #090d16 100%);
 }
 
 input,
@@ -95,11 +93,11 @@ textarea {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(34, 211, 238, 0.35);
+  background: rgba(255, 255, 255, 0.16);
 }
 * {
   scrollbar-width: thin;
@@ -107,19 +105,19 @@ textarea {
 }
 
 @layer components {
-  /* 玻璃拟态卡片（带顶部高光与层次投影） */
+  /* 玻璃卡片：柔边框 + 细腻投影 + 极轻顶部提亮 */
   .glass-card {
     @apply rounded-2xl border p-4;
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0) 18%),
-      rgba(17, 26, 46, 0.72);
+      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0) 22%),
+      rgba(18, 24, 38, 0.66);
     border-color: var(--border-subtle);
-    backdrop-filter: blur(12px) saturate(1.2);
-    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+    backdrop-filter: blur(14px) saturate(1.15);
+    -webkit-backdrop-filter: blur(14px) saturate(1.15);
     box-shadow:
-      0 14px 40px rgba(0, 0, 0, 0.42),
-      0 2px 8px rgba(0, 0, 0, 0.28),
-      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      0 10px 30px rgba(0, 0, 0, 0.32),
+      0 1px 4px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.045);
     transition:
       border-color var(--t-hover),
       transform var(--t-hover),
@@ -127,46 +125,50 @@ textarea {
     transform-style: preserve-3d;
   }
   .glass-card.hoverable:hover {
-    border-color: var(--border-active);
-    transform: translateY(-3px);
+    border-color: rgba(255, 255, 255, 0.14);
+    transform: translateY(-2px);
     box-shadow:
-      0 22px 48px rgba(0, 0, 0, 0.5),
-      0 0 22px rgba(34, 211, 238, 0.14),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      0 16px 40px rgba(0, 0, 0, 0.4),
+      0 1px 6px rgba(0, 0, 0, 0.24),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  /* 卡片内的次级面板（统一此前三种并存的手写子卡） */
+  .sub-card {
+    @apply rounded-xl border p-3;
+    background: rgba(255, 255, 255, 0.028);
+    border-color: rgba(255, 255, 255, 0.06);
   }
 
   .glass-btn {
     @apply inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] text-slate-300;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+    background: rgba(255, 255, 255, 0.04);
     border-color: rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
     transition: all var(--t-hover);
   }
   .glass-btn:hover {
-    border-color: rgba(34, 211, 238, 0.4);
-    background: rgba(34, 211, 238, 0.1);
-    color: #22d3ee;
-    box-shadow:
-      0 4px 14px rgba(34, 211, 238, 0.12),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.08);
+    color: #e8edf5;
   }
   .glass-btn:active {
-    transform: scale(0.97) translateY(0);
+    transform: scale(0.97);
   }
   .glass-btn:disabled {
     opacity: 0.45;
     pointer-events: none;
   }
   .glass-btn.primary {
-    background: linear-gradient(180deg, rgba(34, 211, 238, 0.22), rgba(34, 145, 238, 0.12));
-    border-color: rgba(34, 211, 238, 0.4);
-    color: #22d3ee;
-    box-shadow:
-      0 4px 16px rgba(34, 211, 238, 0.16),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    background: linear-gradient(180deg, var(--accent-soft), var(--accent-softer));
+    border-color: var(--border-active);
+    color: var(--accent);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  }
+  .glass-btn.primary:hover {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
   }
   .glass-btn.danger:hover {
     border-color: rgba(239, 68, 68, 0.5);
@@ -176,33 +178,51 @@ textarea {
 
   .glass-input {
     @apply w-full rounded-lg border px-3 py-1.5 text-[13px] text-slate-200 outline-none;
-    background: rgba(6, 10, 20, 0.45);
+    background: rgba(5, 8, 15, 0.4);
     border-color: rgba(255, 255, 255, 0.08);
-    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.25);
+    box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.2);
     transition:
       border-color var(--t-hover),
       box-shadow var(--t-hover);
   }
   .glass-input:focus {
-    border-color: rgba(34, 211, 238, 0.5);
-    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12);
+    border-color: var(--border-active);
+    box-shadow: 0 0 0 3px var(--accent-softer);
   }
   .glass-input::placeholder {
     color: var(--text-muted);
   }
   select.glass-input option {
-    background: #111a2e;
+    background: #121826;
     color: #e8edf5;
   }
 
   .chip {
     @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-slate-300;
-    border-color: rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.09);
+    background: rgba(255, 255, 255, 0.045);
     transition: all var(--t-hover);
   }
   .chip:hover {
-    transform: scale(1.05);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  /* 选项胶囊（设置/隐私等单选按钮组的统一写法） */
+  .pill-btn {
+    @apply rounded-lg border px-2.5 py-1.5 text-[12px] text-slate-400;
+    border-color: rgba(255, 255, 255, 0.08);
+    background: transparent;
+    transition: all var(--t-hover);
+  }
+  .pill-btn:hover {
+    border-color: rgba(255, 255, 255, 0.18);
+    color: #e8edf5;
+  }
+  .pill-btn.active {
+    border-color: var(--border-active);
+    background: var(--accent-softer);
+    color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent-softer);
   }
 }
 
@@ -238,7 +258,7 @@ textarea {
 @keyframes scale-in {
   from {
     opacity: 0;
-    transform: scale(0.95);
+    transform: scale(0.96);
   }
   to {
     opacity: 1;
@@ -331,42 +351,24 @@ textarea {
   --border-active: rgba(251, 191, 36, 0.35);
 }
 /* 主题色同步到少量硬编码工具类（导航/主按钮/滑块/选中态） */
-[data-theme='violet'] .text-neon-cyan,
-[data-theme='violet'] .glass-btn.primary,
-[data-theme='violet'] .glass-btn:hover {
+[data-theme='violet'] .text-neon-cyan {
   color: #a78bfa !important;
 }
-[data-theme='green'] .text-neon-cyan,
-[data-theme='green'] .glass-btn.primary,
-[data-theme='green'] .glass-btn:hover {
+[data-theme='green'] .text-neon-cyan {
   color: #34d399 !important;
 }
-[data-theme='amber'] .text-neon-cyan,
-[data-theme='amber'] .glass-btn.primary,
-[data-theme='amber'] .glass-btn:hover {
+[data-theme='amber'] .text-neon-cyan {
   color: #fbbf24 !important;
 }
 [data-theme='violet'] .bg-neon-cyan\/15 { background-color: rgb(167 139 250 / 0.15) !important; }
 [data-theme='green'] .bg-neon-cyan\/15 { background-color: rgb(52 211 153 / 0.15) !important; }
 [data-theme='amber'] .bg-neon-cyan\/15 { background-color: rgb(251 191 36 / 0.15) !important; }
-[data-theme='violet'] .shadow-glow { box-shadow: 0 0 18px rgba(167, 139, 250, 0.35) !important; }
-[data-theme='green'] .shadow-glow { box-shadow: 0 0 18px rgba(52, 211, 153, 0.35) !important; }
-[data-theme='amber'] .shadow-glow { box-shadow: 0 0 18px rgba(251, 191, 36, 0.35) !important; }
-[data-theme='violet'] .glass-btn.primary {
-  background: linear-gradient(180deg, rgba(167, 139, 250, 0.22), rgba(139, 120, 238, 0.12)) !important;
-  border-color: rgba(167, 139, 250, 0.4) !important;
-}
-[data-theme='green'] .glass-btn.primary {
-  background: linear-gradient(180deg, rgba(52, 211, 153, 0.22), rgba(34, 180, 130, 0.12)) !important;
-  border-color: rgba(52, 211, 153, 0.4) !important;
-}
-[data-theme='amber'] .glass-btn.primary {
-  background: linear-gradient(180deg, rgba(251, 191, 36, 0.22), rgba(220, 160, 20, 0.12)) !important;
-  border-color: rgba(251, 191, 36, 0.4) !important;
-}
-[data-theme='violet'] input[type='range']::-webkit-slider-thumb { background: #a78bfa; box-shadow: 0 0 8px rgba(167, 139, 250, 0.6); }
-[data-theme='green'] input[type='range']::-webkit-slider-thumb { background: #34d399; box-shadow: 0 0 8px rgba(52, 211, 153, 0.6); }
-[data-theme='amber'] input[type='range']::-webkit-slider-thumb { background: #fbbf24; box-shadow: 0 0 8px rgba(251, 191, 36, 0.6); }
+[data-theme='violet'] .shadow-glow { box-shadow: 0 0 14px rgba(167, 139, 250, 0.22) !important; }
+[data-theme='green'] .shadow-glow { box-shadow: 0 0 14px rgba(52, 211, 153, 0.22) !important; }
+[data-theme='amber'] .shadow-glow { box-shadow: 0 0 14px rgba(251, 191, 36, 0.22) !important; }
+[data-theme='violet'] input[type='range']::-webkit-slider-thumb { background: #a78bfa; box-shadow: 0 0 6px rgba(167, 139, 250, 0.45); }
+[data-theme='green'] input[type='range']::-webkit-slider-thumb { background: #34d399; box-shadow: 0 0 6px rgba(52, 211, 153, 0.45); }
+[data-theme='amber'] input[type='range']::-webkit-slider-thumb { background: #fbbf24; box-shadow: 0 0 6px rgba(251, 191, 36, 0.45); }
 
 /* 星图主题色联动：切换主题时 work/life 星图整体换色 */
 [data-theme='cyan']   { --star-work: 6 182 212; --star-life: 236 72 153; --star-work-fg: 14 116 144; --star-life-fg: 190 18 60; }
@@ -374,20 +376,17 @@ textarea {
 [data-theme='green']  { --star-work: 16 185 129; --star-life: 251 191 36; --star-work-fg: 6 95 70; --star-life-fg: 180 83 9; }
 [data-theme='amber']  { --star-work: 251 191 36; --star-life: 239 68 68; --star-work-fg: 180 83 9; --star-life-fg: 185 28 28; }
 
+/* shadow-glow 收敛：默认主题下也减弱（发光只做点缀） */
+.shadow-glow {
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.22) !important;
+}
+
 /* ── 亮色模式（data-mode=light，覆盖少量硬编码工具类） ── */
 [data-mode='light'] body {
   background:
-    radial-gradient(1200px 500px at 70% -10%, rgba(34, 211, 238, 0.1), transparent 60%),
-    radial-gradient(900px 420px at 15% 110%, rgba(80, 200, 120, 0.08), transparent 60%),
-    linear-gradient(rgba(0, 0, 0, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.025) 1px, transparent 1px),
-    linear-gradient(160deg, #eef2f7 0%, #f1f5f9 55%, #e8edf4 100%);
-  background-size:
-    auto,
-    auto,
-    44px 44px,
-    44px 44px,
-    auto;
+    radial-gradient(1100px 480px at 78% -12%, rgba(56, 120, 200, 0.08), transparent 62%),
+    radial-gradient(880px 420px at 8% 112%, rgba(52, 211, 153, 0.06), transparent 60%),
+    linear-gradient(165deg, #eef2f7 0%, #f1f5f9 52%, #e9edf3 100%);
   color: #1e293b;
 }
 [data-mode='light'] {
@@ -415,27 +414,33 @@ textarea {
 [data-mode='light'] .bg-ink-900\/60 { background-color: rgba(255, 255, 255, 0.6) !important; }
 [data-mode='light'] .glass-card {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.72) 100%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.75) 100%);
   border-color: rgba(0, 0, 0, 0.07);
   box-shadow:
-    0 10px 30px rgba(30, 41, 59, 0.1),
-    0 2px 6px rgba(30, 41, 59, 0.06),
+    0 8px 24px rgba(30, 41, 59, 0.08),
+    0 1px 4px rgba(30, 41, 59, 0.05),
     inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 [data-mode='light'] .glass-card.hoverable:hover {
+  border-color: rgba(0, 0, 0, 0.12);
   box-shadow:
-    0 18px 40px rgba(30, 41, 59, 0.16),
-    0 0 22px rgba(34, 211, 238, 0.18),
+    0 14px 32px rgba(30, 41, 59, 0.12),
+    0 1px 6px rgba(30, 41, 59, 0.07),
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
+[data-mode='light'] .sub-card {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.06);
+}
 [data-mode='light'] .glass-btn {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(241, 245, 249, 0.8));
+  background: rgba(255, 255, 255, 0.8);
   border-color: rgba(0, 0, 0, 0.09);
   color: #475569;
 }
 [data-mode='light'] .glass-btn:hover {
-  border-color: rgba(34, 211, 238, 0.45);
-  background: rgba(34, 211, 238, 0.08);
+  border-color: rgba(0, 0, 0, 0.16);
+  background: #ffffff;
+  color: #1e293b;
 }
 [data-mode='light'] .glass-input {
   background: rgba(255, 255, 255, 0.85);
@@ -449,6 +454,20 @@ textarea {
   background: rgba(0, 0, 0, 0.04);
   border-color: rgba(0, 0, 0, 0.08);
   color: #475569;
+}
+[data-mode='light'] .chip:hover { background: rgba(0, 0, 0, 0.07); }
+[data-mode='light'] .pill-btn {
+  border-color: rgba(0, 0, 0, 0.1);
+  color: #64748b;
+}
+[data-mode='light'] .pill-btn:hover {
+  border-color: rgba(0, 0, 0, 0.2);
+  color: #1e293b;
+}
+[data-mode='light'] .pill-btn.active {
+  border-color: var(--border-active);
+  background: var(--accent-softer);
+  color: var(--accent);
 }
 [data-mode='light'] .text-slate-100 { color: #0f172a !important; }
 [data-mode='light'] .text-slate-200 { color: #1e293b !important; }
@@ -496,8 +515,8 @@ input[type='range']::-webkit-slider-thumb {
   height: 14px;
   border-radius: 50%;
   background: #22d3ee;
-  border: 2px solid #0b1220;
-  box-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
+  border: 2px solid #0b101b;
+  box-shadow: 0 0 6px rgba(34, 211, 238, 0.45);
   transition: transform var(--t-hover);
 }
 input[type='range']::-webkit-slider-thumb:hover {

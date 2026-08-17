@@ -8,6 +8,7 @@ import StateDistCard from '../components/StateDistCard'
 import TopAppsCard from '../components/TopAppsCard'
 import DailyOverviewCard from '../components/DailyOverviewCard'
 import { Icon } from '../components/Icon'
+import { PageHeader } from '../components/PageHeader'
 import { EmptyState } from '../components/EmptyState'
 import AnalysisView from './AnalysisView'
 import SmartReportView from './SmartReportView'
@@ -467,15 +468,7 @@ export default function ReportHub() {
   return (
     <div className="view-enter flex flex-col gap-5">
       {/* 页面标题区 */}
-      <header className="flex items-center gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-neon-cyan shadow-glass">
-          <Icon name="chart" size={18} />
-        </div>
-        <div>
-          <h1 className="text-[17px] font-bold tracking-wide text-slate-100">报表中心</h1>
-          <p className="mt-0.5 text-[11px] text-slate-500">日报、周报与 AI 洞察，一眼看懂你的时间去向</p>
-        </div>
-      </header>
+      <PageHeader icon="chart" title="报表中心" desc="日报、周报与 AI 洞察，一眼看懂你的时间去向" />
 
       <div className="anim-fade-up flex flex-wrap items-center gap-2" style={{ animationDelay: '60ms' }}>
         {TABS.map((t) => (

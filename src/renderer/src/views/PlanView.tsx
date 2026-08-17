@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { PlanForecast, PlanItem, PlanStatus, PlanType, PlanVsActual } from '@shared/types'
 import { Icon } from '../components/Icon'
+import { PageHeader } from '../components/PageHeader'
 import { EmptyState } from '../components/EmptyState'
 import { ProgressRing } from '../components/ProgressRing'
 import { addDays, clockOf, fmtDateLabel, fmtMin, timeToMin, todayKey } from '../components/utils'
@@ -340,25 +341,24 @@ export default function PlanView() {
   return (
     <div className="view-enter flex flex-col gap-5">
       {/* 页面标题区 */}
-      <header className="flex items-center gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-neon-cyan shadow-glow">
-          <Icon name="target" size={20} />
-        </div>
-        <div className="min-w-0">
-          <h1 className="text-[17px] font-bold tracking-wide text-slate-100">每日计划</h1>
-          <p className="mt-0.5 text-[11px] text-slate-500">安排目标 · 跟踪达成率与完成预测</p>
-        </div>
-        <div className="flex-1" />
-        <button className="glass-btn text-[12px]" onClick={() => void importFromMeeting()}>
-          📋 从会议纪要导入
-        </button>
-        <button className="glass-btn text-[12px]" onClick={() => setFolderModal(true)}>
-          ⚙ 配置文件目录
-        </button>
-        <button className="glass-btn primary" onClick={() => setEditor({ plan: { date }, isNew: true })}>
-          <Icon name="plus" size={14} /> 新建计划
-        </button>
-      </header>
+      <PageHeader
+        icon="target"
+        title="每日计划"
+        desc="安排目标 · 跟踪达成率与完成预测"
+        actions={
+          <>
+            <button className="glass-btn text-[12px]" onClick={() => void importFromMeeting()}>
+              📋 从会议纪要导入
+            </button>
+            <button className="glass-btn text-[12px]" onClick={() => setFolderModal(true)}>
+              ⚙ 配置文件目录
+            </button>
+            <button className="glass-btn primary" onClick={() => setEditor({ plan: { date }, isNew: true })}>
+              <Icon name="plus" size={14} /> 新建计划
+            </button>
+          </>
+        }
+      />
 
       {scanProgress > 0 && (
         <div className="anim-fade-in">

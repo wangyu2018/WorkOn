@@ -4,6 +4,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { StateBadge } from '../components/StateBadge'
 import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
+import { PageHeader } from '../components/PageHeader'
 import { Toggle } from '../components/Toggle'
 
 /** 当前搭子角色（VRM 姵儿，单角色） */
@@ -197,23 +198,16 @@ export default function BuddyStage() {
   return (
     <div className="view-enter flex flex-col gap-5">
       {/* 页面标题区 */}
-      <header className="anim-fade-up flex items-center gap-3">
-        <div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-neon-cyan"
-          style={{ borderColor: 'var(--accent-glow)', background: 'var(--accent-softer)', boxShadow: '0 0 14px var(--accent-glow)' }}
-        >
-          <Icon name="cat" size={20} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-lg font-semibold leading-tight text-slate-100">搭子</h1>
-          <p className="mt-0.5 text-[12px] text-slate-500">
-            {CHARACTER.name} · {CHARACTER.tagline} — 实时状态、互动控制与养成指南
-          </p>
-        </div>
-        <span className="chip" style={{ borderColor: '#F59E0B66' }}>
-          {CHARACTER.rarity}
-        </span>
-      </header>
+      <PageHeader
+        icon="cat"
+        title="搭子"
+        desc={`${CHARACTER.name} · ${CHARACTER.tagline} — 实时状态、互动控制与养成指南`}
+        actions={
+          <span className="chip" style={{ borderColor: '#F59E0B66' }}>
+            {CHARACTER.rarity}
+          </span>
+        }
+      />
 
       {/* 总控卡：桌面形象 + 浮窗，两开关并列 */}
       <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '40ms' }}>

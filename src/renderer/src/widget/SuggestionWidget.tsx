@@ -1,13 +1,15 @@
 /**
  * 右下角悬浮窗（PRD F12 + 问题 7/12）：
- * 三态浮窗：collapsed（收起·环）、expanded（展开·完整面板）、notification（通知·环闪烁）
+ * 三态浮窗：mini（收起·胶囊）、compact（状态卡）、full（完整面板）
+ * 设计：静谧深空 · accent 变量驱动 · 统一头部/告警壳
  */
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import type { SuggestionQuestion } from '@shared/types'
 import { WORK_STATES } from '@shared/stateMeta'
 import { attentionGrade, focusScoreLine } from '@shared/focusMeta'
 import { usePresenceStore } from '../stores/presenceStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { Icon, type IconName } from '../components/Icon'
 
 interface BrowserPlanConfirm {
   planId: string
@@ -35,6 +37,176 @@ function hexAlpha(hex: string, a: number): string {
 
 function restoreWidgetOpacity(): void {
   window.api.getSettings().then((s) => window.api.setWidgetOpacity(s.widgetOpacity)).catch(() => undefined)
+}
+
+/* ── 共享小件 ── */
+
+/** 浮窗面板容器（三态统一质感） */
+const PANEL_STYLE: CSSProperties = {
+  background: 'linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0) 30%), rgba(12, 16, 27, 0.84)',
+  border: '1px solid rgba(255, 255, 255, 0.09)',
+  boxShadow: '0 14px 36px rgba(0, 0, 0, 0.48), 0 2px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
+  backdropFilter: 'blur(16px) saturate(1.2)',
+  WebkitBackdropFilter: 'blur(16px) saturate(1.2)'
+}
+
+/** 头部小图标按钮 */
+function HeaderBtn({ icon, rotate, title, onClick, active, accent }: {
+  icon: IconName
+  rotate?: number
+  title: string
+  onClick: (e: React.MouseEvent) => void
+  active?: boolean
+  accent?: string
+}) {
+  return (
+    <button
+      className="flex h-6 w-6 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200"
+      style={{ ...APP_NO_DRAG, color: active ? accent : undefined }}
+      title={title}
+      onClick={onClick}
+    >
+      <Icon name={icon} size={13} style={rotate ? { transform: `rotate(${rotate}deg)` } : undefined} />
+    </button>
+  )
+}
+
+/** 拖拽头部条（compact / full 共用） */
+function WidgetHeader({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className="flex h-8 shrink-0 cursor-move select-none items-center justify-between border-b border-white/[0.06] px-2.5"
+      style={APP_DRAG}
+    >
+      <span className="pl-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">WorkOn</span>
+      <div className="flex items-center gap-0.5">{children}</div>
+    </div>
+  )
+}
+
+/** 右下角缩放手柄 */
+function ResizeHandle({ onDown, onMove, onUp }: {
+  onDown: (e: ReactPointerEvent) => void
+  onMove: (e: ReactPointerEvent) => void
+  onUp: () => void
+}) {
+  return (
+    <div
+      className="absolute bottom-0 right-0 z-20 flex h-5 w-5 cursor-nwse-resize items-end justify-end rounded-bl-lg p-[3px] text-slate-600 transition-colors hover:text-slate-300"
+      onPointerDown={onDown}
+      onPointerMove={onMove}
+      onPointerUp={onUp}
+      title="拖动改变大小"
+    >
+      <svg viewBox="0 0 24 24" className="h-3 w-3">
+        <path d="M24 0 L24 24 L0 24" fill="none" stroke="currentColor" strokeWidth="2.5" />
+      </svg>
+    </div>
+  )
+}
+
+/** 专注度状态环 */
+function FocusRing({ size, focus, color, emoji }: { size: number; focus: number; color: string; emoji: string }) {
+  const R = 18
+  const CIRC = 2 * Math.PI * R
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg viewBox="0 0 48 48" className="-rotate-90" style={{ width: size, height: size }}>
+        <circle cx="24" cy="24" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3.5" />
+        <circle
+          cx="24" cy="24" r={R} fill="none"
+          stroke={color} strokeWidth="3.5" strokeLinecap="round"
+          strokeDasharray={CIRC}
+          strokeDashoffset={CIRC * (1 - focus / 100)}
+          style={{ transition: 'stroke-dashoffset 400ms ease-out' }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center" style={{ fontSize: Math.round(size * 0.34) }}>{emoji}</div>
+    </div>
+  )
+}
+
+/** 告警卡外壳：统一色调 + 收起/展开（修复原收起后无法展开的死端） */
+function AlertShell({ color, label, collapsed, onToggle, children }: {
+  color: string
+  label: string
+  collapsed: boolean
+  onToggle: () => void
+  children: ReactNode
+}) {
+  return (
+    <div
+      className="relative rounded-xl border p-2.5"
+      style={{ borderColor: hexAlpha(color, 0.25), background: hexAlpha(color, 0.07) }}
+    >
+      <button
+        className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+        onClick={onToggle}
+        title={collapsed ? '展开' : '收起'}
+      >
+        <Icon name="chevronRight" size={10} style={{ transform: collapsed ? 'rotate(-90deg)' : 'rotate(90deg)' }} />
+      </button>
+      {collapsed ? (
+        <div className="cursor-pointer text-[11px]" style={{ color }} onClick={onToggle}>
+          {label}（已收起）
+        </div>
+      ) : children}
+    </div>
+  )
+}
+
+/** 问答条（input / thinking / answer 三态） */
+function AskBar({ askState, askText, setAskText, submitAsk, onAskBlur, onEscape, askAnswer, accent, blurTimer }: {
+  askState: AskState
+  askText: string
+  setAskText: (v: string) => void
+  submitAsk: () => Promise<void>
+  onAskBlur: () => void
+  onEscape: () => void
+  askAnswer: string
+  accent: string
+  blurTimer: React.MutableRefObject<number | null>
+}) {
+  if (askState === 'hidden') return null
+  return (
+    <div className="transition-all">
+      {askState === 'input' ? (
+        <input
+          autoFocus
+          className="w-full rounded-full border bg-white/[0.05] px-3 py-1.5 text-xs text-slate-200 outline-none placeholder:text-slate-600"
+          style={{ borderColor: hexAlpha(accent, 0.3) }}
+          placeholder="问点什么…（回车发送）"
+          value={askText}
+          onChange={(e) => { setAskText(e.target.value); if (blurTimer.current) window.clearTimeout(blurTimer.current) }}
+          onKeyDown={(e) => { if (e.key === 'Enter') void submitAsk(); if (e.key === 'Escape') onEscape() }}
+          onBlur={onAskBlur}
+        />
+      ) : askState === 'thinking' ? (
+        <div className="flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs text-slate-400">
+          <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full" style={{ background: accent }} />思考中…
+        </div>
+      ) : (
+        <div
+          className="max-h-20 overflow-hidden rounded-xl rounded-bl-sm border px-3 py-2 text-xs leading-relaxed"
+          style={{ borderColor: hexAlpha(accent, 0.18), background: hexAlpha(accent, 0.09), color: accent }}
+        >
+          {askAnswer}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** 桌宠气泡 */
+function PetBubbleLine({ text, accent }: { text: string; accent: string }) {
+  return (
+    <div
+      className="rounded-xl rounded-bl-sm border px-3 py-2 text-xs"
+      style={{ borderColor: hexAlpha(accent, 0.18), background: hexAlpha(accent, 0.09), color: accent }}
+    >
+      🐾 {text}
+    </div>
+  )
 }
 
 export default function SuggestionWidget() {
@@ -85,6 +257,16 @@ export default function SuggestionWidget() {
     setWidgetMode(mode)
     window.api.widgetSetMode(mode)
   }
+
+  const togglePenetration = () => {
+    const v = !penetration
+    setPenetration(v)
+    const api = window.api as Record<string, any>
+    if (typeof api.setWidgetPenetration === 'function') api.setWidgetPenetration(v)
+    void window.api.setSettings({ widgetPenetration: v })
+  }
+
+  const toggleAlert = (key: string) => setAlertCollapsed((c) => ({ ...c, [key]: !c[key] }))
 
   useEffect(() => {
     window.api.getSettings().then((s) => {
@@ -192,8 +374,6 @@ export default function SuggestionWidget() {
   const state = presence?.state ?? 'idle'
   const meta = WORK_STATES[state] ?? WORK_STATES.idle
   const focus = presence?.focusLevel ?? 0
-  const R = 18
-  const CIRC = 2 * Math.PI * R
 
   const answer = (a: 'yes' | 'no') => {
     if (!question) return
@@ -254,110 +434,75 @@ export default function SuggestionWidget() {
     blurTimer.current = window.setTimeout(() => setAskState('hidden'), 3000)
   }
 
-  // ── mini 态：状态环 + 实时工作内容 ──
+  const penetrationTitle = penetration ? '穿透中（桌搭页关闭）' : '开启鼠标穿透（穿透后需在桌搭页关闭）'
+  const liveTitle = presence?.screens?.find((s) => s.screen === presence.mainScreen)?.title
+
+  // ── mini 态：悬浮胶囊（状态环 + 实时工作内容） ──
   if (widgetMode === 'mini') {
-    const liveTitle = presence?.screens?.find((s) => s.screen === presence.mainScreen)?.title || meta.label
     return (
       <div className="flex h-screen w-screen items-end justify-end">
         <div
-          className={`flex h-11 w-full cursor-pointer items-center gap-2 rounded-2xl border border-white/10 bg-ink-900/80 px-3 shadow-glass backdrop-blur-md ${shimmer ? 'shimmer-ring' : ''}`}
+          className={`flex h-11 w-full cursor-pointer items-center gap-2.5 rounded-full px-3 ${shimmer ? 'shimmer-ring' : ''}`}
+          style={PANEL_STYLE}
           onClick={() => setMode('compact')}
         >
-          <div className="relative h-7 w-7 shrink-0">
-            <svg viewBox="0 0 48 48" className="h-7 w-7 -rotate-90">
-              <circle cx="24" cy="24" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3.5" />
-              <circle cx="24" cy="24" r={R} fill="none" stroke={meta.color} strokeWidth="3.5" strokeLinecap="round"
-                strokeDasharray={CIRC} strokeDashoffset={CIRC * (1 - focus / 100)} style={{ transition: 'stroke-dashoffset 400ms ease-out' }} />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center text-[10px]">{meta.emoji}</div>
-          </div>
-          <span className="min-w-0 flex-1 truncate text-xs text-slate-200">{liveTitle}</span>
+          <FocusRing size={26} focus={focus} color={meta.color} emoji={meta.emoji} />
+          <span className="min-w-0 flex-1 truncate text-xs text-slate-200">{liveTitle || meta.label}</span>
           <button
-            className={`shrink-0 rounded p-1 text-[10px] ${penetration ? '' : 'text-slate-500'} hover:bg-white/10`}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200"
             style={{ color: penetration ? accent : undefined }}
-            title={penetration ? '穿透中（桌搭页关闭）' : '开启鼠标穿透（穿透后需在桌搭页关闭）'}
-            onClick={(e) => { e.stopPropagation(); const v = !penetration; setPenetration(v); const api = window.api as Record<string, any>; if (typeof api.setWidgetPenetration === 'function') api.setWidgetPenetration(v); void window.api.setSettings({ widgetPenetration: v }) }}
-          >⊘</button>
+            title={penetrationTitle}
+            onClick={(e) => { e.stopPropagation(); togglePenetration() }}
+          >
+            <Icon name="eyeOff" size={12} />
+          </button>
         </div>
         <style>{`
           .shimmer-ring { animation: shimmer 2s ease-out; }
           @keyframes shimmer {
-            0% { box-shadow: 0 0 4px rgba(34,211,238,0.5), 0 0 12px rgba(34,211,238,0.3); }
-            50% { box-shadow: 0 0 8px rgba(34,211,238,0.8), 0 0 24px rgba(34,211,238,0.5); }
-            100% { box-shadow: 0 0 4px rgba(34,211,238,0.5), 0 0 12px rgba(34,211,238,0.3); }
+            0% { box-shadow: 0 0 4px ${hexAlpha(accent, 0.5)}, 0 0 12px ${hexAlpha(accent, 0.3)}; }
+            50% { box-shadow: 0 0 8px ${hexAlpha(accent, 0.8)}, 0 0 24px ${hexAlpha(accent, 0.5)}; }
+            100% { box-shadow: 0 0 4px ${hexAlpha(accent, 0.5)}, 0 0 12px ${hexAlpha(accent, 0.3)}; }
           }
         `}</style>
       </div>
     )
   }
 
-  // ── compact 态：状态区 + 一行 microActivity ──
+  // ── compact 态：状态区 + 问答/气泡 ──
   if (widgetMode === 'compact') {
     return (
       <div className="flex h-screen w-screen items-end justify-end p-3">
-        <div className="glass relative flex w-[300px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-ink-900/80 shadow-glass backdrop-blur-md">
-          <div className="flex h-8 shrink-0 cursor-move items-center justify-between border-b border-white/5 px-3 select-none" style={APP_DRAG}>
-            <span className="text-[11px] font-medium tracking-wider text-slate-400">WorkOn</span>
-            <div className="flex items-center gap-1">
-              <button className="rounded p-1 text-slate-500 hover:bg-white/10 hover:text-slate-300" style={APP_NO_DRAG} title="展开" onClick={() => setMode('full')}>▴</button>
-              <button className={`rounded p-1 ${penetration ? '' : 'text-slate-500'} hover:bg-white/10`} style={{ ...APP_NO_DRAG, color: penetration ? accent : undefined }} title={penetration ? '穿透中（桌搭页关闭）' : '开启鼠标穿透（穿透后需在桌搭页关闭）'}
-                onClick={() => { const v = !penetration; setPenetration(v); const api = window.api as Record<string, any>; if (typeof api.setWidgetPenetration === 'function') api.setWidgetPenetration(v); void window.api.setSettings({ widgetPenetration: v }) }}>⊘</button>
-              <button className="rounded p-1 text-slate-500 hover:bg-white/10 hover:text-slate-300" style={APP_NO_DRAG} title="收起到最小" onClick={() => setMode('mini')}>▾</button>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 px-4 py-3">
-            <div className="relative h-12 w-12 shrink-0">
-              <svg viewBox="0 0 48 48" className="h-12 w-12 -rotate-90">
-                <circle cx="24" cy="24" r={R} fill="none" stroke={hexAlpha(accent, 0.18)} strokeWidth="3.5" />
-                <circle cx="24" cy="24" r={R} fill="none" stroke={meta.color} strokeWidth="3.5" strokeLinecap="round"
-                  strokeDasharray={CIRC} strokeDashoffset={CIRC * (1 - focus / 100)} style={{ transition: 'stroke-dashoffset 400ms ease-out' }} />
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center text-sm">{meta.emoji}</div>
-            </div>
+        <div className="relative flex w-[300px] flex-col overflow-hidden rounded-2xl" style={PANEL_STYLE}>
+          <WidgetHeader>
+            <HeaderBtn icon="chevronRight" rotate={-90} title="展开" onClick={() => setMode('full')} />
+            <HeaderBtn icon="eyeOff" title={penetrationTitle} onClick={togglePenetration} active={penetration} accent={accent} />
+            <HeaderBtn icon="chevronRight" rotate={90} title="收起到最小" onClick={() => setMode('mini')} />
+          </WidgetHeader>
+          <div className="flex items-center gap-3 px-3.5 py-2.5">
+            <FocusRing size={42} focus={focus} color={meta.color} emoji={meta.emoji} />
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold" style={{ color: meta.color }}>{meta.label}
-                <span className="text-xs text-slate-500"> · 专注度 {focus} · {attentionGrade(focus).grade}</span>
+              <div className="text-[13px] font-semibold" style={{ color: meta.color }}>
+                {meta.label}
+                <span className="ml-1 text-[11px] font-normal text-slate-500">专注度 {focus} · {attentionGrade(focus).grade}</span>
               </div>
-              <div className="mt-0.5 truncate text-xs text-slate-400">{presence?.screens?.find((s) => s.screen === presence.mainScreen)?.title || '等待采集…'}</div>
-              {aiEnabled ? (
-                <button className="mt-1 rounded-lg p-1 text-slate-400 hover:bg-white/10" title="问点什么…"
-                  onClick={() => setAskState(askState === 'hidden' ? 'input' : 'hidden')}>💬</button>
-              ) : null}
+              <div className="mt-0.5 truncate text-[11px] text-slate-400">{liveTitle || '等待采集…'}</div>
             </div>
-          </div>
-          <div className="mx-3 mb-3 flex flex-col gap-2 overflow-y-auto" style={{ maxHeight: 120 }}>
-            {askState !== 'hidden' ? (
-              <div className="transition-all">
-                {askState === 'input' ? (
-                  <input autoFocus className="w-full rounded-full border bg-white/[0.06] px-3 py-1.5 text-xs text-slate-200 outline-none placeholder:text-slate-600" style={{ borderColor: hexAlpha(accent, 0.35) }}
-                    placeholder="问点什么…（回车发送）" value={askText}
-                    onChange={(e) => { setAskText(e.target.value); if (blurTimer.current) window.clearTimeout(blurTimer.current) }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') void submitAsk(); if (e.key === 'Escape') setAskState('hidden') }}
-                    onBlur={onAskBlur} />
-                ) : askState === 'thinking' ? (
-                  <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-400">
-                    <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full" style={{ background: accent }} />思考中…
-                  </div>
-                ) : (
-                  <div className="max-h-20 overflow-hidden rounded-xl rounded-bl-sm border px-3 py-2 text-xs leading-relaxed" style={{ borderColor: hexAlpha(accent, 0.2), background: hexAlpha(accent, 0.1), color: accent }}>{askAnswer}</div>
-                )}
-              </div>
+            {aiEnabled ? (
+              <button
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200"
+                title="问点什么…"
+                onClick={() => setAskState(askState === 'hidden' ? 'input' : 'hidden')}
+              >
+                <Icon name="message" size={12} />
+              </button>
             ) : null}
-            {petBubble && !widgetCompact && (
-              <div className="rounded-xl rounded-bl-sm border px-3 py-2 text-xs" style={{ borderColor: hexAlpha(accent, 0.2), background: hexAlpha(accent, 0.1), color: accent }}>🐾 {petBubble}</div>
-            )}
           </div>
-          <div
-            className="absolute bottom-0 right-0 z-20 h-6 w-6 cursor-nwse-resize rounded-bl-xl transition-colors hover:bg-white/10"
-            onPointerDown={onResizePointerDown}
-            onPointerMove={onResizePointerMove}
-            onPointerUp={onResizePointerUp}
-            title="拖动改变大小"
-          >
-            <svg viewBox="0 0 24 24" className="h-6 w-6" style={{ color: 'rgba(148,163,184,0.9)' }}>
-              <path d="M24 0 L24 24 L0 24" fill="none" stroke="currentColor" strokeWidth="2" />
-            </svg>
+          <div className="mx-2.5 mb-2.5 flex flex-col gap-2 overflow-y-auto" style={{ maxHeight: 120 }}>
+            <AskBar askState={askState} askText={askText} setAskText={setAskText} submitAsk={submitAsk} onAskBlur={onAskBlur} onEscape={() => setAskState('hidden')} askAnswer={askAnswer} accent={accent} blurTimer={blurTimer} />
+            {petBubble && !widgetCompact && <PetBubbleLine text={petBubble} accent={accent} />}
           </div>
+          <ResizeHandle onDown={onResizePointerDown} onMove={onResizePointerMove} onUp={onResizePointerUp} />
         </div>
       </div>
     )
@@ -366,302 +511,171 @@ export default function SuggestionWidget() {
   // ── full 态：完整面板 ──
   return (
     <div className="flex h-screen w-screen items-end justify-end p-3">
-      <div className="glass relative flex w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-ink-900/80 shadow-glass backdrop-blur-md">
-        {/* 拖动区 */}
-        <div
-          className="flex h-9 shrink-0 cursor-move items-center justify-between border-b border-white/5 px-3 select-none"
-          style={APP_DRAG}
-        >
-          <span className="text-xs font-medium tracking-wider text-slate-400">WorkOn</span>
-          <div className="flex items-center gap-1">
-            <button
-              className={`rounded p-1 ${penetration ? '' : 'text-slate-500'} hover:bg-white/10`}
-              style={{ ...APP_NO_DRAG, color: penetration ? accent : undefined }}
-              onClick={() => { const v = !penetration; setPenetration(v); const api = window.api as Record<string, any>; if (typeof api.setWidgetPenetration === 'function') api.setWidgetPenetration(v); void window.api.setSettings({ widgetPenetration: v }) }}
-              title={penetration ? '穿透中（桌搭页关闭）' : '开启鼠标穿透（穿透后需在桌搭页关闭）'}
-            >⊘</button>
-            <button
-              className="rounded p-1 text-slate-500 hover:bg-white/10 hover:text-slate-300"
-              style={APP_NO_DRAG}
-              onClick={() => setMode('mini')}
-              title="收起"
-            >▾</button>
-            <button
-              className="rounded p-1 text-slate-500 hover:bg-white/10 hover:text-slate-300"
-              style={APP_NO_DRAG}
-              onClick={() => window.api.toggleWidget()}
-              title="隐藏悬浮窗"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
+      <div className="relative flex w-full flex-col overflow-hidden rounded-2xl" style={PANEL_STYLE}>
+        <WidgetHeader>
+          <HeaderBtn icon="eyeOff" title={penetrationTitle} onClick={togglePenetration} active={penetration} accent={accent} />
+          <HeaderBtn icon="chevronRight" rotate={90} title="收起" onClick={() => setMode('mini')} />
+          <HeaderBtn icon="x" title="隐藏悬浮窗" onClick={() => window.api.toggleWidget()} />
+        </WidgetHeader>
 
         {welcome && !widgetCompact && (
-          <div className="mx-3 mt-2 rounded-lg bg-neon-green/15 px-3 py-1.5 text-center text-xs text-neon-green">
+          <div className="anim-fade-in mx-3 mt-2 rounded-lg border border-neon-green/20 bg-neon-green/10 px-3 py-1.5 text-center text-xs text-neon-green">
             欢迎回到正事
           </div>
         )}
 
         {/* 状态区 */}
         <div
-          className="flex items-center gap-3 px-4 py-3"
+          className="flex items-center gap-3 px-3.5 py-3"
           onMouseEnter={() => setShowFocusMinutes(true)}
           onMouseLeave={() => setShowFocusMinutes(false)}
         >
-          <div className="relative h-12 w-12 shrink-0">
-            <svg viewBox="0 0 48 48" className="h-12 w-12 -rotate-90">
-              <circle cx="24" cy="24" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3.5" />
-              <circle
-                cx="24" cy="24" r={R} fill="none"
-                stroke={meta.color} strokeWidth="3.5" strokeLinecap="round"
-                strokeDasharray={CIRC}
-                strokeDashoffset={CIRC * (1 - focus / 100)}
-                style={{ transition: 'stroke-dashoffset 400ms ease-out' }}
-              />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center text-sm">{meta.emoji}</div>
-          </div>
+          <FocusRing size={44} focus={focus} color={meta.color} emoji={meta.emoji} />
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold" style={{ color: meta.color }}>
+            <div className="text-[13px] font-semibold" style={{ color: meta.color }}>
               {meta.label}{' '}
               <span
-                className="text-xs text-slate-500"
+                className="text-[11px] font-normal text-slate-500"
                 title={presence ? `专注度怎么算的：${focusScoreLine(presence)}\n评级 ${attentionGrade(focus).grade}（S≥90 / A≥75 / B≥55 / C≥35 / D<35）` : undefined}
               >
-                · 专注度 {focus} · {attentionGrade(focus).grade}
+                专注度 {focus} · {attentionGrade(focus).grade}
               </span>
             </div>
-            <div className="mt-0.5 truncate text-xs text-slate-400">
-              {presence?.screens?.find((s) => s.screen === presence.mainScreen)?.title || '等待采集…'}
+            <div className="mt-0.5 truncate text-[11px] text-slate-400">
+              {liveTitle || '等待采集…'}
             </div>
             {presence && presence.continuousFocusSec > 60 && showFocusMinutes && (
-              <div className="mt-0.5 text-xs" style={{ color: accent }}>
+              <div className="mt-0.5 text-[11px]" style={{ color: accent }}>
                 已专注 {Math.round(presence.continuousFocusSec / 60)} 分钟
               </div>
             )}
           </div>
           {aiEnabled ? (
             <button
-              className="shrink-0 rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/10"
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200"
               title="问点什么…"
               onClick={() => setAskState(askState === 'hidden' ? 'input' : 'hidden')}
             >
-              💬
+              <Icon name="message" size={12} />
             </button>
           ) : null}
         </div>
 
-        {/* 折叠态问答条 */}
-        {askState !== 'hidden' ? (
-          <div className="mx-3 mb-2 transition-all">
-            {askState === 'input' ? (
-              <input
-                autoFocus
-                className="w-full rounded-full border bg-white/[0.06] px-3 py-1.5 text-xs text-slate-200 outline-none placeholder:text-slate-600"
-                style={{ borderColor: hexAlpha(accent, 0.35) }}
-                placeholder="问点什么…（回车发送）"
-                value={askText}
-                onChange={(e) => {
-                  setAskText(e.target.value)
-                  if (blurTimer.current) window.clearTimeout(blurTimer.current)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void submitAsk()
-                  if (e.key === 'Escape') setAskState('hidden')
-                }}
-                onBlur={onAskBlur}
-              />
-            ) : askState === 'thinking' ? (
-              <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-400">
-                <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full" style={{ background: accent }} />
-                思考中…
-              </div>
-            ) : (
-              <div className="max-h-20 overflow-hidden rounded-xl rounded-bl-sm border px-3 py-2 text-xs leading-relaxed" style={{ borderColor: hexAlpha(accent, 0.2), background: hexAlpha(accent, 0.1), color: accent }}>
-                {askAnswer}
-              </div>
-            )}
-          </div>
-        ) : null}
+        {/* 折叠态问答条 + 桌宠气泡 */}
+        <div className="mx-3 flex flex-col gap-2">
+          <AskBar askState={askState} askText={askText} setAskText={setAskText} submitAsk={submitAsk} onAskBlur={onAskBlur} onEscape={() => setAskState('hidden')} askAnswer={askAnswer} accent={accent} blurTimer={blurTimer} />
+          {petBubble && !widgetCompact && <PetBubbleLine text={petBubble} accent={accent} />}
+        </div>
 
-        {/* 桌宠气泡 */}
-        {petBubble && !widgetCompact && (
-          <div className="mx-3 mb-2 rounded-xl rounded-bl-sm border px-3 py-2 text-xs" style={{ borderColor: hexAlpha(accent, 0.2), background: hexAlpha(accent, 0.1), color: accent }}>
-            🐾 {petBubble}
-          </div>
-        )}
-
-        {/* 浏览器计划匹配确认 */}
-        <div className="mx-3 flex max-h-[240px] flex-col gap-2 overflow-y-auto">
+        {/* 告警区：浏览器计划确认 / 会议检测 / 会议辅助 / 轻问诊 */}
+        <div className="mx-3 mb-1 mt-2 flex max-h-[240px] flex-col gap-2 overflow-y-auto">
           {bpConfirm ? (
-            <div className="relative rounded-xl border border-neon-blue/30 bg-neon-blue/10 p-2.5">
-              <button
-                className="absolute right-1.5 top-1.5 rounded p-0.5 text-[10px] text-slate-500 hover:text-slate-300"
-                onClick={() => setAlertCollapsed((c) => ({ ...c, bp: true }))}
-                title="收起"
-              >
-                ▾
-              </button>
-              {alertCollapsed['bp'] ? (
-                <div className="text-[11px] text-neon-blue">🌐 浏览器检测（已收起）</div>
-              ) : (
-                <>
-                  <div className="mb-1 text-[11px] font-medium text-neon-blue">🌐 浏览器检测</div>
-                  <div className="mb-2 text-xs leading-relaxed text-slate-200">
-                    检测到你在浏览与计划【{bpConfirm.planTitle}】相关的内容，你在做这项计划吗？
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      className="flex-1 rounded-lg bg-neon-green/20 py-1.5 text-xs text-neon-green transition-colors hover:bg-neon-green/30"
-                      onClick={() => answerBrowserPlan('yes')}
-                    >
-                      是，在做这个
-                    </button>
-                    <button
-                      className="flex-1 rounded-lg bg-white/5 py-1.5 text-xs text-slate-400 transition-colors hover:bg-white/10"
-                      onClick={() => answerBrowserPlan('no')}
-                    >
-                      不是
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+            <AlertShell color="#3B82F6" label="🌐 浏览器检测" collapsed={!!alertCollapsed['bp']} onToggle={() => toggleAlert('bp')}>
+              <div className="mb-1 text-[11px] font-medium" style={{ color: '#7FB0F7' }}>🌐 浏览器检测</div>
+              <div className="mb-2 pr-4 text-xs leading-relaxed text-slate-200">
+                检测到你在浏览与计划【{bpConfirm.planTitle}】相关的内容，你在做这项计划吗？
+              </div>
+              <div className="flex gap-2">
+                <button
+                  className="flex-1 rounded-lg py-1.5 text-xs transition-colors hover:brightness-125"
+                  style={{ background: 'rgba(16,185,129,0.16)', color: '#34D399' }}
+                  onClick={() => answerBrowserPlan('yes')}
+                >
+                  是，在做这个
+                </button>
+                <button
+                  className="flex-1 rounded-lg bg-white/[0.05] py-1.5 text-xs text-slate-400 transition-colors hover:bg-white/10"
+                  onClick={() => answerBrowserPlan('no')}
+                >
+                  不是
+                </button>
+              </div>
+            </AlertShell>
           ) : null}
 
-          {/* 会议检测选项 */}
           {meetingDetected ? (
-            <div className="relative rounded-xl border border-neon-amber/30 bg-neon-amber/10 p-2.5">
-              <button
-                className="absolute right-1.5 top-1.5 rounded p-0.5 text-[10px] text-slate-500 hover:text-slate-300"
-                onClick={() => setAlertCollapsed((c) => ({ ...c, md: true }))}
-                title="收起"
-              >
-                ▾
-              </button>
-              {alertCollapsed['md'] ? (
-                <div className="text-[11px] text-neon-amber">👥 会议检测（已收起）</div>
-              ) : (
-                <>
-                  <div className="mb-1 text-[11px] font-medium text-neon-amber">👥 会议检测</div>
-                  <div className="mb-2 text-xs leading-relaxed text-slate-200">
-                    检测到你正在使用 {meetingDetected.app.replace(/\.exe$/i, '')} 开会，选择会议模式：
-                  </div>
-                  <div className="flex gap-1.5">
-                    <button
-                      className="flex-1 rounded-lg bg-white/[0.08] py-1.5 text-[11px] text-slate-200 transition-colors hover:bg-white/[0.14]"
-                      onClick={() => chooseMeetingMode('stealth')}
-                    >
-                      🤫 一键隐身
-                    </button>
-                    <button
-                      className="flex-1 rounded-lg bg-white/[0.08] py-1.5 text-[11px] text-slate-200 transition-colors hover:bg-white/[0.14]"
-                      onClick={() => chooseMeetingMode('quiet')}
-                    >
-                      🔇 免打扰
-                    </button>
-                    <button
-                      className="flex-1 rounded-lg bg-white/[0.08] py-1.5 text-[11px] text-slate-200 transition-colors hover:bg-white/[0.14]"
-                      onClick={() => chooseMeetingMode('assist')}
-                    >
-                      📝 会议辅助
-                    </button>
-                  </div>
-                  <label className="mt-2 flex cursor-pointer items-center gap-1.5 text-[10px] text-slate-500">
-                    <input type="checkbox" checked={meetingSetDefault} onChange={(e) => setMeetingSetDefault(e.target.checked)} />
-                    以后都这样（可在设置中修改）
-                  </label>
-                </>
-              )}
-            </div>
+            <AlertShell color="#F59E0B" label="👥 会议检测" collapsed={!!alertCollapsed['md']} onToggle={() => toggleAlert('md')}>
+              <div className="mb-1 text-[11px] font-medium" style={{ color: '#FBBF24' }}>👥 会议检测</div>
+              <div className="mb-2 pr-4 text-xs leading-relaxed text-slate-200">
+                检测到你正在使用 {meetingDetected.app.replace(/\.exe$/i, '')} 开会，选择会议模式：
+              </div>
+              <div className="flex gap-1.5">
+                <button
+                  className="flex-1 rounded-lg bg-white/[0.07] py-1.5 text-[11px] text-slate-200 transition-colors hover:bg-white/[0.12]"
+                  onClick={() => chooseMeetingMode('stealth')}
+                >
+                  🤫 一键隐身
+                </button>
+                <button
+                  className="flex-1 rounded-lg bg-white/[0.07] py-1.5 text-[11px] text-slate-200 transition-colors hover:bg-white/[0.12]"
+                  onClick={() => chooseMeetingMode('quiet')}
+                >
+                  🔇 免打扰
+                </button>
+                <button
+                  className="flex-1 rounded-lg bg-white/[0.07] py-1.5 text-[11px] text-slate-200 transition-colors hover:bg-white/[0.12]"
+                  onClick={() => chooseMeetingMode('assist')}
+                >
+                  📝 会议辅助
+                </button>
+              </div>
+              <label className="mt-2 flex cursor-pointer items-center gap-1.5 text-[10px] text-slate-500">
+                <input type="checkbox" checked={meetingSetDefault} onChange={(e) => setMeetingSetDefault(e.target.checked)} />
+                以后都这样（可在设置中修改）
+              </label>
+            </AlertShell>
           ) : null}
 
-          {/* 会议辅助计时 */}
           {meetingActive?.mode === 'assist' ? (
-            <div className="relative flex items-center gap-2 rounded-xl border border-neon-green/25 bg-neon-green/10 px-3 py-2">
-              <button
-                className="absolute right-1.5 top-1.5 rounded p-0.5 text-[10px] text-slate-500 hover:text-slate-300"
-                onClick={() => setAlertCollapsed((c) => ({ ...c, ma: true }))}
-                title="收起"
-              >
-                ▾
-              </button>
-              {alertCollapsed['ma'] ? (
-                <span className="text-xs text-neon-green">📝 会议辅助中（已收起）</span>
-              ) : (
-                <>
-                  <span className="text-xs text-neon-green">📝</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-medium text-neon-green">
-                      会议辅助中 · {Math.max(1, Math.round((Date.now() - meetingActive.sinceTs) / 60000))} 分钟
-                    </div>
-                    <div className="text-[10px] text-neon-green/60">每 15 分钟报时提醒</div>
+            <AlertShell color="#10B981" label="📝 会议辅助中" collapsed={!!alertCollapsed['ma']} onToggle={() => toggleAlert('ma')}>
+              <div className="flex items-center gap-2">
+                <span className="text-xs" style={{ color: '#34D399' }}>📝</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-medium" style={{ color: '#34D399' }}>
+                    会议辅助中 · {Math.max(1, Math.round((Date.now() - meetingActive.sinceTs) / 60000))} 分钟
                   </div>
-                  <button
-                    className="shrink-0 rounded-lg border border-neon-green/30 px-2 py-1 text-[10px] text-neon-green transition-colors hover:bg-neon-green/15"
-                    onClick={() => applyMeetingMode('assist', false, meetingActive.sinceTs)}
-                  >
-                    结束会议
-                  </button>
-                </>
-              )}
-            </div>
+                  <div className="text-[10px]" style={{ color: 'rgba(52,211,153,0.6)' }}>每 15 分钟报时提醒</div>
+                </div>
+                <button
+                  className="shrink-0 rounded-lg border px-2 py-1 text-[10px] transition-colors hover:bg-white/[0.06]"
+                  style={{ borderColor: 'rgba(16,185,129,0.3)', color: '#34D399' }}
+                  onClick={() => applyMeetingMode('assist', false, meetingActive.sinceTs)}
+                >
+                  结束会议
+                </button>
+              </div>
+            </AlertShell>
           ) : null}
 
-          {/* 轻问诊 */}
           {question ? (
-            <div className="relative rounded-xl border border-neon-violet/30 bg-neon-violet/10 p-2.5">
-              <button
-                className="absolute right-1.5 top-1.5 rounded p-0.5 text-[10px] text-slate-500 hover:text-slate-300"
-                onClick={() => setAlertCollapsed((c) => ({ ...c, q: true }))}
-                title="收起"
-              >
-                ▾
-              </button>
-              {alertCollapsed['q'] ? (
-                <div className="text-[11px] text-neon-violet">📋 轻问诊（已收起）</div>
-              ) : (
-                <>
-                  <div className="mb-2 text-xs leading-relaxed text-slate-200">{question.question}</div>
-                  <div className="flex gap-2">
-                    <button
-                      className="flex-1 rounded-lg bg-neon-green/20 py-1.5 text-xs text-neon-green transition-colors hover:bg-neon-green/30"
-                      onClick={() => answer('yes')}
-                    >
-                      是
-                    </button>
-                    <button
-                      className="flex-1 rounded-lg bg-white/5 py-1.5 text-xs text-slate-400 transition-colors hover:bg-white/10"
-                      onClick={() => answer('no')}
-                    >
-                      不是
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+            <AlertShell color="#8B5CF6" label="📋 轻问诊" collapsed={!!alertCollapsed['q']} onToggle={() => toggleAlert('q')}>
+              <div className="mb-2 pr-4 text-xs leading-relaxed text-slate-200">{question.question}</div>
+              <div className="flex gap-2">
+                <button
+                  className="flex-1 rounded-lg py-1.5 text-xs transition-colors hover:brightness-125"
+                  style={{ background: 'rgba(16,185,129,0.16)', color: '#34D399' }}
+                  onClick={() => answer('yes')}
+                >
+                  是
+                </button>
+                <button
+                  className="flex-1 rounded-lg bg-white/[0.05] py-1.5 text-xs text-slate-400 transition-colors hover:bg-white/10"
+                  onClick={() => answer('no')}
+                >
+                  不是
+                </button>
+              </div>
+            </AlertShell>
           ) : !bpConfirm ? (
             widgetCompact ? null : (
-              <div className="rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2 text-center text-xs text-slate-500">
+              <div className="rounded-xl border border-white/[0.05] bg-white/[0.03] px-3 py-2 text-center text-[11px] text-slate-500">
                 暂无新的情境确认 · 越用越聪明
               </div>
             )
           ) : null}
         </div>
 
-        {/* 右下角缩放手柄 */}
-        <div
-          className="absolute bottom-0 right-0 z-20 h-6 w-6 cursor-nwse-resize rounded-bl-xl transition-colors hover:bg-white/10"
-          onPointerDown={onResizePointerDown}
-          onPointerMove={onResizePointerMove}
-          onPointerUp={onResizePointerUp}
-          title="拖动改变大小"
-        >
-          <svg viewBox="0 0 24 24" className="h-6 w-6" style={{ color: 'rgba(148,163,184,0.9)' }}>
-            <path d="M24 0 L24 24 L0 24" fill="none" stroke="currentColor" strokeWidth="2" />
-          </svg>
-        </div>
+        <ResizeHandle onDown={onResizePointerDown} onMove={onResizePointerMove} onUp={onResizePointerUp} />
       </div>
     </div>
   )

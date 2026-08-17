@@ -3,6 +3,7 @@ import type { ProfileReference, QAMessage } from '@shared/types'
 import { genId } from '@shared/types'
 import { PRIVACY_LEVEL_META } from '@shared/personaMeta'
 import { Icon } from '../components/Icon'
+import { PageHeader } from '../components/PageHeader'
 import { EmptyState } from '../components/EmptyState'
 import { useSettingsStore } from '../stores/settingsStore'
 import peierAvatar from '../assets/peier-avatar.png'
@@ -105,17 +106,19 @@ export default function QAReview() {
   return (
     <div className="view-enter flex h-full flex-col gap-4">
       {/* 页面标题区：图标 + 标题 + 副标题 + 右侧模式状态 */}
-      <header className="anim-fade-up flex shrink-0 items-center gap-3">
-        <div className="shadow-glow flex h-9 w-9 items-center justify-center rounded-xl border border-neon-cyan/25 bg-neon-cyan/10 text-neon-cyan">
-          <Icon name="message" size={17} />
-        </div>
-        <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold text-slate-200">问答回顾</h2>
-          <p className="mt-0.5 text-[11px] text-slate-500">向姵儿提问今日工作状态，随时回顾历史问答</p>
-        </div>
-        <span className="chip ml-auto shrink-0">{aiReady ? '🤖 AI 模式' : '📊 本地模式'}</span>
-        <button className="glass-btn text-[11px] ml-2 shrink-0" onClick={() => { setPruneMode(!pruneMode); if (pruneMode) setSelectedIds(new Set()) }}>🗑 管理回顾</button>
-      </header>
+      <div className="shrink-0">
+        <PageHeader
+          icon="message"
+          title="问答回顾"
+          desc="向姵儿提问今日工作状态，随时回顾历史问答"
+          actions={
+            <>
+              <span className="chip shrink-0">{aiReady ? '🤖 AI 模式' : '📊 本地模式'}</span>
+              <button className="glass-btn text-[11px] shrink-0" onClick={() => { setPruneMode(!pruneMode); if (pruneMode) setSelectedIds(new Set()) }}>🗑 管理回顾</button>
+            </>
+          }
+        />
+      </div>
 
       {!aiReady ? (
         <div className="anim-fade-up shrink-0 rounded-2xl border border-neon-amber/25 bg-gradient-to-r from-neon-amber/[0.09] via-neon-amber/[0.05] to-transparent px-4 py-3" style={{ animationDelay: '60ms' }}>

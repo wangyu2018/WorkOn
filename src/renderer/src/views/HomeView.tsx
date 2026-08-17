@@ -57,11 +57,11 @@ function makeDragImage(app: string, ma?: string | null): HTMLDivElement {
   return el
 }
 
-function STATE_COLOR_OF(seg: TrailSegment) {
+function STATE_TEXT_VAR(seg: TrailSegment): string {
   const s = senseOf(seg.mainState)
-  if (s === 'work') return { fillVar: '--tl-work-fill', strokeVar: '--tl-work-stroke', textVar: '--tl-work-text' }
-  if (s === 'slack') return { fillVar: '--tl-slack-fill', strokeVar: '--tl-slack-stroke', textVar: '--tl-slack-text' }
-  return { fillVar: '--tl-other-fill', strokeVar: '--tl-other-stroke', textVar: '--tl-other-text' }
+  if (s === 'work') return '--tl-work-text'
+  if (s === 'slack') return '--tl-slack-text'
+  return '--tl-other-text'
 }
 
 type SenseKind = 'work' | 'slack' | 'other'
@@ -70,6 +70,14 @@ function senseOf(state: WorkState): SenseKind {
   if (slackStates.includes(state)) return 'slack'
   if (WORK_LIKE_STATES.includes(state)) return 'work'
   return 'other'
+}
+
+/** 时间轴散点语义色（RGB 通道，与星图 chroma 保持一致） */
+function CHROMA_OF(seg: TrailSegment): string {
+  const s = senseOf(seg.mainState)
+  if (s === 'work') return '124 158 255'
+  if (s === 'slack') return '255 124 124'
+  return '148 163 184'
 }
 
 interface StarNode { item: GraphItem; key: string; x: number; y: number; size: number; isCore: boolean }
@@ -256,7 +264,8 @@ export default function HomeView() {
   const renderSegBlock = useCallback((seg: TrailSegment, left: number, width: number) => {
     const app = displayApp(seg.mainApp)
     const ma = (seg as any).microActivity
-    const c = STATE_COLOR_OF(seg)
+    const c = STATE_TEXT_VAR(seg)
+    const chroma = CHROMA_OF(seg)
     const ghost = dragTs === seg.startTs
     const glance = !!seg.glance
     return (
@@ -273,21 +282,22 @@ export default function HomeView() {
         onMouseEnter={e => !dragTs && setTlHover({ seg, rect: e.currentTarget.getBoundingClientRect() })}
         onMouseLeave={() => setTlHover(null)}
         title={`${app}${ma ? ' · ' + ma : ''} · ${fmtTime(seg.startTs)}${glance ? ' · 短切换' : ''}`}
-        style={{ position: 'absolute', left, width, top: 4, bottom: 4,
-                 background: ghost ? 'rgba(136,135,128,0.10)' : `var(${c.fillVar})`,
-                 border: ghost ? '1px dashed var(--tl-other-stroke)' : `0.5px solid var(${c.strokeVar})`,
-                 borderRadius: 6,
+        style={{ position: 'absolute', left, width, top: 6, bottom: 6,
+                 background: ghost ? 'rgba(136,135,128,0.12)' : `linear-gradient(180deg, rgb(${chroma}/0.36), rgb(${chroma}/0.12))`,
+                 border: ghost ? '1px dashed var(--tl-other-stroke)' : 'none',
+                 borderRadius: 999,
                  cursor: dragTs ? 'grabbing' : 'grab',
-                 opacity: ghost ? 0.35 : glance ? 0.35 : 1,
+                 opacity: ghost ? 0.4 : glance ? 0.35 : 1,
                  transition: 'opacity .12s, box-shadow .12s',
-                 boxShadow: ghost ? 'none' : 'inset 0 1px 0 rgba(255,255,255,0.25)',
+                 boxShadow: ghost ? 'none' : `0 0 5px rgb(${chroma}/0.22), 0 0 10px rgb(${chroma}/0.06)`,
                  display: 'flex', alignItems: 'center', justifyContent: 'center',
                  overflow: 'hidden' }}
       >
         {!ghost && !glance && width > 44 && (
           <span style={{
             fontSize: 11, fontWeight: 500,
-            color: `var(${c.textVar})`,
+            color: `var(${c})`,
+            textShadow: '0 0 8px rgba(0,0,0,0.45)',
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             padding: '0 4px', pointerEvents: 'none',
           }}>
@@ -566,7 +576,7 @@ export default function HomeView() {
             <div className="flex items-center mb-1">
               <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-ruler-label)', paddingLeft: 8 }} className="shrink-0">全天</span>
               <div ref={overviewRef} className="relative"
-                style={{ width: LANE_W, height: 16, borderRadius: 8, background: 'var(--tl-lane-today-bg)', cursor: 'grab', touchAction: 'none' }}
+                style={{ width: LANE_W, height: 10, borderRadius: 999, background: 'var(--tl-lane-today-bg)', cursor: 'grab', touchAction: 'none' }}
                 onPointerDown={onOverviewPointerDown}
                 onPointerMove={onOverviewPointerMove}
                 onPointerUp={onOverviewPointerUp}
@@ -578,17 +588,15 @@ export default function HomeView() {
                 <div className="absolute top-0 bottom-0" style={{
                   left: `${(rangeLo / 1440) * 100}%`,
                   width: `${((rangeHi - rangeLo) / 1440) * 100}%`,
-                  background: 'rgba(55,138,221,0.30)',
-                  border: '0.5px solid var(--tl-accent)',
-                  borderRadius: 6,
-                  boxSizing: 'border-box',
+                  background: 'rgba(55,138,221,0.32)',
+                  borderRadius: 999,
                 }} />
               </div>
             </div>
             <div className="flex items-center mb-1.5">
               <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-ruler-label)', paddingLeft: 8 }} className="shrink-0">{fmtHHMM(rangeLo)}–{fmtHHMM(rangeHi)}</span>
-              <div ref={rangeRef} className="relative"
-                style={{ width: LANE_W, height: 32, cursor: panRef.current ? 'grabbing' : 'grab', touchAction: 'none' }}
+                <div ref={rangeRef} className="relative"
+                  style={{ width: LANE_W, height: 26, cursor: panRef.current ? 'grabbing' : 'grab', touchAction: 'none' }}
                 onPointerDown={onRulerPointerDown}
                 onPointerMove={onRulerPointerMove}
                 onPointerUp={onRulerPointerUp}
@@ -598,8 +606,8 @@ export default function HomeView() {
                 <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2" style={{ height: 0.5, background: 'var(--tl-ruler-line)' }} />
                 {hourTicks.map(t => (
                   <div key={t} className="absolute top-0 bottom-0" style={{ left: ruler.minToX(t) }}>
-                    <div style={{ width: 0.5, height: 8, background: 'var(--tl-ruler-tick)' }} />
-                    <span className="absolute" style={{ top: 12, left: '50%', transform: 'translateX(-50%)', fontSize: 11, color: 'var(--tl-ruler-label)', fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontVariantNumeric: 'tabular-nums' }}>
+                    <div style={{ width: 0.5, height: 6, background: 'var(--tl-ruler-tick)' }} />
+                    <span className="absolute" style={{ top: 10, left: '50%', transform: 'translateX(-50%)', fontSize: 11, color: 'var(--tl-ruler-label)', fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontVariantNumeric: 'tabular-nums' }}>
                       {String(Math.floor(t / 60))}
                     </span>
                   </div>
@@ -619,9 +627,9 @@ export default function HomeView() {
               <div className="flex items-center mb-1.5">
                 <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-other-text)', paddingLeft: 8 }} className="shrink-0">今日</span>
                 <div className="relative" style={{
-                     width: LANE_W, height: 30, borderRadius: 8, overflow: 'hidden',
-                     background: 'var(--tl-lane-today-bg)',
-                     boxShadow: 'inset 0 0 0 0.5px var(--tl-lane-border)',
+                     width: LANE_W, height: 30, overflow: 'hidden',
+                     background: 'transparent',
+                     borderBottom: '0.5px solid var(--tl-lane-border)',
                    }}
                   onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane('today') }}
                   onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverLane(null) }}
@@ -637,9 +645,10 @@ export default function HomeView() {
               <div key={app} className="flex items-center mb-1.5">
                 <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-other-text)', paddingLeft: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} className="shrink-0">{displayApp(app)}</span>
                 <div className="relative" style={{
-                     width: LANE_W, height: 30, borderRadius: 8, overflow: 'hidden',
-                     background: dragOverLane === 'today' ? 'rgba(55,138,221,0.08)' : 'var(--tl-lane-today-bg)',
-                     boxShadow: dragOverLane === 'today' ? 'inset 0 0 0 1.5px var(--tl-accent)' : 'inset 0 0 0 0.5px var(--tl-lane-border)',
+                     width: LANE_W, height: 30, overflow: 'hidden',
+                     background: dragOverLane === 'today' ? 'rgba(55,138,221,0.08)' : 'transparent',
+                     borderBottom: '0.5px solid var(--tl-lane-border)',
+                     boxShadow: dragOverLane === 'today' ? 'inset 0 -1.5px 0 var(--tl-accent)' : 'none',
                      transition: 'background .12s, box-shadow .12s',
                    }}
                   onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane('today') }}
@@ -665,7 +674,7 @@ export default function HomeView() {
                 </div>
                 <div className="flex items-center mb-1.5">
                   <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-ruler-label)', paddingLeft: 8 }} className="shrink-0">定时提醒</span>
-                  <div className="relative" style={{ width: LANE_W, height: 24, borderRadius: 8, overflow: 'hidden', background: 'transparent', border: '0.5px dashed var(--tl-lane-border)' }}>
+                  <div className="relative" style={{ width: LANE_W, height: 24, overflow: 'hidden', background: 'transparent', borderBottom: '0.5px dashed var(--tl-lane-border)' }}>
                     {reminders.map(r => {
                       const t = r.startMin
                       if (t === undefined) return null
@@ -697,12 +706,15 @@ export default function HomeView() {
               const covered = segs.reduce((a, s) => a + (s.seg.durationMin || 0), 0)
               return (
                 <div key={plan.id} className="flex items-center mb-1.5">
-                  <span style={{ width: LABEL_W, fontSize: 11, color: STATUS_TEXT[plan.status] || 'var(--tl-other-text)', paddingLeft: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} className="shrink-0">{plan.title}</span>
+                  <span style={{ width: LABEL_W, fontSize: 11, color: STATUS_TEXT[plan.status] || 'var(--tl-other-text)', paddingLeft: 8, display: 'flex', alignItems: 'center', gap: 6 }} className="shrink-0">
+                    <i style={{ width: 6, height: 6, borderRadius: '50%', background: STATUS_BORDER[plan.status] || 'var(--tl-lane-border)', flexShrink: 0, display: 'inline-block' }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{plan.title}</span>
+                  </span>
                   <div className="relative" style={{
-                           width: LANE_W, height: 30, borderRadius: 8, overflow: 'hidden',
-                           borderLeft: `3px solid ${STATUS_BORDER[plan.status] || 'var(--tl-lane-border)'}`,
-                           background: dragOverLane === plan.id ? 'rgba(55,138,221,0.08)' : 'var(--tl-lane-plan-bg)',
-                           boxShadow: dragOverLane === plan.id ? 'inset 0 0 0 1.5px var(--tl-accent)' : 'inset 0 0 0 0.5px var(--tl-lane-border)',
+                           width: LANE_W, height: 30, overflow: 'hidden',
+                           background: dragOverLane === plan.id ? 'rgba(55,138,221,0.08)' : 'transparent',
+                           borderBottom: '0.5px solid var(--tl-lane-border)',
+                           boxShadow: dragOverLane === plan.id ? 'inset 0 -1.5px 0 var(--tl-accent)' : 'none',
                            transition: 'background .12s, box-shadow .12s',
                          }}
                     onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane(plan.id) }}
@@ -716,8 +728,8 @@ export default function HomeView() {
                       <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', background: 'var(--tl-accent)', color: '#fff', fontSize: 11, fontWeight: 500, borderRadius: 999, padding: '2px 8px' }}>松开归入 · {plan.title}</span>
                     )}
                     <div style={{ position: 'absolute', left: ruler.minToX(plan.startMin ?? 0), width: ruler.durToW(plan.durationMin ?? 60),
-                                 top: 2, bottom: 2, background: `${STATUS_BG[plan.status] || 'var(--tl-lane-today-bg)'}55`,
-                                 border: `0.5px dashed ${STATUS_BORDER[plan.status] || 'var(--tl-lane-border)'}`, borderRadius: 6 }} />
+                                 top: 5, bottom: 5, background: `${STATUS_BG[plan.status] || 'var(--tl-lane-today-bg)'}40`,
+                                 borderRadius: 999 }} />
                     {segs.map(s => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 30)))}
                     <span style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--tl-ruler-label)' }}>
                       {[
@@ -734,10 +746,10 @@ export default function HomeView() {
               const x = LABEL_W + ruler.minToX(nowMin)
               return (
                 <div style={{ position: 'absolute', left: x, top: 0, bottom: 0,
-                              width: 1.5, background: 'var(--tl-now)', zIndex: 50, pointerEvents: 'none' }}>
-                  <div style={{ position: 'absolute', top: -3, left: '50%', transform: 'translateX(-50%)',
+                              width: 1, background: 'var(--tl-now)', zIndex: 50, pointerEvents: 'none' }}>
+                  <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
                                 width: 7, height: 7, borderRadius: '50%', background: 'var(--tl-now)' }} />
-                  <div style={{ position: 'absolute', top: -18, left: '50%', transform: 'translateX(-50%)',
+                  <div style={{ position: 'absolute', top: 9, left: '50%', transform: 'translateX(-50%)',
                                 background: 'var(--tl-now)', color: '#ffffff',
                                 fontSize: 11, fontWeight: 500, padding: '1px 8px', borderRadius: 8,
                                 whiteSpace: 'nowrap' }}>
@@ -748,6 +760,27 @@ export default function HomeView() {
                 </div>
               )
             })()}
+            {/* 提醒时间点竖线：与当前时间线一致，临近时闪烁 */}
+            {reminders.map(r => {
+              const t = r.startMin
+              if (t === undefined || t < rangeLo || t > rangeHi || r.status === 'cancelled') return null
+              const x = LABEL_W + ruler.minToX(t)
+              const color = STATUS_BORDER[r.status] || '#A78BFA'
+              const deltaMin = t - nowMin
+              const upcoming = deltaMin >= 0 && deltaMin <= 60
+              const dur = upcoming ? Math.max(0.4, deltaMin / 12) : 0
+              return (
+                <div key={`rem-line-${r.id}`} style={{
+                  position: 'absolute', left: x, top: 0, bottom: 0, width: 1,
+                  background: color, zIndex: 40, pointerEvents: 'none',
+                  opacity: r.status === 'done' ? 0.3 : upcoming ? undefined : 0.5,
+                  animation: upcoming ? `tl-reminder-pulse ${dur.toFixed(2)}s ease-in-out infinite` : 'none',
+                }}>
+                  <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
+                                width: 5, height: 5, borderRadius: '50%', background: color }} />
+                </div>
+              )
+            })}
             </div>
           </div>
       </section>

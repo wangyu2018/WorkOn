@@ -161,7 +161,7 @@ export function CommandPalette() {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b border-white/[0.07] px-4 py-3">
-          <Icon name={mode === 'plan' ? 'plus' : 'command'} size={15} className="shrink-0 text-neon-cyan" />
+          <Icon name={mode === 'plan' ? 'plus' : 'command'} size={15} className="shrink-0" style={{ color: 'var(--accent)' }} />
           <input
             ref={inputRef}
             className="w-full bg-transparent text-[14px] text-slate-100 outline-none placeholder:text-slate-600"
@@ -181,13 +181,13 @@ export function CommandPalette() {
                 <button
                   key={a.id}
                   className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors ${
-                    i === sel ? 'bg-neon-cyan/12 text-slate-100' : 'text-slate-400'
+                    i === sel ? 'text-slate-100' : 'text-slate-400'
                   }`}
-                  style={{ transitionDuration: '100ms' }}
+                  style={{ transitionDuration: '100ms', background: i === sel ? 'var(--accent-softer)' : undefined }}
                   onMouseEnter={() => setSel(i)}
                   onClick={() => void a.run()}
                 >
-                  <Icon name={a.icon} size={15} className={i === sel ? 'text-neon-cyan' : 'text-slate-500'} />
+                  <Icon name={a.icon} size={15} style={i === sel ? { color: 'var(--accent)' } : undefined} className={i === sel ? '' : 'text-slate-500'} />
                   <span className="flex-1 text-[13px]">{a.title}</span>
                   {a.hint ? <span className="text-[11px] text-slate-600">{a.hint}</span> : null}
                 </button>

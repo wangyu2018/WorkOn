@@ -4,12 +4,12 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // v2.2 CSS 变量体系（科技感暗色）
+        // 静谧深空色板（与 index.css 变量同步）
         ink: {
-          950: '#070B14',
-          900: '#0B1220',
-          800: '#111A2E',
-          700: '#1A2540'
+          950: '#070B13',
+          900: '#0B101B',
+          800: '#121826',
+          700: '#1A2233'
         },
         neon: {
           cyan: '#22D3EE',
@@ -25,8 +25,8 @@ module.exports = {
         mono: ['"JetBrains Mono"', 'Consolas', 'monospace']
       },
       boxShadow: {
-        glass: '0 8px 32px rgba(0,0,0,0.37)',
-        glow: '0 0 18px rgba(34,211,238,0.35)'
+        glass: '0 10px 30px rgba(0,0,0,0.32)',
+        glow: '0 0 14px rgba(34,211,238,0.22)'
       },
       backdropBlur: { xs: '2px' }
     }

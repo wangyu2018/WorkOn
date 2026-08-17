@@ -4,6 +4,7 @@ import { ALL_STATES, WORK_STATES, WORK_LIKE_STATES } from '@shared/stateMeta'
 import { genId } from '@shared/types'
 import { displayApp } from '@shared/appDisplayName'
 import { Icon } from '../components/Icon'
+import { PageHeader } from '../components/PageHeader'
 import { ActivityHoverCard } from '../components/ActivityHoverCard'
 import HeatmapView from './HeatmapView'
 import {
@@ -88,13 +89,15 @@ function ActivityDetailCard({ entry, pos, onEdit, onClose, matchedApp, matchedTi
     <>
       <div className="fixed inset-0 z-[55]" onClick={onClose} />
       <div
-        className="fixed z-[56] rounded-xl px-3 py-2 shadow-lg"
+        className="fixed z-[56] rounded-xl px-3 py-2"
         style={{
           width: 240,
-          background: '#ffffff',
-          border: `1px solid rgb(${sense.rgb}/0.55)`,
-          boxShadow: '0 4px 18px rgba(15,23,42,0.15)',
-          color: '#1e293b',
+          background: 'rgba(15, 21, 34, 0.94)',
+          border: `1px solid rgb(${sense.rgb}/0.35)`,
+          boxShadow: '0 10px 28px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.3)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          color: '#e8edf5',
           left: `${pos.x}px`,
           top: `${pos.y}px`,
           transform: pos.x + 240 + 16 > window.innerWidth
@@ -106,34 +109,34 @@ function ActivityDetailCard({ entry, pos, onEdit, onClose, matchedApp, matchedTi
         <div className="flex items-center justify-between gap-2">
           <span className="text-[12px] font-semibold truncate">{app}</span>
           <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
-            style={{ color: `rgb(${sense.rgb})`, background: `rgb(${sense.rgb}/0.12)` }}>
+            style={{ color: `rgb(${sense.rgb})`, background: `rgb(${sense.rgb}/0.14)` }}>
             {sense.label}
           </span>
         </div>
-        <div className="mt-1 text-[11px] leading-snug" style={{ color: '#334155' }}>
+        <div className="mt-1 text-[11px] leading-snug" style={{ color: '#c3cad8' }}>
           {title || '（未命名）'}
         </div>
         {(counterpart || topic) ? (
-          <div className="mt-1 text-[11px] leading-snug" style={{ color: '#64748b' }}>
-            {counterpart ? <span>与 <b style={{ color: '#334155' }}>{counterpart}</b> 沟通</span> : null}
-            {topic ? <span>查看：<b style={{ color: '#334155' }}>{topic}</b></span> : null}
+          <div className="mt-1 text-[11px] leading-snug" style={{ color: '#8a93a6' }}>
+            {counterpart ? <span>与 <b style={{ color: '#c3cad8' }}>{counterpart}</b> 沟通</span> : null}
+            {topic ? <span>查看：<b style={{ color: '#c3cad8' }}>{topic}</b></span> : null}
           </div>
         ) : null}
-        <div className="mt-1.5 flex items-center gap-2 text-[10px]" style={{ color: '#64748b' }}>
+        <div className="mt-1.5 flex items-center gap-2 text-[10px]" style={{ color: '#8a93a6' }}>
           <span>{clockOf(entry.startMin)} – {clockOf(entry.endMin)}</span>
-          <span style={{ color: '#94a3b8' }}>·</span>
+          <span style={{ color: '#4d566b' }}>·</span>
           <span>{fmtMin(entry.endMin - entry.startMin)}</span>
-          <span className="ml-auto rounded px-1 py-0.5" style={{ background: '#f1f5f9', color: '#475569' }}>{SOURCE_LABEL[entry.source]}</span>
+          <span className="ml-auto rounded px-1 py-0.5" style={{ background: 'rgba(255,255,255,0.07)', color: '#aab3c5' }}>{SOURCE_LABEL[entry.source]}</span>
         </div>
         <div className="mt-2 flex items-center gap-2">
           <button
-            className="flex-1 rounded-lg border border-slate-200 py-1 text-[10px] text-slate-600 transition-colors hover:bg-slate-100"
+            className="flex-1 rounded-lg border border-white/10 py-1 text-[10px] text-slate-300 transition-colors hover:bg-white/[0.08]"
             onClick={onEdit}
           >
             ✏️ 编辑
           </button>
           <button
-            className="rounded-lg border border-slate-200 px-2 py-1 text-[10px] text-slate-400 transition-colors hover:bg-slate-100"
+            className="rounded-lg border border-white/10 px-2 py-1 text-[10px] text-slate-400 transition-colors hover:bg-white/[0.08]"
             onClick={onClose}
           >
             关闭
@@ -576,15 +579,7 @@ export default function CalendarView() {
   return (
     <div className="view-enter flex flex-col gap-5">
       {/* 页面标题区 */}
-      <header className="anim-fade-up flex items-center gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neon-cyan/25 bg-neon-cyan/10 text-neon-cyan shadow-glow">
-          <Icon name="calendar" size={20} />
-        </div>
-        <div className="min-w-0">
-          <h1 className="text-[17px] font-semibold leading-tight text-slate-100">时间日历</h1>
-          <p className="mt-0.5 text-[11px] text-slate-500">周视图概览 · 月度热力图 · 点击 ＋ 补录时段</p>
-        </div>
-      </header>
+      <PageHeader icon="calendar" title="时间日历" desc="周视图概览 · 月度热力图 · 点击 ＋ 补录时段" />
 
       {/* 工具条 */}
       <div className="anim-fade-up flex flex-wrap items-center gap-2" style={{ animationDelay: '60ms' }}>
