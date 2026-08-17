@@ -8,6 +8,7 @@ import type { MergedTrail, TrailSegment, WorkState, PlanItem } from '@shared/typ
 import { dateKey } from '@shared/trail'
 import { ActivityHoverCard } from '../components/ActivityHoverCard'
 import { displayApp } from '@shared/appDisplayName'
+import { useSettingsStore } from '../stores/settingsStore'
 
 type Channel = 'CMD' | '浏览器' | '微信' | 'IDE' | '其他'
 type Column = 'work' | 'life'
@@ -143,6 +144,13 @@ export default function HomeView() {
 
   const lastPresenceRefresh = useRef<number>(0)
   const trailingRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** 悬浮卡粘滞：鼠标移出段落后短暂延迟再收起，留出移动到卡上的时间 */
+  const hoverLeaveTimer = useRef<number | null>(null)
+  /** 时间轴自适应宽度：泳道跟随容器宽度（全屏撑满，不再固定 760） */
+  const timelineScrollRef = useRef<HTMLDivElement>(null)
+  const [laneW, setLaneW] = useState(LANE_W)
+  /** 隐私排除的应用（时间轴末尾管理区 + 刷新过滤共用） */
+  const excludedApps = useSettingsStore((s) => s.settings.privacyExcludedApps ?? [])
 
   const refresh = useCallback(() => {
     void (async () => {
@@ -150,13 +158,16 @@ export default function HomeView() {
       const p = await window.api?.listPlans?.(dateKey(Date.now())) as PlanItem[] | undefined
       if (t) {
         setTrail(t)
+        // 隐私排除的应用不再进入时间轴/星图（0 采集；历史数据也一并隐去）
+        const excludedApps = useSettingsStore.getState().settings.privacyExcludedApps ?? []
+        const isExcluded = (app?: string | null) => !!app && excludedApps.includes(app)
         // 只保留「有实际工作」的段：过滤短切换(<30s glance)、前台无操作(idle/away)
-        const segs = t.segments.filter((s) => s.durationMin > 0 && !s.glance && s.mainState !== 'idle' && s.mainState !== 'away')
+        const segs = t.segments.filter((s) => s.durationMin > 0 && !s.glance && s.mainState !== 'idle' && s.mainState !== 'away' && !isExcluded(s.mainApp) && !isExcluded(s.auxApp))
         // 主屏 + 副屏都进今日池：副屏重要工作（如 opencode）也显示为独立行，双屏并行一眼看清
         const list: GraphItem[] = []
         for (const s of segs) {
           list.push({ seg: s, channel: mapChannel(s.mainApp), column: WORK_LIKE_STATES.includes(s.mainState) ? 'work' : 'life' })
-          if (s.auxApp && s.auxApp !== s.mainApp) {
+          if (s.auxApp && s.auxApp !== s.mainApp && !isExcluded(s.auxApp)) {
             const auxSeg: TrailSegment = { ...s, id: s.id + ':aux', mainApp: s.auxApp, mainState: s.auxState ?? 'other', mainTitle: s.auxTitle ?? '' }
             list.push({ seg: auxSeg, channel: mapChannel(auxSeg.mainApp), column: WORK_LIKE_STATES.includes(auxSeg.mainState) ? 'work' : 'life' })
           }
@@ -174,6 +185,17 @@ export default function HomeView() {
       const list = (links as Array<{ segStartTs: number; planId: string }>) ?? []
       if (list.length) setPlanSegments(new Map(list.map((l) => [l.segStartTs, l.planId])))
     }).catch(() => undefined)
+  }, [])
+
+  // 时间轴泳道自适应容器宽度（全屏撑满）
+  useEffect(() => {
+    const el = timelineScrollRef.current
+    if (!el) return
+    const update = () => setLaneW(Math.max(560, el.clientWidth - LABEL_W))
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
   }, [])
 
   useEffect(() => {
@@ -253,13 +275,13 @@ export default function HomeView() {
 
   const ruler = useMemo(() => {
     const lo = rangeLo, hi = rangeHi
-    const PAD = 8, W = LANE_W, span = hi - lo || 1
+    const PAD = 8, W = laneW, span = hi - lo || 1
     return {
       lo, hi,
       minToX: (m: number) => PAD + ((m - lo) / span) * (W - PAD * 2),
       durToW: (dur: number) => Math.max(16, (dur / span) * (W - PAD * 2)),
     }
-  }, [items, plans, rangeLo, rangeHi])
+  }, [items, plans, rangeLo, rangeHi, laneW])
 
   const renderSegBlock = useCallback((seg: TrailSegment, left: number, width: number) => {
     const app = displayApp(seg.mainApp)
@@ -279,8 +301,14 @@ export default function HomeView() {
           setTlHover(null); setDragTs(seg.startTs)
         }}
         onDragEnd={() => { setDragTs(null); setDragOverLane(null) }}
-        onMouseEnter={e => !dragTs && setTlHover({ seg, rect: e.currentTarget.getBoundingClientRect() })}
-        onMouseLeave={() => setTlHover(null)}
+        onMouseEnter={e => {
+          if (dragTs) return
+          if (hoverLeaveTimer.current) { window.clearTimeout(hoverLeaveTimer.current); hoverLeaveTimer.current = null }
+          setTlHover({ seg, rect: e.currentTarget.getBoundingClientRect() })
+        }}
+        onMouseLeave={() => {
+          hoverLeaveTimer.current = window.setTimeout(() => setTlHover(null), 400)
+        }}
         title={`${app}${ma ? ' · ' + ma : ''} · ${fmtTime(seg.startTs)}${glance ? ' · 短切换' : ''}`}
         style={{ position: 'absolute', left, width, top: 6, bottom: 6,
                  background: ghost ? 'rgba(136,135,128,0.12)' : `linear-gradient(180deg, rgb(${chroma}/0.36), rgb(${chroma}/0.12))`,
@@ -318,27 +346,8 @@ export default function HomeView() {
   const fmtHHMM = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
   const panRef = useRef<{ x: number; lo: number; hi: number } | null>(null)
 
-  // 范围手柄：pointer capture，拖动调整起止时间
-  const onHandleDown = (which: 'lo' | 'hi') => (e: React.PointerEvent) => {
-    e.preventDefault(); e.stopPropagation()
-    const el = rangeRef.current; if (!el) return
-    const rect = el.getBoundingClientRect()
-    const lo0 = rangeLo, hi0 = rangeHi
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-    const move = (ev: PointerEvent) => {
-      const ratio = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width))
-      const m = Math.round(lo0 + ratio * (hi0 - lo0))
-      if (which === 'lo') setRangeLo(Math.min(m, hi0 - 30))
-      else setRangeHi(Math.max(m, lo0 + 30))
-    }
-    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
-  }
-
   // 时间轴平移：在刻度条空白处按住拖动，整体平移可视时间范围
   const onRulerPointerDown = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest('[data-handle]')) return
     e.preventDefault()
     const el = rangeRef.current; if (!el) return
     el.setPointerCapture(e.pointerId)
@@ -462,6 +471,26 @@ export default function HomeView() {
     setItems((prev) => prev.map((i) => (i.seg.mainApp === appKey ? { ...i, column: toCol } : i)))
   }, [])
 
+  /** 不再记录某个程序：加入隐私排除列表（监控即刻停止采集），并从当前时间轴移除 */
+  const excludeSeg = useCallback((seg: TrailSegment) => {
+    const app = seg.mainApp
+    const label = displayApp(app)
+    if (!window.confirm(`确定不再记录「${label}」吗？\n此后该程序将完全停止采集（截屏/OCR/活动），可到「隐私」页恢复。`)) return
+    const st = useSettingsStore.getState()
+    const cur = st.settings.privacyExcludedApps ?? []
+    if (!cur.includes(app)) void st.patch({ privacyExcludedApps: [...cur, app] })
+    setItems((prev) => prev.filter((i) => i.seg.mainApp !== app))
+    setTlHover(null)
+  }, [])
+
+  /** 恢复记录某个程序：从排除列表移除（隐私页同列表，双向联动），并刷新时间轴 */
+  const restoreExcluded = useCallback((app: string) => {
+    const st = useSettingsStore.getState()
+    const cur = st.settings.privacyExcludedApps ?? []
+    void st.patch({ privacyExcludedApps: cur.filter((a) => a !== app) })
+    refresh()
+  }, [refresh])
+
   const starDropProps = (col: Column) => ({
     onDragOver: (e: React.DragEvent) => { e.preventDefault(); setHoverCol(col) },
     onDragLeave: () => setHoverCol(null),
@@ -512,6 +541,7 @@ export default function HomeView() {
             durationText: fmtDur(node.item.seg.durationMin),
             source: '监控',
             microActivity: (node.item.seg as any).microActivity ?? null,
+            operation: (node.item.seg as any).operation ?? null,
           }} />
         )}
       </div>
@@ -571,12 +601,12 @@ export default function HomeView() {
               title="向右平移">▶</button>
           </div>
         </div>
-          <div style={{ overflowX: 'auto', overflowY: 'visible', position: 'relative' }}>
-            <div className="relative" style={{ width: LABEL_W + LANE_W }}>
+          <div ref={timelineScrollRef} style={{ overflowX: 'auto', overflowY: 'visible', position: 'relative' }}>
+            <div className="relative" style={{ width: LABEL_W + laneW }}>
             <div className="flex items-center mb-1">
               <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-ruler-label)', paddingLeft: 8 }} className="shrink-0">全天</span>
               <div ref={overviewRef} className="relative"
-                style={{ width: LANE_W, height: 10, borderRadius: 999, background: 'var(--tl-lane-today-bg)', cursor: 'grab', touchAction: 'none' }}
+                style={{ width: laneW, height: 10, borderRadius: 999, background: 'var(--tl-lane-today-bg)', cursor: 'grab', touchAction: 'none' }}
                 onPointerDown={onOverviewPointerDown}
                 onPointerMove={onOverviewPointerMove}
                 onPointerUp={onOverviewPointerUp}
@@ -596,7 +626,7 @@ export default function HomeView() {
             <div className="flex items-center mb-1.5">
               <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-ruler-label)', paddingLeft: 8 }} className="shrink-0">{fmtHHMM(rangeLo)}–{fmtHHMM(rangeHi)}</span>
                 <div ref={rangeRef} className="relative"
-                  style={{ width: LANE_W, height: 26, cursor: panRef.current ? 'grabbing' : 'grab', touchAction: 'none' }}
+                  style={{ width: laneW, height: 26, cursor: panRef.current ? 'grabbing' : 'grab', touchAction: 'none' }}
                 onPointerDown={onRulerPointerDown}
                 onPointerMove={onRulerPointerMove}
                 onPointerUp={onRulerPointerUp}
@@ -612,10 +642,6 @@ export default function HomeView() {
                     </span>
                   </div>
                 ))}
-                <div data-handle onPointerDown={onHandleDown('lo')} className="absolute top-0 bottom-0"
-                     style={{ left: ruler.minToX(rangeLo) - 3, width: 6, borderRadius: 3, background: 'var(--tl-accent)', boxShadow: '0 0 0 1.5px rgba(255,255,255,0.9)', cursor: 'ew-resize' }} title="拖拽调整起始时间" />
-                <div data-handle onPointerDown={onHandleDown('hi')} className="absolute top-0 bottom-0"
-                     style={{ left: ruler.minToX(rangeHi) - 3, width: 6, borderRadius: 3, background: 'var(--tl-accent)', boxShadow: '0 0 0 1.5px rgba(255,255,255,0.9)', cursor: 'ew-resize' }} title="拖拽调整结束时间" />
               </div>
             </div>
             {/* 今日操作区 header */}
@@ -627,7 +653,7 @@ export default function HomeView() {
               <div className="flex items-center mb-1.5">
                 <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-other-text)', paddingLeft: 8 }} className="shrink-0">今日</span>
                 <div className="relative" style={{
-                     width: LANE_W, height: 30, overflow: 'hidden',
+                     width: laneW, height: 30, overflow: 'hidden',
                      background: 'transparent',
                      borderBottom: '0.5px solid var(--tl-lane-border)',
                    }}
@@ -645,7 +671,7 @@ export default function HomeView() {
               <div key={app} className="flex items-center mb-1.5">
                 <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-other-text)', paddingLeft: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} className="shrink-0">{displayApp(app)}</span>
                 <div className="relative" style={{
-                     width: LANE_W, height: 30, overflow: 'hidden',
+                     width: laneW, height: 30, overflow: 'hidden',
                      background: dragOverLane === 'today' ? 'rgba(55,138,221,0.08)' : 'transparent',
                      borderBottom: '0.5px solid var(--tl-lane-border)',
                      boxShadow: dragOverLane === 'today' ? 'inset 0 -1.5px 0 var(--tl-accent)' : 'none',
@@ -674,7 +700,7 @@ export default function HomeView() {
                 </div>
                 <div className="flex items-center mb-1.5">
                   <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-ruler-label)', paddingLeft: 8 }} className="shrink-0">定时提醒</span>
-                  <div className="relative" style={{ width: LANE_W, height: 24, overflow: 'hidden', background: 'transparent', borderBottom: '0.5px dashed var(--tl-lane-border)' }}>
+                  <div className="relative" style={{ width: laneW, height: 24, overflow: 'hidden', background: 'transparent', borderBottom: '0.5px dashed var(--tl-lane-border)' }}>
                     {reminders.map(r => {
                       const t = r.startMin
                       if (t === undefined) return null
@@ -711,7 +737,7 @@ export default function HomeView() {
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{plan.title}</span>
                   </span>
                   <div className="relative" style={{
-                           width: LANE_W, height: 30, overflow: 'hidden',
+                           width: laneW, height: 30, overflow: 'hidden',
                            background: dragOverLane === plan.id ? 'rgba(55,138,221,0.08)' : 'transparent',
                            borderBottom: '0.5px solid var(--tl-lane-border)',
                            boxShadow: dragOverLane === plan.id ? 'inset 0 -1.5px 0 var(--tl-accent)' : 'none',
@@ -777,69 +803,97 @@ export default function HomeView() {
                   animation: upcoming ? `tl-reminder-pulse ${dur.toFixed(2)}s ease-in-out infinite` : 'none',
                 }}>
                   <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
-                                width: 5, height: 5, borderRadius: '50%', background: color }} />
+                                  width: 5, height: 5, borderRadius: '50%', background: color }} />
                 </div>
               )
             })}
+            {/* 已停止记录：与隐私页排除列表双向联动，可一键恢复 */}
+            {excludedApps.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-2"
+                style={{ borderTop: '0.5px solid var(--tl-lane-border)' }}>
+                <span className="text-[11px]" style={{ color: 'var(--tl-ruler-label)' }}>
+                  <span style={{ color: 'var(--tl-accent)' }}>⛔</span> 已停止记录（点击 ✕ 恢复，与「隐私」页同步）
+                </span>
+                {excludedApps.map((a) => (
+                  <span
+                    key={a}
+                    className="chip"
+                    title={`点击恢复「${displayApp(a)}」的记录`}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => restoreExcluded(a)}
+                  >
+                    {displayApp(a)}
+                    <span className="ml-0.5 text-slate-500 transition-colors hover:text-slate-200">✕</span>
+                  </span>
+                ))}
+              </div>
+            )}
             </div>
           </div>
       </section>
 
       {tlHover && createPortal(
-        <ActivityHoverCard a={{
-          app: displayApp(tlHover.seg.mainApp),
-          title: tlHover.seg.mainTitle ?? '(未命名)',
-          state: tlHover.seg.mainState,
-          startText: fmtTime(tlHover.seg.startTs),
-          endText: fmtTime(tlHover.seg.endTs),
-          durationText: fmtDur(tlHover.seg.durationMin),
-          source: '监控',
-          microActivity: (tlHover.seg as any).microActivity ?? null,
-          counterpart: (tlHover.seg as any).counterpart ?? undefined,
-          topic: (tlHover.seg as any).topic ?? undefined,
-          mode: 'fixed',
-          pos: { x: tlHover.rect.left + tlHover.rect.width / 2, y: tlHover.rect.top },
-        }} />,
+        <ActivityHoverCard
+          sticky
+          onMouseEnter={() => { if (hoverLeaveTimer.current) { window.clearTimeout(hoverLeaveTimer.current); hoverLeaveTimer.current = null } }}
+          onMouseLeave={() => setTlHover(null)}
+          onExclude={() => excludeSeg(tlHover.seg)}
+          a={{
+            app: displayApp(tlHover.seg.mainApp),
+            title: tlHover.seg.mainTitle ?? '(未命名)',
+            state: tlHover.seg.mainState,
+            startText: fmtTime(tlHover.seg.startTs),
+            endText: fmtTime(tlHover.seg.endTs),
+            durationText: fmtDur(tlHover.seg.durationMin),
+            source: '监控',
+            microActivity: (tlHover.seg as any).microActivity ?? null,
+            operation: (tlHover.seg as any).operation ?? null,
+            counterpart: (tlHover.seg as any).counterpart ?? undefined,
+            topic: (tlHover.seg as any).topic ?? undefined,
+            mode: 'fixed',
+            pos: { x: tlHover.rect.left + tlHover.rect.width / 2, y: tlHover.rect.top },
+          }}
+        />,
         document.body
       )}
 
-      {/* 星图 — 白底卡片 */}
-      <section className="glass-card hoverable" style={{ background: '#fff' }}>
+      {/* 星图 — 双模式卡片（暗色玻璃 / 亮色白底）；深色模式整卡隐藏 */}
+      <section className="star-map glass-card hoverable" style={{ background: 'var(--star-card-bg)' }}>
         <div className="flex items-center justify-between mb-3 px-1">
           <div className="flex items-center gap-2">
             <span className="text-base">🗂️</span>
-            <h3 className="text-[13px] font-semibold text-slate-800">今日星图</h3>
+            <h3 className="text-[13px] font-semibold" style={{ color: 'var(--star-text)' }}>今日星图</h3>
           </div>
-          <span className="text-[11px] text-slate-500">工作 ✦ {fmtDur(totalWorkMin)} · 生活 ✦ {fmtDur(totalLifeMin)} · 拖动星点调整</span>
+          <span className="text-[11px]" style={{ color: 'var(--star-text-muted)' }}>工作 ✦ {fmtDur(totalWorkMin)} · 生活 ✦ {fmtDur(totalLifeMin)} · 拖动星点调整</span>
         </div>
-        <div className="relative flex rounded-xl" style={{ minHeight: 320, background: '#ffffff' }}>
-          <div className="absolute left-1/2 top-4 bottom-4 border-l-2 border-dashed border-slate-200 z-10" />
+        <div className="relative flex rounded-xl" style={{ minHeight: 320, background: 'var(--star-card-bg)' }}>
+          <div className="absolute left-1/2 top-4 bottom-4 border-l-2 border-dashed z-10" style={{ borderColor: 'var(--star-line)' }} />
           {/* 图例 */}
-          <div className="absolute bottom-2 left-3 z-20 flex items-center gap-3 text-[10px]" style={{ color: '#475569' }}>
+          <div className="absolute bottom-2 left-3 z-20 flex items-center gap-3 text-[10px]" style={{ color: 'var(--star-text-muted)' }}>
             <span className="flex items-center gap-1"><i className="inline-block w-2 h-2 rounded-full" style={{ background: '#7c9eff' }} />办公</span>
             <span className="flex items-center gap-1"><i className="inline-block w-2 h-2 rounded-full" style={{ background: '#ff7c7c' }} />摸鱼</span>
             <span className="flex items-center gap-1"><i className="inline-block w-2 h-2 rounded-full" style={{ background: '#94a3b8' }} />其他</span>
           </div>
-          <div className={`relative flex-1 min-h-[320px] transition-colors ${hoverCol === 'work' && dragFrom && dragFrom.col !== 'work' ? 'bg-[rgb(var(--star-work)/0.04)]' : ''}`} style={{ background: 'rgb(var(--star-work)/0.03)' }} {...starDropProps('work')}>
+          <div className={`relative flex-1 min-h-[320px] transition-colors ${hoverCol === 'work' && dragFrom && dragFrom.col !== 'work' ? 'bg-[rgb(var(--star-work)/0.06)]' : ''}`} style={{ background: 'var(--star-work-bg)' }} {...starDropProps('work')}>
             <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
               {workChart.connections.map((c, i) => (
-                <line key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} strokeWidth="0.3" stroke={`rgb(var(--star-work)/0.2)`} />
+                <line key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} strokeWidth="0.3" stroke="var(--star-work-line)" />
               ))}
             </svg>
-            <span className="absolute top-3 left-3 text-[11px] font-semibold z-10" style={{ color: 'rgb(var(--star-work-fg))' }}>工作</span>
+            <span className="absolute top-3 left-3 text-[11px] font-semibold z-10" style={{ color: 'var(--star-work-label)' }}>工作</span>
             {workChart.nodes.length === 0 ? (
-              <p className="absolute inset-0 flex items-center justify-center text-[12px]" style={{ color: 'rgb(var(--star-work-fg)/0.3)' }}>从右边拖星点过来 ✦</p>
+              <p className="absolute inset-0 flex items-center justify-center text-[12px]" style={{ color: 'var(--star-text-muted)' }}>从右边拖星点过来 ✦</p>
             ) : workChart.nodes.map(n => renderStarNode(n, true))}
           </div>
-          <div className={`relative flex-1 min-h-[320px] transition-colors ${hoverCol === 'life' && dragFrom && dragFrom.col !== 'life' ? 'bg-[rgb(var(--star-life)/0.04)]' : ''}`} style={{ background: 'rgb(var(--star-life)/0.03)' }} {...starDropProps('life')}>
+          <div className={`relative flex-1 min-h-[320px] transition-colors ${hoverCol === 'life' && dragFrom && dragFrom.col !== 'life' ? 'bg-[rgb(var(--star-life)/0.06)]' : ''}`} style={{ background: 'var(--star-life-bg)' }} {...starDropProps('life')}>
             <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
               {lifeChart.connections.map((c, i) => (
-                <line key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} strokeWidth="0.3" stroke={`rgb(var(--star-life)/0.15)`} />
+                <line key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} strokeWidth="0.3" stroke="var(--star-life-line)" />
               ))}
             </svg>
-            <span className="absolute top-3 right-3 text-[11px] font-semibold z-10" style={{ color: 'rgb(var(--star-life-fg))' }}>生活</span>
+            <span className="absolute top-3 right-3 text-[11px] font-semibold z-10" style={{ color: 'var(--star-life-label)' }}>生活</span>
             {lifeChart.nodes.length === 0 ? (
-              <p className="absolute inset-0 flex items-center justify-center text-[12px]" style={{ color: 'rgb(var(--star-life-fg)/0.3)' }}>把左边星点拖过来 ✦</p>
+              <p className="absolute inset-0 flex items-center justify-center text-[12px]" style={{ color: 'var(--star-text-muted)' }}>把左边星点拖过来 ✦</p>
             ) : lifeChart.nodes.map(n => renderStarNode(n, false))}
           </div>
         </div>

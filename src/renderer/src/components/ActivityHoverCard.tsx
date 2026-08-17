@@ -14,6 +14,17 @@ export interface ActivityInfo {
   counterpart?: string
   topic?: string
   microActivity?: string | null
+  operation?: string | null
+}
+
+interface ActivityHoverCardProps {
+  a: ActivityInfo
+  /** 粘滞模式：卡片可交互（hover 停留不消失，供按钮点击） */
+  sticky?: boolean
+  onMouseEnter?: () => void
+  onMouseLeave?: () => void
+  /** 提供时渲染「不再记录该程序」按钮 */
+  onExclude?: () => void
 }
 
 const SLACK_STATES: WorkState[] = ['slack', 'relax', 'break', 'lunch', 'idle', 'away']
@@ -30,11 +41,11 @@ const SENSE_META = {
   other: { label: '其他', rgb: '148 163 184' },
 } as const
 
-export function ActivityHoverCard({ a }: { a: ActivityInfo }) {
+export function ActivityHoverCard({ a, sticky, onMouseEnter, onMouseLeave, onExclude }: ActivityHoverCardProps) {
   const sense = SENSE_META[senseOf(a.state)]
   return (
     <div
-      className="absolute z-30 rounded-xl px-3 py-2 pointer-events-none"
+      className={`absolute z-30 rounded-xl px-3 py-2 ${sticky ? '' : 'pointer-events-none'}`}
       style={{
         width: 240,
         background: 'rgba(15, 21, 34, 0.94)',
@@ -54,6 +65,8 @@ export function ActivityHoverCard({ a }: { a: ActivityInfo }) {
             }
           : { left: '50%', top: '-100%', transform: 'translateX(-50%)' }),
       }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-[12px] font-semibold truncate">{a.app || '活动'}</span>
@@ -65,9 +78,13 @@ export function ActivityHoverCard({ a }: { a: ActivityInfo }) {
       <div className="mt-1 text-[11px] leading-snug" style={{ color: '#c3cad8' }}>
         {a.title || '（未命名）'}
       </div>
-      {a.microActivity && (
-        <div className="mt-0.5 text-[10px]" style={{ color: '#7b8499' }}>
-          {a.microActivity} <span style={{ color: '#4d566b' }}>· 推断</span>
+      {(a.operation || a.microActivity) && (
+        <div className="mt-1 flex items-start gap-1 text-[11px] leading-snug">
+          <span className="mt-px shrink-0" style={{ color: `rgb(${sense.rgb})` }}>▸</span>
+          <span className="min-w-0 flex-1" style={{ color: '#aab3c5' }}>{a.operation || a.microActivity}</span>
+          {a.microActivity && !a.operation ? (
+            <span className="shrink-0 text-[10px]" style={{ color: '#4d566b' }}>· 推断</span>
+          ) : null}
         </div>
       )}
       {(a.counterpart || a.topic) ? (
@@ -82,6 +99,14 @@ export function ActivityHoverCard({ a }: { a: ActivityInfo }) {
         <span>{a.durationText}</span>
         {a.source && <span className="ml-auto rounded px-1 py-0.5" style={{ background: 'rgba(255,255,255,0.07)', color: '#aab3c5' }}>{a.source}</span>}
       </div>
+      {onExclude ? (
+        <button
+          className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-white/10 py-1 text-[10px] text-slate-400 transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-400"
+          onClick={(e) => { e.stopPropagation(); onExclude() }}
+        >
+          ⛔ 不再记录该程序
+        </button>
+      ) : null}
     </div>
   )
 }

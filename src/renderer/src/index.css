@@ -14,6 +14,19 @@
   /* 星图白底墨色文字（白底基准，高对比） */
   --star-work-fg: 6 95 70;
   --star-life-fg: 180 83 9;
+  /* 星图卡片：暗色下跟随玻璃表面，亮色下恢复白底 */
+  --star-card-bg: rgba(18, 24, 38, 0.6);
+  --star-text: #e8edf5;
+  --star-text-muted: #8a93a6;
+  --star-line: rgba(255, 255, 255, 0.08);
+  --star-work-bg: rgb(var(--star-work) / 0.1);
+  --star-life-bg: rgb(var(--star-life) / 0.1);
+  --star-work-line: rgb(var(--star-work) / 0.28);
+  --star-life-line: rgb(var(--star-life) / 0.2);
+  --star-work-label: rgb(var(--star-work) / 0.95);
+  --star-life-label: rgb(var(--star-life) / 0.95);
+  --star-badge-bg: rgba(255, 255, 255, 0.06);
+  --star-badge-text: #aab3c5;
   --border-active: rgba(34, 211, 238, 0.35);
   --text-primary: #e8edf5;
   --text-secondary: #8a93a6;
@@ -407,9 +420,23 @@ textarea {
   --tl-ruler-label: #5f5e5a;
   --tl-now: #1d9e75;
   --tl-accent: #378add;
+  /* 星图卡片亮色恢复白底 + 墨色文字 */
+  --star-card-bg: #ffffff;
+  --star-text: #0f172a;
+  --star-text-muted: #64748b;
+  --star-line: rgba(15, 23, 42, 0.09);
+  --star-work-bg: rgb(var(--star-work) / 0.04);
+  --star-life-bg: rgb(var(--star-life) / 0.04);
+  --star-work-line: rgb(var(--star-work) / 0.2);
+  --star-life-line: rgb(var(--star-life) / 0.16);
+  --star-work-label: rgb(var(--star-work-fg));
+  --star-life-label: rgb(var(--star-life-fg));
+  --star-badge-bg: #f1f5f9;
+  --star-badge-text: #475569;
 }
 [data-mode='light'] .bg-ink-900 { background-color: #f1f5f9 !important; }
 [data-mode='light'] .bg-ink-950\/60 { background-color: rgba(255, 255, 255, 0.75) !important; }
+[data-mode='light'] .bg-ink-950\/50 { background-color: rgba(255, 255, 255, 0.85) !important; }
 [data-mode='light'] .bg-ink-800\/95 { background-color: rgba(255, 255, 255, 0.92) !important; }
 [data-mode='light'] .bg-ink-900\/60 { background-color: rgba(255, 255, 255, 0.6) !important; }
 [data-mode='light'] .glass-card {
@@ -487,6 +514,11 @@ textarea {
 [data-mode='light'] .bg-white\/10 { background-color: rgba(0, 0, 0, 0.09) !important; }
 [data-mode='light'] .divide-white\/\[0\.05\] > * + * { border-color: rgba(0, 0, 0, 0.06) !important; }
 [data-mode='light'] ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.16); }
+
+/* 今日星图：纸感白图，暗色模式下直接隐藏（浅色模式保留） */
+[data-mode='dark'] .star-map {
+  display: none;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .view-enter,
