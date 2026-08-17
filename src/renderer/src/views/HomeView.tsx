@@ -7,6 +7,7 @@ import { WORK_LIKE_STATES } from '@shared/stateMeta'
 import type { MergedTrail, TrailSegment, WorkState, PlanItem } from '@shared/types'
 import { dateKey } from '@shared/trail'
 import { ActivityHoverCard } from '../components/ActivityHoverCard'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { displayApp } from '@shared/appDisplayName'
 import { useSettingsStore } from '../stores/settingsStore'
 
@@ -471,11 +472,10 @@ export default function HomeView() {
     setItems((prev) => prev.map((i) => (i.seg.mainApp === appKey ? { ...i, column: toCol } : i)))
   }, [])
 
-  /** 不再记录某个程序：加入隐私排除列表（监控即刻停止采集），并从当前时间轴移除 */
-  const excludeSeg = useCallback((seg: TrailSegment) => {
+  /** 不再记录某个程序：弹确认框，确认后加入隐私排除列表并移出时间轴 */
+  const [confirmExclude, setConfirmExclude] = useState<TrailSegment | null>(null)
+  const doExclude = useCallback((seg: TrailSegment) => {
     const app = seg.mainApp
-    const label = displayApp(app)
-    if (!window.confirm(`确定不再记录「${label}」吗？\n此后该程序将完全停止采集（截屏/OCR/活动），可到「隐私」页恢复。`)) return
     const st = useSettingsStore.getState()
     const cur = st.settings.privacyExcludedApps ?? []
     if (!cur.includes(app)) void st.patch({ privacyExcludedApps: [...cur, app] })
@@ -837,7 +837,7 @@ export default function HomeView() {
           sticky
           onMouseEnter={() => { if (hoverLeaveTimer.current) { window.clearTimeout(hoverLeaveTimer.current); hoverLeaveTimer.current = null } }}
           onMouseLeave={() => setTlHover(null)}
-          onExclude={() => excludeSeg(tlHover.seg)}
+          onExclude={() => setConfirmExclude(tlHover.seg)}
           a={{
             app: displayApp(tlHover.seg.mainApp),
             title: tlHover.seg.mainTitle ?? '(未命名)',
@@ -898,6 +898,17 @@ export default function HomeView() {
           </div>
         </div>
       </section>
+
+      {/* 不再记录确认弹窗 */}
+      <ConfirmDialog
+        open={!!confirmExclude}
+        title={`不再记录「${confirmExclude ? displayApp(confirmExclude.mainApp) : ''}」？`}
+        message="此后该程序将完全停止采集（截屏/OCR/活动），可到「隐私」页恢复。"
+        confirmLabel="不再记录"
+        danger
+        onConfirm={() => { if (confirmExclude) doExclude(confirmExclude); setConfirmExclude(null) }}
+        onCancel={() => setConfirmExclude(null)}
+      />
 
     </div>
   )

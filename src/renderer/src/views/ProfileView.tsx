@@ -8,6 +8,7 @@ import { PERSONA_LAYERS, PRIVACY_LEVEL_META, completenessLabel, completenessOf, 
 import { USER_TYPE_META } from '@shared/attention'
 import { Icon } from '../components/Icon'
 import { Toggle } from '../components/Toggle'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { fmtMin } from '../components/utils'
 import { useSettingsStore } from '../stores/settingsStore'
 
@@ -290,6 +291,7 @@ export default function ProfileView() {
   const [city, setCity] = useState(settings.city ?? '')
   const [exportNote, setExportNote] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [confirmClearLogs, setConfirmClearLogs] = useState(false)
 
   const reload = useCallback(async () => {
     try {
@@ -362,7 +364,6 @@ export default function ProfileView() {
   }
 
   const doClearLogs = async () => {
-    if (!window.confirm('确定清除全部 AI 访问日志吗？清除后不可追溯。')) return
     await window.api.clearAccessLogs()
     await reloadLogs()
   }
@@ -920,7 +921,7 @@ export default function ProfileView() {
               <Icon name="send" size={13} /> 导出我的全部画像数据
             </button>
             {exportNote ? <div className="anim-fade-in break-all text-[11px] text-neon-green">{exportNote}</div> : null}
-            <button className="glass-btn danger w-full !py-2 font-medium" onClick={() => void doClearLogs()}>
+            <button className="glass-btn danger w-full !py-2 font-medium" onClick={() => setConfirmClearLogs(true)}>
               <Icon name="trash" size={13} /> 清除 AI 访问日志
             </button>
           </div>
@@ -945,7 +946,7 @@ export default function ProfileView() {
           )}
         </div>
         {logs.length > 0 ? (
-          <button className="glass-btn !px-2.5 !py-1 !text-[11px]" onClick={() => void doClearLogs()}>
+          <button className="glass-btn !px-2.5 !py-1 !text-[11px]" onClick={() => setConfirmClearLogs(true)}>
             <Icon name="trash" size={12} /> 清除日志
           </button>
         ) : null}
@@ -1182,6 +1183,17 @@ export default function ProfileView() {
           />
         </SettingRow>
       </section>
+
+      {/* 清除 AI 访问日志确认弹窗 */}
+      <ConfirmDialog
+        open={confirmClearLogs}
+        title="清除全部 AI 访问日志？"
+        message="清除后不可追溯。"
+        confirmLabel="清除"
+        danger
+        onConfirm={() => { setConfirmClearLogs(false); void doClearLogs() }}
+        onCancel={() => setConfirmClearLogs(false)}
+      />
     </div>
   )
 }

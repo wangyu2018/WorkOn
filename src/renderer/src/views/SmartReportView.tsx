@@ -13,6 +13,7 @@ import { WORK_STATES } from '@shared/stateMeta'
 import { displayApp } from '@shared/appDisplayName'
 import { Icon } from '../components/Icon'
 import type { IconName } from '../components/Icon'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useSettingsStore } from '../stores/settingsStore'
 import { WEEK_LABELS, addDays, clockOf, fmtDateLabel, fmtMin, todayKey } from '../components/utils'
 
@@ -541,6 +542,7 @@ function SmartDayReportView({ onSynced }: { onSynced?: () => void }) {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [report, setReport] = useState<GeneratedReport | null>(null)
   const [loading, setLoading] = useState(false)
+  const [confirmTemplate, setConfirmTemplate] = useState<ReportTemplate | null>(null)
   const [aiOn, setAiOn] = useState(settingsAI)
   const [copied, setCopied] = useState<'text' | 'md' | null>(null)
   const [showImport, setShowImport] = useState(false)
@@ -622,14 +624,7 @@ function SmartDayReportView({ onSynced }: { onSynced?: () => void }) {
   }
 
   const removeTemplate = async (t: ReportTemplate) => {
-    if (!window.confirm(`确定删除模板「${t.name}」吗？`)) return
-    try {
-      await window.api.removeReportTemplate(t.id)
-    } catch {
-      /* ignore */
-    }
-    if (selectedTemplateId === t.id) setSelectedTemplateId(null)
-    await loadTemplates()
+    setConfirmTemplate(t)
   }
 
   /* 派生数据 */
@@ -994,6 +989,25 @@ function SmartDayReportView({ onSynced }: { onSynced?: () => void }) {
           }}
         />
       ) : null}
+
+      {/* 删除模板确认弹窗 */}
+      <ConfirmDialog
+        open={!!confirmTemplate}
+        title={`删除模板「${confirmTemplate?.name ?? ''}」？`}
+        message="删除后该模板无法恢复。"
+        confirmLabel="删除"
+        danger
+        onConfirm={() => {
+          const t = confirmTemplate
+          if (t) {
+            window.api.removeReportTemplate(t.id).catch(() => undefined)
+            if (selectedTemplateId === t.id) setSelectedTemplateId(null)
+            void loadTemplates()
+          }
+          setConfirmTemplate(null)
+        }}
+        onCancel={() => setConfirmTemplate(null)}
+      />
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AttentionScore, MergedTrail, PlanForecast, PlanVsActual, WorkState } from '@shared/types'
 import { SLACK_STATES, WORK_LIKE_STATES, WORK_STATES } from '@shared/stateMeta'
 import { usePresenceStore } from '../stores/presenceStore'
@@ -12,6 +12,8 @@ import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { clockOf, fmtMin, minutesOfDay } from '../components/utils'
 import { attentionGrade, focusAdvice, focusScoreLine } from '@shared/focusMeta'
+import { displayApp } from '@shared/appDisplayName'
+import { CATEGORY_META, categoryOf, type AppCategory } from '@shared/appCategory'
 
 /** 一行式时间轴摘要条：当日状态分布色条（不可缩放/平移）+ 计划预测三色叠加，点击跳转日历日视图 */
 function MiniTrailBar({ trail, plans, forecasts }: { trail: MergedTrail; plans: PlanVsActual | null; forecasts?: Map<string, PlanForecast> }) {
@@ -247,6 +249,25 @@ export default function MonitorView() {
       })()
     : []
   const maxApp = stateApps.length ? stateApps[0][1] : 1
+  // 应用分类聚合：分类 → { 总时长, 分类下应用列表 }
+  const [expandedCat, setExpandedCat] = useState<AppCategory | null>(null)
+  const catAgg = useMemo(() => {
+    const map = new Map<AppCategory, { min: number; apps: Map<string, number> }>()
+    if (trail) {
+      for (const seg of trail.segments) {
+        if (!seg.mainApp) continue
+        const cat = categoryOf(seg.mainApp)
+        const entry = map.get(cat) ?? { min: 0, apps: new Map<string, number>() }
+        entry.min += seg.durationMin
+        entry.apps.set(seg.mainApp, (entry.apps.get(seg.mainApp) ?? 0) + seg.durationMin)
+        map.set(cat, entry)
+      }
+    }
+    return [...map.entries()]
+      .filter(([, v]) => v.min > 0.5)
+      .map(([cat, v]) => ({ cat, min: v.min, apps: [...v.apps.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8) }))
+      .sort((a, b) => b.min - a.min)
+  }, [trail])
   const focusColor =
     (presence?.focusLevel ?? 0) >= 70 ? '#10B981' : (presence?.focusLevel ?? 0) >= 40 ? '#F59E0B' : '#EF4444'
   const grade = presence ? attentionGrade(presence.focusLevel) : null
@@ -451,6 +472,64 @@ export default function MonitorView() {
             </div>
           ) : (
             <EmptyState emoji="📊" title="暂无状态数据" hint="采集到活动后，这里会展示各工作状态的时长分布。" />
+          )}
+        </section>
+
+        {/* 应用分类：把具体应用归到业务大类，同分类时长合并 */}
+        <section className="glass-card hoverable anim-fade-up lg:col-span-2" style={{ animationDelay: '150ms' }}>
+          <h2 className="mb-1 flex items-center gap-2 text-[15px] font-semibold text-slate-200">
+            <Icon name="folder" size={15} className="text-neon-cyan" /> 应用分类
+          </h2>
+          <p className="mb-3 text-[11px] text-slate-500">按业务用途归类，同一分类的时长合并统计</p>
+          {catAgg.length > 0 ? (
+            <div className="flex flex-col gap-1">
+              {catAgg.map(({ cat, min, apps }) => {
+                const meta = CATEGORY_META[cat]
+                const expanded = expandedCat === cat
+                const maxCatMin = catAgg[0].min || 1
+                return (
+                  <div key={cat}>
+                    <button
+                      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
+                      onClick={() => setExpandedCat(expanded ? null : cat)}
+                    >
+                      <span className="text-[10px] text-slate-600">{expanded ? '▾' : '▸'}</span>
+                      <span className="w-8 shrink-0 text-center">{meta.emoji}</span>
+                      <span className="w-20 shrink-0 text-[12px] text-slate-200">{meta.label}</span>
+                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{ width: `${(min / maxCatMin) * 100}%`, background: meta.color, opacity: 0.85, transitionDuration: '250ms' }}
+                        />
+                      </div>
+                      <span className="w-14 shrink-0 text-right text-[12px] text-slate-400">{fmtMin(min)}</span>
+                    </button>
+                    {expanded && (
+                      <div className="anim-fade-in ml-12 mr-2 mt-1 flex flex-col gap-1 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2">
+                        {apps.map(([app, appMin]) => {
+                          const pct = Math.round((appMin / Math.max(1, min)) * 100)
+                          return (
+                            <div key={app} className="flex items-center gap-2 text-[11px]">
+                              <span className="w-32 truncate text-slate-300" title={app}>{displayApp(app)}</span>
+                              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
+                                <div
+                                  className="h-full rounded-full"
+                                  style={{ width: `${(appMin / Math.max(1, apps[0][1])) * 100}%`, background: meta.color, opacity: 0.7 }}
+                                />
+                              </div>
+                              <span className="w-12 shrink-0 text-right text-slate-500">{fmtMin(appMin)}</span>
+                              <span className="w-8 shrink-0 text-right text-slate-600">{pct}%</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <EmptyState emoji="📁" title="暂无分类数据" hint="采集到活动后，这里会按办公/即时通讯/开发等分类汇总应用时长。" />
           )}
         </section>
 

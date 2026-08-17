@@ -4,6 +4,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { Toggle } from '../components/Toggle'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 
 function monitorAccuracyOf(intervalMs: number) {
   if (intervalMs <= 2000) return { tier: '高', err: '±2s', note: '能捕捉秒级切窗，时长几乎无误差' }
@@ -129,6 +130,7 @@ const PRIVACY_PRESETS = ['微信', '钉钉', 'QQ', '飞书', '旺旺', 'Outlook'
 function PrivacyStats({ reloadToken, excludedKey, onCleared }: { reloadToken: number; excludedKey: string; onCleared: () => void }) {
   const [rows, setRows] = useState<{ app: string; count: number; lastTs: number; excluded: boolean }[] | null>(null)
   const [clearing, setClearing] = useState<string | null>(null)
+  const [confirmApp, setConfirmApp] = useState<string | null>(null)
   useEffect(() => {
     window.api
       .getPrivacyStats()
@@ -136,14 +138,7 @@ function PrivacyStats({ reloadToken, excludedKey, onCleared }: { reloadToken: nu
       .catch(() => setRows(null))
   }, [reloadToken, excludedKey])
   const clearApp = async (app: string) => {
-    if (!window.confirm(`确定清理「${app}」的全部活动记录吗？不可恢复。`)) return
-    setClearing(app)
-    try {
-      await window.api.clearAppPrivacy(app)
-      onCleared()
-    } finally {
-      setClearing(null)
-    }
+    setConfirmApp(app)
   }
   if (!rows || rows.length === 0)
     return <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] py-3 text-center text-[11px] text-slate-500">暂无采集记录</div>
@@ -193,6 +188,21 @@ function PrivacyStats({ reloadToken, excludedKey, onCleared }: { reloadToken: nu
           ))}
         </tbody>
       </table>
+      <ConfirmDialog
+        open={!!confirmApp}
+        title={`清理「${confirmApp ?? ''}」的活动记录？`}
+        message="将删除该应用近 14 天的全部活动记录，不可恢复。"
+        confirmLabel="清理"
+        danger
+        onConfirm={() => {
+          if (confirmApp) {
+            setClearing(confirmApp)
+            window.api.clearAppPrivacy(confirmApp).then(() => onCleared()).catch(() => undefined).finally(() => setClearing(null))
+          }
+          setConfirmApp(null)
+        }}
+        onCancel={() => setConfirmApp(null)}
+      />
     </div>
   )
 }
@@ -209,6 +219,8 @@ export default function PrivacyView() {
   const [statsReload, setStatsReload] = useState(0)
   /** 应用痕迹统计默认收起，展开后才加载/渲染 */
   const [statsOpen, setStatsOpen] = useState(false)
+  /** 清理截屏缓存确认弹窗 */
+  const [confirmClear, setConfirmClear] = useState(false)
 
   const p = (patchObj: Partial<AppSettings>) => void patch(patchObj)
 
@@ -225,7 +237,6 @@ export default function PrivacyView() {
   }, [loadOcrStats])
 
   const clearCache = async () => {
-    if (!window.confirm('⚠️ 将删除所有截屏缓存（保留最近7天），不可恢复。确认清理？')) return
     setClearing(true)
     try {
       const r = (await window.api.clearOcrCache(7)) as OcrStats & { freedBytes: number }
@@ -440,7 +451,7 @@ export default function PrivacyView() {
           <button
             className="glass-btn danger w-full !py-2.5 font-medium"
             disabled={clearing}
-            onClick={() => void clearCache()}
+            onClick={() => setConfirmClear(true)}
           >
             <Icon name="trash" size={13} /> {clearing ? '清理中…' : '一键清理全部截屏缓存'}
           </button>
@@ -458,6 +469,17 @@ export default function PrivacyView() {
           <TextSetting value={settings.city ?? ''} placeholder="如 天津" onCommit={(v: string) => p({ city: v.trim() })} />
         </Row>
       </Section>
+
+      {/* 清理截屏缓存确认弹窗 */}
+      <ConfirmDialog
+        open={confirmClear}
+        title="清理全部截屏缓存？"
+        message="将删除所有截屏缓存（保留最近 7 天），不可恢复。"
+        confirmLabel="清理"
+        danger
+        onConfirm={() => { setConfirmClear(false); void clearCache() }}
+        onCancel={() => setConfirmClear(false)}
+      />
 
     </div>
   )

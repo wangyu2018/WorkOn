@@ -183,6 +183,10 @@ textarea {
     border-color: var(--accent);
     color: var(--accent);
   }
+  .glass-btn.danger {
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #f87171;
+  }
   .glass-btn.danger:hover {
     border-color: rgba(239, 68, 68, 0.5);
     background: rgba(239, 68, 68, 0.12);
