@@ -53,6 +53,7 @@ export interface ForegroundWindowInfo {
   width: number
   height: number
   screen: number // 反查得到所在屏幕索引
+  exePath?: string // 进程完整路径（提取图标/主题色用）
 }
 
 /** UIAutomation 焦点元素信息（深度模式） */
@@ -614,6 +615,8 @@ export interface AppSettings {
   widgetSizes?: Partial<Record<WidgetMode, { w: number; h: number }>> // 每个模式的自定义尺寸
   /** 用户自定义应用分类：进程名 → 业务分类（覆盖默认映射；UI 拖拽归类后持久化） */
   appCategoryOverride?: Record<string, string>
+  /** 用户自定义工作/摸鱼归属：进程名 → work | life（星图拖拽调整后持久化） */
+  appColumnOverride?: Record<string, string>
   launchAtLogin: boolean
   slackHideSec: number // 持续摸鱼自动隐身阈值，默认 180
   slackAutoHide: boolean // 启用摸鱼自动隐身，默认开

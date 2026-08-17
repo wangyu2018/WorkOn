@@ -10,6 +10,7 @@ import { attentionGrade, focusScoreLine } from '@shared/focusMeta'
 import { usePresenceStore } from '../stores/presenceStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { Icon, type IconName } from '../components/Icon'
+import { CATEGORY_META, categoryOfWithOverride } from '@shared/appCategory'
 
 interface BrowserPlanConfirm {
   planId: string
@@ -436,6 +437,10 @@ export default function SuggestionWidget() {
 
   const penetrationTitle = penetration ? '穿透中（桌搭页关闭）' : '开启鼠标穿透（穿透后需在桌搭页关闭）'
   const liveTitle = presence?.screens?.find((s) => s.screen === presence.mainScreen)?.title
+  // 当前活跃应用 → 分类图标（跟随用户手动归类，override 变化即同步）
+  const mainApp = presence?.screens?.find((s) => s.screen === presence.mainScreen)?.app
+  const appCategoryOverride = useSettingsStore((s) => s.settings.appCategoryOverride)
+  const mainCatEmoji = mainApp ? CATEGORY_META[categoryOfWithOverride(mainApp, appCategoryOverride)].emoji : null
 
   // ── mini 态：悬浮胶囊（状态环 + 实时工作内容） ──
   if (widgetMode === 'mini') {
@@ -446,7 +451,7 @@ export default function SuggestionWidget() {
           style={PANEL_STYLE}
           onClick={() => setMode('compact')}
         >
-          <FocusRing size={26} focus={focus} color={meta.color} emoji={meta.emoji} />
+          <FocusRing size={26} focus={focus} color={meta.color} emoji={mainCatEmoji || meta.emoji} />
           <span className="min-w-0 flex-1 truncate text-xs text-slate-200">{liveTitle || meta.label}</span>
           <button
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200"
@@ -480,7 +485,7 @@ export default function SuggestionWidget() {
             <HeaderBtn icon="chevronRight" rotate={90} title="收起到最小" onClick={() => setMode('mini')} />
           </WidgetHeader>
           <div className="flex items-center gap-3 px-3.5 py-2.5">
-            <FocusRing size={42} focus={focus} color={meta.color} emoji={meta.emoji} />
+            <FocusRing size={42} focus={focus} color={meta.color} emoji={mainCatEmoji || meta.emoji} />
             <div className="min-w-0 flex-1">
               <div className="text-[13px] font-semibold" style={{ color: meta.color }}>
                 {meta.label}
@@ -530,7 +535,7 @@ export default function SuggestionWidget() {
           onMouseEnter={() => setShowFocusMinutes(true)}
           onMouseLeave={() => setShowFocusMinutes(false)}
         >
-          <FocusRing size={44} focus={focus} color={meta.color} emoji={meta.emoji} />
+          <FocusRing size={44} focus={focus} color={meta.color} emoji={mainCatEmoji || meta.emoji} />
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-semibold" style={{ color: meta.color }}>
               {meta.label}{' '}

@@ -9,6 +9,7 @@
  */
 import { powerMonitor, screen } from 'electron'
 import { getForegroundWindow } from './winInfo'
+import { captureAppVisual } from './appVisuals'
 import { presence } from './presence'
 import { insertActivity, col, updateIn } from './db'
 import { getSettings } from './settings'
@@ -140,6 +141,8 @@ async function tick(): Promise<void> {
     let tr = tracks.get(fg.screen)
     const changed = !tr || tr.app !== corrected.app || tr.title !== safeTitle
     if (!excluded) {
+      // 提取/补写图标+主题色（captureAppVisual 命中缓存即返回，仅首次真正提取 exe 图标）
+      void captureAppVisual(corrected.app, fg.exePath, identified.appName)
       if (!tr || changed) {
         tr = { app: corrected.app, title: safeTitle, startTs: ts, lastTs: ts }
         tracks.set(fg.screen, tr)

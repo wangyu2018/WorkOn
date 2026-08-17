@@ -2,14 +2,14 @@
  * 主窗口壳：左侧分组导航 + 内容区 + 命令面板
  * 设计：静谧深空 · accent 变量驱动的选中态（换主题自动联动）
  */
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { useAppStore, type ViewKey } from './stores/appStore'
 import { usePresenceStore } from './stores/presenceStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { CommandPalette } from './components/CommandPalette'
 import { Icon, type IconName } from './components/Icon'
-import { StateBadge } from './components/StateBadge'
 import { attentionGrade, focusScoreLine } from '@shared/focusMeta'
+import { CATEGORY_META, categoryOfWithOverride } from '@shared/appCategory'
 import workonLogo from './assets/workon-logo.png'
 import HomeView from './views/HomeView'
 import MonitorView from './views/MonitorView'
@@ -112,6 +112,10 @@ export default function App() {
   const settings = useSettingsStore((s) => s.settings)
   const theme = useSettingsStore((s) => s.settings.theme)
   const appearanceMode = useSettingsStore((s) => s.settings.appearanceMode)
+  // 当前活跃应用 → 分类图标（跟随用户手动归类，override 变化即同步）
+  const appCategoryOverride = useSettingsStore((s) => s.settings.appCategoryOverride)
+  const mainApp = presence?.screens?.find((s) => s.screen === presence.mainScreen)?.app
+  const mainCatEmoji = mainApp ? CATEGORY_META[categoryOfWithOverride(mainApp, appCategoryOverride)].emoji : null
 
   // 强调色主题 + 亮暗模式应用到根节点
   useEffect(() => {
@@ -184,7 +188,8 @@ export default function App() {
     return off
   }, [])
 
-  const ActiveView = VIEWS[view]
+  // memo 化当前视图：presence 每 2s 更新时不再整页重渲染（修复时间轴/星图卡顿）
+  const ActiveView = useMemo(() => memo(VIEWS[view]), [view])
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-ink-900 text-slate-200">
@@ -244,11 +249,13 @@ export default function App() {
                 className="mr-1 flex items-center gap-2 rounded-full border border-white/[0.07] bg-white/[0.03] py-1 pl-2.5 pr-2"
                 title={presence ? `专注度怎么算的：${focusScoreLine(presence)}\n评级 ${attentionGrade(presence.focusLevel).grade}（S≥90 / A≥75 / B≥55 / C≥35 / D<35）` : undefined}
               >
+                {mainCatEmoji ? (
+                  <span className="text-[13px] leading-none" title={`当前应用分类`}>{mainCatEmoji}</span>
+                ) : null}
                 <span className="text-[11px] tabular-nums text-slate-400">
                   专注度 <span className="font-medium text-slate-200">{presence.focusLevel}</span>
                   <span className="ml-1 text-slate-500">{attentionGrade(presence.focusLevel).grade}</span>
                 </span>
-                <StateBadge state={presence.state} size="sm" pulse />
               </div>
             )}
             {/* 无边框自定义窗口控制 */}

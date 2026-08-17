@@ -65,7 +65,9 @@ export function buildMergedTrail(records: ActivityRecord[], date: string): Merge
     let bucketEnd = 0
     const screenSpan = new Map<number, { start: number; end: number; top: ActivityRecord }>()
     for (const [screen, rs] of b.byScreen) {
-      const start = rs[0].startTs ?? rs[0].ts
+      // 用记录实际时刻作起点而非 startTs：副屏应用未切换时 startTs 是应用停留起点，
+      // 被多个 bucket 重复计入导致总时长虚高（实测 11.5h 墙钟被算成 74h）
+      const start = rs[0].ts
       const end = rs[rs.length - 1].ts
       // 选该屏持续时间最长/最新的代表记录
       const top = rs.reduce((a, c) => (c.ts - (c.startTs ?? c.ts) > a.ts - (a.startTs ?? a.ts) ? c : a), rs[0])

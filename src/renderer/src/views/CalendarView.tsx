@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import type { TimeEntry, WorkState, MergedTrail } from '@shared/types'
 import { ALL_STATES, WORK_STATES, WORK_LIKE_STATES } from '@shared/stateMeta'
 import { genId } from '@shared/types'
@@ -271,6 +271,11 @@ function WeekGrid({ date }: { date: string }) {
   const [detailPos, setDetailPos] = useState({ x: 0, y: 0 })
   const detailRef = useRef<HTMLDivElement | null>(null)
   const days = weekDays(date)
+  /** 应用图标/主题色缓存 */
+  const [appVisuals, setAppVisuals] = useState<Record<string, { iconDataUrl: string; themeColor: string }>>({})
+  useEffect(() => {
+    window.api.getAppVisuals?.().then((v) => setAppVisuals((v as Record<string, { iconDataUrl: string; themeColor: string }>) ?? {})).catch(() => undefined)
+  }, [])
 
   useEffect(() => {
     Promise.all(days.map((d) => window.api.getTrail(d).catch(() => null))).then((ts) =>
@@ -436,6 +441,10 @@ function WeekGrid({ date }: { date: string }) {
                 ＋
               </button>
             </div>
+            {/* 当天应用图标行：鼠标悬停显示应用名，超宽省略只留主要工作 */}
+            {trail && trail.segments.length > 0 ? (
+              <DayAppIcons trail={trail} visuals={appVisuals} />
+            ) : null}
             <div className="flex flex-col gap-1">
               {states.map((s, h) => (
                 <div
@@ -547,6 +556,55 @@ function WeekGrid({ date }: { date: string }) {
           )
         })()
       ) : null}
+    </div>
+  )
+}
+
+/** 当天应用图标行：真实图标 + hover 应用名；宽度不够时省略只留主要工作 */
+function DayAppIcons({ trail, visuals }: {
+  trail: MergedTrail
+  visuals: Record<string, { iconDataUrl: string; themeColor: string }>
+}) {
+  // 按应用聚合时长，取前 6（有图标的优先显示图标）
+  const apps = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const s of trail.segments) {
+      if (s.glance || s.mainState === 'idle' || s.mainState === 'away') continue
+      m.set(s.mainApp, (m.get(s.mainApp) ?? 0) + s.durationMin)
+    }
+    return [...m.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([app, min]) => ({ app, min }))
+  }, [trail])
+
+  if (apps.length === 0) return null
+  return (
+    <div
+      className="mb-2 flex items-center gap-1 overflow-hidden"
+      title={apps.map((a) => `${displayApp(a.app)} · ${fmtMin(a.min)}`).join('\n')}
+    >
+      {apps.map((a, i) => {
+        const v = visuals[a.app.trim().toLowerCase().replace(/\.exe$/i, '')]
+        return (
+          <span
+            key={a.app}
+            className="flex shrink-0 items-center gap-1 rounded px-0.5 py-0.5 transition-colors hover:bg-white/[0.06]"
+            title={`${displayApp(a.app)} · ${fmtMin(a.min)}`}
+            style={{ maxWidth: 44 }}
+          >
+            {v ? (
+              <img src={v.iconDataUrl} alt="" className="h-4 w-4 rounded-[3px]" style={{ background: 'rgba(255,255,255,0.06)' }} />
+            ) : (
+              <span className="text-[9px] text-slate-500">{displayApp(a.app)}</span>
+            )}
+            {/* 宽度不足时默认显示主要工作（第一个应用的名称） */}
+            {i === 0 ? (
+              <span className="max-w-[40px] overflow-hidden text-ellipsis whitespace-nowrap text-[9px] text-slate-500">{displayApp(a.app)}</span>
+            ) : null}
+          </span>
+        )
+      })}
     </div>
   )
 }

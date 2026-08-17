@@ -35,6 +35,7 @@ $obj = [pscustomobject]@{
   title = $sb.ToString()
   x = $r.Left; y = $r.Top
   width = $r.Right - $r.Left; height = $r.Bottom - $r.Top
+  exePath = if ($p) { $p.Path } else { '' }
 }
 $obj | ConvertTo-Json -Compress
 `
@@ -98,7 +99,8 @@ export async function getForegroundWindow(): Promise<ForegroundWindowInfo | null
       y: raw.y,
       width: raw.width,
       height: raw.height,
-      screen: screenIndexOf(raw.x, raw.y, raw.width, raw.height)
+      screen: screenIndexOf(raw.x, raw.y, raw.width, raw.height),
+      exePath: typeof raw.exePath === 'string' && raw.exePath ? raw.exePath : undefined
     }
   } catch {
     console.warn('[winInfo] 解析输出失败:', out.slice(0, 120))
