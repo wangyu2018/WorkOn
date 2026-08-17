@@ -67,3 +67,11 @@ export function categoryOf(app?: string): AppCategory {
   const key = app.trim().toLowerCase().replace(/\.exe$/i, '')
   return APP_CATEGORY[key] ?? 'other'
 }
+
+/** 用户自定义覆盖分类：override 存在则优先，否则走默认映射 */
+export function categoryOfWithOverride(app: string | undefined, override?: Record<string, string>): AppCategory {
+  if (!app) return 'other'
+  const key = app.trim().toLowerCase().replace(/\.exe$/i, '')
+  if (override && override[key] && (override[key] as string) in CATEGORY_META) return override[key] as AppCategory
+  return categoryOf(app)
+}

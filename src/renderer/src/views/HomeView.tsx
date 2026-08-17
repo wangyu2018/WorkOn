@@ -10,6 +10,7 @@ import { ActivityHoverCard } from '../components/ActivityHoverCard'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { displayApp } from '@shared/appDisplayName'
 import { useSettingsStore } from '../stores/settingsStore'
+import { CATEGORY_META, categoryOfWithOverride, type AppCategory } from '@shared/appCategory'
 
 type Channel = 'CMD' | '浏览器' | '微信' | 'IDE' | '其他'
 type Column = 'work' | 'life'
@@ -491,6 +492,56 @@ export default function HomeView() {
     refresh()
   }, [refresh])
 
+  /** 分类分组：今日操作按分类分组展示，组可展开/收起 */
+  const override = useSettingsStore((s) => s.settings.appCategoryOverride)
+  const [openCats, setOpenCats] = useState<Set<AppCategory>>(new Set())
+  const toggleCat = (c: AppCategory) => setOpenCats((prev) => {
+    const next = new Set(prev)
+    if (next.has(c)) next.delete(c); else next.add(c)
+    return next
+  })
+  /** 应用行 → 分类：先按 override，再按默认 */
+  const catOf = (app: string) => categoryOfWithOverride(app, override)
+  /** 拖拽归类：把应用拖到某个分类，持久化 override */
+  const [catDragApp, setCatDragApp] = useState<string | null>(null)
+  const setAppCategory = useCallback((app: string, cat: AppCategory) => {
+    const st = useSettingsStore.getState()
+    const key = app.trim().toLowerCase().replace(/\.exe$/i, '')
+    const cur = { ...(st.settings.appCategoryOverride ?? {}) }
+    cur[key] = cat
+    void st.patch({ appCategoryOverride: cur })
+  }, [])
+
+  /** 按分类分组：cat → 应用行列表（组内/组间按时长降序）；recent=最近 20 分钟内有活动 */
+  const todayByCategory = useMemo(() => {
+    const recentCut = Date.now() - 20 * 60 * 1000
+    const m = new Map<AppCategory, [string, GraphItem[]][]>()
+    const recentSet = new Set<AppCategory>()
+    for (const [app, segsArr] of todayByApp) {
+      const cat = catOf(app)
+      if (!m.has(cat)) m.set(cat, [])
+      m.get(cat)!.push([app, segsArr])
+      if (segsArr.some((g) => g.seg.endTs >= recentCut)) recentSet.add(cat)
+    }
+    const sumOf = (apps: [string, GraphItem[]][]) => apps.reduce((s, [, x]) => s + x.reduce((t, g) => t + g.seg.durationMin, 0), 0)
+    const rows = [...m.entries()].map(([cat, apps]) => ({
+      cat,
+      apps: apps.sort((a, b) => sumOf([b]) - sumOf([a])),
+      min: sumOf(apps),
+      recent: recentSet.has(cat)
+    }))
+    return rows.sort((a, b) => b.min - a.min)
+  }, [todayByApp, override]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 首次加载后，默认展开最近 20 分钟涉及到的分类
+  const catInitRef = useRef(false)
+  useEffect(() => {
+    if (catInitRef.current || todayByCategory.length === 0) return
+    catInitRef.current = true
+    const recentCats = todayByCategory.filter((g) => g.recent).map((g) => g.cat)
+    if (recentCats.length > 0) setOpenCats(new Set(recentCats))
+  }, [todayByCategory])
+
   const starDropProps = (col: Column) => ({
     onDragOver: (e: React.DragEvent) => { e.preventDefault(); setHoverCol(col) },
     onDragLeave: () => setHoverCol(null),
@@ -667,30 +718,83 @@ export default function HomeView() {
                   <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--tl-ruler-label)' }}>今日活动已全部归入计划 ✓</span>
                 </div>
               </div>
-            ) : todayByApp.map(([app, segsArr]) => (
-              <div key={app} className="flex items-center mb-1.5">
-                <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-other-text)', paddingLeft: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} className="shrink-0">{displayApp(app)}</span>
-                <div className="relative" style={{
-                     width: laneW, height: 30, overflow: 'hidden',
-                     background: dragOverLane === 'today' ? 'rgba(55,138,221,0.08)' : 'transparent',
-                     borderBottom: '0.5px solid var(--tl-lane-border)',
-                     boxShadow: dragOverLane === 'today' ? 'inset 0 -1.5px 0 var(--tl-accent)' : 'none',
-                     transition: 'background .12s, box-shadow .12s',
-                   }}
-                  onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane('today') }}
-                  onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverLane(null) }}
-                  onDrop={e => {
-                    e.preventDefault(); setDragOverLane(null)
-                    const ts = parseInt(e.dataTransfer.getData('text/start-ts'))
-                    if (!isNaN(ts)) handleAssignPlan(null, ts)
-                  }}>
-                  {dragOverLane === 'today' && (
-                    <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', background: 'var(--tl-accent)', color: '#fff', fontSize: 11, fontWeight: 500, borderRadius: 999, padding: '2px 8px' }}>松开归入 · 今日</span>
-                  )}
-                  {segsArr.map(s => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 30)))}
-                </div>
-              </div>
-            ))}
+            ) : (
+              <>
+                {/* 分类分组：每分类一个可展开/收起的分组，组头也是拖放目标（拖入应用即归类） */}
+                {(Object.keys(CATEGORY_META) as AppCategory[]).map((cat) => {
+                  const meta = CATEGORY_META[cat]
+                  const group = todayByCategory.find((c) => c.cat === cat)
+                  const apps = group?.apps ?? []
+                  const min = group?.min ?? 0
+                  const open = openCats.has(cat)
+                  return (
+                    <div key={cat} className="mb-0.5">
+                      <div
+                        className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-white/[0.03]"
+                        onClick={() => apps.length > 0 && toggleCat(cat)}
+                        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          const app = e.dataTransfer.getData('text/app-cat')
+                          if (app) setAppCategory(app, cat)
+                          setCatDragApp(null)
+                        }}
+                        title={apps.length > 0 ? `${meta.label} · ${apps.length} 个应用 · 点击展开/收起 · 拖入应用可归类` : `拖入应用归类到「${meta.label}」`}
+                      >
+                        <span className="text-[10px] text-slate-600">{apps.length > 0 ? (open ? '▾' : '▸') : ''}</span>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: meta.color, opacity: apps.length > 0 ? 1 : 0.4, display: 'inline-block' }} />
+                        <span className="w-5 text-center" style={{ opacity: apps.length > 0 ? 1 : 0.5 }}>{meta.emoji}</span>
+                        <span className="text-[12px] font-medium" style={{ color: apps.length > 0 ? meta.color : 'var(--tl-ruler-label)' }}>{meta.label}</span>
+                        <span className="text-[11px] text-slate-500">{apps.length > 0 ? `${apps.length} 个 · ${fmtDur(min)}` : '拖入归类'}</span>
+                      </div>
+                      {open && apps.length > 0 ? (
+                        <div className="anim-fade-in">
+                          {apps.map(([app, segsArr]) => (
+                            <div key={app} className="flex items-center mb-1">
+                              {/* 应用行标签：可拖拽到任意分类组头重新归类 */}
+                              <span
+                                draggable
+                                onDragStart={(e) => {
+                                  e.dataTransfer.setData('text/app-cat', app)
+                                  e.dataTransfer.effectAllowed = 'move'
+                                  setCatDragApp(app)
+                                }}
+                                onDragEnd={() => setCatDragApp(null)}
+                                className="flex shrink-0 cursor-grab items-center gap-1.5 pl-5 pr-1"
+                                style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-other-text)', opacity: catDragApp === app ? 0.4 : 1 }}
+                                title={`${displayApp(app)}（${meta.label}）· 拖到其他分类组头可重新归类`}
+                              >
+                                <span style={{ fontSize: 9, color: 'var(--tl-ruler-label)' }}>⠿</span>
+                                <span className="overflow-hidden text-ellipsis whitespace-nowrap">{displayApp(app)}</span>
+                              </span>
+                              <div className="relative" style={{
+                                   width: laneW, height: 30, overflow: 'hidden',
+                                   background: dragOverLane === 'today' ? 'rgba(55,138,221,0.08)' : 'transparent',
+                                   borderBottom: '0.5px solid var(--tl-lane-border)',
+                                   boxShadow: dragOverLane === 'today' ? 'inset 0 -1.5px 0 var(--tl-accent)' : 'none',
+                                   transition: 'background .12s, box-shadow .12s',
+                                 }}
+                                onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane('today') }}
+                                onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverLane(null) }}
+                                onDrop={e => {
+                                  e.preventDefault(); setDragOverLane(null)
+                                  const ts = parseInt(e.dataTransfer.getData('text/start-ts'))
+                                  if (!isNaN(ts)) handleAssignPlan(null, ts)
+                                }}>
+                                {dragOverLane === 'today' && (
+                                  <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', background: 'var(--tl-accent)', color: '#fff', fontSize: 11, fontWeight: 500, borderRadius: 999, padding: '2px 8px' }}>松开归入 · 今日</span>
+                                )}
+                                {segsArr.map(s => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 30)))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  )
+                })}
+              </>
+            )}
             {/* 里程碑 · 提醒轨道 */}
             {reminders.length > 0 && (
               <>

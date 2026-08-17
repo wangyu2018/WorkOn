@@ -612,6 +612,8 @@ export interface AppSettings {
   widgetPosX?: number // 悬浮窗位置 X（-1 = 未保存）
   widgetPosY?: number // 悬浮窗位置 Y
   widgetSizes?: Partial<Record<WidgetMode, { w: number; h: number }>> // 每个模式的自定义尺寸
+  /** 用户自定义应用分类：进程名 → 业务分类（覆盖默认映射；UI 拖拽归类后持久化） */
+  appCategoryOverride?: Record<string, string>
   launchAtLogin: boolean
   slackHideSec: number // 持续摸鱼自动隐身阈值，默认 180
   slackAutoHide: boolean // 启用摸鱼自动隐身，默认开
