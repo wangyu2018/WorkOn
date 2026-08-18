@@ -13,3 +13,4 @@ assets/rapidocr/dict_*.txt
 assets/rapidocr/ppocr_keys_v1.txt
 assets/rapidocr/rec_*.onnx
 *.traineddata
+src/main/devOcr.ts

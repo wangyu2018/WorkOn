@@ -29,6 +29,7 @@ const api = {
   updateTrail: (startTs: number, patch: { title?: string }) => ipcRenderer.invoke('trail:update', startTs, patch),
   assignSegmentPlan: (segStartTs: number, planId: string | null) => ipcRenderer.invoke('trail:assignPlan', segStartTs, planId),
   getSegmentPlans: (date?: string) => ipcRenderer.invoke('trail:getSegmentPlans', date),
+  getAppVisuals: () => ipcRenderer.invoke('appVisuals:get'),
   listEntries: (date: string) => ipcRenderer.invoke('entries:list', date),
   saveEntry: (entry: unknown) => ipcRenderer.invoke('entries:save', entry),
   removeEntry: (id: string) => ipcRenderer.invoke('entries:remove', id),

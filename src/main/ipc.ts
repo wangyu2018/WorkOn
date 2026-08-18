@@ -12,6 +12,7 @@ import { genId } from '@shared/types'
 import { dateKey, buildMergedTrail } from '@shared/trail'
 import { planVsActual, forecastPlan, BUILTIN_CATEGORIES } from '@shared/planAnalysis'
 import { getSettings, setSettings } from './settings'
+import { getAllAppVisuals } from './appVisuals'
 import {
   col, insertInto, updateIn, removeFrom, listActivities, listActivitiesRange, deleteActivitiesByApp,
   updateActivityTitleByStartTs
@@ -135,6 +136,7 @@ export function registerIpc(): void {
     const d = date ?? dateKey(Date.now())
     return buildMergedTrail(listActivities(d), d)
   })
+  ipcMain.handle('appVisuals:get', () => getAllAppVisuals())
   ipcMain.handle('trail:update', (_e, startTs: number, patch: { title?: string }) => {
     if (patch.title === undefined) return { success: false }
     const updated = updateActivityTitleByStartTs(startTs, patch.title)
