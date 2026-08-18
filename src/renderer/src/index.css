@@ -81,10 +81,14 @@ body {
   margin: 0;
   color: var(--text-primary);
   font-family:
-    'Inter',
-    'Segoe UI',
+    'MiSans',
+    'HarmonyOS Sans SC',
+    'Noto Sans SC',
     'PingFang SC',
+    'DengXian',
+    'Microsoft YaHei UI',
     'Microsoft YaHei',
+    'Segoe UI',
     system-ui,
     -apple-system,
     sans-serif;

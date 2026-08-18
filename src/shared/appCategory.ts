@@ -13,16 +13,16 @@ export type AppCategory =
   | 'system'   // 系统工具 · 资源管理器/安全/压缩
   | 'other'    // 其他
 
-export const CATEGORY_META: Record<AppCategory, { label: string; emoji: string; color: string }> = {
-  office:  { label: '办公', emoji: '📄', color: '#10B981' },
-  im:      { label: '即时通讯', emoji: '💬', color: '#3B82F6' },
-  dev:     { label: '开发', emoji: '👨‍💻', color: '#8B5CF6' },
-  browser: { label: '浏览器', emoji: '🌐', color: '#22D3EE' },
-  design:  { label: '设计', emoji: '🎨', color: '#EC4899' },
-  media:   { label: '影音娱乐', emoji: '🎬', color: '#F59E0B' },
-  game:    { label: '游戏', emoji: '🎮', color: '#EF4444' },
-  system:  { label: '系统工具', emoji: '⚙️', color: '#94A3B8' },
-  other:   { label: '其他', emoji: '📦', color: '#64748B' }
+export const CATEGORY_META: Record<AppCategory, { label: string; emoji: string; color: string; icon: string }> = {
+  office:  { label: '办公', emoji: '📄', color: '#10B981', icon: 'M7 3h7l4 4v14H7z M14 3v4h4 M10 12h6 M10 15h6' },
+  im:      { label: '即时通讯', emoji: '💬', color: '#3B82F6', icon: 'M5 5h14v9H10l-4 4v-4H5z M9 9h6 M9 12h4' },
+  dev:     { label: '开发', emoji: '👨‍💻', color: '#8B5CF6', icon: 'M9 8l-4 4 4 4 M15 8l4 4-4 4' },
+  browser: { label: '浏览器', emoji: '🌐', color: '#22D3EE', icon: 'M4 5h16v14H4z M4 9h20 M12 11.5v5 M9.5 14h5' },
+  design:  { label: '设计', emoji: '🎨', color: '#EC4899', icon: 'M4 20l3-1L18 7l-3-3L4 16l-1 4z M14 6l4 4' },
+  media:   { label: '影音娱乐', emoji: '🎬', color: '#F59E0B', icon: 'M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17 M10 8.5l5 3.5-5 3.5z' },
+  game:    { label: '游戏', emoji: '🎮', color: '#EF4444', icon: 'M7 8h10a4 4 0 0 1 4 4v1a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-1a4 4 0 0 1 4-4z M8 12v2 M7 13h2 M16 12.5a.8.8 0 1 0 0 1.6.8.8 0 0 0 0-1.6 M17.5 14a.8.8 0 1 0 0 1.6.8.8 0 0 0 0-1.6' },
+  system:  { label: '系统工具', emoji: '⚙️', color: '#94A3B8', icon: 'M12 8.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4 M12 4v3 M12 17v3 M4 12h3 M17 12h3 M6 6l2 2 M16 16l2 2 M18 6l-2 2 M8 16l-2 2' },
+  other:   { label: '其他', emoji: '📦', color: '#64748B', icon: 'M5 8l7-4 7 4v8l-7 4-7-4z M5 8l7 4 7-4 M12 12v8' }
 }
 
 /** 进程名/中文名 → 分类 */

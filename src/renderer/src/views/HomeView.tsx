@@ -8,6 +8,7 @@ import type { MergedTrail, TrailSegment, WorkState, PlanItem } from '@shared/typ
 import { dateKey } from '@shared/trail'
 import { ActivityHoverCard } from '../components/ActivityHoverCard'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { Icon } from '../components/Icon'
 import { displayApp } from '@shared/appDisplayName'
 import { useSettingsStore } from '../stores/settingsStore'
 import { CATEGORY_META, categoryOfWithOverride, type AppCategory } from '@shared/appCategory'
@@ -37,6 +38,19 @@ const fmtMin = (min?: number) =>
 
 const LABEL_W = 128
 const LANE_W = 760
+
+/** 分类 hex → "r g b"（renderSegBlock 段色用） */
+function hexToRgb(hex: string): string {
+  const m = hex.replace('#', '')
+  const n = m.length === 3 ? m.split('').map((c) => c + c).join('') : m
+  const num = parseInt(n, 16)
+  return `${(num >> 16) & 255} ${(num >> 8) & 255} ${num & 255}`
+}
+
+/** 分类 hex → 低透明底色（泳道底/磁贴底） */
+function hexBg(hex: string, alpha: number): string {
+  return `rgba(${hexToRgb(hex)}, ${alpha})`
+}
 
 // 时间轴缩放档位：从全天到 1 小时
 const ZOOM_STOPS = [
@@ -96,7 +110,7 @@ interface StarNode {
   item?: GraphItem    // 应用节点
   min: number
 }
-interface StarConnection { x1: number; y1: number; x2: number; y2: number }
+interface StarConnection { x1: number; y1: number; x2: number; y2: number; level: 1 | 2 }
 
 const sumDur = (list: GraphItem[]) => list.reduce((s, i) => s + i.seg.durationMin, 0)
 
@@ -117,19 +131,19 @@ function computeStarHierarchy(filtered: GraphItem[], isWork: boolean, override: 
   }
   const cats = [...byCat.entries()].sort((a, b) => sumDur(b[1]) - sumDur(a[1]))
   const maxCatMin = sumDur(cats[0][1]) || 1
-  const CAT_R = 31
+  const CAT_R = 30
   cats.forEach(([cat, items], ci) => {
     const baseAngle = (ci / cats.length) * 2 * Math.PI - Math.PI / 2
     const catMin = sumDur(items)
     const cx = 50 + CAT_R * Math.cos(baseAngle)
     const cy = 50 + CAT_R * Math.sin(baseAngle)
     nodes.push({ kind: 'cat', key: `cat-${cat}`, x: cx, y: cy, size: Math.max(22, Math.round(25 + (catMin / maxCatMin) * 10)), cat, apps: items.length, min: catMin })
-    connections.push({ x1: 50, y1: 50, x2: cx, y2: cy })
+    connections.push({ x1: 50, y1: 50, x2: cx, y2: cy, level: 1 })
     // 应用围绕各自分类
     const apps = [...items].sort((a, b) => b.seg.durationMin - a.seg.durationMin)
-    const APP_R = 47
+    const APP_R = 49
     const n = apps.length
-    const spread = Math.min(0.6, 0.16 * Math.max(1, n - 1))
+    const spread = Math.min(0.4, 0.12 * Math.max(1, n - 1))
     apps.forEach((item, ai) => {
       const aAngle = baseAngle + (n === 1 ? 0 : ((ai - (n - 1) / 2) / Math.max(1, n - 1)) * spread)
       nodes.push({
@@ -141,7 +155,7 @@ function computeStarHierarchy(filtered: GraphItem[], isWork: boolean, override: 
         item,
         min: item.seg.durationMin
       })
-      connections.push({ x1: cx, y1: cy, x2: 50 + APP_R * Math.cos(aAngle), y2: 50 + APP_R * Math.sin(aAngle) })
+      connections.push({ x1: cx, y1: cy, x2: 50 + APP_R * Math.cos(aAngle), y2: 50 + APP_R * Math.sin(aAngle), level: 2 })
     })
   })
   return { nodes, connections }
@@ -207,6 +221,22 @@ function insight(trail: MergedTrail, yesterday: MergedTrail | null): DailyInsigh
 }
 
 export default function HomeView() {
+  /** 主页模块显隐（类似小组件管理，localStorage 持久化） */
+  const [widgets, setWidgets] = useState<{ insight: boolean; timeline: boolean; starmap: boolean }>(() => {
+    try {
+      const s = localStorage.getItem('homeWidgets')
+      if (s) return { insight: true, timeline: true, starmap: true, ...JSON.parse(s) }
+    } catch { /* ignore */ }
+    return { insight: true, timeline: true, starmap: true }
+  })
+  const [editing, setEditing] = useState(false)
+  const setWidget = (k: 'insight' | 'timeline' | 'starmap', v: boolean) => {
+    setWidgets((prev) => {
+      const next = { ...prev, [k]: v }
+      try { localStorage.setItem('homeWidgets', JSON.stringify(next)) } catch { /* ignore */ }
+      return next
+    })
+  }
   /** 用户自定义分类覆盖（星图分类层 + 时间轴分类组共用） */
   const override = useSettingsStore((s) => s.settings.appCategoryOverride)
   /** 应用视觉元数据：进程名(小写) → { iconDataUrl, themeColor } */
@@ -406,11 +436,11 @@ export default function HomeView() {
     }
   }, [items, plans, rangeLo, rangeHi, laneW])
 
-  const renderSegBlock = useCallback((seg: TrailSegment, left: number, width: number) => {
+  const renderSegBlock = useCallback((seg: TrailSegment, left: number, width: number, colorRgb?: string) => {
     const app = displayApp(seg.mainApp)
     const ma = (seg as any).microActivity
     const c = STATE_TEXT_VAR(seg)
-    const chroma = CHROMA_OF(seg)
+    const chroma = colorRgb || CHROMA_OF(seg)
     const ghost = dragTs === seg.startTs
     const glance = !!seg.glance
     return (
@@ -510,9 +540,6 @@ export default function HomeView() {
     setRangeHi(Math.round(hi))
   }
 
-  const overviewRef = useRef<HTMLDivElement>(null)
-  const overviewPanRef = useRef<{ x: number; lo: number; hi: number } | null>(null)
-
   const clampRange = (lo: number, hi: number) => {
     const span = hi - lo
     if (span >= 1440) return { lo: 0, hi: 1440 }
@@ -530,14 +557,6 @@ export default function HomeView() {
     setRangeHi(r.hi)
   }
 
-  // 左右平移按钮：移动半个可视范围
-  const panBy = (dir: -1 | 1) => {
-    const span = rangeHi - rangeLo
-    const r = clampRange(rangeLo + (dir * span) / 2, rangeHi + (dir * span) / 2)
-    setRangeLo(r.lo)
-    setRangeHi(r.hi)
-  }
-
   // 回到现在：让「现在」绿线居中
   const centerOnNow = () => {
     const span = rangeHi - rangeLo
@@ -545,38 +564,6 @@ export default function HomeView() {
     setRangeLo(r.lo)
     setRangeHi(r.hi)
   }
-
-  // 迷你地图（全天概览）：点击定位 + 拖动平移可视窗口
-  const onOverviewPointerDown = (e: React.PointerEvent) => {
-    e.preventDefault()
-    const el = overviewRef.current; if (!el) return
-    const rect = el.getBoundingClientRect()
-    el.setPointerCapture(e.pointerId)
-    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
-    const center = ratio * 1440
-    const span = rangeHi - rangeLo
-    let lo = center - span / 2
-    let hi = center + span / 2
-    if (lo < 0) { lo = 0; hi = span }
-    if (hi > 1440) { hi = 1440; lo = 1440 - span }
-    setRangeLo(Math.round(lo))
-    setRangeHi(Math.round(hi))
-    overviewPanRef.current = { x: e.clientX, lo, hi }
-  }
-  const onOverviewPointerMove = (e: React.PointerEvent) => {
-    if (!overviewPanRef.current) return
-    const el = overviewRef.current; if (!el) return
-    const rect = el.getBoundingClientRect()
-    const span = overviewPanRef.current.hi - overviewPanRef.current.lo
-    const dt = ((e.clientX - overviewPanRef.current.x) / rect.width) * 1440
-    let lo = overviewPanRef.current.lo + dt
-    let hi = overviewPanRef.current.hi + dt
-    if (lo < 0) { lo = 0; hi = span }
-    if (hi > 1440) { hi = 1440; lo = 1440 - span }
-    setRangeLo(Math.round(lo))
-    setRangeHi(Math.round(hi))
-  }
-  const onOverviewPointerUp = () => { overviewPanRef.current = null }
 
   const handleAssignPlan = useCallback(async (planId: string | null, startTs?: number) => {
     const ts = startTs ?? dragSeg
@@ -706,31 +693,39 @@ export default function HomeView() {
         </div>
       )
     }
-    // 子星：分类（不可拖，hover 显示分类时长）
+    // 子星：分类（不可拖，下方显示分类用时）
     if (node.kind === 'cat') {
       const catMeta = CATEGORY_META[node.cat!]
-      const chroma = isWork ? 'var(--star-work)' : 'var(--star-life)'
       return (
         <div
           key={node.key}
-          onMouseEnter={() => setStarHover(node.key)}
-          onMouseLeave={() => setStarHover(null)}
-          className="absolute flex items-center justify-center rounded-full"
-          title={`${catMeta.label} · ${node.apps ?? 0} 个应用 · ${fmtDur(node.min)}`}
-          style={{
-            left: `${node.x}%`, top: `${node.y}%`,
-            width: node.size, height: node.size,
-            transform: 'translate(-50%, -50%)',
-            background: `radial-gradient(circle at 35% 35%, ${chroma}/0.55, ${chroma}/0.2)`,
-            boxShadow: `0 0 8px ${chroma}/0.35`,
-            zIndex: 6,
-            scale: starHover === node.key ? '1.1' : '1',
-            border: `1px solid ${chroma}/0.35`,
-            fontSize: node.size * 0.5,
-            cursor: 'default',
-          }}
+          className="absolute flex flex-col items-center"
+          style={{ left: `${node.x}%`, top: `${node.y}%`, transform: 'translate(-50%, -50%)', zIndex: 6 }}
         >
-          {catMeta.emoji}
+          <div
+            onMouseEnter={() => setStarHover(node.key)}
+            onMouseLeave={() => setStarHover(null)}
+            className="flex items-center justify-center rounded-full"
+            title={`${catMeta.label} · ${node.apps ?? 0} 个应用 · ${fmtDur(node.min)}`}
+            style={{
+              width: node.size, height: node.size,
+              background: hexBg(catMeta.color, 0.28),
+              boxShadow: `0 0 10px ${catMeta.color}55`,
+              scale: starHover === node.key ? '1.1' : '1',
+              border: `1px solid ${catMeta.color}66`,
+              cursor: 'default',
+            }}
+          >
+            <svg width={node.size * 0.5} height={node.size * 0.5} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ color: catMeta.color }}>
+              <use href={`#cat-${node.cat}`} />
+            </svg>
+          </div>
+          <span
+            className="mt-0.5 rounded-full px-1.5 py-px text-[9px] tabular-nums"
+            style={{ background: 'var(--pop-bg)', color: catMeta.color, border: `1px solid ${catMeta.color}44` }}
+          >
+            {fmtDur(node.min)}
+          </span>
         </div>
       )
     }
@@ -780,6 +775,8 @@ export default function HomeView() {
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-auto">
+      {widgets.insight ? (
+      <>
       {/* 今日洞察 */}
       <section className="glass-card hoverable">
         <div className="mb-2.5 flex items-center gap-2.5">
@@ -835,7 +832,11 @@ export default function HomeView() {
           <p className="text-[13px] text-slate-400 leading-relaxed">加载中...</p>
         )}
       </section>
+      </>
+      ) : null}
 
+      {widgets.timeline ? (
+      <>
       {/* 时间轴 — 水平泳道 */}
       <section className="glass-card">
         <div className="mb-3 flex items-center gap-2.5">
@@ -843,7 +844,7 @@ export default function HomeView() {
             className="flex h-6 w-6 items-center justify-center rounded-lg border"
             style={{ background: 'var(--accent-softer)', borderColor: 'var(--border-active)', color: 'var(--accent)' }}
           >
-            <span className="text-[13px] leading-none">⏱</span>
+            <Icon name="clock" size={13} />
           </span>
           <span className="text-[13px] font-semibold text-slate-200">时间轴</span>
           <span className="text-[12px] text-slate-500">{plans.length} 计划 · {fmtDur(items.reduce((a, i) => a + i.seg.durationMin, 0))}</span>
@@ -873,39 +874,13 @@ export default function HomeView() {
                 )
               })}
             </div>
-            <button onClick={() => panBy(-1)}
-              style={{ width: 28, height: 28, borderRadius: 6, border: '0.5px solid var(--tl-lane-border)', background: 'transparent', color: 'var(--tl-ruler-label)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              title="向左平移">◀</button>
             <button onClick={centerOnNow}
               style={{ height: 28, padding: '0 12px', borderRadius: 6, border: '0.5px solid var(--tl-now)', background: 'transparent', color: 'var(--tl-now)', fontSize: 11, fontWeight: 500, cursor: 'pointer' }}
               title="回到当前时间">现在</button>
-            <button onClick={() => panBy(1)}
-              style={{ width: 28, height: 28, borderRadius: 6, border: '0.5px solid var(--tl-lane-border)', background: 'transparent', color: 'var(--tl-ruler-label)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              title="向右平移">▶</button>
           </div>
         </div>
           <div ref={timelineScrollRef} style={{ overflowX: 'auto', overflowY: 'visible', position: 'relative' }}>
             <div className="relative" style={{ width: LABEL_W + laneW }}>
-            <div className="flex items-center mb-1">
-              <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-ruler-label)', paddingLeft: 8 }} className="shrink-0">全天</span>
-              <div ref={overviewRef} className="relative"
-                style={{ width: laneW, height: 10, borderRadius: 999, background: 'var(--tl-lane-today-bg)', cursor: 'grab', touchAction: 'none' }}
-                onPointerDown={onOverviewPointerDown}
-                onPointerMove={onOverviewPointerMove}
-                onPointerUp={onOverviewPointerUp}
-                onPointerCancel={onOverviewPointerUp}
-                title="全天概览 · 点击定位 · 拖动平移">
-                {[360, 720, 1080].map((m) => (
-                  <div key={m} className="absolute top-0 bottom-0" style={{ left: `${(m / 1440) * 100}%`, width: 0.5, background: 'var(--tl-lane-border)' }} />
-                ))}
-                <div className="absolute top-0 bottom-0" style={{
-                  left: `${(rangeLo / 1440) * 100}%`,
-                  width: `${((rangeHi - rangeLo) / 1440) * 100}%`,
-                  background: 'rgba(55,138,221,0.32)',
-                  borderRadius: 999,
-                }} />
-              </div>
-            </div>
             <div className="flex items-center mb-1.5">
               <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-ruler-label)', paddingLeft: 8 }} className="shrink-0">{fmtHHMM(rangeLo)}–{fmtHHMM(rangeHi)}</span>
                 <div ref={rangeRef} className="relative"
@@ -919,8 +894,7 @@ export default function HomeView() {
                 <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2" style={{ height: 0.5, background: 'var(--tl-ruler-line)' }} />
                 {hourTicks.map(t => (
                   <div key={t} className="absolute top-0 bottom-0" style={{ left: ruler.minToX(t) }}>
-                    <div style={{ width: 0.5, height: 6, background: 'var(--tl-ruler-tick)' }} />
-                    <span className="absolute" style={{ top: 10, left: '50%', transform: 'translateX(-50%)', fontSize: 11, color: 'var(--tl-ruler-label)', fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontVariantNumeric: 'tabular-nums' }}>
+                    <span className="absolute" style={{ top: 16, left: '50%', transform: 'translateX(-50%)', fontSize: 11, color: 'var(--tl-ruler-label)', fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontVariantNumeric: 'tabular-nums' }}>
                       {String(Math.floor(t / 60))}
                     </span>
                   </div>
@@ -933,10 +907,10 @@ export default function HomeView() {
                 className="flex h-6 w-6 items-center justify-center rounded-lg border"
                 style={{ background: 'var(--accent-softer)', borderColor: 'var(--border-active)', color: 'var(--accent)' }}
               >
-                <span className="text-[13px] leading-none">🗂</span>
+                <Icon name="activity" size={13} />
               </span>
               <span className="text-[13px] font-semibold text-slate-200">今日操作</span>
-              <span className="text-[11px] text-slate-500">按分类分组 · 拖拽可重新归类</span>
+              <span className="text-[11px] text-slate-500">按分类聚合 · 可展开应用泳道 · 拖拽归类</span>
             </div>
             {todayByApp.length === 0 ? (
               <div className="flex items-center mb-1.5">
@@ -958,96 +932,96 @@ export default function HomeView() {
               </div>
             ) : (
               <>
-                {/* 分类分组：玻璃卡组头（展开/收起 + 拖放归类目标），分类名与时长两端分离 */}
-                {(Object.keys(CATEGORY_META) as AppCategory[]).map((cat) => {
+                {/* 时间轴按分类聚合：泳道 = 分类，段块按真实时间铺，hover 显示应用详情 */}
+                {todayByCategory.map(({ cat, apps, min }) => {
                   const meta = CATEGORY_META[cat]
-                  const group = todayByCategory.find((c) => c.cat === cat)
-                  const apps = group?.apps ?? []
-                  const min = group?.min ?? 0
+                  const rgb = hexToRgb(meta.color)
                   const open = openCats.has(cat)
-                  const hasApps = apps.length > 0
                   return (
                     <div key={cat} className="mb-1">
-                      <div
-                        className={`flex w-full cursor-pointer items-center rounded-xl border px-3 py-1.5 transition-all ${hasApps ? 'hover:bg-white/[0.04]' : ''}`}
-                        style={{ borderColor: hasApps ? 'var(--border-subtle)' : 'rgba(255,255,255,0.05)', background: hasApps ? 'rgba(255,255,255,0.028)' : 'transparent' }}
-                        onClick={() => hasApps && toggleCat(cat)}
-                        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
-                        onDrop={(e) => {
-                          e.preventDefault()
-                          const app = e.dataTransfer.getData('text/app-cat')
-                          if (app) setAppCategory(app, cat)
-                          setCatDragApp(null)
-                        }}
-                        title={hasApps ? `${meta.label} · ${apps.length} 个应用 · ${fmtDur(min)} · 点击展开/收起，拖入应用可归类` : `拖入应用归类到「${meta.label}」`}
-                      >
-                        <span className={`text-[14px] leading-none text-slate-500 transition-transform duration-200 ${open ? 'rotate-90' : ''}`} style={{ width: 12, display: 'inline-block' }}>▸</span>
-                        <span className="text-[14px] leading-none" style={{ opacity: hasApps ? 1 : 0.45 }}>{meta.emoji}</span>
-                        <span className="text-[13px] font-semibold" style={{ color: hasApps ? meta.color : 'var(--tl-ruler-label)' }}>{meta.label}</span>
-                        <div className="flex-1" />
-                        {hasApps ? (
-                          <span className="text-[11px] text-slate-500">{apps.length} 个应用 · <span style={{ color: meta.color }}>{fmtDur(min)}</span></span>
-                        ) : (
-                          <span className="text-[11px] text-slate-600">拖入归类</span>
-                        )}
+                      <div className="flex items-center">
+                        {/* 分类标签列：图标 + 分类名 + 时长（点击分类名可展开/收起，拖入归类） */}
+                        <span
+                          className="flex shrink-0 cursor-pointer items-center gap-1.5 py-1 pr-1"
+                          style={{ width: LABEL_W, fontSize: 11, color: meta.color }}
+                          onClick={() => toggleCat(cat)}
+                          onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+                          onDrop={(e) => {
+                            e.preventDefault()
+                            const app = e.dataTransfer.getData('text/app-cat')
+                            if (app) setAppCategory(app, cat)
+                            setCatDragApp(null)
+                          }}
+                          title={`${meta.label} · ${apps.length} 个应用 · ${fmtDur(min)} · 点击展开应用泳道，拖入应用可归类`}
+                        >
+                          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ color: meta.color, flexShrink: 0 }}>
+                            <use href={`#cat-${cat}`} />
+                          </svg>
+                          <span className="overflow-hidden text-ellipsis whitespace-nowrap">{meta.label}</span>
+                          <span className="shrink-0 text-[10px]" style={{ color: 'var(--tl-ruler-label)' }}>{fmtDur(min)}</span>
+                        </span>
+                        {/* 分类泳道：段块按真实时间铺 */}
+                        <div
+                          className="relative"
+                          style={{
+                            width: laneW, height: 30, overflow: 'hidden',
+                            background: hexBg(meta.color, 0.14),
+                            borderBottom: '1px dashed rgba(255,255,255,0.05)',
+                            transition: 'background .12s',
+                          }}
+                        >
+                          {apps.flatMap(([, segsArr]) => segsArr.map((s) => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 30), rgb)))}
+                        </div>
+                        {/* 尾部展开按钮 */}
+                        <button
+                          className="ml-1 flex shrink-0 items-center gap-0.5 rounded px-1.5 py-1 text-[10px] text-slate-500 transition-colors hover:bg-white/[0.05] hover:text-slate-200"
+                          onClick={() => toggleCat(cat)}
+                          title={open ? '收起应用泳道' : '展开各应用泳道'}
+                        >
+                          {open ? '收起' : '展开'}
+                          <span className={`text-[8px] transition-transform duration-200 ${open ? '' : '-rotate-90'}`}>▶</span>
+                        </button>
                       </div>
-                      {open && hasApps ? (
-                        <div className="anim-fade-in mt-0.5 flex flex-col gap-0.5">
-                          {apps.map(([app, segsArr]) => (
-                            <div key={app} className="flex items-center">
-                              {/* 应用行标签：可拖拽到任意分类组头重新归类 */}
-                              <span
-                                draggable
-                                onDragStart={(e) => {
-                                  e.dataTransfer.setData('text/app-cat', app)
-                                  e.dataTransfer.effectAllowed = 'move'
-                                  setCatDragApp(app)
-                                }}
-                                onDragEnd={() => setCatDragApp(null)}
-                                className="flex shrink-0 cursor-grab items-center gap-1.5 py-1 pl-7 pr-1"
-                                style={{ width: LABEL_W, fontSize: 11.5, color: 'var(--tl-other-text)', opacity: catDragApp === app ? 0.4 : 1 }}
-                                title={`${displayApp(app)}（${meta.label}）· 拖到其他分类组头可重新归类`}
-                              >
-                                {(() => {
-                                  const ak = app.trim().toLowerCase().replace(/\.exe$/i, '')
-                                  const pid = projectAppMap[ak]
-                                  const pcolor = pid ? projectColors[pid] : null
-                                  return pcolor ? <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: pcolor, boxShadow: `0 0 4px ${pcolor}` }} /> : null
-                                })()}
-                                {appVisuals[app.trim().toLowerCase().replace(/\.exe$/i, '')] ? (
-                                  <img
-                                    src={appVisuals[app.trim().toLowerCase().replace(/\.exe$/i, '')].iconDataUrl}
-                                    alt=""
-                                    className="h-3.5 w-3.5 shrink-0 rounded-[3px]"
-                                    draggable={false}
-                                    style={{ background: 'rgba(255,255,255,0.06)' }}
-                                  />
-                                ) : (
-                                  <span style={{ fontSize: 10, color: 'var(--tl-ruler-label)' }}>⠿</span>
-                                )}
-                                <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{displayApp(app)}</span>
-                              </span>
-                              <div className="relative" style={{
-                                   width: laneW, height: 30, overflow: 'hidden',
-                                   background: dragOverLane === 'today' ? 'rgba(55,138,221,0.08)' : 'transparent',
-                                   borderBottom: '0.5px solid var(--tl-lane-border)',
-                                   boxShadow: dragOverLane === 'today' ? 'inset 0 -1.5px 0 var(--tl-accent)' : 'none',
-                                   transition: 'background .12s, box-shadow .12s',
-                                 }}
-                                onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane('today') }}
-                                onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverLane(null) }}
-                                onDrop={e => {
-                                  e.preventDefault(); setDragOverLane(null)
-                                  const ts = parseInt(e.dataTransfer.getData('text/start-ts'))
-                                  if (!isNaN(ts)) handleAssignPlan(null, ts)
-                                }}>
-                                {dragOverLane === 'today' && (
-                                  <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', background: 'var(--tl-accent)', color: '#fff', fontSize: 11, fontWeight: 500, borderRadius: 999, padding: '2px 8px' }}>松开归入 · 今日</span>
-                                )}
-                                {segsArr.map(s => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 30)))}
+                      {/* 展开：该分类下各应用独立泳道（每应用一行，段块按真实时间铺） */}
+                      {open ? (
+                        <div className="anim-fade-in ml-2 mt-0.5 flex flex-col gap-0.5 border-l-2 pl-2" style={{ borderColor: hexBg(meta.color, 0.5) }}>
+                          {apps.map(([app, segsArr]) => {
+                            const ak = app.trim().toLowerCase().replace(/\.exe$/i, '')
+                            const v = appVisuals[ak]
+                            const appMin = segsArr.reduce((s, g) => s + g.seg.durationMin, 0)
+                            return (
+                              <div key={app} className="flex items-center">
+                                {/* 应用名标签列（可拖拽归类） */}
+                                <span
+                                  draggable
+                                  onDragStart={(e) => { e.dataTransfer.setData('text/app-cat', app); e.dataTransfer.effectAllowed = 'move'; setCatDragApp(app) }}
+                                  onDragEnd={() => setCatDragApp(null)}
+                                  className="flex shrink-0 cursor-grab items-center gap-1.5 py-1 pr-1"
+                                  style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-other-text)', opacity: catDragApp === app ? 0.4 : 1 }}
+                                  title={`${displayApp(app)}（${meta.label}）· 拖到其他分类可重新归类`}
+                                >
+                                  {v ? (
+                                    <img src={v.iconDataUrl} alt="" className="h-3.5 w-3.5 shrink-0 rounded-[3px]" style={{ background: 'rgba(0,0,0,0.05)' }} draggable={false} />
+                                  ) : (
+                                    <span className="h-3.5 w-3.5 shrink-0 rounded-[3px]" style={{ background: hexBg(meta.color, 0.3) }} />
+                                  )}
+                                  <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{displayApp(app)}</span>
+                                  <span className="shrink-0 text-[10px]" style={{ color: 'var(--tl-ruler-label)' }}>{fmtDur(appMin)}</span>
+                                </span>
+                                {/* 应用泳道：段块按真实时间铺 */}
+                                <div
+                                  className="relative"
+                                  style={{
+                                    width: laneW, height: 26, overflow: 'hidden',
+                                    background: 'transparent',
+                                    borderBottom: '1px dashed rgba(255,255,255,0.04)',
+                                  }}
+                                >
+                                  {segsArr.map((s) => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 30), rgb))}
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       ) : null}
                     </div>
@@ -1195,6 +1169,8 @@ export default function HomeView() {
             </div>
           </div>
       </section>
+      </>
+      ) : null}
 
       {tlHover && createPortal(
         <ActivityHoverCard
@@ -1221,11 +1197,13 @@ export default function HomeView() {
         document.body
       )}
 
+      {widgets.starmap ? (
+      <>
       {/* 星图 — 主星(工作/摸鱼) → 子星(分类) → 末级(应用) */}
       <section className="star-map glass-card hoverable" style={{ background: 'var(--star-card-bg)' }}>
         <div className="flex items-center justify-between mb-3 px-1">
           <div className="flex items-center gap-2">
-            <span className="text-base">🗂️</span>
+            <Icon name="chart" size={16} className="shrink-0" style={{ color: 'var(--star-text)' }} />
             <h3 className="text-[13px] font-semibold" style={{ color: 'var(--star-text)' }}>今日星图</h3>
           </div>
           <span className="text-[11px]" style={{ color: 'var(--star-text-muted)' }}>主星=工作/摸鱼 · 子星=分类 · 末级=应用 · 拖动应用可调整</span>
@@ -1241,7 +1219,13 @@ export default function HomeView() {
           <div className={`relative flex-1 min-h-[340px] transition-colors ${hoverCol === 'work' && dragFrom && dragFrom.col !== 'work' ? 'bg-[rgb(var(--star-work)/0.06)]' : ''}`} style={{ background: 'var(--star-work-bg)' }} {...starDropProps('work')}>
             <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
               {workChart.connections.map((c, i) => (
-                <line key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} strokeWidth="0.3" stroke="var(--star-work-line)" />
+                <line
+                  key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2}
+                  strokeWidth={c.level === 1 ? 0.35 : 0.22}
+                  stroke="var(--star-work-line)"
+                  strokeDasharray={c.level === 2 ? '1.5 2' : undefined}
+                  opacity={c.level === 2 ? 0.55 : 0.8}
+                />
               ))}
             </svg>
             {workChart.nodes.length === 0 ? (
@@ -1251,7 +1235,13 @@ export default function HomeView() {
           <div className={`relative flex-1 min-h-[340px] transition-colors ${hoverCol === 'life' && dragFrom && dragFrom.col !== 'life' ? 'bg-[rgb(var(--star-life)/0.06)]' : ''}`} style={{ background: 'var(--star-life-bg)' }} {...starDropProps('life')}>
             <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
               {lifeChart.connections.map((c, i) => (
-                <line key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} strokeWidth="0.3" stroke="var(--star-life-line)" />
+                <line
+                  key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2}
+                  strokeWidth={c.level === 1 ? 0.35 : 0.22}
+                  stroke="var(--star-life-line)"
+                  strokeDasharray={c.level === 2 ? '1.5 2' : undefined}
+                  opacity={c.level === 2 ? 0.55 : 0.8}
+                />
               ))}
             </svg>
             {lifeChart.nodes.length === 0 ? (
@@ -1260,6 +1250,43 @@ export default function HomeView() {
           </div>
         </div>
       </section>
+      </>
+      ) : null}
+
+      {/* 底部编辑按钮（小组件管理风格） */}
+      <div className="flex items-center justify-center py-1">
+        <button
+          className="glass-btn !px-3 !py-1 !text-[11px]"
+          onClick={() => setEditing((e) => !e)}
+          title="管理首页模块"
+        >
+          <Icon name="sliders" size={12} /> {editing ? '完成' : '编辑'}
+        </button>
+      </div>
+      {editing ? (
+        <div className="glass-card anim-scale-in flex items-center gap-2 !p-3">
+          <span className="text-[12px] font-medium text-slate-300">首页模块：</span>
+          <button
+            className={`chip ${widgets.insight ? '!text-neon-green' : 'opacity-50'}`}
+            onClick={() => setWidget('insight', !widgets.insight)}
+          >
+            今日洞察 {widgets.insight ? '✓' : '✕'}
+          </button>
+          <button
+            className={`chip ${widgets.timeline ? '!text-neon-green' : 'opacity-50'}`}
+            onClick={() => setWidget('timeline', !widgets.timeline)}
+          >
+            时间轴 {widgets.timeline ? '✓' : '✕'}
+          </button>
+          <button
+            className={`chip ${widgets.starmap ? '!text-neon-green' : 'opacity-50'}`}
+            onClick={() => setWidget('starmap', !widgets.starmap)}
+          >
+            今日星图 {widgets.starmap ? '✓' : '✕'}
+          </button>
+          <span className="ml-auto text-[10px] text-slate-600">点击切换显隐 · 选择会记住</span>
+        </div>
+      ) : null}
 
       {/* 星图应用节点悬浮卡：portal 渲染避免被星图边界裁剪 */}
       {starHover && starHoverRect && (() => {

@@ -6,11 +6,10 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import type { SuggestionQuestion } from '@shared/types'
 import { WORK_STATES } from '@shared/stateMeta'
-import { attentionGrade, focusScoreLine } from '@shared/focusMeta'
 import { usePresenceStore } from '../stores/presenceStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { Icon, type IconName } from '../components/Icon'
-import { CATEGORY_META, categoryOfWithOverride } from '@shared/appCategory'
+import { CATEGORY_META, categoryOfWithOverride, type AppCategory } from '@shared/appCategory'
 
 interface BrowserPlanConfirm {
   planId: string
@@ -106,8 +105,8 @@ function ResizeHandle({ onDown, onMove, onUp }: {
   )
 }
 
-/** 专注度状态环 */
-function FocusRing({ size, focus, color, emoji }: { size: number; focus: number; color: string; emoji: string }) {
+/** 专注度状态环：中心显示分类线性图标（icon）或 emoji 降级 */
+function FocusRing({ size, focus, color, emoji, icon }: { size: number; focus: number; color: string; emoji: string; icon?: AppCategory }) {
   const R = 18
   const CIRC = 2 * Math.PI * R
   return (
@@ -122,7 +121,15 @@ function FocusRing({ size, focus, color, emoji }: { size: number; focus: number;
           style={{ transition: 'stroke-dashoffset 400ms ease-out' }}
         />
       </svg>
-      <div className="absolute inset-0 flex items-center justify-center" style={{ fontSize: Math.round(size * 0.34) }}>{emoji}</div>
+      <div className="absolute inset-0 flex items-center justify-center">
+        {icon ? (
+          <svg width={size * 0.42} height={size * 0.42} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--pop-text)' }}>
+            <use href={`#cat-${icon}`} />
+          </svg>
+        ) : (
+          <span style={{ fontSize: Math.round(size * 0.34) }}>{emoji}</span>
+        )}
+      </div>
     </div>
   )
 }
@@ -440,7 +447,8 @@ export default function SuggestionWidget() {
   // 当前活跃应用 → 分类图标（跟随用户手动归类，override 变化即同步）
   const mainApp = presence?.screens?.find((s) => s.screen === presence.mainScreen)?.app
   const appCategoryOverride = useSettingsStore((s) => s.settings.appCategoryOverride)
-  const mainCatEmoji = mainApp ? CATEGORY_META[categoryOfWithOverride(mainApp, appCategoryOverride)].emoji : null
+  const mainCat = mainApp ? categoryOfWithOverride(mainApp, appCategoryOverride) : null
+  const mainCatEmoji = mainCat ? CATEGORY_META[mainCat].emoji : null
 
   // ── mini 态：悬浮胶囊（状态环 + 实时工作内容） ──
   if (widgetMode === 'mini') {
@@ -451,7 +459,7 @@ export default function SuggestionWidget() {
           style={PANEL_STYLE}
           onClick={() => setMode('compact')}
         >
-          <FocusRing size={26} focus={focus} color={meta.color} emoji={mainCatEmoji || meta.emoji} />
+          <FocusRing size={26} focus={focus} color={meta.color} emoji={mainCatEmoji || meta.emoji} icon={mainCat ?? undefined} />
           <span className="min-w-0 flex-1 truncate text-xs text-slate-200">{liveTitle || meta.label}</span>
           <button
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200"
@@ -485,11 +493,11 @@ export default function SuggestionWidget() {
             <HeaderBtn icon="chevronRight" rotate={90} title="收起到最小" onClick={() => setMode('mini')} />
           </WidgetHeader>
           <div className="flex items-center gap-3 px-3.5 py-2.5">
-            <FocusRing size={42} focus={focus} color={meta.color} emoji={mainCatEmoji || meta.emoji} />
+            <FocusRing size={42} focus={focus} color={meta.color} emoji={mainCatEmoji || meta.emoji} icon={mainCat ?? undefined} />
             <div className="min-w-0 flex-1">
               <div className="text-[13px] font-semibold" style={{ color: meta.color }}>
                 {meta.label}
-                <span className="ml-1 text-[11px] font-normal text-slate-500">专注度 {focus} · {attentionGrade(focus).grade}</span>
+                <span className="ml-1 text-[11px] font-normal text-slate-500">专注度 {focus}</span>
               </div>
               <div className="mt-0.5 truncate text-[11px] text-slate-400">{liveTitle || '等待采集…'}</div>
             </div>
@@ -535,15 +543,15 @@ export default function SuggestionWidget() {
           onMouseEnter={() => setShowFocusMinutes(true)}
           onMouseLeave={() => setShowFocusMinutes(false)}
         >
-          <FocusRing size={44} focus={focus} color={meta.color} emoji={mainCatEmoji || meta.emoji} />
+          <FocusRing size={44} focus={focus} color={meta.color} emoji={mainCatEmoji || meta.emoji} icon={mainCat ?? undefined} />
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-semibold" style={{ color: meta.color }}>
               {meta.label}{' '}
               <span
                 className="text-[11px] font-normal text-slate-500"
-                title={presence ? `专注度怎么算的：${focusScoreLine(presence)}\n评级 ${attentionGrade(focus).grade}（S≥90 / A≥75 / B≥55 / C≥35 / D<35）` : undefined}
+                title={presence ? `实时专注度 ${focus}（0-100）· 当前状态 ${presence.state}\n多维注意力评分见「监控/报表」页` : undefined}
               >
-                专注度 {focus} · {attentionGrade(focus).grade}
+                专注度 {focus}
               </span>
             </div>
             <div className="mt-0.5 truncate text-[11px] text-slate-400">

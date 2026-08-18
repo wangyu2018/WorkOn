@@ -8,8 +8,7 @@ import { usePresenceStore } from './stores/presenceStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { CommandPalette } from './components/CommandPalette'
 import { Icon, type IconName } from './components/Icon'
-import { attentionGrade, focusScoreLine } from '@shared/focusMeta'
-import { CATEGORY_META, categoryOfWithOverride } from '@shared/appCategory'
+import { CATEGORY_META, categoryOfWithOverride, type AppCategory } from '@shared/appCategory'
 import workonLogo from './assets/workon-logo.png'
 import HomeView from './views/HomeView'
 import MonitorView from './views/MonitorView'
@@ -115,7 +114,7 @@ export default function App() {
   // 当前活跃应用 → 分类图标（跟随用户手动归类，override 变化即同步）
   const appCategoryOverride = useSettingsStore((s) => s.settings.appCategoryOverride)
   const mainApp = presence?.screens?.find((s) => s.screen === presence.mainScreen)?.app
-  const mainCatEmoji = mainApp ? CATEGORY_META[categoryOfWithOverride(mainApp, appCategoryOverride)].emoji : null
+  const mainCat: AppCategory | null = mainApp ? categoryOfWithOverride(mainApp, appCategoryOverride) : null
 
   // 强调色主题 + 亮暗模式应用到根节点
   useEffect(() => {
@@ -247,14 +246,15 @@ export default function App() {
             {presence && (
               <div
                 className="mr-1 flex items-center gap-2 rounded-full border border-white/[0.07] bg-white/[0.03] py-1 pl-2.5 pr-2"
-                title={presence ? `专注度怎么算的：${focusScoreLine(presence)}\n评级 ${attentionGrade(presence.focusLevel).grade}（S≥90 / A≥75 / B≥55 / C≥35 / D<35）` : undefined}
+                title={presence ? `实时专注度 ${presence.focusLevel}（0-100）· 当前状态 ${presence.state}\n多维注意力评分见「监控/报表」页` : undefined}
               >
-                {mainCatEmoji ? (
-                  <span className="text-[13px] leading-none" title={`当前应用分类`}>{mainCatEmoji}</span>
+                {mainCat ? (
+                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ color: CATEGORY_META[mainCat].color, flexShrink: 0 }}>
+                    <use href={`#cat-${mainCat}`} />
+                  </svg>
                 ) : null}
                 <span className="text-[11px] tabular-nums text-slate-400">
                   专注度 <span className="font-medium text-slate-200">{presence.focusLevel}</span>
-                  <span className="ml-1 text-slate-500">{attentionGrade(presence.focusLevel).grade}</span>
                 </span>
               </div>
             )}
