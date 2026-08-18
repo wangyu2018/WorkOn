@@ -64,6 +64,8 @@ export function CommandPalette() {
           setSel(0)
         }
       },
+      { id: 'open-projects', title: '打开项目开发', icon: 'target', keywords: 'projects project xiangmu 项目 开发', run: () => { go('plan'); setTimeout(() => window.dispatchEvent(new CustomEvent('workon:goto-projects')), 50) } },
+      { id: 'project-report', title: '查看项目耗时报表', icon: 'chart', keywords: 'project report baobiao 项目 报表', run: () => go('report') },
       { id: 'toggle-widget', title: '显隐悬浮窗', icon: 'monitor', keywords: 'widget xuanfuchuang 悬浮窗', run: () => { window.api.toggleWidget(); close() } },
       { id: 'toggle-pet', title: '显隐桌搭', icon: 'cat', keywords: 'pet zhuochong zhuoda 桌搭 桌宠', run: () => { window.api.togglePet(); close() } },
       ...(aiEnabled ? [

@@ -13,7 +13,8 @@ import type {
   ActivityRecord, TimeEntry, ScreenshotRecord, MemoRecord, PlanItem,
   UserAnalysis, UsageStat, ActivityCorrection, CorrectionRule, UserFeedback, QAMessage,
   CustomCategory, AttentionScore, Achievement, AccessLog, UserPersona,
-  ReportTemplate, OcrSnapshot, CategoryInference, SegmentPlanLink
+  ReportTemplate, OcrSnapshot, CategoryInference, SegmentPlanLink,
+  Project, ProjectTask, ProjectTimeLink
 } from '@shared/types'
 import type { ChainDayReport } from '@shared/chain'
 import { dateKey } from '@shared/trail'
@@ -43,13 +44,17 @@ interface JsonData {
   chains: ChainDayReport[] // v2.6.1 作业链路日报（按 date 唯一，重算覆盖）
   categoryInferences: CategoryInference[] // AI 分类兜底推断（独立表，仅展示）
   segmentPlans: SegmentPlanLink[] // 时间轴段→计划拖拽关联（持久化）
+  projects: Project[] // v3.1 项目 AI 开发管理：项目
+  projectTasks: ProjectTask[] // 项目下任务
+  projectTimeLinks: ProjectTimeLink[] // 开发时间归类
 }
 
 const EMPTY: JsonData = {
   entries: [], screenshots: [], memos: [], plans: [], analyses: [],
   usages: [], corrections: [], rules: [], feedbacks: [], qa: [], categories: [],
   attentionScores: [], achievements: [], accessLogs: [], personas: [],
-  reportTemplates: [], ocrSnapshots: [], chains: [], categoryInferences: [], segmentPlans: []
+  reportTemplates: [], ocrSnapshots: [], chains: [], categoryInferences: [], segmentPlans: [],
+  projects: [], projectTasks: [], projectTimeLinks: []
 }
 
 let dir = ''

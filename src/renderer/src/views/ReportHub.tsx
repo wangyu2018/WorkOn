@@ -207,6 +207,8 @@ function DailyReport() {
   /** 注意力评分：todayAttention + rangeAttention(8)（昨日对比 / 周均小字用） */
   const [attention, setAttention] = useState<{ today: AttentionScore; history: AttentionScore[] } | null>(null)
   const [attentionLoaded, setAttentionLoaded] = useState(false)
+  /** 项目今日耗时（项目 → { 名称/色, 分钟 }） */
+  const [projectTimes, setProjectTimes] = useState<{ id: string; name: string; color: string; min: number }[]>([])
 
   const load = useCallback(async () => {
     try {
@@ -218,6 +220,33 @@ function DailyReport() {
     } finally {
       setLoaded(true)
     }
+  }, [])
+
+  // 加载项目耗时
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [ps, links, tr] = await Promise.all([window.api.listProjects(), window.api.getDayProjectLinks(), window.api.getTrail()])
+        const projects = (ps as { id: string; name: string; color?: string }[])
+        const dayLinks = (links as { app: string; projectId: string }[])
+        const trail2 = tr as MergedTrail | null
+        if (!projects.length || !trail2) return
+        const appOfProject = new Map<string, string>()
+        dayLinks.forEach((l) => appOfProject.set(l.app, l.projectId))
+        const agg = new Map<string, number>()
+        for (const seg of trail2.segments) {
+          const k = seg.mainApp.trim().toLowerCase().replace(/\.exe$/i, '')
+          const pid = appOfProject.get(k)
+          if (pid) agg.set(pid, (agg.get(pid) ?? 0) + seg.durationMin)
+        }
+        setProjectTimes(
+          projects
+            .filter((p) => (agg.get(p.id) ?? 0) > 0)
+            .map((p) => ({ id: p.id, name: p.name, color: p.color ?? '#22D3EE', min: agg.get(p.id) ?? 0 }))
+            .sort((a, b) => b.min - a.min)
+        )
+      } catch { /* ignore */ }
+    })()
   }, [])
 
   useEffect(() => {
@@ -325,6 +354,36 @@ function DailyReport() {
           <div className="mt-1 text-[11px] text-slate-500">双屏并行（{Math.round(trail.dualRatio * 100)}%）</div>
         </div>
       </div>
+
+      {/* 项目耗时汇总 */}
+      {projectTimes.length > 0 ? (
+        <section className="glass-card anim-fade-up" style={{ animationDelay: '60ms' }}>
+          <div className="mb-2 flex items-center gap-2.5">
+            <span
+              className="flex h-6 w-6 items-center justify-center rounded-lg border"
+              style={{ background: 'var(--accent-softer)', borderColor: 'var(--border-active)', color: 'var(--accent)' }}
+            >
+              <Icon name="target" size={13} />
+            </span>
+            <h3 className="text-[13px] font-semibold text-slate-200">项目耗时</h3>
+            <span className="text-[11px] text-slate-500">按项目归类应用累计</span>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {projectTimes.map((pt) => {
+              const maxMin = projectTimes[0].min || 1
+              return (
+                <div key={pt.id} className="flex items-center gap-2">
+                  <span className="w-24 shrink-0 truncate text-[12px] text-slate-300" title={pt.name}>{pt.name}</span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
+                    <div className="h-full rounded-full" style={{ width: `${(pt.min / maxMin) * 100}%`, background: pt.color }} />
+                  </div>
+                  <span className="w-14 shrink-0 text-right text-[12px] tabular-nums text-slate-400">{fmtMin(pt.min)}</span>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      ) : null}
 
       {/* 今日注意力评分：loading 骨架 / 数据不足引导 / 评分卡 */}
       {!attentionLoaded ? (

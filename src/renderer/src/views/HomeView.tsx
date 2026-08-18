@@ -214,6 +214,22 @@ export default function HomeView() {
   useEffect(() => {
     window.api?.getAppVisuals?.().then((v) => setAppVisuals((v as Record<string, { iconDataUrl: string; themeColor: string }>) ?? {})).catch(() => undefined)
   }, [])
+  /** 项目→色标映射 + 应用→项目归类（时间轴着色） */
+  const [projectColors, setProjectColors] = useState<Record<string, string>>({})
+  const [projectAppMap, setProjectAppMap] = useState<Record<string, string>>({}) // app(小写) → projectId
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [ps, links] = await Promise.all([window.api.listProjects(), window.api.getDayProjectLinks()])
+        const colors: Record<string, string> = {}
+        ;(ps as { id: string; color?: string }[]).forEach((x) => { colors[x.id] = x.color ?? '#22D3EE' })
+        setProjectColors(colors)
+        const appMap: Record<string, string> = {}
+        ;(links as { app: string; projectId: string }[]).forEach((l) => { appMap[l.app] = l.projectId })
+        setProjectAppMap(appMap)
+      } catch { /* ignore */ }
+    })()
+  }, [])
   const [trail, setTrail] = useState<MergedTrail | null>(null)
   const [yesterdayTrail, setYesterdayTrail] = useState<MergedTrail | null>(null)
   const [items, setItems] = useState<GraphItem[]>([])
@@ -992,6 +1008,12 @@ export default function HomeView() {
                                 style={{ width: LABEL_W, fontSize: 11.5, color: 'var(--tl-other-text)', opacity: catDragApp === app ? 0.4 : 1 }}
                                 title={`${displayApp(app)}（${meta.label}）· 拖到其他分类组头可重新归类`}
                               >
+                                {(() => {
+                                  const ak = app.trim().toLowerCase().replace(/\.exe$/i, '')
+                                  const pid = projectAppMap[ak]
+                                  const pcolor = pid ? projectColors[pid] : null
+                                  return pcolor ? <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: pcolor, boxShadow: `0 0 4px ${pcolor}` }} /> : null
+                                })()}
                                 {appVisuals[app.trim().toLowerCase().replace(/\.exe$/i, '')] ? (
                                   <img
                                     src={appVisuals[app.trim().toLowerCase().replace(/\.exe$/i, '')].iconDataUrl}

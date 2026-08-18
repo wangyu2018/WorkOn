@@ -161,6 +161,8 @@ export interface PlanItem {
   extId?: string // oner 外部 id（增量去重依据）
   note?: string
   ts: number
+  /** 关联项目（项目 AI 开发管理）：该计划归入哪个项目 */
+  projectId?: string
 }
 
 /** 计划分类（内置不可删 + 用户自定义） */
@@ -173,6 +175,52 @@ export interface CustomCategory {
   isBuiltIn: boolean
   ts: number
 }
+
+/* ── 项目 AI 开发管理（跨天项目 + 任务 + 开发时间归类） ── */
+
+export type ProjectStatus = 'active' | 'paused' | 'done' | 'archived'
+export type ProjectTaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked'
+
+/** 项目：跨多天的开发目标容器 */
+export interface Project {
+  id: string
+  name: string
+  status: ProjectStatus
+  priority: 'low' | 'medium' | 'high'
+  goal?: string      // 目标/需求描述
+  color?: string
+  createdAt: number
+  updatedAt: number
+}
+
+/** 项目下的开发任务（AI 可拆解生成 / 手动创建） */
+export interface ProjectTask {
+  id: string
+  projectId: string
+  title: string
+  status: ProjectTaskStatus
+  priority: 'low' | 'medium' | 'high'
+  estMin?: number     // 预估工时（分钟）
+  actualMin?: number  // 实际投入（分钟，自动累计）
+  tags?: string[]     // 关联标签/技术栈
+  note?: string
+  aiGenerated?: boolean
+  sort: number
+  createdAt: number
+  updatedAt: number
+}
+
+/** 开发时间归类：把某时段/某应用归入某项目（手动归类） */
+export interface ProjectTimeLink {
+  id: string
+  projectId: string
+  date: string
+  app: string        // 关联的应用（进程名小写）
+  min: number        // 该应用当日时长归入此项目
+  source: 'manual' | 'auto'
+  ts: number
+}
+
 
 /** AI 分类推断结果（独立存储，不污染热轨迹；仅展示用） */
 export interface CategoryInference {

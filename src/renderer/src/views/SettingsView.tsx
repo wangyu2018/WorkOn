@@ -427,7 +427,7 @@ export default function SettingsView() {
             <div className="mt-2 rounded-xl border border-white/10 p-3">
               <div className="grid grid-cols-3 gap-2 text-[11px]">
                 <div className="font-medium text-slate-300">功能</div><div className="font-medium text-slate-400 text-center">无需 AI</div><div className="font-medium text-emerald-400 text-center">开启 AI 后增强</div>
-                {['日报/周报生成|65% 覆盖|95% + 摘要/拆解','实际活动记录|✓ 本地规则|LLM 增强','快捷推荐|✗|AI 推荐','注意力曲线|✓ 算法|—','位置提醒|✓ 天气 API|—','文件夹解析|✓ 正则|LLM 归纳'].map((r,i)=>{const [n,w,a]=r.split('|');return <Fragment key={i}><div className="text-slate-200">{n}</div><div className="text-slate-400 text-center">{w}</div><div className="text-emerald-400 text-center">{a}</div></Fragment>})}
+                {['日报/周报生成|65% 覆盖|95% + 摘要/拆解','实际活动记录|✓ 本地规则|LLM 增强','快捷推荐|✗|AI 推荐','注意力曲线|✓ 算法|—','位置提醒|✓ 天气 API|—','文件夹解析|✓ 正则|LLM 归纳','任务排期（AI）|按预估工时排序|AI 智能排入每日计划','实时建议提醒|固定模板|AI 结合当前项目/状态生成','项目复盘|✓ 手动汇总|AI 自动生成复盘与改进建议'].map((r,i)=>{const [n,w,a]=r.split('|');return <Fragment key={i}><div className="text-slate-200">{n}</div><div className="text-slate-400 text-center">{w}</div><div className="text-emerald-400 text-center">{a}</div></Fragment>})}
               </div>
             </div>
           </details>

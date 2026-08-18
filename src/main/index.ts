@@ -21,6 +21,7 @@ import { startFolderWatch } from './folderWatcher'
 import { presence } from './presence'
 import { genQuestion, analyzeDay, deriveHabits } from './ai'
 import { genPersonaGapQuestion } from './qa/questionGenerator'
+import { aiDevAdvice } from './projects'
 import { listActivities, insertInto, col, updateIn } from './db'
 import type { UserHabits, PlanItem } from '@shared/types'
 import { dateKey, buildMergedTrail } from '@shared/trail'
@@ -95,6 +96,24 @@ function startPeriodicJobs(): void {
     const q = genQuestion(snap.context)
     if (q) bus.setQuestion({ id: q.id, ctx: q.ctx, question: q.question, ts: Date.now() })
   }, 30 * 60 * 1000)
+
+  // AI 开发实时建议：检测到连续 AI 开发（aidev/coding）时，每 60 分钟推一条针对性建议（桌宠气泡）
+  let lastDevAdvice = 0
+  setInterval(() => {
+    const now = Date.now()
+    if (now - lastDevAdvice < 60 * 60_000) return
+    const snap = presence.getSnapshot()
+    if (!snap || snap.state === 'idle' || snap.state === 'away') return
+    const isDev = snap.state === 'aidev' || snap.state === 'coding' || snap.state === 'aiqa'
+    if (!isDev) return
+    const devSec = snap.continuousFocusSec || 0
+    if (devSec < 45 * 60) return
+    lastDevAdvice = now
+    const currentApp = snap.screens?.find((s) => s.screen === snap.mainScreen)?.appName ?? snap.screens?.[0]?.appName ?? ''
+    void aiDevAdvice({ currentApp, devMin: devSec / 60, state: snap.state }).then((r) => {
+      if (r?.text) bus.setPet({ message: r.text })
+    })
+  }, 60 * 1000)
 
   // 画像自动刷新（间隔可在设置中配置：15/30/60 分钟或关闭；默认 30 分钟，省 token）
   let lastAutoRefresh = 0

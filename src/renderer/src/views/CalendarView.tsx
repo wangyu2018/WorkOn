@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import type { TimeEntry, WorkState, MergedTrail } from '@shared/types'
 import { ALL_STATES, WORK_STATES, WORK_LIKE_STATES } from '@shared/stateMeta'
 import { genId } from '@shared/types'
@@ -84,25 +85,31 @@ function ActivityDetailCard({ entry, pos, onEdit, onClose, matchedApp, matchedTi
   const sense = SENSE_META[senseOf(entry.state ?? 'idle')]
   const app = matchedApp ?? displayApp(entry.title)
   const title = matchedTitle ?? entry.title
+  // 智能贴边：锚点 = 色块右上角。卡片优先显示在色块右侧、向下；右侧/下方放不下则向左/向上，并钳制在可视区内
+  const W = 260
+  const H = 190
+  const margin = 8
+  let left = pos.x + margin
+  let top = pos.y
+  if (left + W > window.innerWidth - margin) left = pos.x - W - margin
+  left = Math.max(margin, Math.min(left, window.innerWidth - W - margin))
+  if (top + H > window.innerHeight - margin) top = Math.max(margin, window.innerHeight - H - margin)
 
   return (
     <>
       <div className="fixed inset-0 z-[55]" onClick={onClose} />
       <div
-        className="fixed z-[56] rounded-xl px-3 py-2"
+        className="fixed z-[56] rounded-xl px-3 py-2 anim-scale-in"
         style={{
-          width: 240,
-          background: 'rgba(15, 21, 34, 0.94)',
+          width: W,
+          background: 'var(--pop-bg)',
           border: `1px solid rgb(${sense.rgb}/0.35)`,
-          boxShadow: '0 10px 28px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.3)',
+          boxShadow: 'var(--pop-shadow)',
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
-          color: '#e8edf5',
-          left: `${pos.x}px`,
-          top: `${pos.y}px`,
-          transform: pos.x + 240 + 16 > window.innerWidth
-            ? 'translate(calc(-100% - 16px), 16px)'
-            : 'translate(0, 16px)',
+          color: 'var(--pop-text)',
+          left: `${left}px`,
+          top: `${top}px`,
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -113,20 +120,20 @@ function ActivityDetailCard({ entry, pos, onEdit, onClose, matchedApp, matchedTi
             {sense.label}
           </span>
         </div>
-        <div className="mt-1 text-[11px] leading-snug" style={{ color: '#c3cad8' }}>
+        <div className="mt-1 text-[11px] leading-snug" style={{ color: 'var(--pop-text-strong)' }}>
           {title || '（未命名）'}
         </div>
         {(counterpart || topic) ? (
-          <div className="mt-1 text-[11px] leading-snug" style={{ color: '#8a93a6' }}>
-            {counterpart ? <span>与 <b style={{ color: '#c3cad8' }}>{counterpart}</b> 沟通</span> : null}
-            {topic ? <span>查看：<b style={{ color: '#c3cad8' }}>{topic}</b></span> : null}
+          <div className="mt-1 text-[11px] leading-snug" style={{ color: 'var(--pop-text-muted)' }}>
+            {counterpart ? <span>与 <b style={{ color: 'var(--pop-text-strong)' }}>{counterpart}</b> 沟通</span> : null}
+            {topic ? <span>查看：<b style={{ color: 'var(--pop-text-strong)' }}>{topic}</b></span> : null}
           </div>
         ) : null}
-        <div className="mt-1.5 flex items-center gap-2 text-[10px]" style={{ color: '#8a93a6' }}>
+        <div className="mt-1.5 flex items-center gap-2 text-[10px]" style={{ color: 'var(--pop-text-muted)' }}>
           <span>{clockOf(entry.startMin)} – {clockOf(entry.endMin)}</span>
-          <span style={{ color: '#4d566b' }}>·</span>
+          <span style={{ color: 'var(--pop-text-muted)' }}>·</span>
           <span>{fmtMin(entry.endMin - entry.startMin)}</span>
-          <span className="ml-auto rounded px-1 py-0.5" style={{ background: 'rgba(255,255,255,0.07)', color: '#aab3c5' }}>{SOURCE_LABEL[entry.source]}</span>
+          <span className="ml-auto rounded px-1 py-0.5" style={{ background: 'var(--pop-badge-bg)', color: 'var(--pop-badge-text)' }}>{SOURCE_LABEL[entry.source]}</span>
         </div>
         <div className="mt-2 flex items-center gap-2">
           <button
@@ -269,6 +276,8 @@ function WeekGrid({ date }: { date: string }) {
   const [mouse, setMouse] = useState({ x: 0, y: 0 })
   const [detailEntry, setDetailEntry] = useState<TimeEntry | null>(null)
   const [detailPos, setDetailPos] = useState({ x: 0, y: 0 })
+  /** 小时 hover 预览：hour + 色块 rect + 该小时 top5 应用 */
+  const [hourHover, setHourHover] = useState<{ day: string; hour: number; apps: { app: string; min: number }[]; rect: DOMRect } | null>(null)
   const detailRef = useRef<HTMLDivElement | null>(null)
   const days = weekDays(date)
   /** 应用图标/主题色缓存 */
@@ -341,7 +350,9 @@ function WeekGrid({ date }: { date: string }) {
     if (best && bestOverlap > 0) {
       const sMin = new Date(best.startTs).getHours() * 60 + new Date(best.startTs).getMinutes()
       const eMin = new Date(best.endTs).getHours() * 60 + new Date(best.endTs).getMinutes()
-      setDetailPos({ x: e.clientX, y: e.clientY })
+      // 锚点用色块右上角（靠近图标），而非鼠标坐标，卡片贴近色块显示
+      const rect = e.currentTarget.getBoundingClientRect()
+      setDetailPos({ x: rect.right, y: rect.top })
       setDetailEntry({
         id: best.id ?? `seg-${best.startTs}`,
         date: dayKey,
@@ -382,6 +393,32 @@ function WeekGrid({ date }: { date: string }) {
         }
       }
       result[h] = best
+    }
+    return result
+  }
+
+  /** 每小时主要应用：按该小时占用时长取 top5（含时长，供 hover 预览） */
+  const hourApps = (trail: MergedTrail | null): ({ app: string; min: number }[] | null)[] => {
+    const result: ({ app: string; min: number }[] | null)[] = new Array(24).fill(null)
+    if (!trail) return result
+    const acc: Map<string, number>[] = Array.from({ length: 24 }, () => new Map())
+    for (const seg of trail.segments) {
+      if (seg.glance || !seg.mainApp) continue
+      let ts = seg.startTs
+      while (ts < seg.endTs) {
+        const h = new Date(ts).getHours()
+        const next = new Date(ts)
+        next.setHours(h + 1, 0, 0, 0)
+        const end = Math.min(seg.endTs, next.getTime())
+        const m = acc[h]
+        m.set(seg.mainApp, (m.get(seg.mainApp) ?? 0) + (end - ts))
+        ts = end
+      }
+    }
+    for (let h = 0; h < 24; h++) {
+      if (!acc[h].size) continue
+      const sorted = [...acc[h].entries()].sort((a, b) => b[1] - a[1])
+      result[h] = sorted.slice(0, 5).map(([app, min]) => ({ app, min: min / 60000 }))
     }
     return result
   }
@@ -441,15 +478,13 @@ function WeekGrid({ date }: { date: string }) {
                 ＋
               </button>
             </div>
-            {/* 当天应用图标行：鼠标悬停显示应用名，超宽省略只留主要工作 */}
-            {trail && trail.segments.length > 0 ? (
-              <DayAppIcons trail={trail} visuals={appVisuals} />
-            ) : null}
             <div className="flex flex-col gap-1">
-              {states.map((s, h) => (
+              {(() => { const appList = hourApps(trail); return states.map((s, h) => {
+                const apps = appList[h]
+                return (
                 <div
                   key={h}
-                  title={`${d} ${h}:00${s ? ` · ${WORK_STATES[s].label}` : ''}`}
+                  title={`${d} ${h}:00${s ? ` · ${WORK_STATES[s].label}` : ''}${apps ? ` · ${apps.map((a) => displayApp(a.app)).join('、')}` : ''}`}
                   className="w-full cursor-pointer rounded-lg px-2 py-1 text-[10px] transition-colors hover:brightness-110"
                   style={{
                     borderLeft: s ? `2px solid ${WORK_STATES[s].color}` : '2px solid transparent',
@@ -457,11 +492,29 @@ function WeekGrid({ date }: { date: string }) {
                     color: s ? '#cbd5e1' : '#475569'
                   }}
                   onClick={(e) => handleHourClick(d, h, trail, e)}
+                  onMouseEnter={(e) => { if (apps) setHourHover({ day: d, hour: h, apps, rect: e.currentTarget.getBoundingClientRect() }) }}
+                  onMouseLeave={() => setHourHover(null)}
                 >
-                  {String(h).padStart(2, '0')}:00
-                  {s ? <span> {WORK_STATES[s].emoji} {WORK_STATES[s].label}</span> : null}
+                  <span className="flex items-center gap-1.5">
+                    <span className="shrink-0 text-slate-500">{String(h).padStart(2, '0')}:00</span>
+                    {apps ? (
+                      <span className="flex min-w-0 flex-1 items-center gap-1">
+                        {apps.slice(0, 2).map((a) => {
+                          const v = appVisuals[a.app.trim().toLowerCase().replace(/\.exe$/i, '')]
+                          return v ? (
+                            <img key={a.app} src={v.iconDataUrl} alt={displayApp(a.app)} title={displayApp(a.app)} className="h-3.5 w-3.5 shrink-0 rounded-[3px]" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                          ) : (
+                            <span key={a.app} className="truncate text-slate-400" title={displayApp(a.app)}>{displayApp(a.app)}</span>
+                          )
+                        })}
+                      </span>
+                    ) : s ? (
+                      <span className="min-w-0 flex-1 truncate"> {WORK_STATES[s].emoji} {WORK_STATES[s].label}</span>
+                    ) : null}
+                  </span>
                 </div>
-              ))}
+                )
+              }) })()}
             </div>
             <div className="mt-2 border-t border-white/[0.05] pt-1.5">
               {entries.length === 0 ? (
@@ -556,6 +609,65 @@ function WeekGrid({ date }: { date: string }) {
           )
         })()
       ) : null}
+      {hourHover ? createPortal(
+        <HourPreviewCard apps={hourHover.apps} rect={hourHover.rect} hour={hourHover.hour} day={hourHover.day} visuals={appVisuals} />,
+        document.body
+      ) : null}
+    </div>
+  )
+}
+
+/** 小时 hover 预览：显示该小时 top5 应用（图标 + 名称 + 时长），贴色块边缘翻转防溢出 */
+function HourPreviewCard({ apps, rect, hour, day, visuals }: {
+  apps: { app: string; min: number }[]
+  rect: DOMRect
+  hour: number
+  day: string
+  visuals: Record<string, { iconDataUrl: string; themeColor: string }>
+}) {
+  const W = 220
+  const H = Math.min(apps.length * 30 + 40, 200)
+  const margin = 8
+  let left = rect.right + margin
+  if (left + W > window.innerWidth - margin) left = rect.left - W - margin
+  left = Math.max(margin, Math.min(left, window.innerWidth - W - margin))
+  let top = rect.top
+  if (top + H > window.innerHeight - margin) top = Math.max(margin, window.innerHeight - H - margin)
+  return (
+    <div
+      className="fixed z-[58] rounded-xl border px-3 py-2 anim-scale-in"
+      style={{
+        width: W,
+        left, top,
+        background: 'var(--pop-bg)',
+        borderColor: 'var(--pop-border)',
+        boxShadow: 'var(--pop-shadow)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        color: 'var(--pop-text)',
+        pointerEvents: 'none'
+      }}
+    >
+      <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: 'var(--pop-text)' }}>
+        <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
+        {day} {String(hour).padStart(2, '0')}:00 主要操作
+      </div>
+      <div className="flex flex-col gap-1">
+        {apps.map((a) => {
+          const v = visuals[a.app.trim().toLowerCase().replace(/\.exe$/i, '')]
+          return (
+            <div key={a.app} className="flex items-center gap-2">
+              {v ? (
+                <img src={v.iconDataUrl} alt="" className="h-4 w-4 shrink-0 rounded-[3px]" style={{ background: 'rgba(0,0,0,0.05)' }} />
+              ) : (
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] text-[9px]" style={{ background: 'rgba(0,0,0,0.05)' }}>·</span>
+              )}
+              <span className="min-w-0 flex-1 truncate text-[11px]" style={{ color: 'var(--pop-text-strong)' }}>{displayApp(a.app)}</span>
+              <span className="shrink-0 text-[10px] tabular-nums" style={{ color: 'var(--pop-text-muted)' }}>{Math.round(a.min)}m</span>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

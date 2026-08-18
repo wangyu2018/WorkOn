@@ -31,6 +31,15 @@
   --text-primary: #e8edf5;
   --text-secondary: #8a93a6;
   --text-muted: #5a6478;
+  /* 浮层卡（hover 预览 / 详情弹层）主题变量：随亮暗模式切换 */
+  --pop-bg: rgba(15, 21, 34, 0.96);
+  --pop-border: rgba(255, 255, 255, 0.09);
+  --pop-shadow: 0 14px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --pop-text: #e8edf5;
+  --pop-text-muted: #8a93a6;
+  --pop-text-strong: #c3cad8;
+  --pop-badge-bg: rgba(255, 255, 255, 0.07);
+  --pop-badge-text: #aab3c5;
   /* 3 级动效：hover 150ms / 面板 250ms / 页面 400ms */
   --t-hover: 150ms ease-out;
   --t-panel: 250ms ease-out;
@@ -437,6 +446,15 @@ textarea {
   --star-life-label: rgb(var(--star-life-fg));
   --star-badge-bg: #f1f5f9;
   --star-badge-text: #475569;
+  /* 浮层卡浅色：白底 + 墨色文字 */
+  --pop-bg: rgba(255, 255, 255, 0.97);
+  --pop-border: rgba(0, 0, 0, 0.1);
+  --pop-shadow: 0 10px 30px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(15, 23, 42, 0.08);
+  --pop-text: #0f172a;
+  --pop-text-muted: #64748b;
+  --pop-text-strong: #1e293b;
+  --pop-badge-bg: #f1f5f9;
+  --pop-badge-text: #475569;
 }
 [data-mode='light'] .bg-ink-900 { background-color: #f1f5f9 !important; }
 [data-mode='light'] .bg-ink-950\/60 { background-color: rgba(255, 255, 255, 0.75) !important; }

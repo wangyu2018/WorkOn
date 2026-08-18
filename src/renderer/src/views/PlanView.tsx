@@ -6,6 +6,7 @@ import { EmptyState } from '../components/EmptyState'
 import { ProgressRing } from '../components/ProgressRing'
 import { addDays, clockOf, fmtDateLabel, fmtMin, timeToMin, todayKey } from '../components/utils'
 import { parsePlanText } from '../components/parsePlanText'
+import { ProjectBoard } from '../components/ProjectBoard'
 
 const STATUS_LABEL: Record<PlanStatus, string> = {
   planned: '待办',
@@ -239,8 +240,11 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
 /* ── 计划视图 ── */
 export default function PlanView() {
   const [date, setDate] = useState(todayKey())
+  const [tab, setTab] = useState<'plan' | 'project'>('plan')
   const [plans, setPlans] = useState<PlanItem[]>([])
+  const [projects, setProjects] = useState<{ id: string; name: string; color?: string }[]>([])
   const [pva, setPva] = useState<PlanVsActual | null>(null)
+  const [trail, setTrail] = useState<{ segments: { mainApp: string; durationMin: number; mainState: string }[] } | null>(null)
   const [forecasts, setForecasts] = useState<Map<string, PlanForecast>>(new Map())
   const [statusFilter, setStatusFilter] = useState<'all' | PlanStatus>('all')
   const [editor, setEditor] = useState<{ plan: Partial<PlanItem> & { date: string }; isNew: boolean } | null>(null)
@@ -255,13 +259,17 @@ export default function PlanView() {
 
   const load = useCallback(async () => {
     try {
-      const [ps, pv, fc] = await Promise.all([
+      const [ps, pv, fc, tr, prjs] = await Promise.all([
         window.api.listPlans(date),
         window.api.planVsActual(date),
-        window.api.getForecast(date).catch(() => [])
+        window.api.getForecast(date).catch(() => []),
+        window.api.getTrail(date).catch(() => null),
+        window.api.listProjects().catch(() => [])
       ])
       setPlans((ps as PlanItem[]) ?? [])
       setPva(pv as PlanVsActual)
+      setTrail(tr as { segments: { mainApp: string; durationMin: number; mainState: string }[] } | null)
+      setProjects((prjs as { id: string; name: string; color?: string }[]) ?? [])
       setForecasts(new Map(((fc as PlanForecast[]) ?? []).map((f) => [f.planId, f])))
     } catch {
       setPlans([])
@@ -272,6 +280,13 @@ export default function PlanView() {
   useEffect(() => {
     void load()
   }, [load])
+
+  // 命令面板「打开项目开发」→ 切到项目 Tab
+  useEffect(() => {
+    const onGoto = () => setTab('project')
+    window.addEventListener('workon:goto-projects', onGoto)
+    return () => window.removeEventListener('workon:goto-projects', onGoto)
+  }, [])
 
   // 问答确认创建计划后实时刷新
   useEffect(() => window.api.onPlanUpdated(() => void load()), [load])
@@ -289,6 +304,11 @@ export default function PlanView() {
 
   const remove = async (p: PlanItem) => {
     await window.api.removePlan(p.id)
+    void load()
+  }
+
+  const setPlanProject = async (planId: string, projectId: string | null) => {
+    await window.api.savePlan({ id: planId, projectId })
     void load()
   }
 
@@ -359,6 +379,21 @@ export default function PlanView() {
           </>
         }
       />
+
+      {/* 计划 / 项目 Tab 切换 */}
+      <div className="anim-fade-up flex items-center gap-1 rounded-xl border border-white/[0.06] bg-white/[0.03] p-1" style={{ width: 'fit-content' }}>
+        {([['plan', '每日计划'], ['project', '项目开发']] as const).map(([k, label]) => (
+          <button
+            key={k}
+            className={`rounded-lg px-3 py-1 text-[12px] transition-colors ${tab === k ? 'bg-white/[0.08] text-slate-100' : 'text-slate-400 hover:text-slate-200'}`}
+            onClick={() => setTab(k)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === 'plan' ? (
+      <>
 
       {scanProgress > 0 && (
         <div className="anim-fade-in">
@@ -504,6 +539,29 @@ export default function PlanView() {
                         </>
                       ) : null}
                       <SourceMark plan={p} />
+                      {projects.length > 0 ? (
+                        <select
+                          className="glass-input !w-28 !py-0.5 !px-1 !text-[10px]"
+                          value={p.projectId ?? ''}
+                          title="归入项目"
+                          onChange={(e) => void setPlanProject(p.id, e.target.value || null)}
+                        >
+                          <option value="">无项目</option>
+                          {projects.map((pj) => (
+                            <option key={pj.id} value={pj.id}>{pj.name}</option>
+                          ))}
+                        </select>
+                      ) : null}
+                      {(() => {
+                        const proj = projects.find((x) => x.id === p.projectId)
+                        return proj ? (
+                          <span className="chip !py-0" style={{ color: proj.color ?? '#22D3EE', borderColor: `${proj.color ?? '#22D3EE'}44` }}>
+                            <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: proj.color ?? '#22D3EE' }} />
+                            {proj.name}
+                            <button className="ml-0.5 text-slate-500 hover:text-red-400" title="移出项目" onClick={() => void setPlanProject(p.id, null)}>✕</button>
+                          </span>
+                        ) : null
+                      })()}
                       {fc && !done && (p.planType ?? 'phase') === 'phase' ? (
                         <span
                           className={`chip !py-0 ${
@@ -690,6 +748,10 @@ export default function PlanView() {
             </div>
           </div>
         </div>
+      )}
+      </>
+      ) : (
+        <ProjectBoard trail={trail} />
       )}
     </div>
   )

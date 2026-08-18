@@ -14,6 +14,11 @@ import { planVsActual, forecastPlan, BUILTIN_CATEGORIES } from '@shared/planAnal
 import { getSettings, setSettings } from './settings'
 import { getAllAppVisuals } from './appVisuals'
 import {
+  listProjects, saveProject, removeProject, listTasks, saveTask, removeTask,
+  aiBreakdown, linkAppToProject, projectLinkedApps, projectTimeForTrail, projectLinks, dayProjectLinks,
+  aiSchedule, aiReview, aiDevAdvice
+} from './projects'
+import {
   col, insertInto, updateIn, removeFrom, listActivities, listActivitiesRange, deleteActivitiesByApp,
   updateActivityTitleByStartTs
 } from './db'
@@ -192,6 +197,23 @@ export function registerIpc(): void {
     const trail = buildMergedTrail(listActivities(d), d)
     return planVsActual(col<PlanItem>('plans'), trail, col<CustomCategory>('categories'))
   })
+
+  // ── 项目 AI 开发管理 ──
+  ipcMain.handle('projects:list', () => listProjects())
+  ipcMain.handle('projects:save', (_e, p) => saveProject(p))
+  ipcMain.handle('projects:remove', (_e, id: string) => removeProject(String(id)))
+  ipcMain.handle('projects:tasks', (_e, projectId: string) => listTasks(String(projectId)))
+  ipcMain.handle('projects:saveTask', (_e, t) => saveTask(t))
+  ipcMain.handle('projects:removeTask', (_e, id: string) => removeTask(String(id)))
+  ipcMain.handle('projects:aiBreakdown', (_e, projectId: string, req: string) => aiBreakdown(String(projectId), String(req ?? '')))
+  ipcMain.handle('projects:linkApp', (_e, projectId: string | null, app: string) => linkAppToProject(projectId, String(app ?? '')))
+  ipcMain.handle('projects:linkedApps', () => projectLinkedApps())
+  ipcMain.handle('projects:dayLinks', (_e, date?: string) => dayProjectLinks(date))
+  ipcMain.handle('projects:links', (_e, projectId: string) => projectLinks(String(projectId)))
+  ipcMain.handle('projects:timeForTrail', (_e, projectId: string, trail) => projectTimeForTrail(String(projectId), trail))
+  ipcMain.handle('projects:aiSchedule', () => aiSchedule())
+  ipcMain.handle('projects:aiReview', (_e, projectId: string, trailMinutes: number) => aiReview(String(projectId), Number(trailMinutes) || 0))
+  ipcMain.handle('projects:aiDevAdvice', (_e, ctx) => aiDevAdvice(ctx))
 
   // ── AI 分析 ──
   ipcMain.handle('analysis:get', (_e, date?: string) => latestAnalysis(date ?? dateKey(Date.now())))

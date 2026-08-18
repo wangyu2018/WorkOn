@@ -39,6 +39,23 @@ const api = {
   setPlanStatus: (id: string, status: PlanStatus) => ipcRenderer.invoke('plans:setStatus', id, status),
   planVsActual: (date?: string) => ipcRenderer.invoke('plans:vsActual', date),
 
+  // 项目 AI 开发管理
+  listProjects: () => ipcRenderer.invoke('projects:list'),
+  saveProject: (p: unknown) => ipcRenderer.invoke('projects:save', p),
+  removeProject: (id: string) => ipcRenderer.invoke('projects:remove', id),
+  listProjectTasks: (projectId: string) => ipcRenderer.invoke('projects:tasks', projectId),
+  saveProjectTask: (t: unknown) => ipcRenderer.invoke('projects:saveTask', t),
+  removeProjectTask: (id: string) => ipcRenderer.invoke('projects:removeTask', id),
+  aiBreakdown: (projectId: string, req: string) => ipcRenderer.invoke('projects:aiBreakdown', projectId, req),
+  linkAppToProject: (projectId: string | null, app: string) => ipcRenderer.invoke('projects:linkApp', projectId, app),
+  getProjectLinkedApps: () => ipcRenderer.invoke('projects:linkedApps'),
+  getDayProjectLinks: (date?: string) => ipcRenderer.invoke('projects:dayLinks', date),
+  getProjectLinks: (projectId: string) => ipcRenderer.invoke('projects:links', projectId),
+  projectTimeForTrail: (projectId: string, trail: unknown) => ipcRenderer.invoke('projects:timeForTrail', projectId, trail),
+  aiSchedule: () => ipcRenderer.invoke('projects:aiSchedule'),
+  aiProjectReview: (projectId: string, trailMinutes: number) => ipcRenderer.invoke('projects:aiReview', projectId, trailMinutes),
+  aiDevAdvice: (ctx: unknown) => ipcRenderer.invoke('projects:aiDevAdvice', ctx),
+
   // AI 分析 / 问答
   getAnalysis: (date?: string) => ipcRenderer.invoke('analysis:get', date),
   refreshAnalysis: () => ipcRenderer.invoke('analysis:refresh'),
