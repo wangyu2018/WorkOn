@@ -1,14 +1,15 @@
 /**
- * 主窗口壳：左侧分组导航 + 内容区 + 命令面板
+ * 主窗口壳：左侧分组导航 + 内容区
  * 设计：静谧深空 · accent 变量驱动的选中态（换主题自动联动）
  */
 import { memo, useEffect, useMemo, useState } from 'react'
 import { useAppStore, type ViewKey } from './stores/appStore'
 import { usePresenceStore } from './stores/presenceStore'
 import { useSettingsStore } from './stores/settingsStore'
-import { CommandPalette } from './components/CommandPalette'
 import { Icon, type IconName } from './components/Icon'
 import { CATEGORY_META, categoryOfWithOverride, type AppCategory } from '@shared/appCategory'
+import { WORK_STATES } from '@shared/stateMeta'
+import { displayApp } from '@shared/appDisplayName'
 import workonLogo from './assets/workon-logo.png'
 import HomeView from './views/HomeView'
 import MonitorView from './views/MonitorView'
@@ -105,7 +106,7 @@ function NavButton({ item, active, onClick }: { item: NavItem; active: boolean; 
 }
 
 export default function App() {
-  const { view, setView, setPaletteOpen } = useAppStore()
+  const { view, setView } = useAppStore()
   const presence = usePresenceStore((s) => s.presence)
   const loadSettings = useSettingsStore((s) => s.load)
   const settings = useSettingsStore((s) => s.settings)
@@ -113,13 +114,20 @@ export default function App() {
   const appearanceMode = useSettingsStore((s) => s.settings.appearanceMode)
   // 当前活跃应用 → 分类图标（跟随用户手动归类，override 变化即同步）
   const appCategoryOverride = useSettingsStore((s) => s.settings.appCategoryOverride)
-  const mainApp = presence?.screens?.find((s) => s.screen === presence.mainScreen)?.app
+  const mainScreen = presence?.screens?.find((s) => s.screen === presence.mainScreen)
+  const mainApp = mainScreen?.app
   const mainCat: AppCategory | null = mainApp ? categoryOfWithOverride(mainApp, appCategoryOverride) : null
+  /** 右上角当前应用标签 */
+  const currentAppLabel = mainApp ? displayApp(mainApp) : '等待采集…'
 
   // 强调色主题 + 亮暗模式应用到根节点
   useEffect(() => {
     document.documentElement.dataset.theme = theme
   }, [theme])
+  // 动效开关：关闭时给根节点加 data-anim=off（CSS 禁用动画/过渡）
+  useEffect(() => {
+    document.documentElement.dataset.anim = settings.animationsEnabled ? 'on' : 'off'
+  }, [settings.animationsEnabled])
   useEffect(() => {
     const apply = () => {
       const mode =
@@ -152,22 +160,6 @@ export default function App() {
     if (!settings.petEnabled) window.api?.hidePet?.()
     else window.api?.showPet?.()
   }, [settings.petEnabled])
-
-  useEffect(() => {
-    const off = window.api.onOpenPalette(() => setPaletteOpen(true))
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault()
-        if (!useSettingsStore.getState().settings.cmdPaletteEnabled) return
-        setPaletteOpen(!useAppStore.getState().paletteOpen)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => {
-      off()
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [setPaletteOpen])
 
   // 全局错误横幅（数据写入失败等主进程异常 → 用户可感知）
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
@@ -225,15 +217,6 @@ export default function App() {
 
         <div className="flex-1" />
 
-        {/* 底部：命令面板提示 + 设置 */}
-        <button
-          onClick={() => setPaletteOpen(true)}
-          className="mb-2 flex w-full items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-slate-500 transition-colors duration-150 hover:border-white/[0.12] hover:text-slate-300"
-        >
-          <Icon name="command" size={13} />
-          <span className="flex-1 text-left">命令面板</span>
-          <kbd className="rounded border border-white/10 px-1 text-[10px] text-slate-600">Ctrl K</kbd>
-        </button>
         <NavButton item={{ key: 'settings', label: '设置', icon: 'settings' }} active={view === 'settings'} onClick={() => setView('settings')} />
       </aside>
 
@@ -243,22 +226,21 @@ export default function App() {
             <span className="text-[13px] font-semibold text-slate-200">{VIEW_TITLES[view]}</span>
           </div>
           <div className="app-no-drag flex items-center gap-2">
-            {presence && (
-              <div
-                className="mr-1 flex items-center gap-2 rounded-full border border-white/[0.07] bg-white/[0.03] py-1 pl-2.5 pr-2"
-                title={presence ? `实时专注度 ${presence.focusLevel}（0-100）· 当前状态 ${presence.state}\n多维注意力评分见「监控/报表」页` : undefined}
-              >
+            {/* 实时状态：环 + 状态名 + 分类图标 + 当前应用（横向一行，无底板） */}
+            {presence ? (
+              <div className="flex items-center gap-2 mr-1" title={`当前状态 ${presence.state} · ${currentAppLabel}`}>
+                <span className="inline-block h-[13px] w-[13px] shrink-0 rounded-full" style={{ background: WORK_STATES[presence.state]?.color ?? '#22d3ee', boxShadow: `0 0 8px ${WORK_STATES[presence.state]?.color ?? '#22d3ee'}66`, border: '2px solid rgba(11,16,27,0.9)' }} />
+                <span className="text-[12px] font-bold leading-none text-slate-100">{WORK_STATES[presence.state]?.label ?? presence.state}</span>
+                <span className="mx-0.5 h-4 w-px shrink-0 bg-white/[0.1]" />
                 {mainCat ? (
-                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ color: CATEGORY_META[mainCat].color, flexShrink: 0 }}>
+                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="shrink-0" style={{ color: CATEGORY_META[mainCat].color }}>
                     <use href={`#cat-${mainCat}`} />
                   </svg>
                 ) : null}
-                <span className="text-[11px] tabular-nums text-slate-400">
-                  专注度 <span className="font-medium text-slate-200">{presence.focusLevel}</span>
-                </span>
+                <span className="max-w-[130px] truncate text-[11px] text-slate-300">{currentAppLabel}</span>
               </div>
-            )}
-            {/* 无边框自定义窗口控制 */}
+            ) : null}
+            {/* 窗口控制（独立，与状态胶囊分开） */}
             <button
               className="flex h-7 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.08] hover:text-slate-200"
               title="最小化"
@@ -286,8 +268,6 @@ export default function App() {
           <ActiveView />
         </div>
       </main>
-
-      <CommandPalette />
 
       {/* 全局错误横幅（主进程异常通知：写入失败/目录不可写等） */}
       {errorBanner ? (

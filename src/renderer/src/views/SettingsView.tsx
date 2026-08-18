@@ -480,6 +480,9 @@ export default function SettingsView() {
         <Row label="日历分析背景带" desc="日视图叠加你的习惯午休/高效时段底色（数据来自近 7 天习惯画像）">
           <Toggle checked={settings.calAnalysisBands} onChange={(v) => p({ calAnalysisBands: v })} />
         </Row>
+        <Row label="动效" desc="开启保留过渡与动画；关闭后全局禁用，界面更省资源、切换更直接">
+          <Toggle checked={settings.animationsEnabled} onChange={(v) => p({ animationsEnabled: v })} />
+        </Row>
       </Section>
 
       {/* Oner 数据同步（能力 + 开关 + 折叠详情） */}
@@ -531,28 +534,6 @@ export default function SettingsView() {
         <Row label="开发者选项" desc="开启后显示桌搭资源占用面板与 AI 提示词三层上下文（调试用）">
           <Toggle checked={settings.devMode} onChange={(v) => p({ devMode: v })} />
         </Row>
-      </Section>
-
-      {/* 11. 命令面板 */}
-      <Section title="命令面板" icon="command">
-        <p className="mb-2 text-[12px] leading-relaxed text-slate-500">
-          Ctrl+K 呼出全局命令面板，可快速跳转页面、新建计划、控制桌搭/悬浮窗显隐、刷新AI画像、切换主题等。无需离开键盘即可完成常用操作。
-        </p>
-        <Row label="启用 Ctrl+K 命令面板">
-          <Toggle checked={settings.cmdPaletteEnabled} onChange={(v) => p({ cmdPaletteEnabled: v })} />
-        </Row>
-        <div className="py-2.5">
-          <div className="mb-1 text-[11px] text-slate-500">可用命令一览：</div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] text-slate-400">
-            <div>🔍 跳转：监控 / 日历 / 计划 / 报表 / 桌搭 / 问答 / 设置</div>
-            <div>➕ 新建计划（今日）</div>
-            <div>👁️ 显隐悬浮窗</div>
-            <div>🐱 显隐桌搭</div>
-            <div>🔄 刷新 AI 画像</div>
-            <div>✨ 切换强调色主题</div>
-            <div>💬 问 AI…</div>
-          </div>
-        </div>
       </Section>
 
       {/* v3.0 文件夹 ingestion */}

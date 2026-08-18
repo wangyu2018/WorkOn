@@ -556,6 +556,15 @@ textarea {
   }
 }
 
+/* 动效开关：关闭时全局禁用动画/过渡（应用内手动开关） */
+[data-anim='off'] *,
+[data-anim='off'] *::before,
+[data-anim='off'] *::after {
+  animation: none !important;
+  transition: none !important;
+  animation-duration: 0.01s !important;
+}
+
 /* range 滑块 */
 input[type='range'] {
   -webkit-appearance: none;

@@ -177,47 +177,127 @@ const STATUS_TEXT: Record<string,string> = {
 interface DailyInsight {
   workMin: number
   slackMin: number
+  slackPct: number
   focusMin: number
   topApps: { app: string; min: number }[]
-  text: string
-  workVsYesterday: number | null // 今日工作 vs 昨日工作百分比变化（null=无昨日数据）
+  /** 各基线同期工作差值（%） */
+  baseline: { key: 'yest' | 'week' | 'best'; label: string; delta: number | null }[]
+  /** 节奏预测：全天预计工作分钟 */
+  forecastMin: number | null
+  windowMin: number
+  startedAt: string
+  workDetail: string
 }
 
-function insight(trail: MergedTrail, yesterday: MergedTrail | null): DailyInsight {
-  if (!trail || trail.totalMin < 1) {
-    return { workMin: 0, slackMin: 0, focusMin: 0, topApps: [], text: '今天刚开始，随着时间推进洞察会自动长出来 ✨', workVsYesterday: null }
+/** 某段轨迹内，从 startTs 起等长 windowMs 的工作分钟（总−摸鱼−idle−away） */
+function windowWorkMin(tr: MergedTrail, startTs: number, windowMs: number): number {
+  const endTs = startTs + windowMs
+  let work = 0
+  let slack = 0
+  let idle = 0
+  let away = 0
+  for (const s of tr.segments) {
+    const s0 = Math.max(s.startTs, startTs)
+    const s1 = Math.min(s.endTs, endTs)
+    if (s1 <= s0) continue
+    const d = (s1 - s0) / 60000
+    if (s.mainState === 'idle') idle += d
+    else if (s.mainState === 'away') away += d
+    else if (['slack', 'relax', 'break', 'lunch'].includes(s.mainState)) slack += d
+    else work += d
   }
+  return work
+}
+
+function insight(trail: MergedTrail, recent: MergedTrail[]): DailyInsight {
+  const empty: DailyInsight = {
+    workMin: 0, slackMin: 0, slackPct: 0, focusMin: 0, topApps: [],
+    baseline: [{ key: 'yest', label: '昨日同期', delta: null }, { key: 'week', label: '近7天同期', delta: null }, { key: 'best', label: '高效日同期', delta: null }],
+    forecastMin: null, windowMin: 0, startedAt: '', workDetail: ''
+  }
+  if (!trail || trail.totalMin < 1) return empty
+  // 今天窗口：首个有效段 → 现在
+  const nowTs = Date.now()
+  const active = trail.segments.filter((s) => !s.glance && s.mainState !== 'idle' && s.mainState !== 'away')
+  if (!active.length) return empty
+  const startTs = Math.min(...active.map((s) => s.startTs))
+  const windowMs = nowTs - startTs
+  if (windowMs < 30 * 60000) return { ...empty, workMin: windowWorkMin(trail, startTs, windowMs), windowMin: Math.round(windowMs / 60000), startedAt: new Date(startTs).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
+
+  const todayWork = windowWorkMin(trail, startTs, windowMs)
+  const todaySlack = (() => {
+    const endTs = startTs + windowMs
+    let slack = 0
+    for (const s of trail.segments) {
+      const s0 = Math.max(s.startTs, startTs); const s1 = Math.min(s.endTs, endTs)
+      if (s1 <= s0) continue
+      if (['slack', 'relax', 'break', 'lunch'].includes(s.mainState)) slack += (s1 - s0) / 60000
+    }
+    return slack
+  })()
+  const slackPct = Math.round((todaySlack / (todayWork + todaySlack || 1)) * 100)
   const focusMin = (trail.stateMinutes.focus ?? 0) + (trail.stateMinutes.coding ?? 0) + (trail.stateMinutes.aidev ?? 0) + (trail.stateMinutes.aiqa ?? 0)
-  const slackMin = (trail.stateMinutes.slack ?? 0) + (trail.stateMinutes.relax ?? 0) + (trail.stateMinutes.break ?? 0) + (trail.stateMinutes.lunch ?? 0)
-  const workMin = trail.totalMin - slackMin - (trail.stateMinutes.idle ?? 0) - (trail.stateMinutes.away ?? 0)
-  // TOP 应用
+
+  // TOP 应用（窗口内）
   const appMap = new Map<string, number>()
   for (const s of trail.segments) {
     if (s.glance || s.mainState === 'idle' || s.mainState === 'away') continue
     appMap.set(s.mainApp, (appMap.get(s.mainApp) ?? 0) + s.durationMin)
   }
   const topApps = [...appMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([app, min]) => ({ app, min }))
-  // 与昨日对比
-  let workVsYesterday: number | null = null
-  if (yesterday && yesterday.totalMin > 1) {
-    const ySlack = (yesterday.stateMinutes.slack ?? 0) + (yesterday.stateMinutes.relax ?? 0) + (yesterday.stateMinutes.break ?? 0) + (yesterday.stateMinutes.lunch ?? 0)
-    const yWork = yesterday.totalMin - ySlack - (yesterday.stateMinutes.idle ?? 0) - (yesterday.stateMinutes.away ?? 0)
-    if (yWork > 1) workVsYesterday = Math.round(((workMin - yWork) / yWork) * 100)
+
+  // 各天窗口工作分钟（取每天自身窗口起点 + 等长 windowMs）
+  const perDay = recent.map((r) => {
+    const acts = r.segments.filter((s) => !s.glance && s.mainState !== 'idle' && s.mainState !== 'away')
+    if (!acts.length) return null
+    const dayStart = Math.min(...acts.map((s) => s.startTs))
+    return { tr: r, dayStart, work: windowWorkMin(r, dayStart, windowMs) }
+  }).filter((x): x is { tr: MergedTrail; dayStart: number; work: number } => !!x)
+
+  const isWeekend = [0, 6].includes(new Date().getDay())
+  const sameType = perDay.filter((d) => (isWeekend ? [0, 6].includes(new Date(d.dayStart).getDay()) : ![0, 6].includes(new Date(d.dayStart).getDay())))
+  const pool = sameType.length ? sameType : perDay
+  const yest = perDay[0] // recent 倒序：recent[0]=昨天
+  const weekAvg = pool.length ? pool.reduce((a, d) => a + d.work, 0) / pool.length : 0
+  const bestWork = pool.length ? Math.max(...pool.map((d) => d.work)) : 0
+
+  const pct = (a: number, b: number) => (b > 1 ? Math.round(((a - b) / b) * 100) : null)
+  const baseline: DailyInsight['baseline'] = [
+    { key: 'yest', label: '昨日同期', delta: yest ? pct(todayWork, yest.work) : null },
+    { key: 'week', label: '近7天同期', delta: weekAvg > 1 ? pct(todayWork, weekAvg) : null },
+    { key: 'best', label: '高效日同期', delta: bestWork > 1 ? pct(todayWork, bestWork) : null }
+  ]
+
+  // 节奏预测：窗口工作密度 × 全天剩余
+  const density = todayWork / (windowMs / 60000 || 1)
+  const dayStartOfToday = new Date(startTs); dayStartOfToday.setHours(0, 0, 0, 0)
+  const todayTotalMs = Math.max(1, nowTs - dayStartOfToday.getTime())
+  const forecastMin = Math.round(density * (todayTotalMs / 60000))
+
+  // 窗口内明细
+  const winFocus = (() => {
+    const endTs = startTs + windowMs
+    let f = 0
+    for (const s of trail.segments) {
+      const s0 = Math.max(s.startTs, startTs); const s1 = Math.min(s.endTs, endTs)
+      if (s1 <= s0) continue
+      if (['focus', 'coding', 'aidev', 'aiqa'].includes(s.mainState)) f += (s1 - s0) / 60000
+    }
+    return Math.round(f)
+  })()
+
+  return {
+    workMin: Math.round(todayWork),
+    slackMin: Math.round(todaySlack),
+    slackPct,
+    focusMin,
+    topApps,
+    baseline,
+    forecastMin,
+    windowMin: Math.round(windowMs / 60000),
+    startedAt: new Date(startTs).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+    workDetail: `聚焦 ${winFocus} · 窗口 ${new Date(startTs).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}–${new Date(nowTs).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
   }
-  // 一句话
-  let text: string
-  if (focusMin > slackMin * 3 && focusMin > 120) {
-    text = `深度工作 ${Math.round(focusMin)} 分钟，占全天 ${Math.round((focusMin / trail.totalMin) * 100)}%，状态很好 🎯`
-  } else if (slackMin > trail.totalMin * 0.4) {
-    text = `摸鱼 ${Math.round(slackMin)} 分钟（${Math.round((slackMin / trail.totalMin) * 100)}%），要不要拉回一点节奏？`
-  } else if (workVsYesterday !== null && workVsYesterday > 20) {
-    text = `工作时长比昨天多 ${workVsYesterday}%，节奏不错 👍`
-  } else if (workVsYesterday !== null && workVsYesterday < -20) {
-    text = `工作时长比昨天少 ${Math.abs(workVsYesterday)}%，注意别太放松～`
-  } else {
-    text = `一天平稳推进，工作 ${Math.round(workMin)} 分钟，继续保持 👍`
-  }
-  return { workMin, slackMin, focusMin, topApps, text, workVsYesterday }
 }
 
 export default function HomeView() {
@@ -230,6 +310,8 @@ export default function HomeView() {
     return { insight: true, timeline: true, starmap: true }
   })
   const [editing, setEditing] = useState(false)
+  /** 洞察卡对标基线：yest=昨日同期 week=近7天同期 best=高效日同期 */
+  const [baselineKey, setBaselineKey] = useState<'yest' | 'week' | 'best'>('yest')
   const setWidget = (k: 'insight' | 'timeline' | 'starmap', v: boolean) => {
     setWidgets((prev) => {
       const next = { ...prev, [k]: v }
@@ -261,7 +343,7 @@ export default function HomeView() {
     })()
   }, [])
   const [trail, setTrail] = useState<MergedTrail | null>(null)
-  const [yesterdayTrail, setYesterdayTrail] = useState<MergedTrail | null>(null)
+  const [recentTrails, setRecentTrails] = useState<MergedTrail[]>([])
   const [items, setItems] = useState<GraphItem[]>([])
   const [plans, setPlans] = useState<PlanItem[]>([])
   const [dragFrom, setDragFrom] = useState<{ app: string; col: Column } | null>(null)
@@ -296,11 +378,14 @@ export default function HomeView() {
       const p = await window.api?.listPlans?.(dateKey(Date.now())) as PlanItem[] | undefined
       // 应用图标/主题色缓存（监控识别新应用时主进程会增量写入）
       window.api?.getAppVisuals?.().then((v) => setAppVisuals((v as Record<string, { iconDataUrl: string; themeColor: string }>) ?? {})).catch(() => undefined)
-      // 昨日对比（洞察卡用）
-      const yesterday = new Date()
-      yesterday.setDate(yesterday.getDate() - 1)
-      const yt = await window.api?.getTrail?.(dateKey(yesterday.getTime())) as MergedTrail | undefined
-      if (yt && yt.segments && yt.segments.length > 0) setYesterdayTrail(yt)
+      // 近 7 天 trail（洞察卡同期对比用）
+      const days: (MergedTrail | null)[] = []
+      for (let i = 1; i <= 7; i++) {
+        const d = new Date()
+        d.setDate(d.getDate() - i)
+        days.push((await window.api?.getTrail?.(dateKey(d.getTime()))) as MergedTrail | null)
+      }
+      setRecentTrails(days.filter((x): x is MergedTrail => !!x && !!x.segments?.length))
       if (t) {
         setTrail(t)
         // 隐私排除的应用不再进入时间轴/星图（0 采集；历史数据也一并隐去）
@@ -378,7 +463,7 @@ export default function HomeView() {
   const totalWorkMin = useMemo(() => items.filter((i) => i.column === 'work').reduce((a, i) => a + i.seg.durationMin, 0), [items])
   const totalLifeMin = useMemo(() => items.filter((i) => i.column === 'life').reduce((a, i) => a + i.seg.durationMin, 0), [items])
   void totalWorkMin; void totalLifeMin
-  const insightData = useMemo(() => (trail ? insight(trail, yesterdayTrail) : null), [trail, yesterdayTrail])
+  const insightData = useMemo(() => (trail ? insight(trail, recentTrails) : null), [trail, recentTrails])
 
   // 星图按应用聚合：一个应用一个节点（累计时长），不用时间段
   const starItems = useMemo(() => {
@@ -795,36 +880,84 @@ export default function HomeView() {
         </div>
         {insightData ? (
           <>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-center">
-                <div className="text-[15px] font-semibold tabular-nums text-neon-green">{fmtDur(insightData.workMin)}</div>
-                <div className="mt-0.5 text-[10px] text-slate-500">工作</div>
-              </div>
-              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-center">
-                <div className="text-[15px] font-semibold tabular-nums text-neon-red">{fmtDur(insightData.slackMin)}</div>
-                <div className="mt-0.5 text-[10px] text-slate-500">摸鱼</div>
-              </div>
-              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-center">
-                <div
-                  className="text-[15px] font-semibold tabular-nums"
-                  style={{ color: insightData.workVsYesterday === null ? 'var(--text-secondary)' : (insightData.workVsYesterday >= 0 ? 'var(--accent)' : '#f87171') }}
-                  title={insightData.workVsYesterday === null ? '暂无昨日数据' : '较昨日工作增减'}
-                >
-                  {insightData.workVsYesterday === null ? '—' : `${insightData.workVsYesterday >= 0 ? '+' : ''}${insightData.workVsYesterday}%`}
+            {/* 双栏 split：左工作 / 中徽标差值 / 右摸鱼 */}
+            <div className="grid grid-cols-[1fr_auto_1fr] items-stretch overflow-hidden rounded-2xl border border-white/[0.07]">
+              <div className="px-4 py-4" style={{ background: 'linear-gradient(180deg, rgba(34,197,94,0.08), transparent)' }}>
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                  <span className="inline-block h-2 w-2 rounded-[3px]" style={{ background: '#22c55e' }} />
+                  今日工作{insightData.windowMin > 0 ? ` · 截至 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}` : ''}
                 </div>
-                <div className="mt-0.5 text-[10px] text-slate-500">较昨日</div>
+                <div className="mt-1.5 text-[32px] font-extrabold leading-none tabular-nums text-neon-green">
+                  {Math.round(insightData.workMin)}<span className="text-[14px] font-semibold text-slate-500"> 分</span>
+                </div>
+                <div className="mt-1.5 text-[11px] leading-snug text-slate-500">{insightData.workDetail || '数据积累中…'}</div>
+              </div>
+              <div className="flex w-[76px] flex-col items-center justify-center gap-1.5 border-x border-white/[0.07] px-2" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                {(() => {
+                  const cur = insightData.baseline.find((b) => b.key === baselineKey)
+                  const delta = cur?.delta ?? null
+                  return (
+                    <>
+                      <div className="text-[20px] font-extrabold tabular-nums" style={{ color: delta === null ? 'var(--text-secondary)' : delta >= 0 ? '#22c55e' : '#f43f5e' }}>
+                        {delta === null ? '—' : `${delta >= 0 ? '+' : ''}${delta}%`}
+                      </div>
+                      <div className="text-center text-[10px] leading-tight text-slate-500">{cur?.label ?? '较昨日同期'}<br />同期对比</div>
+                    </>
+                  )
+                })()}
+              </div>
+              <div className="px-4 py-4" style={{ background: 'linear-gradient(180deg, rgba(244,63,94,0.07), transparent)' }}>
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                  <span className="inline-block h-2 w-2 rounded-[3px]" style={{ background: '#f43f5e' }} />
+                  今日摸鱼
+                </div>
+                <div className="mt-1.5 text-[32px] font-extrabold leading-none tabular-nums text-neon-red">
+                  {Math.round(insightData.slackMin)}<span className="text-[14px] font-semibold text-slate-500"> 分</span>
+                </div>
+                <div className="mt-1.5 text-[11px] leading-snug text-slate-500">摸鱼占比 {insightData.slackPct}%</div>
               </div>
             </div>
-            <p className="mt-2.5 text-[13px] leading-relaxed text-slate-400">{insightData.text}</p>
+
+            {/* 对标基线切换 */}
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] text-slate-500">对标基线：</span>
+              {insightData.baseline.map((b) => (
+                <button
+                  key={b.key}
+                  className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${baselineKey === b.key ? 'border-neon-cyan/50 bg-neon-cyan/10 text-slate-100' : 'border-white/[0.08] text-slate-500 hover:border-white/[0.18] hover:text-slate-200'}`}
+                  onClick={() => setBaselineKey(b.key)}
+                >
+                  {b.label}
+                </button>
+              ))}
+            </div>
+
+            {/* 节奏预测 */}
+            {insightData.forecastMin ? (
+              <div className="mt-2.5 border-t border-dashed border-white/[0.08] pt-2.5 text-[12px] text-slate-500">
+                📈 节奏预测：按当前效率，预计全天 ≈ <b className="text-neon-cyan tabular-nums">{Math.round(insightData.forecastMin)} 分</b>（窗口法外推）
+              </div>
+            ) : null}
+
+            {/* TOP 应用 */}
             {insightData.topApps.length > 0 ? (
-              <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] text-slate-500">TOP：</span>
-                {insightData.topApps.map((a) => (
-                  <span key={a.app} className="chip">
-                    {displayApp(a.app)}
-                    <span className="text-slate-500">{fmtDur(a.min)}</span>
-                  </span>
-                ))}
+              <div className="mt-3 flex gap-2">
+                {insightData.topApps.map((a) => {
+                  const ak = a.app.trim().toLowerCase().replace(/\.exe$/i, '')
+                  const cat = categoryOfWithOverride(a.app, override)
+                  const maxMin = insightData.topApps[0].min || 1
+                  return (
+                    <div key={a.app} className="min-w-0 flex-1 rounded-lg border border-white/[0.06] px-2.5 py-2" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                      <div className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-200">
+                        {appVisuals[ak] ? <img src={appVisuals[ak].iconDataUrl} alt="" className="h-3.5 w-3.5 rounded-[3px]" /> : null}
+                        <span className="truncate">{displayApp(a.app)}</span>
+                      </div>
+                      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+                        <div className="h-full rounded-full" style={{ width: `${(a.min / maxMin) * 100}%`, background: CATEGORY_META[cat].color }} />
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             ) : null}
           </>

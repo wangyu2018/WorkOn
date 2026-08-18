@@ -162,7 +162,6 @@ const api = {
   widgetSetMode: (mode: 'mini' | 'compact' | 'full') => ipcRenderer.send('widget:setMode', mode),
   dragWidget: (dx: number, dy: number) => ipcRenderer.send('widget:drag', dx, dy),
   onWidgetAccent: on('widget:accent'),
-  onOpenPalette: on('open-palette'),
   onWelcomeBack: on('welcome-back'),
   onErrorBanner: on('error-banner'),
   onRulesApplied: on('rules:applied'),

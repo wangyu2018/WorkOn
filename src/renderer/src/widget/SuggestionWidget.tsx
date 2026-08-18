@@ -260,6 +260,8 @@ export default function SuggestionWidget() {
   const [widgetCompact, setWidgetCompact] = useState(false)
   const [alertCollapsed, setAlertCollapsed] = useState<Record<string, boolean>>({})
   const [showFocusMinutes, setShowFocusMinutes] = useState(false)
+  /** full 态 Tab：现在 / 情景 / 对话 */
+  const [fullTab, setFullTab] = useState<'now' | 'scene' | 'chat'>('now')
 
   const setMode = (mode: WidgetMode) => {
     setWidgetMode(mode)
@@ -482,39 +484,46 @@ export default function SuggestionWidget() {
     )
   }
 
-  // ── compact 态：状态区 + 问答/气泡 ──
+  // ── compact 态：状态优先 + 情景流（左缘状态色条 + 实时内容做大 + 问答 FAB） ──
   if (widgetMode === 'compact') {
     return (
       <div className="flex h-screen w-screen items-end justify-end p-3">
         <div className="relative flex w-[300px] flex-col overflow-hidden rounded-2xl" style={PANEL_STYLE}>
+          {/* 左缘状态色条 */}
+          <div className="absolute left-0 top-0 bottom-0 w-[4px]" style={{ background: meta.color }} />
           <WidgetHeader>
             <HeaderBtn icon="chevronRight" rotate={-90} title="展开" onClick={() => setMode('full')} />
             <HeaderBtn icon="eyeOff" title={penetrationTitle} onClick={togglePenetration} active={penetration} accent={accent} />
             <HeaderBtn icon="chevronRight" rotate={90} title="收起到最小" onClick={() => setMode('mini')} />
           </WidgetHeader>
-          <div className="flex items-center gap-3 px-3.5 py-2.5">
-            <FocusRing size={42} focus={focus} color={meta.color} emoji={mainCatEmoji || meta.emoji} icon={mainCat ?? undefined} />
+          <div className="flex items-center gap-3 pl-4 py-3 pr-3">
             <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-semibold" style={{ color: meta.color }}>
-                {meta.label}
-                <span className="ml-1 text-[11px] font-normal text-slate-500">专注度 {focus}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[14px] font-bold" style={{ color: meta.color }}>{meta.label}</span>
+                <span className="text-[10px] text-slate-500 tabular-nums">专注度 {focus}</span>
               </div>
-              <div className="mt-0.5 truncate text-[11px] text-slate-400">{liveTitle || '等待采集…'}</div>
+              <div className="mt-0.5 truncate text-[13px] font-medium text-slate-200">{liveTitle || '等待采集…'}</div>
+              {presence && presence.continuousFocusSec > 60 ? (
+                <div className="mt-0.5 text-[10px]" style={{ color: accent }}>已连续专注 {Math.round(presence.continuousFocusSec / 60)} 分钟</div>
+              ) : null}
             </div>
-            {aiEnabled ? (
-              <button
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200"
-                title="问点什么…"
-                onClick={() => setAskState(askState === 'hidden' ? 'input' : 'hidden')}
-              >
-                <Icon name="message" size={12} />
-              </button>
-            ) : null}
+            <FocusRing size={44} focus={focus} color={meta.color} emoji={mainCatEmoji || meta.emoji} icon={mainCat ?? undefined} />
           </div>
-          <div className="mx-2.5 mb-2.5 flex flex-col gap-2 overflow-y-auto" style={{ maxHeight: 120 }}>
+          <div className="mx-3 mb-3 flex flex-col gap-2 overflow-y-auto" style={{ maxHeight: 120 }}>
             <AskBar askState={askState} askText={askText} setAskText={setAskText} submitAsk={submitAsk} onAskBlur={onAskBlur} onEscape={() => setAskState('hidden')} askAnswer={askAnswer} accent={accent} blurTimer={blurTimer} />
             {petBubble && !widgetCompact && <PetBubbleLine text={petBubble} accent={accent} />}
           </div>
+          {/* 问答 FAB */}
+          {aiEnabled ? (
+            <button
+              className="absolute bottom-3 right-3 z-20 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-transform hover:scale-110 active:scale-95"
+              style={{ background: accent, boxShadow: `0 4px 14px ${hexAlpha(accent, 0.45)}` }}
+              title="问点什么…"
+              onClick={() => setAskState(askState === 'hidden' ? 'input' : 'hidden')}
+            >
+              <Icon name="message" size={15} />
+            </button>
+          ) : null}
           <ResizeHandle onDown={onResizePointerDown} onMove={onResizePointerMove} onUp={onResizePointerUp} />
         </div>
       </div>
@@ -525,11 +534,27 @@ export default function SuggestionWidget() {
   return (
     <div className="flex h-screen w-screen items-end justify-end p-3">
       <div className="relative flex w-full flex-col overflow-hidden rounded-2xl" style={PANEL_STYLE}>
+        {/* 左缘状态色条 */}
+        <div className="absolute left-0 top-0 bottom-0 w-[4px]" style={{ background: meta.color }} />
         <WidgetHeader>
           <HeaderBtn icon="eyeOff" title={penetrationTitle} onClick={togglePenetration} active={penetration} accent={accent} />
           <HeaderBtn icon="chevronRight" rotate={90} title="收起" onClick={() => setMode('mini')} />
           <HeaderBtn icon="x" title="隐藏悬浮窗" onClick={() => window.api.toggleWidget()} />
         </WidgetHeader>
+
+        {/* full 态 Tab：现在 / 情景 / 对话 */}
+        <div className="flex gap-1 px-3 pt-2">
+          {([['now', '现在'], ['scene', '情景'], ['chat', '对话']] as const).map(([k, label]) => (
+            <button
+              key={k}
+              className={`rounded-md px-2.5 py-1 text-[11px] transition-colors ${fullTab === k ? 'text-slate-100' : 'text-slate-500 hover:text-slate-200'}`}
+              style={fullTab === k ? { background: 'rgba(255,255,255,0.08)' } : undefined}
+              onClick={() => setFullTab(k)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
         {welcome && !widgetCompact && (
           <div className="anim-fade-in mx-3 mt-2 rounded-lg border border-neon-green/20 bg-neon-green/10 px-3 py-1.5 text-center text-xs text-neon-green">
@@ -537,6 +562,8 @@ export default function SuggestionWidget() {
           </div>
         )}
 
+        {fullTab === 'now' ? (
+        <>
         {/* 状态区 */}
         <div
           className="flex items-center gap-3 px-3.5 py-3"
@@ -579,9 +606,11 @@ export default function SuggestionWidget() {
           <AskBar askState={askState} askText={askText} setAskText={setAskText} submitAsk={submitAsk} onAskBlur={onAskBlur} onEscape={() => setAskState('hidden')} askAnswer={askAnswer} accent={accent} blurTimer={blurTimer} />
           {petBubble && !widgetCompact && <PetBubbleLine text={petBubble} accent={accent} />}
         </div>
-
-        {/* 告警区：浏览器计划确认 / 会议检测 / 会议辅助 / 轻问诊 */}
-        <div className="mx-3 mb-1 mt-2 flex max-h-[240px] flex-col gap-2 overflow-y-auto">
+        </>
+        ) : fullTab === 'scene' ? (
+        <>
+        {/* 情景流：浏览器计划确认 / 会议检测 / 会议辅助 / 轻问诊 */}
+        <div className="mx-3 mb-1 mt-2 flex max-h-[320px] flex-col gap-2 overflow-y-auto">
           {bpConfirm ? (
             <AlertShell color="#3B82F6" label="🌐 浏览器检测" collapsed={!!alertCollapsed['bp']} onToggle={() => toggleAlert('bp')}>
               <div className="mb-1 text-[11px] font-medium" style={{ color: '#7FB0F7' }}>🌐 浏览器检测</div>
@@ -687,6 +716,27 @@ export default function SuggestionWidget() {
             )
           ) : null}
         </div>
+        </>
+        ) : (
+        <>
+        {/* 对话：问答为主 */}
+        <div className="mx-3 mb-1 mt-2 flex flex-col gap-2">
+          <AskBar askState={askState} askText={askText} setAskText={setAskText} submitAsk={submitAsk} onAskBlur={onAskBlur} onEscape={() => setAskState('hidden')} askAnswer={askAnswer} accent={accent} blurTimer={blurTimer} />
+          {!askState || askState === 'hidden' ? (
+            aiEnabled ? (
+              <button
+                className="rounded-lg border border-white/[0.08] bg-white/[0.03] py-2 text-[12px] text-slate-400 transition-colors hover:border-neon-cyan/40 hover:text-neon-cyan"
+                onClick={() => setAskState('input')}
+              >
+                💬 问点什么…
+              </button>
+            ) : (
+              <p className="rounded-xl border border-white/[0.05] bg-white/[0.03] px-3 py-2 text-center text-[11px] text-slate-500">开启 AI 后可在此对话</p>
+            )
+          ) : null}
+        </div>
+        </>
+        )}
 
         <ResizeHandle onDown={onResizePointerDown} onMove={onResizePointerMove} onUp={onResizePointerUp} />
       </div>

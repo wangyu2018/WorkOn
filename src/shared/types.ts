@@ -607,6 +607,8 @@ export interface AppSettings {
   aiAutoRefreshMin: number // AI 画像自动刷新间隔分钟，0=关闭，默认 30
   devMode: boolean // 开发者调试模式（资源占用面板等），默认 false
   calAnalysisBands: boolean // 日历日视图叠加用户分析背景带（午休/高效时段），默认 false
+  /** 动效开关：开启=保留过渡/动画，关闭=全局禁用（prefers-reduced-motion 等价） */
+  animationsEnabled: boolean
   reportExcludeSlack: boolean // 报表默认排除摸鱼数据，默认 false
   reportTemplate: string // 日报导出模板（{{date}} {{totalMin}} {{workMin}} {{slackMin}} {{topApps}} {{bestHours}} 变量），空=默认格式
   planForecastEnabled: boolean // 时间轴/日历上的计划完成预测三色标注，默认开
@@ -668,7 +670,6 @@ export interface AppSettings {
   launchAtLogin: boolean
   slackHideSec: number // 持续摸鱼自动隐身阈值，默认 180
   slackAutoHide: boolean // 启用摸鱼自动隐身，默认开
-  cmdPaletteEnabled: boolean // Ctrl+K 命令面板，默认开
   // ── v2.6 注意力评分 ──
   userType?: UserType // 用户类型；未设置时自动识别
   userTypeAuto: boolean // 自动识别用户类型，默认开
@@ -699,6 +700,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   aiAutoRefreshMin: 30,
   devMode: false,
   calAnalysisBands: false,
+  animationsEnabled: true,
   reportExcludeSlack: false,
   reportTemplate: '',
   planForecastEnabled: true,
@@ -747,7 +749,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   launchAtLogin: false,
   slackHideSec: 180,
   slackAutoHide: true,
-  cmdPaletteEnabled: true,
   // v2.6：userType/targetWorkMin/targetPomodoros 留空 = 自动识别 / 用类型默认值
   userTypeAuto: true,
   employmentMode: 'full',
