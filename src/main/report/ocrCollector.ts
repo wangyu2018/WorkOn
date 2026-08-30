@@ -3,7 +3,7 @@
  * 依据：design-spec-v2.9 §3.D（提取正则照抄；轻量落库版：复用 deepMode 的 OCR 周期任务，不单独截图）
  * 隐私：只存提取后的结构化信息（不存原文）；隐私排除应用 / 银行支付密码类关键词 / slack 状态不采
  */
-import type { EnrichmentResult, OcrSnapshot, ReportEntry, WorkState } from '@shared/types'
+import type { EnrichmentResult, OcrSnapshot, OcrShot, ReportEntry, WorkState } from '@shared/types'
 import { genId } from '@shared/types'
 import { dateKey } from '@shared/trail'
 import { INDUSTRY_VOCABS } from '@shared/industryVocab'
@@ -34,9 +34,9 @@ const ALL_VOCAB_KEYWORDS: string[] = (() => {
 export function startOcrCollector(): void {
   if (started) return
   started = true
-  onOcrLines((lines, app, state) => {
+  onOcrLines((lines, app, state, shotFile) => {
     try {
-      collect(lines, app, state)
+      collect(lines, app, state, shotFile)
     } catch (e) {
       console.warn('[report/ocr] 采集失败', e)
     }
@@ -54,7 +54,7 @@ function shouldSkip(app: string, state: WorkState): boolean {
   return false
 }
 
-function collect(lines: string[], app: string, state: WorkState): void {
+function collect(lines: string[], app: string, state: WorkState, shotFile: string): void {
   if (!lines.length || shouldSkip(app, state)) return
   const info = extractFromOcrText(lines, app)
   // 一个字段都没提取到就不落库（减少噪音）
@@ -67,14 +67,62 @@ function collect(lines: string[], app: string, state: WorkState): void {
   ) {
     return
   }
+  const snapTs = Date.now()
   insertInto<OcrSnapshot>('ocrSnapshots', {
     id: genId('ocr'),
-    ts: Date.now(),
+    ts: snapTs,
     app,
     state,
     ...info
   })
+  // P0：截图↔OCR 索引（有落盘文件时记录；ts 取文件名里的截图时刻）
+  if (shotFile) {
+    const m = shotFile.match(/shot-(\d+)\./)
+    insertInto<OcrShot>('ocrShots', {
+      id: genId('os'),
+      ts: m ? Number(m[1]) : snapTs,
+      file: shotFile,
+      app,
+      state,
+      keywords: info.keywords
+    })
+    trimOcrShots()
+  }
   trimSnapshots()
+}
+
+/** ocrShots 裁剪：7 天前的删除（对齐结构化快照；文件本体由 ocrWorker 按天数清理） */
+function trimOcrShots(): void {
+  const arr = col<OcrShot>('ocrShots')
+  const cutoff = Date.now() - RETAIN_DAYS * 86400000
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (arr[i].ts < cutoff) arr.splice(i, 1)
+  }
+}
+
+/** 时间窗召回：截图索引 + 结构化快照（qa:askWithShots 用） */
+export function getOcrShotsForWindow(startTs: number, endTs: number): { shots: OcrShot[]; snaps: OcrSnapshot[] } {
+  const shots = col<OcrShot>('ocrShots').filter((s) => s.ts >= startTs && s.ts <= endTs)
+  const snaps = col<OcrSnapshot>('ocrSnapshots').filter((s) => s.ts >= startTs && s.ts <= endTs)
+  return { shots, snaps }
+}
+
+/**
+ * P0：时段屏幕上下文（脱敏摘要，不含 OCR 原文）——注入 AI 问答
+ */
+export function screenContextForWindow(startTs: number, endTs: number): string | null {
+  const { shots, snaps } = getOcrShotsForWindow(startTs, endTs)
+  if (!shots.length && !snaps.length) return null
+  const apps = [...new Set([...shots.map((s) => s.app), ...snaps.map((s) => s.app)])].filter(Boolean).slice(0, 6)
+  const keywords = [...new Set([...shots.flatMap((s) => s.keywords), ...snaps.flatMap((s) => s.keywords)])].slice(0, 8)
+  const fmt = (ts: number): string => new Date(ts).toLocaleTimeString('zh-CN', { hour12: false })
+  const parts = [
+    apps.length ? '涉及应用: ' + apps.join('、') : '',
+    keywords.length ? '出现关键词: ' + keywords.join('、') : '',
+    '截图 ' + shots.length + ' 张 / 结构化快照 ' + snaps.length + ' 条',
+    '时间窗 ' + fmt(startTs) + ' ~ ' + fmt(endTs)
+  ].filter(Boolean)
+  return '（时段屏幕内容）' + parts.join('；')
 }
 
 /** 裁剪：7 天前的删除；同日超 500 条删最旧 */

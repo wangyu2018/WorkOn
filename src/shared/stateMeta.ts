@@ -30,6 +30,15 @@ export const ALL_STATES = Object.keys(WORK_STATES) as WorkState[]
 /** 摸鱼类状态 */
 export const SLACK_STATES: WorkState[] = ['slack']
 
+/** 「摸鱼时长」统一统计口径（首页/监控/报表/日历共用）：摸鱼+放松+休息+午休 */
+export const MOOD_SLACK_STATES: WorkState[] = ['slack', 'relax', 'break', 'lunch']
+
+/** 隐私排除应用名匹配（别名包含式，主进程与渲染层共用） */
+export function matchesExcludedApp(appName: string, excludedList: string[]): boolean {
+  const low = String(appName ?? '').toLowerCase()
+  return (excludedList ?? []).some((e) => e && (low.includes(String(e).toLowerCase()) || String(e).toLowerCase().includes(low)))
+}
+
 /** 空闲/离开类状态 */
 export const IDLE_STATES: WorkState[] = ['idle', 'away']
 
@@ -272,4 +281,25 @@ export function inferMicroActivity(state: WorkState, title: string): string | nu
   if (!vocab) return null
   for (const v of vocab) if (v.match.test(title)) return v.tag
   return null
+}
+
+// ───────────────────────── 识别引擎策略参数（小模型接入） ─────────────────────────
+
+/** 系统空闲超过该秒数判定为 away */
+export const AWAY_AFTER_SEC = 300
+
+/**
+ * 小模型 8 动作标签 → WorkState 映射。
+ * 模型标签描述"正在执行的动作类别"，映射到对外契约的 13 态；
+ * communicate→remote 等模糊项先按保守值映射，待影子数据回来后调
+ */
+export const MODEL_LABEL_TO_STATE: Record<string, WorkState> = {
+  code: 'coding',
+  write: 'writing',
+  data_entry: 'writing',
+  search: 'focus',
+  browse: 'focus',
+  manage: 'focus',
+  communicate: 'remote',
+  other: 'focus'
 }

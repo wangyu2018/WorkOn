@@ -14,7 +14,7 @@
  * 这里映射到 VRM humanoid 标准化骨骼；狐耳/金铃等旧配件骨骼给隐形替身骨。
  */
 import * as THREE from 'three'
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import { VRMLoaderPlugin, VRMUtils, VRM, VRMHumanBoneName } from '@pixiv/three-vrm'
 import {
@@ -139,6 +139,9 @@ export class VrmCharacter {
 
   private hipsProxy = new THREE.Group()
   private dummies = new Map<string, THREE.Group>()
+  /** 各骨骼 rest 局部旋转（模型绑定姿态）：T-pose≈单位四元数；A-pose 模型非零。
+   *  动画层写入时以此为基准做补偿，任何绑定姿势的模型都能正确播放动画 */
+  private restQuats = new Map<string, THREE.Quaternion>()
   private materials: THREE.Material[] = []
   private lookTarget = new THREE.Object3D()
   private charHeight: number
@@ -176,6 +179,16 @@ export class VrmCharacter {
       this.dummies.set(name, d)
     }
 
+    // 捕获 rest 姿态（必须在任何动画写入前）：新/旧两套键都注册
+    for (const [oldName, vrmName] of Object.entries(BONE_ALIAS)) {
+      const node = vrm.humanoid?.getNormalizedBoneNode(vrmName)
+      if (node) {
+        const q = node.quaternion.clone()
+        this.restQuats.set(oldName, q)
+        this.restQuats.set(vrmName, q)
+      }
+    }
+
     // 材质收集（透明度统一控制用）
     vrm.scene.traverse((o) => {
       const mesh = o as THREE.Mesh
@@ -200,14 +213,30 @@ export class VrmCharacter {
   }
 
   /** 异步加载 VRM，归一化到 DEFAULT_HIPS_Y 髋高
-   *  支持 URL 字符串或 ArrayBuffer（用户上传的文件） */
-  static async load(urlOrBuffer: string | ArrayBuffer): Promise<VrmCharacter> {
+   *  支持 URL 字符串或 ArrayBuffer（用户上传的文件）；onProgress 上报 0-1 加载进度 */
+  static async load(urlOrBuffer: string | ArrayBuffer, onProgress?: (p: number) => void): Promise<VrmCharacter> {
     const loader = new GLTFLoader()
     loader.setDRACOLoader(getDracoLoader())
     loader.register((parser) => new VRMLoaderPlugin(parser))
-    const gltf = typeof urlOrBuffer === 'string'
-      ? await loader.loadAsync(urlOrBuffer)
-      : await loader.parseAsync(urlOrBuffer, '')
+    let gltf: GLTF
+    if (typeof urlOrBuffer === 'string') {
+      gltf = await new Promise<GLTF>((resolve, reject) => {
+        loader.load(
+          urlOrBuffer,
+          (g) => resolve(g),
+          (evt) => {
+            if (!onProgress) return
+            if (evt.total > 0) onProgress(THREE.MathUtils.clamp(evt.loaded / evt.total, 0, 0.95))
+            else onProgress(0.5) // 无 content-length 时给不确定进度
+          },
+          (err) => reject(err)
+        )
+      })
+    } else {
+      onProgress?.(0.6)
+      gltf = await loader.parseAsync(urlOrBuffer, '')
+    }
+    onProgress?.(0.85)
     const vrm = gltf.userData.vrm as VRM
     if (!vrm) throw new Error('文件不是有效的 VRM 格式（缺少 VRM 元数据）')
     if (vrm.meta.metaVersion === '0') VRMUtils.rotateVRM0(vrm)
@@ -235,6 +264,11 @@ export class VrmCharacter {
   /** 把视线目标挂到场景（需要世界坐标，随 root 一起加到 scene 即可） */
   attachLookTarget(scene: THREE.Scene): void {
     scene.add(this.lookTarget)
+  }
+
+  /** 骨骼 rest 四元数（旧名或 VRM 名均可；未注册返回单位四元数） */
+  restQuatOf(name: string): THREE.Quaternion {
+    return this.restQuats.get(name) ?? IDENTITY_QUAT
   }
 
   bone(name: string): THREE.Object3D {
@@ -328,6 +362,7 @@ export class VrmCharacter {
   }
 }
 
+const IDENTITY_QUAT = new THREE.Quaternion()
 const _v1 = new THREE.Vector3()
 const _v2 = new THREE.Vector3()
 const _q = new THREE.Quaternion()

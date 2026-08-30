@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   GeneratedEntry,
   GeneratedReport,
@@ -600,6 +600,20 @@ function SmartDayReportView({ onSynced }: { onSynced?: () => void }) {
       window.setTimeout(() => setCopied(null), 1500)
     })
   }
+
+  // A3：报表载入/重新生成后，套用已持久化的人工修正（不再丢失）
+  const patchesAppliedFor = useRef<string>('')
+  useEffect(() => {
+    if (!report || !date || patchesAppliedFor.current === date) return
+    patchesAppliedFor.current = date
+    void (window.api as unknown as { reportPatchesList?: (d: string) => Promise<Array<{ entryId: string; patch: Record<string, unknown> }>> })
+      ?.reportPatchesList?.(date)
+      .then((list) => {
+        if (!list?.length) return
+        setReport((r) => (r ? list.reduce((acc, p) => patchReportEntry(acc, p.entryId, { ...(p.patch as Partial<ReportEntry>), confidence: 1, needsReview: false }), r) : r))
+      })
+      .catch(() => undefined)
+  }, [report, date])
 
   /* 确认 / 编辑条目 */
   const confirmEntry = (entryId: string, entryPatch?: Partial<ReportEntry>) => {

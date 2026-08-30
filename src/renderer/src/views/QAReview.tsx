@@ -72,11 +72,18 @@ export default function QAReview() {
   useEffect(() => {
     window.api
       .listQA()
-      .then((list) => setMessages((list as QAMessage[]) ?? []))
+      .then((list) => {
+        const arr = (list as QAMessage[]) ?? []
+        setMessages(arr)
+        // 派生回顾列表（按天分组用）：取助手回答，date 由 ts 推导
+        setQaList(
+          arr
+            .filter((m) => m.role === 'assistant')
+            .map((m) => ({ id: m.id, date: new Date(m.ts).toISOString().slice(0, 10), question: '', answer: m.content, ts: m.ts }))
+        )
+      })
       .catch(() => undefined)
   }, [])
-
-  useEffect(() => { void window.api?.listQA?.().then(r => setQaList(r as any[] ?? [])) }, [])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -88,7 +95,7 @@ export default function QAReview() {
     setThinking(true)
     setMessages((prev) => [...prev, { id: genId('qa'), role: 'user', content: q, ts: Date.now() }])
     try {
-      const ans = await window.api.askQA(q)
+      const ans = await window.api.askQAWithShots(q)
       // v2.7：askQA 返回 { content, references }；兼容旧的 string 形态
       const payload = typeof ans === 'string' ? { content: ans, references: [] } : ((ans ?? {}) as { content?: string | null; references?: ProfileReference[] })
       const content = typeof payload.content === 'string' && payload.content ? payload.content : '（本次未生成回复，换个问法试试？）'
@@ -140,7 +147,7 @@ export default function QAReview() {
         <button className="glass-btn text-[11px]" onClick={() => void ask('生成今天的注意力曲线报告')}>
           📈 注意力曲线
         </button>
-        <button className="glass-btn text-[11px]" onClick={() => void ask('生成本周效率报表')}>
+        <button className="glass-btn text-[11px]" onClick={() => void ask('分析今天的工作效率')}>
           📊 周效率报表
         </button>
       </div>
@@ -153,7 +160,9 @@ export default function QAReview() {
               <button className="glass-btn primary text-[11px]" onClick={async () => {
                 const keep = [...selectedIds]
                 await window.api?.pruneQA?.(keep)
-                window.location.reload()
+                // 就地刷新：重新拉取问答列表，不再整页 reload
+                const list = ((await window.api?.listQA?.().catch(() => [])) ?? []) as QAMessage[]
+                setMessages(list)
               }}>保留所选，删除其余</button>
             </div>
           </div>

@@ -136,8 +136,14 @@ export async function detectHardware(): Promise<HardwareInfo> {
   const ramGB = Math.round(os.totalmem() / (1024 * 1024 * 1024))
 
   const gpus = await queryGPU()
-  // 找独显（非核显的第一个）
-  const discreteGPU = gpus.find((g) => !isIntegratedGPU(g.name))
+  // 虚拟显示适配（向日葵 OrayIdd/远程串流等）不是真独显，排除掉避免污染等级判定
+  const VIRTUAL_GPU_HINTS = ['idd', 'oray', 'virtual', 'indirect', 'basic render', 'hyper-v', 'vmware', 'vbox', 'parsec', 'mirror']
+  const isVirtual = (name: string): boolean => {
+    const low = name.toLowerCase()
+    return VIRTUAL_GPU_HINTS.some((h) => low.includes(h))
+  }
+  // 找独显（非核显且非虚拟适配的第一个）
+  const discreteGPU = gpus.find((g) => !isIntegratedGPU(g.name) && !isVirtual(g.name))
   const gpuModel = discreteGPU?.name ?? gpus[0]?.name ?? 'Unknown GPU'
   const gpuVRAMGB = discreteGPU ? estimateVRAM(discreteGPU.name, discreteGPU.vramBytes) : 0
   const hasDiscreteGPU = !!discreteGPU
@@ -163,7 +169,9 @@ export async function detectHardware(): Promise<HardwareInfo> {
     setSettings({
       hardwareTier: tier,
       // 自动设置 VRM 路径（如果用户未手动指定 petVrmPath）
-      ...(settings.petVrmPath ? {} : { petVrmPath: config.vrmModelPath })
+      ...(settings.petVrmPath ? {} : { petVrmPath: config.vrmModelPath }),
+      // 自动设置帧率档位（用户在设置里手动改过档位后不再接管）
+      ...(settings.petFpsTierAuto === false ? {} : { petFpsTier: config.petFpsTier })
     } as Partial<typeof settings>)
   }
 

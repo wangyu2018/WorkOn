@@ -178,15 +178,30 @@ export const WORKON_TOOLS: ToolDef[] = [
         required: []
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_weather',
+      description: '查询指定城市（默认设置中的城市）的实时天气与今日/明日预报，含温度、天气现象、湿度、风速',
+      parameters: {
+        type: 'object',
+        properties: {
+          city: { type: 'string', description: '城市名，如「北京」，缺省用设置中的城市' }
+        },
+        required: []
+      }
+    }
   }
 ]
 
 /** 桌宠轻量工具子集（petAskShort 路径使用，避免高延迟） */
 export const PET_TOOLS: ToolDef[] = [
-  WORKON_TOOLS[0], // get_presence
-  WORKON_TOOLS[1], // get_focused_element
-  WORKON_TOOLS[5], // add_memo
-  WORKON_TOOLS[9]  // set_pet_message
+  WORKON_TOOLS[0],  // get_presence
+  WORKON_TOOLS[1],  // get_focused_element
+  WORKON_TOOLS[5],  // add_memo
+  WORKON_TOOLS[9],  // set_pet_message
+  WORKON_TOOLS[13]  // get_weather
 ]
 
 // ───────────────────────── 工具调度器 ─────────────────────────
@@ -390,6 +405,23 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
         suggestions.push('在问答中说"帮我生成周报"可一键导出')
         if (ctx) suggestions.push(`基于"${ctx.slice(0, 60)}"推荐：尝试用番茄钟聚焦当前任务`)
         return JSON.stringify({ suggestions })
+      }
+
+      case 'get_weather': {
+        const { getWeather } = await import('./weather')
+        const city = (args.city as string) || undefined
+        const res = await getWeather(city)
+        if ('error' in res) return JSON.stringify({ error: res.error })
+        return JSON.stringify({
+          city: res.city,
+          text: res.text,
+          tempC: res.tempC,
+          feelsC: res.feelsC,
+          humidity: res.humidity,
+          windKph: res.windKph,
+          maxC: res.maxC,
+          minC: res.minC
+        })
       }
 
       default:

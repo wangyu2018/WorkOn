@@ -11,10 +11,13 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "^1.0.1",
+    "@pixiv/three-vrm-animation": "^3.5.5",
     "chokidar": "^5.0.0",
     "rapidocrjson": "^0.1.1",
     "sharp": "^0.35.3",
     "tesseract.js": "^5.1.1",
+    "uiohook-napi": "^1.5.5",
     "ws": "^8.18.0"
   },
   "devDependencies": {

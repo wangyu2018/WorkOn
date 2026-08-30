@@ -19,7 +19,7 @@ import {
   weekDays
 } from '../components/utils'
 
-const SLACK_STATES: WorkState[] = ['slack', 'relax', 'break', 'lunch', 'idle', 'away']
+const SLACK_STATES: WorkState[] = ['slack', 'relax', 'break', 'lunch'] // 口径统一到 shared（不再含 idle/away）
 
 type CalMode = 'week' | 'month'
 
@@ -172,7 +172,7 @@ function EntryEditor({ entry, isNew, onClose, onSaved }: EditorProps) {
 
   const save = async () => {
     if (!draft.title.trim()) return
-    const startMin = Math.min(draft.startMin, draft.endMin - 5)
+    const startMin = Math.max(0, Math.min(draft.startMin, draft.endMin - 5))
     await window.api.saveEntry({ ...draft, startMin, title: draft.title.trim() })
     onSaved()
     onClose()
@@ -334,7 +334,22 @@ function WeekGrid({ date }: { date: string }) {
   }
 
   const handleHourClick = (dayKey: string, hour: number, trail: MergedTrail | null, e: React.MouseEvent) => {
-    if (!trail) return
+    if (!trail) {
+      // B19：空白小时也可点击补录（预填该小时时间段）
+      setEditor({
+        isNew: true,
+        entry: {
+          id: `new-${dayKey}-${hour}`,
+          date: dayKey,
+          startMin: hour * 60,
+          endMin: hour * 60 + 60,
+          title: '',
+          source: 'manual',
+          ts: Date.now()
+        }
+      })
+      return
+    }
     const dayTs = new Date(`${dayKey}T00:00:00`).getTime()
     const hStart = dayTs + hour * 3600000
     const hEnd = hStart + 3600000
@@ -520,7 +535,7 @@ function WeekGrid({ date }: { date: string }) {
               {entries.length === 0 ? (
                 <div className="text-center text-[10px] text-slate-600">—</div>
               ) : (
-                entries
+                [...entries]
                   .sort((a, b) => a.endMin - b.endMin)
                   .map((entry) => {
                     const meta = WORK_STATES[entry.state ?? 'idle'] ?? WORK_STATES.idle

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import type { PlanForecast, PlanItem, PlanStatus, PlanType, PlanVsActual } from '@shared/types'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
@@ -254,6 +254,9 @@ export default function PlanView() {
   const [delayReason, setDelayReason] = useState('')
   const [folderModal, setFolderModal] = useState(false)
   const [folderDirs, setFolderDirs] = useState<string[]>([])
+  const [ratioDraft, setRatioDraft] = useState<Record<string, number>>({})
+  const ratioTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const [importMsg, setImportMsg] = useState('')
   const [scanProgress, setScanProgress] = useState(0)
   const [scanFile, setScanFile] = useState('')
 
@@ -302,6 +305,7 @@ export default function PlanView() {
     void load()
   }
 
+  const [confirmDelId, setConfirmDelId] = useState<string | null>(null)
   const remove = async (p: PlanItem) => {
     await window.api.removePlan(p.id)
     void load()
@@ -324,7 +328,7 @@ export default function PlanView() {
     if (folderDirs.length === 0) { setFolderModal(true); return }
     setScanProgress(0); setScanFile('正在扫描...')
     const entries = await window.api?.scanFolders?.() as Array<{ source: string; type: string; content: string }> | undefined
-    if (!entries?.length) { setScanProgress(0); return }
+    if (!entries?.length) { setScanProgress(0); setImportMsg('未扫描到会议纪要文件'); return }
     const actions = entries
       .filter((e) => e.type === 'action')
       .flatMap((e) => {
@@ -332,8 +336,9 @@ export default function PlanView() {
         const lines = e.content.split('\n').filter((l: string) => /^[\s]*(- \[[ x]\]\s*|(下一步|待办)[：:]\s*)/i.test(l.trim()))
         return lines.map((l: string) => l.replace(/^[\s]*(- \[[ x]\]\s*|(下一步|待办)[：:]\s*)/i, '').trim()).filter(Boolean)
       })
-    if (actions.length === 0) return
+    if (actions.length === 0) { setImportMsg('纪要中未发现行动项'); return }
     // 逐个创建计划项
+    setImportMsg(`正在导入 ${actions.length} 条行动项…`)
     for (const title of actions) {
       await window.api.savePlan({
         date,
@@ -370,6 +375,7 @@ export default function PlanView() {
             <button className="glass-btn text-[12px]" onClick={() => void importFromMeeting()}>
               📋 从会议纪要导入
             </button>
+            {importMsg ? <div className="mt-1.5 rounded-lg bg-neon-cyan/10 px-3 py-1.5 text-[11px] text-neon-cyan">{importMsg}</div> : null}
             <button className="glass-btn text-[12px]" onClick={() => setFolderModal(true)}>
               ⚙ 配置文件目录
             </button>
@@ -580,7 +586,7 @@ export default function PlanView() {
                     <button className="glass-btn !px-2 !py-1" title="编辑" onClick={() => setEditor({ plan: p, isNew: false })}>
                       <Icon name="edit" size={13} />
                     </button>
-                    <button className="glass-btn danger !px-2 !py-1" title="删除" onClick={() => void remove(p)}>
+                    <button className="glass-btn danger !px-2 !py-1" title={confirmDelId === p.id ? "再点一次确认删除" : "删除"} onClick={() => { if (confirmDelId === p.id) { void remove(p); setConfirmDelId(null) } else setConfirmDelId(p.id) }}>
                       <Icon name="trash" size={13} />
                     </button>
                   </div>
@@ -642,10 +648,24 @@ export default function PlanView() {
                           min={0}
                           max={100}
                           step={5}
-                          value={Math.round((p.completionRatio ?? (done ? 1 : 0)) * 100)}
+                          value={Math.round(ratioDraft[p.id] ?? (p.completionRatio ?? (done ? 1 : 0)) * 100)}
                           className="flex-1"
                           onChange={(e) => {
-                            void window.api.updatePlanProgress(p.id, Number(e.target.value) / 100).then(() => void load())
+                            // 防抖：拖动只更新本地草稿，停手 400ms 或松手才提交
+                            const v = Number(e.target.value)
+                            setRatioDraft((d) => ({ ...d, [p.id]: v }))
+                            if (ratioTimers.current[p.id]) clearTimeout(ratioTimers.current[p.id])
+                            ratioTimers.current[p.id] = setTimeout(() => {
+                              delete ratioTimers.current[p.id]
+                              void window.api.updatePlanProgress(p.id, v / 100).then(() => void load())
+                            }, 400)
+                          }}
+                          onPointerUp={() => {
+                            const v = ratioDraft[p.id]
+                            if (v === undefined) return
+                            if (ratioTimers.current[p.id]) clearTimeout(ratioTimers.current[p.id])
+                            delete ratioTimers.current[p.id]
+                            void window.api.updatePlanProgress(p.id, v / 100).then(() => void load())
                           }}
                         />
                         <span className="w-10 text-right text-[11px] font-semibold text-neon-cyan">

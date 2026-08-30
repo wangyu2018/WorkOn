@@ -10,6 +10,7 @@ import { ActivityHoverCard } from '../components/ActivityHoverCard'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Icon } from '../components/Icon'
 import { displayApp } from '@shared/appDisplayName'
+import { matchesExcludedApp } from '@shared/stateMeta'
 import { useSettingsStore } from '../stores/settingsStore'
 import { CATEGORY_META, categoryOfWithOverride, type AppCategory } from '@shared/appCategory'
 
@@ -141,10 +142,11 @@ function computeStarHierarchy(filtered: GraphItem[], isWork: boolean, override: 
     connections.push({ x1: 50, y1: 50, x2: cx, y2: cy, level: 1 })
     // 应用围绕各自分类
     const apps = [...items].sort((a, b) => b.seg.durationMin - a.seg.durationMin)
-    const APP_R = 49
     const n = apps.length
-    const spread = Math.min(0.4, 0.12 * Math.max(1, n - 1))
+    const spread = Math.min(0.6, 0.16 * Math.max(1, n - 1))
     apps.forEach((item, ai) => {
+      // 双环交错：偶数内环 41、奇数外环 50，密集时减少压叠
+      const APP_R = ai % 2 === 0 ? 41 : 50
       const aAngle = baseAngle + (n === 1 ? 0 : ((ai - (n - 1) / 2) / Math.max(1, n - 1)) * spread)
       nodes.push({
         kind: 'app',
@@ -348,7 +350,7 @@ export default function HomeView() {
   const [plans, setPlans] = useState<PlanItem[]>([])
   const [dragFrom, setDragFrom] = useState<{ app: string; col: Column } | null>(null)
   const [hoverCol, setHoverCol] = useState<Column | null>(null)
-  const [tlHover, setTlHover] = useState<{ seg: TrailSegment; rect: DOMRect } | null>(null)
+  const [tlHover, setTlHover] = useState<{ seg: TrailSegment; rect: DOMRect; mouse?: { x: number; y: number } } | null>(null)
   const [nowMin, setNowMin] = useState(() => {
     const d = new Date(); return d.getHours() * 60 + d.getMinutes()
   })
@@ -368,6 +370,18 @@ export default function HomeView() {
   const hoverLeaveTimer = useRef<number | null>(null)
   /** 时间轴自适应宽度：泳道跟随容器宽度（全屏撑满，不再固定 760） */
   const timelineScrollRef = useRef<HTMLDivElement>(null)
+  const onRulerWheelRef = useRef<((e: { clientX: number; deltaY: number }) => void) | null>(null)
+  // 时间轴区域滚轮 = 缩放（非被动监听，接管页面滚动）
+  useEffect(() => {
+    const el = timelineScrollRef.current
+    if (!el) return
+    const handler = (e: WheelEvent) => {
+      e.preventDefault()
+      ;(onRulerWheelRef.current as unknown as (e: unknown) => void)(e)
+    }
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
+  }, [])
   const [laneW, setLaneW] = useState(LANE_W)
   /** 隐私排除的应用（时间轴末尾管理区 + 刷新过滤共用） */
   const excludedApps = useSettingsStore((s) => s.settings.privacyExcludedApps ?? [])
@@ -390,7 +404,7 @@ export default function HomeView() {
         setTrail(t)
         // 隐私排除的应用不再进入时间轴/星图（0 采集；历史数据也一并隐去）
         const excludedApps = useSettingsStore.getState().settings.privacyExcludedApps ?? []
-        const isExcluded = (app?: string | null) => !!app && excludedApps.includes(app)
+        const isExcluded = (app?: string | null) => !!app && matchesExcludedApp(app, excludedApps)
         // 只保留「有实际工作」的段：过滤短切换(<30s glance)、前台无操作(idle/away)
         const segs = t.segments.filter((s) => s.durationMin > 0 && !s.glance && s.mainState !== 'idle' && s.mainState !== 'away' && !isExcluded(s.mainApp) && !isExcluded(s.auxApp))
         // 工作/摸鱼归属：用户自定义优先，否则按状态默认
@@ -406,6 +420,7 @@ export default function HomeView() {
           list.push({ seg: s, channel: mapChannel(s.mainApp), column: colOf(s.mainApp, WORK_LIKE_STATES.includes(s.mainState) ? 'work' : 'life') })
           if (s.auxApp && s.auxApp !== s.mainApp && !isExcluded(s.auxApp)) {
             const auxSeg: TrailSegment = { ...s, id: s.id + ':aux', mainApp: s.auxApp, mainState: s.auxState ?? 'other', mainTitle: s.auxTitle ?? '' }
+            ;(auxSeg as TrailSegment & { aux?: boolean }).aux = true // 标记副屏复制段：总时长/星图聚合不计入，防双屏重复累计
             list.push({ seg: auxSeg, channel: mapChannel(auxSeg.mainApp), column: colOf(auxSeg.mainApp, WORK_LIKE_STATES.includes(auxSeg.mainState) ? 'work' : 'life') })
           }
         }
@@ -460,18 +475,21 @@ export default function HomeView() {
     }
   }, [refresh])
 
-  const totalWorkMin = useMemo(() => items.filter((i) => i.column === 'work').reduce((a, i) => a + i.seg.durationMin, 0), [items])
-  const totalLifeMin = useMemo(() => items.filter((i) => i.column === 'life').reduce((a, i) => a + i.seg.durationMin, 0), [items])
-  void totalWorkMin; void totalLifeMin
   const insightData = useMemo(() => (trail ? insight(trail, recentTrails) : null), [trail, recentTrails])
 
   // 星图按应用聚合：一个应用一个节点（累计时长），不用时间段
   const starItems = useMemo(() => {
     const m = new Map<string, GraphItem>()
     for (const i of items) {
+      if ((i.seg as TrailSegment & { aux?: boolean }).aux) continue // 副屏复制段不计入（防双屏重复累计）
       const ex = m.get(i.seg.mainApp)
       if (ex) {
-        ex.seg = { ...ex.seg, durationMin: (ex.seg.durationMin ?? 0) + (i.seg.durationMin ?? 0) }
+        ex.seg = {
+          ...ex.seg,
+          durationMin: (ex.seg.durationMin ?? 0) + (i.seg.durationMin ?? 0),
+          startTs: Math.min(ex.seg.startTs, i.seg.startTs), // 悬浮卡时间区间口径自洽
+          endTs: Math.max(ex.seg.endTs, i.seg.endTs)
+        }
       } else {
         m.set(i.seg.mainApp, { ...i, seg: { ...i.seg } })
       }
@@ -517,7 +535,7 @@ export default function HomeView() {
     return {
       lo, hi,
       minToX: (m: number) => PAD + ((m - lo) / span) * (W - PAD * 2),
-      durToW: (dur: number) => Math.max(16, (dur / span) * (W - PAD * 2)),
+      durToW: (dur: number) => Math.max(2, (dur / span) * (W - PAD * 2)),
     }
   }, [items, plans, rangeLo, rangeHi, laneW])
 
@@ -542,7 +560,7 @@ export default function HomeView() {
         onMouseEnter={e => {
           if (dragTs) return
           if (hoverLeaveTimer.current) { window.clearTimeout(hoverLeaveTimer.current); hoverLeaveTimer.current = null }
-          setTlHover({ seg, rect: e.currentTarget.getBoundingClientRect() })
+          setTlHover({ seg, rect: e.currentTarget.getBoundingClientRect(), mouse: { x: e.clientX, y: e.clientY } })
         }}
         onMouseLeave={() => {
           hoverLeaveTimer.current = window.setTimeout(() => setTlHover(null), 400)
@@ -559,6 +577,10 @@ export default function HomeView() {
                  display: 'flex', alignItems: 'center', justifyContent: 'center',
                  overflow: 'hidden' }}
       >
+        {!ghost && (
+          <span style={{ position: 'absolute', left: 0, top: 5, bottom: 5, width: 3, borderRadius: 2,
+                         background: `var(${c})`, opacity: 0.95, pointerEvents: 'none' }} />
+        )}
         {!ghost && !glance && width > 44 && (
           <span style={{
             fontSize: 11, fontWeight: 500,
@@ -581,6 +603,7 @@ export default function HomeView() {
     for (let t = start; t <= rangeHi; t += 60) arr.push(t)
     return arr
   }, [rangeLo, rangeHi])
+  const halfHourTicks = useMemo(() => hourTicks.flatMap((h) => [h + 30, h + 60]).filter((x) => x >= rangeLo && x <= rangeHi), [hourTicks, rangeLo, rangeHi])
   const fmtHHMM = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
   const panRef = useRef<{ x: number; lo: number; hi: number } | null>(null)
 
@@ -608,7 +631,7 @@ export default function HomeView() {
 
   // 滚轮缩放：以鼠标位置为中心缩放时间范围
   const onRulerWheel = (e: React.WheelEvent) => {
-    e.preventDefault()
+    // 注意：合成 wheel 监听是 passive 的，这里不做 preventDefault（时间轴卡片自身不滚动页面）
     const el = rangeRef.current; if (!el) return
     const rect = el.getBoundingClientRect()
     const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
@@ -620,6 +643,7 @@ export default function HomeView() {
     if (hi - lo < minSpan) { lo = anchor - minSpan / 2; hi = anchor + minSpan / 2 }
     if (hi - lo > 1440) { lo = 0; hi = 1440 }
     if (lo < 0) { hi -= lo; lo = 0 }
+  onRulerWheelRef.current = onRulerWheel as unknown as (e: { clientX: number; deltaY: number }) => void
     if (hi > 1440) { lo -= (hi - 1440); hi = 1440 }
     setRangeLo(Math.round(lo))
     setRangeHi(Math.round(hi))
@@ -771,7 +795,7 @@ export default function HomeView() {
             fontWeight: 600,
           }}
         >
-          <div className="text-center leading-tight">
+          <div className="text-center leading-tight" style={{ background: 'rgba(8, 12, 24, 0.55)', borderRadius: 8, padding: '3px 8px' }}>
             <div>{node.label}</div>
             <div style={{ fontSize: 8.5, fontWeight: 400, opacity: 0.85 }}>{fmtDur(node.min)}</div>
           </div>
@@ -853,7 +877,11 @@ export default function HomeView() {
       >
         {visual ? (
           <img src={visual.iconDataUrl} alt="" className="h-full w-full object-contain" draggable={false} style={{ padding: 3 }} />
-        ) : null}
+        ) : (
+          <span style={{ fontSize: Math.max(9, node.size * 0.38), fontWeight: 600, color: '#e2e8f0', pointerEvents: 'none' }}>
+            {displayApp(node.key).replace(/\.exe$/i, '').slice(0, 1)}
+          </span>
+        )}
       </div>
     )
   }
@@ -888,7 +916,7 @@ export default function HomeView() {
                   今日工作{insightData.windowMin > 0 ? ` · 截至 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}` : ''}
                 </div>
                 <div className="mt-1.5 text-[32px] font-extrabold leading-none tabular-nums text-neon-green">
-                  {Math.round(insightData.workMin)}<span className="text-[14px] font-semibold text-slate-500"> 分</span>
+                  {fmtMin(Math.round(insightData.workMin))}
                 </div>
                 <div className="mt-1.5 text-[11px] leading-snug text-slate-500">{insightData.workDetail || '数据积累中…'}</div>
               </div>
@@ -912,7 +940,7 @@ export default function HomeView() {
                   今日摸鱼
                 </div>
                 <div className="mt-1.5 text-[32px] font-extrabold leading-none tabular-nums text-neon-red">
-                  {Math.round(insightData.slackMin)}<span className="text-[14px] font-semibold text-slate-500"> 分</span>
+                  {fmtMin(Math.round(insightData.slackMin))}
                 </div>
                 <div className="mt-1.5 text-[11px] leading-snug text-slate-500">摸鱼占比 {insightData.slackPct}%</div>
               </div>
@@ -979,7 +1007,8 @@ export default function HomeView() {
           >
             <Icon name="clock" size={13} />
           </span>
-          <span className="text-[13px] font-semibold text-slate-200">时间轴</span>
+          <span className="text-[13px] font-semibold text-slate-200"><PinnedWidgets trail={trail} />
+        时间轴</span>
           <span className="text-[12px] text-slate-500">{plans.length} 计划 · {fmtDur(items.reduce((a, i) => a + i.seg.durationMin, 0))}</span>
           <div className="ml-auto flex items-center gap-2">
             <div className="flex items-center gap-0.5 rounded-lg p-0.5"
@@ -1012,7 +1041,8 @@ export default function HomeView() {
               title="回到当前时间">现在</button>
           </div>
         </div>
-          <div ref={timelineScrollRef} style={{ overflowX: 'auto', overflowY: 'visible', position: 'relative' }}>
+          <div ref={timelineScrollRef}
+            style={{ overflowX: 'auto', overflowY: 'visible', position: 'relative' }}>
             <div className="relative" style={{ width: LABEL_W + laneW }}>
             <div className="flex items-center mb-1.5">
               <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-ruler-label)', paddingLeft: 8 }} className="shrink-0">{fmtHHMM(rangeLo)}–{fmtHHMM(rangeHi)}</span>
@@ -1025,6 +1055,11 @@ export default function HomeView() {
                 onWheel={onRulerWheel}
                 title="按住拖动平移时间轴 · 滚轮缩放">
                 <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2" style={{ height: 0.5, background: 'var(--tl-ruler-line)' }} />
+                {halfHourTicks.map(t => (
+                  <div key={'h' + t} className="absolute top-0 bottom-0" style={{ left: ruler.minToX(t) }}>
+                    <span className="absolute" style={{ top: 18, left: '50%', transform: 'translateX(-50%)', width: 1, height: 6, background: 'var(--tl-ruler-line)' }} />
+                  </div>
+                ))}
                 {hourTicks.map(t => (
                   <div key={t} className="absolute top-0 bottom-0" style={{ left: ruler.minToX(t) }}>
                     <span className="absolute" style={{ top: 16, left: '50%', transform: 'translateX(-50%)', fontSize: 11, color: 'var(--tl-ruler-label)', fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontVariantNumeric: 'tabular-nums' }}>
@@ -1103,7 +1138,7 @@ export default function HomeView() {
                             transition: 'background .12s',
                           }}
                         >
-                          {apps.flatMap(([, segsArr]) => segsArr.map((s) => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 30), rgb)))}
+                          {apps.flatMap(([, segsArr]) => segsArr.map((s) => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 0.5), rgb)))}
                         </div>
                         {/* 尾部展开按钮 */}
                         <button
@@ -1150,7 +1185,7 @@ export default function HomeView() {
                                     borderBottom: '1px dashed rgba(255,255,255,0.04)',
                                   }}
                                 >
-                                  {segsArr.map((s) => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 30), rgb))}
+                                  {segsArr.map((s) => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 0.5), rgb))}
                                 </div>
                               </div>
                             )
@@ -1227,7 +1262,7 @@ export default function HomeView() {
                     <div style={{ position: 'absolute', left: ruler.minToX(plan.startMin ?? 0), width: ruler.durToW(plan.durationMin ?? 60),
                                  top: 5, bottom: 5, background: `${STATUS_BG[plan.status] || 'var(--tl-lane-today-bg)'}40`,
                                  borderRadius: 999 }} />
-                    {segs.map(s => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 30)))}
+                    {segs.map(s => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 0.5)))}
                     <span style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--tl-ruler-label)' }}>
                       {[
                         plan.startMin != null ? fmtHHMM(plan.startMin) : null,
@@ -1353,7 +1388,7 @@ export default function HomeView() {
             <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
               {workChart.connections.map((c, i) => (
                 <line
-                  key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2}
+                  key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} vectorEffect="non-scaling-stroke"
                   strokeWidth={c.level === 1 ? 0.35 : 0.22}
                   stroke="var(--star-work-line)"
                   strokeDasharray={c.level === 2 ? '1.5 2' : undefined}
@@ -1362,14 +1397,14 @@ export default function HomeView() {
               ))}
             </svg>
             {workChart.nodes.length === 0 ? (
-              <p className="absolute inset-0 flex items-center justify-center text-[12px]" style={{ color: 'var(--star-text-muted)' }}>从右边拖应用过来 ✦</p>
+              <p className="absolute inset-0 flex items-center justify-center text-[12px]" style={{ color: 'var(--star-text-muted)' }}>把应用拖到这一侧 ✦</p>
             ) : workChart.nodes.map(n => renderStarNode(n, true))}
           </div>
           <div className={`relative flex-1 min-h-[340px] transition-colors ${hoverCol === 'life' && dragFrom && dragFrom.col !== 'life' ? 'bg-[rgb(var(--star-life)/0.06)]' : ''}`} style={{ background: 'var(--star-life-bg)' }} {...starDropProps('life')}>
             <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
               {lifeChart.connections.map((c, i) => (
                 <line
-                  key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2}
+                  key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} vectorEffect="non-scaling-stroke"
                   strokeWidth={c.level === 1 ? 0.35 : 0.22}
                   stroke="var(--star-life-line)"
                   strokeDasharray={c.level === 2 ? '1.5 2' : undefined}
@@ -1378,7 +1413,7 @@ export default function HomeView() {
               ))}
             </svg>
             {lifeChart.nodes.length === 0 ? (
-              <p className="absolute inset-0 flex items-center justify-center text-[12px]" style={{ color: 'var(--star-text-muted)' }}>把左边应用拖过来 ✦</p>
+              <p className="absolute inset-0 flex items-center justify-center text-[12px]" style={{ color: 'var(--star-text-muted)' }}>把应用拖到这一侧 ✦</p>
             ) : lifeChart.nodes.map(n => renderStarNode(n, false))}
           </div>
         </div>
@@ -1460,6 +1495,23 @@ export default function HomeView() {
   )
 }
 
+function AttentionPin() {
+  const [score, setScore] = useState<number | null>(null)
+  useEffect(() => {
+    void (window.api as unknown as { todayAttention?: () => Promise<unknown> })?.todayAttention?.().then((r) => {
+      const today = (r as { today?: { finalScore?: number } } | null)?.today ?? null
+      setScore(today?.finalScore ?? null)
+    }).catch(() => undefined)
+  }, [])
+  return (
+    <div className="glass-card p-3">
+      <h4 className="text-[11px] text-slate-400 mb-2">注意力评分</h4>
+      <div className="text-[20px] font-extrabold tabular-nums text-neon-green">{score ?? '—'}</div>
+      <div className="text-[10px] text-slate-500">五维综合（0-1000）</div>
+    </div>
+  )
+}
+
 function PinnedWidgets({ trail }: { trail: MergedTrail | null }) {
   const [pins, setPins] = useState<string[]>(() => { try { return (localStorage.getItem('pinnedWidgets')??'').split(',').filter(Boolean) } catch { return [] } })
   if (!trail || pins.length === 0) return null
@@ -1475,6 +1527,7 @@ function PinnedWidgets({ trail }: { trail: MergedTrail | null }) {
       <div className="grid gap-3 lg:grid-cols-2">
         {pins.includes('state') && <div className="glass-card p-3"><h4 className="text-[11px] text-slate-400 mb-2">状态分布</h4>{Object.entries(stateMinutes).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([s,m])=><div key={s} className="flex justify-between text-[11px] text-slate-300"><span>{s}</span><span>{Math.round(m)}m</span></div>)}</div>}
         {pins.includes('topapps') && <div className="glass-card p-3"><h4 className="text-[11px] text-slate-400 mb-2">TOP 应用</h4>{topApps.map(a=><div key={a.app} className="flex justify-between text-[11px] text-slate-300"><span>{a.app}</span><span>{Math.round(a.minutes)}m</span></div>)}</div>}
+        {pins.includes('attention') && <AttentionPin />}
       </div>
     </section>
   )

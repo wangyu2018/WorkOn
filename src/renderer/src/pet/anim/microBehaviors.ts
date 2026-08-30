@@ -80,8 +80,8 @@ export class MicroBehaviors {
     this.bellR.impulse(-2.5 * strength)
   }
 
-  /** 挥一次手（开心/打招呼触发）：右臂举起左右摆，1.6s 自动结束 */
-  triggerWave(dur = 1.6): void {
+  /** 连续挥手（开心/打招呼触发）：右臂抬起后连续左右摆动数次再放下，2.2s 自动结束 */
+  triggerWave(dur = 2.2): void {
     this.waveT = 0
     this.waveDur = dur
   }
@@ -105,7 +105,8 @@ export class MicroBehaviors {
     }
     if (this.blinkT >= 0) {
       this.blinkT += dt
-      const total = 0.25 // 0.15 闭 + 0.1 开
+      // 低帧率下拉长包络：10fps 时 0.25s 只有 2-3 帧，眨眼会被看成"卡死闭眼"
+      const total = this.ecoMode ? 0.6 : 0.25 // 0.15 闭 + 0.1 开
       const p = this.blinkT / total
       const closed = p < 0.6 ? Math.sin((p / 0.6) * Math.PI * 0.5) : Math.cos(((p - 0.6) / 0.4) * Math.PI * 0.5)
       this.char.face.applyBlinkOverride?.(1 - Math.max(0, closed))
@@ -145,19 +146,24 @@ export class MicroBehaviors {
     add('head', -this.gaze.y * 3.5, this.gaze.x * 6)
     add('neck_01', -this.gaze.y * 2.5, this.gaze.x * 3)
 
-    // ── 挥手（一次性）：右臂从站姿抬到举起 + 小臂慢摆（幅度小、速度慢） ──
+    // ── 连续挥手：右臂快速抬起 → 连续左右摆动数次（幅度渐衰）→ 自然放下 ──
     if (this.waveT >= 0) {
       this.waveT += dt
       const p = this.waveT / this.waveDur
       if (p >= 1) {
         this.waveT = -1
       } else {
-        const env = Math.sin(p * Math.PI)
+        // 分段包络：0-0.12 抬起，0.12-0.88 保持并连续摆动，0.88-1 放下
+        const lift = Math.min(1, p / 0.12)
+        const lower = Math.min(1, (1 - p) / 0.12)
+        const hold = Math.min(lift, lower)
+        // 连续摆动：约 3.5 次完整左右摆，幅度随保持阶段衰减，越摆越缓
+        const swing = Math.sin(p * Math.PI * 7) * hold
         // 挥手路径：先往身前送（y-45）再抬起（z+150），全程在躯干前方，不经过头部；头微向右倾
-        add('upperarm_R', 0, -45 * env, 150 * env)
-        add('forearm_R', 0, Math.sin(this.waveT * 5.5) * 16 * env, 0)
-        add('head', 0, 0, -7 * env)
-        this.anim.expressionImpulse({ smile: 0.2 * env }, 0.3)
+        add('upperarm_R', 0, -45 * hold, 150 * hold)
+        add('forearm_R', 0, swing * 24, 0)
+        add('head', 0, 0, -7 * hold)
+        this.anim.expressionImpulse({ smile: 0.2 * hold }, 0.3)
       }
     }
 
@@ -176,7 +182,7 @@ export class MicroBehaviors {
     this.nextDeepBreath -= dt
     if (this.nextDeepBreath <= 0) {
       this.anim.expressionImpulse({ smile: 0.05 }, 1.5)
-      this.distantGazeT = -1
+      // 不再打断进行中的远眺（原实现会把 3s 远眺包络拦腰截断）
       this.nextDeepBreath = 25 + Math.random() * 30
     }
     this.nextDistantGaze -= dt

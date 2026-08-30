@@ -6,6 +6,8 @@ import { EmptyState } from '../components/EmptyState'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { Toggle } from '../components/Toggle'
+import { MotionLab } from '../components/MotionLab'
+import { VrmUploader } from '../components/VrmUploader'
 
 /** 当前搭子角色（VRM 姵儿，单角色） */
 const CHARACTER = {
@@ -209,18 +211,21 @@ export default function BuddyStage() {
         }
       />
 
-      {/* 总控卡：桌面形象 + 浮窗，两开关并列 */}
+      {/* 顶部总控：仅两个开关 —— 虚拟角色 / 悬浮窗，下方按开启状态显示对应设置 */}
       <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '40ms' }}>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-3">
-            <span className="text-[13px] font-semibold text-slate-200">桌面形象</span>
+            <span className="text-[13px] font-semibold text-slate-200">虚拟角色</span>
             <Toggle checked={settings.petEnabled} onChange={(v) => void patch({ petEnabled: v })} />
           </div>
           <div className="w-px h-6 bg-white/10" />
           <div className="flex items-center gap-3">
-            <span className="text-[13px] font-semibold text-slate-200">浮窗与托盘</span>
+            <span className="text-[13px] font-semibold text-slate-200">悬浮窗</span>
             <Toggle checked={settings.widgetVisible} onChange={(v) => void patch({ widgetVisible: v })} />
           </div>
+        </div>
+        <div className="mt-2 text-[11px] text-slate-500">
+          开启后下方显示对应设置；两个都开启则全部罗列。
         </div>
       </section>
 
@@ -363,34 +368,16 @@ export default function BuddyStage() {
               </div>
               <span className="text-[10px] text-slate-600">敬请期待</span>
             </div>
+
+            {/* ── 动作工坊 + 动作库 + 积分（第三批） ── */}
+            <MotionLab />
           </div>
 
           <div className="text-[10px] uppercase text-slate-600 pt-3">显示参数</div>
           <div className="flex flex-col gap-2.5 border-t border-white/[0.06] pt-2">
             <div className="flex items-center justify-between text-[12px] text-slate-300">
-              <span>启用搭子</span>
-              <Toggle checked={settings.petEnabled} onChange={(v) => void patch({ petEnabled: v })} />
-            </div>
-            <div className="flex items-center justify-between text-[12px] text-slate-300">
               <span>角色</span>
-              <div className="flex items-center gap-2">
-                <select
-                  className="glass-input w-32"
-                  value={settings.petVrmPath ? 'custom' : 'ling'}
-                  onChange={(e) => {
-                    if (e.target.value === 'ling') void window.api?.resetVrm?.()
-                  }}
-                >
-                  <option value="ling">姵儿（默认）</option>
-                  {settings.petVrmPath && <option value="custom">自定义角色</option>}
-                </select>
-                <button
-                  className="rounded-lg border border-neon-cyan/30 bg-neon-cyan/10 px-3 py-1 text-[11px] text-neon-cyan transition-all hover:bg-neon-cyan/20"
-                  onClick={() => void window.api?.selectVrmFile?.()}
-                >
-                  上传 VRM
-                </button>
-              </div>
+              <VrmUploader petVrmPath={settings.petVrmPath} />
             </div>
             <div className="flex items-center justify-between gap-3 text-[12px] text-slate-300">
               <span>
@@ -470,7 +457,7 @@ export default function BuddyStage() {
         <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '60ms' }}>
           <div className="mb-3"><SectionTitle icon="cat" title="搭子状态" /></div>
           <div className="text-[12px] leading-relaxed text-slate-500">
-            虚拟角色未启用。在上方总控卡开启「桌面形象」后，这里会显示其实时状态、情感与行为控制。
+            虚拟角色未启用。在上方总控卡开启「虚拟角色」后，这里会显示其实时状态、情感与行为控制。
           </div>
         </section>
       )}
@@ -510,88 +497,83 @@ export default function BuddyStage() {
         </section>
       ) : null}
 
-      {/* 防分心：摸鱼自动隐身 */}
-      <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '180ms' }}>
-        <div className="mb-3">
-          <SectionTitle icon="shield" title="防分心" />
-        </div>
-        <p className="mb-3 text-[12px] leading-relaxed text-slate-500">
-          姵儿在检测到你持续摸鱼（看视频/刷微信/打游戏等）超过设定时长后，自动隐藏悬浮窗，避免分心。回到工作状态后悬浮窗会自动恢复并弹出欢迎提示。
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="flex items-center justify-between rounded-lg border border-white/[0.05] bg-white/[0.03] px-3 py-2.5 transition-colors hover:bg-white/[0.05]">
-            <span className="text-[13px] text-slate-300">启用自动隐身</span>
-            <Toggle checked={settings.slackAutoHide} onChange={(v) => void patch({ slackAutoHide: v })} />
+      {/* 防分心：摸鱼自动隐身（仅虚拟角色开启时显示） */}
+      {settings.petEnabled && (
+        <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '180ms' }}>
+          <div className="mb-3">
+            <SectionTitle icon="shield" title="防分心" />
           </div>
-          <div className="flex items-center justify-between rounded-lg border border-white/[0.05] bg-white/[0.03] px-3 py-2.5 transition-colors hover:bg-white/[0.05]">
-            <span className="text-[13px] text-slate-300">触发阈值</span>
-            <div className="flex items-center gap-1.5">
-              <input
-                type="number"
-                className="glass-input w-20 text-right text-[12px] tabular-nums"
-                min={30}
-                max={3600}
-                step={30}
-                value={settings.slackHideSec}
-                onChange={(e) => {
-                  const v = Math.max(30, Math.min(3600, Number(e.target.value) || 30))
-                  void patch({ slackHideSec: v })
-                }}
-              />
-              <span className="text-[11px] text-slate-500">秒</span>
+          <p className="mb-3 text-[12px] leading-relaxed text-slate-500">
+            姵儿在检测到你持续摸鱼（看视频/刷微信/打游戏等）超过设定时长后，自动隐藏悬浮窗，避免分心。回到工作状态后悬浮窗会自动恢复并弹出欢迎提示。
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex items-center justify-between rounded-lg border border-white/[0.05] bg-white/[0.03] px-3 py-2.5 transition-colors hover:bg-white/[0.05]">
+              <span className="text-[13px] text-slate-300">启用自动隐身</span>
+              <Toggle checked={settings.slackAutoHide} onChange={(v) => void patch({ slackAutoHide: v })} />
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 养成指南（折叠式） */}
-      <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '240ms' }}>
-        <div className="mb-3">
-          <SectionTitle icon="brain" title="养成指南" />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {GUIDES.map((g) => (
-            <button
-              key={g.key}
-              className={`rounded-lg border px-3 py-1.5 text-[12px] transition-all ${
-                activeGuide === g.key
-                  ? 'border-neon-cyan/50 bg-neon-cyan/10 text-neon-cyan'
-                  : 'border-white/[0.07] text-slate-400 hover:border-white/20 hover:text-slate-200'
-              }`}
-              onClick={() => setActiveGuide((cur) => (cur === g.key ? null : g.key))}
-            >
-              {g.label}
-            </button>
-          ))}
-        </div>
-        {activeGuide ? (
-          <div className="anim-fade-in mt-3 border-t border-white/[0.06] pt-3">
-            {GUIDES.find((g) => g.key === activeGuide)?.content}
-          </div>
-        ) : (
-          <div className="mt-2 text-[11px] text-slate-600">点击标签查看对应说明</div>
-        )}
-      </section>
-
-      {/* 浮窗与托盘 — 与搭子并列主开关 */}
-      <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '140ms' }}>
-        <div className="mb-3">
-          <SectionTitle icon="monitor" title="浮窗与托盘" />
-        </div>
-        <div className="mb-2 text-[11px] text-slate-500">
-          托盘图标是搭子的"手柄"——左键展开状态浮窗，右键弹出快捷菜单。与搭子伴侣的开关独立但联动。
-        </div>
-
-        {/* 管控细节（总控卡浮窗开关开启后展开） */}
-        {settings.widgetVisible && (
-          <div className="mt-2 ml-2 flex flex-col divide-y divide-white/[0.05] border-l border-white/[0.06] pl-3">
-            <div className="-mx-1 flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-white/[0.03]">
-              <div className="min-w-0 flex-1">
-                <div className="text-[12px] text-slate-300">桌面浮窗</div>
-                <div className="mt-0.5 text-[10px] text-slate-500">屏幕右侧半透明悬浮窗，显示今日状态概览与快捷问答</div>
+            <div className="flex items-center justify-between rounded-lg border border-white/[0.05] bg-white/[0.03] px-3 py-2.5 transition-colors hover:bg-white/[0.05]">
+              <span className="text-[13px] text-slate-300">触发阈值</span>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  className="glass-input w-20 text-right text-[12px] tabular-nums"
+                  min={30}
+                  max={3600}
+                  step={30}
+                  value={settings.slackHideSec}
+                  onChange={(e) => {
+                    const v = Math.max(30, Math.min(3600, Number(e.target.value) || 30))
+                    void patch({ slackHideSec: v })
+                  }}
+                />
+                <span className="text-[11px] text-slate-500">秒</span>
               </div>
-              <Toggle checked={settings.widgetVisible} onChange={(v) => void patch({ widgetVisible: v })} />
             </div>
+          </div>
+        </section>
+      )}
+
+      {/* 养成指南（折叠式，仅虚拟角色开启时显示） */}
+      {settings.petEnabled && (
+        <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '240ms' }}>
+          <div className="mb-3">
+            <SectionTitle icon="brain" title="养成指南" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {GUIDES.map((g) => (
+              <button
+                key={g.key}
+                className={`rounded-lg border px-3 py-1.5 text-[12px] transition-all ${
+                  activeGuide === g.key
+                    ? 'border-neon-cyan/50 bg-neon-cyan/10 text-neon-cyan'
+                    : 'border-white/[0.07] text-slate-400 hover:border-white/20 hover:text-slate-200'
+                }`}
+                onClick={() => setActiveGuide((cur) => (cur === g.key ? null : g.key))}
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
+          {activeGuide ? (
+            <div className="anim-fade-in mt-3 border-t border-white/[0.06] pt-3">
+              {GUIDES.find((g) => g.key === activeGuide)?.content}
+            </div>
+          ) : (
+            <div className="mt-2 text-[11px] text-slate-600">点击标签查看对应说明</div>
+          )}
+        </section>
+      )}
+
+      {/* 悬浮窗设置 — 仅悬浮窗开启时显示 */}
+      {settings.widgetVisible && (
+        <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '140ms' }}>
+          <div className="mb-3">
+            <SectionTitle icon="monitor" title="悬浮窗设置" />
+          </div>
+          <div className="mb-2 text-[11px] text-slate-500">
+            屏幕右侧半透明悬浮窗，显示今日状态概览与快捷问答。托盘图标是它的"手柄"——左键展开状态浮窗，右键弹出快捷菜单。
+          </div>
+          <div className="flex flex-col divide-y divide-white/[0.05]">
             <div className="-mx-1 rounded-lg px-1 py-2">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -654,8 +636,8 @@ export default function BuddyStage() {
               <Toggle checked={settings.widgetPenetration} onChange={(v) => void patch({ widgetPenetration: v })} />
             </div>
           </div>
-        )}
-      </section>
+        </section>
+      )}
 
       {showGuide ? <GuideModal onDone={closeGuide} /> : null}
     </div>

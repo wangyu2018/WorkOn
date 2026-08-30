@@ -14,7 +14,9 @@ import type {
   UserAnalysis, UsageStat, ActivityCorrection, CorrectionRule, UserFeedback, QAMessage,
   CustomCategory, AttentionScore, Achievement, AccessLog, UserPersona,
   ReportTemplate, OcrSnapshot, CategoryInference, SegmentPlanLink,
-  Project, ProjectTask, ProjectTimeLink
+  Project, ProjectTask, ProjectTimeLink,
+  RecognitionLogRecord, OcrShot,
+  MotionMeta, PointsEntry, ReportEntryPatch
 } from '@shared/types'
 import type { ChainDayReport } from '@shared/chain'
 import { dateKey } from '@shared/trail'
@@ -40,7 +42,11 @@ interface JsonData {
   accessLogs: AccessLog[] // v2.7 AI 访问日志
   personas: UserPersona[] // v2.7 用户画像
   reportTemplates: ReportTemplate[] // v2.9 用户报表模板（预置模板不落库）
-  ocrSnapshots: OcrSnapshot[] // v2.9 OCR 结构化快照（不存原文，隐私）
+  ocrSnapshots: OcrSnapshot[]
+  ocrShots: OcrShot[] // 截图↔OCR 索引（P0）
+  motions: MotionMeta[] // 动作库
+  pointsLedger: PointsEntry[] // 积分流水
+  reportPatches: ReportEntryPatch[] // 报表条目人工修正 // v2.9 OCR 结构化快照（不存原文，隐私）
   chains: ChainDayReport[] // v2.6.1 作业链路日报（按 date 唯一，重算覆盖）
   categoryInferences: CategoryInference[] // AI 分类兜底推断（独立表，仅展示）
   segmentPlans: SegmentPlanLink[] // 时间轴段→计划拖拽关联（持久化）
@@ -55,14 +61,23 @@ const EMPTY: JsonData = {
   attentionScores: [], achievements: [], accessLogs: [], personas: [],
   reportTemplates: [], ocrSnapshots: [], chains: [], categoryInferences: [], segmentPlans: [],
   projects: [], projectTasks: [], projectTimeLinks: []
-}
+,
+  ocrShots: []
+  ,
+  motions: [],
+  pointsLedger: []
+  ,
+  reportPatches: []
+  }
 
 let dir = ''
 let jsonFile = ''
 let actFile = ''
+let recogFile = ''
 let data: JsonData = { ...EMPTY }
 let activities: ActivityRecord[] = []
 let actIdSeq = 1
+let recogIdSeq = 1
 let flushTimer: NodeJS.Timeout | null = null
 let actDirty = false
 
@@ -70,6 +85,8 @@ export function initDb(): void {
   dir = app.getPath('userData')
   jsonFile = path.join(dir, 'db.json')
   actFile = path.join(dir, 'activities.jsonl')
+  recogFile = path.join(dir, 'recognition_log.jsonl')
+  pruneRecogLog()
 
   // 启动可写性检查：数据目录不可写时明确告知（静默丢失比报错更糟）
   try {
@@ -125,6 +142,8 @@ function scheduleFlush(): void {
 
 export function flushNow(): void {
   if (!jsonFile) return // initDb 未运行（如单实例锁冲突直接 quit），无需落盘
+  flushActivityBuffer()
+  flushRecogBuffer()
   try {
     fs.writeFileSync(jsonFile, JSON.stringify(data), 'utf-8')
   } catch (e) {
@@ -140,17 +159,110 @@ export function flushNow(): void {
 }
 
 // ── activities ──
+// 性能：JSONL 缓冲写入（每 8s 或满 50 条批量落盘），替代每 tick 同步 appendFileSync。
+// 代价：崩溃可能丢最后 ≤8s 的活动尾巴（可接受；flushNow 在退出时兜底）
+let pendingActLines: string[] = []
+let actFlushTimer: ReturnType<typeof setTimeout> | null = null
+
+function flushActivityBuffer(): void {
+  if (!pendingActLines.length) return
+  const lines = pendingActLines
+  pendingActLines = []
+  try {
+    fs.appendFileSync(actFile, lines.join('\n') + '\n', 'utf-8')
+  } catch (e) {
+    // 写入失败不再静默：主窗口弹错误横幅（用户可感知数据丢失风险）
+    console.warn('[db] 活动批量写入失败', e)
+    sendTo('main', 'error-banner', `活动记录写入失败：${(e as Error).message}（请检查磁盘空间）`)
+  }
+}
+
+function scheduleActFlush(): void {
+  if (actFlushTimer) return
+  actFlushTimer = setTimeout(() => {
+    actFlushTimer = null
+    flushActivityBuffer()
+  }, 8000)
+}
+
 export function insertActivity(r: Omit<ActivityRecord, 'id'>): ActivityRecord {
   const rec: ActivityRecord = { ...r, id: actIdSeq++ }
   activities.push(rec)
-  try {
-    fs.appendFileSync(actFile, JSON.stringify(rec) + '\n', 'utf-8')
-  } catch (e) {
-    // 写入失败不再静默：主窗口弹错误横幅（用户可感知数据丢失风险）
-    console.warn('[db] 活动追加失败', e)
-    sendTo('main', 'error-banner', `活动记录写入失败：${(e as Error).message}（请检查磁盘空间）`)
-  }
+  pendingActLines.push(JSON.stringify(rec))
+  if (pendingActLines.length >= 50) flushActivityBuffer()
+  else scheduleActFlush()
   return rec
+}
+
+// ── recognition_log（影子模式记账；7 天保留，启动裁剪） ──
+const RETAIN_RECOG_LOG_DAYS = 7
+
+function pruneRecogLog(): void {
+  try {
+    if (!fs.existsSync(recogFile)) return
+    const cutoff = Date.now() - RETAIN_RECOG_LOG_DAYS * 86400000
+    const lines = fs.readFileSync(recogFile, 'utf-8').split('\n').filter(Boolean)
+    const kept: string[] = []
+    for (const line of lines) {
+      try {
+        const r = JSON.parse(line) as RecognitionLogRecord
+        if (r.ts >= cutoff) {
+          kept.push(line)
+          if (r.id && r.id >= recogIdSeq) recogIdSeq = r.id + 1
+        }
+      } catch { /* 跳过坏行 */ }
+    }
+    if (kept.length !== lines.length) {
+      fs.writeFileSync(recogFile, kept.join('\n') + (kept.length ? '\n' : ''), 'utf-8')
+    }
+  } catch (e) {
+    console.warn('[db] recognition_log 裁剪失败', e)
+  }
+}
+
+let pendingRecog: RecognitionLogRecord[] = []
+let recogFlushTimer: ReturnType<typeof setTimeout> | null = null
+
+function flushRecogBuffer(): void {
+  if (!pendingRecog.length) return
+  const recs = pendingRecog
+  pendingRecog = []
+  try {
+    fs.appendFileSync(recogFile, recs.map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf-8')
+  } catch (e) {
+    console.warn('[db] 识别日志批量写入失败', e)
+  }
+}
+
+function scheduleRecogFlush(): void {
+  if (recogFlushTimer) return
+  recogFlushTimer = setTimeout(() => {
+    recogFlushTimer = null
+    flushRecogBuffer()
+  }, 8000)
+}
+
+export function insertRecognitionLog(r: Omit<RecognitionLogRecord, 'id'>): void {
+  const rec: RecognitionLogRecord = { ...r, id: recogIdSeq++ }
+  pendingRecog.push(rec)
+  if (pendingRecog.length >= 50) flushRecogBuffer()
+  else scheduleRecogFlush()
+}
+
+export function listRecentRecognitionLogs(n = 20): RecognitionLogRecord[] {
+  try {
+    const pending = pendingRecog.slice(-n)
+    const fromFile: RecognitionLogRecord[] = []
+    if (fs.existsSync(recogFile)) {
+      const lines = fs.readFileSync(recogFile, 'utf-8').split('\n').filter(Boolean)
+      for (const line of lines.slice(-n)) {
+        try { fromFile.push(JSON.parse(line) as RecognitionLogRecord) } catch { /* 跳过坏行 */ }
+      }
+    }
+    return [...fromFile, ...pending].slice(-n)
+  } catch {
+    return []
+  }
 }
 
 export function listActivities(date: string): ActivityRecord[] {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AttentionScore, MergedTrail, PlanForecast, PlanVsActual, WorkState } from '@shared/types'
-import { SLACK_STATES, WORK_LIKE_STATES, WORK_STATES } from '@shared/stateMeta'
+import { MOOD_SLACK_STATES, WORK_LIKE_STATES, WORK_STATES } from '@shared/stateMeta'
 import { usePresenceStore } from '../stores/presenceStore'
 import { useAppStore } from '../stores/appStore'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -198,7 +198,10 @@ export default function MonitorView() {
     } catch {
       /* 保持旧数据 */
     }
-    if (!forecastEnabled) return
+    if (!forecastEnabled) {
+        setForecasts(new Map())
+        return
+      }
     try {
       const list = (await window.api.getForecast()) as PlanForecast[]
       const m = new Map<string, PlanForecast>()
@@ -275,7 +278,7 @@ export default function MonitorView() {
   const advice = presence ? focusAdvice(presence) : null
   // 今日概览：工作/摸鱼时长按 shared/stateMeta 口径从 trail.stateMinutes 聚合
   const overviewWorkMin = trail ? WORK_LIKE_STATES.reduce((s, st) => s + (trail.stateMinutes[st] ?? 0), 0) : 0
-  const overviewSlackMin = trail ? SLACK_STATES.reduce((s, st) => s + (trail.stateMinutes[st] ?? 0), 0) : 0
+  const overviewSlackMin = trail ? MOOD_SLACK_STATES.reduce((s, st) => s + (trail.stateMinutes[st] ?? 0), 0) : 0
   // 昨日评分：history 日期升序，取今日之前最后一条
   const yesterdayScore = attention ? (attention.history.filter((h) => h.date < attention.today.date).pop() ?? null) : null
 

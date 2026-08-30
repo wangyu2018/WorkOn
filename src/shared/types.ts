@@ -64,6 +64,7 @@ export interface UIElementInfo {
   automationId: string  // 自动化 ID
   value: string         // 当前值（文本框内容等）
   selectedText: string  // 选中文本
+  docLength: number     // 焦点文档/编辑框全文长度（识别特征用，截断上限 20000）
   processId: number     // 所属进程 ID
   isFocused: boolean    // 是否当前焦点
 }
@@ -237,9 +238,10 @@ export interface CategoryInference {
 
 /** 时间轴段 → 计划 拖拽关联（持久化，重启后保持） */
 export interface SegmentPlanLink {
-  id: string            // `${date}:${segStartTs}` 去重键
+  id: string            // `${date}:${segStartTs}:${app}` 去重键
   date: string
   segStartTs: number
+  app?: string // 应用维度（双屏同刻段不误伤）
   planId: string
   ts: number
 }
@@ -597,6 +599,31 @@ export interface ProfileReference { layer: PrivacyLevel; field: string; logId: s
 
 export type WidgetMode = 'mini' | 'compact' | 'full'
 
+// ───────────────────────── 识别引擎（规则 + 小模型） ─────────────────────────
+
+/** 状态判定来源：correction 用户纠偏 > idle 空闲 > model 小模型 > rule 规则表 > fallback 兜底 */
+export type RecognitionSource = 'correction' | 'idle' | 'model' | 'rule' | 'fallback'
+
+/** 识别模式：rules 纯规则（旧行为）/ shadow 影子记账（默认）/ model_first 高置信模型优先 */
+export type RecognitionMode = 'rules' | 'shadow' | 'model_first'
+
+/** 每轮采样的双管道识别记录（影子模式记账，重训数据源） */
+export interface RecognitionLogRecord {
+  id?: number
+  ts: number
+  screen: number
+  app: string
+  title: string
+  mode: RecognitionMode
+  featuresJson: string
+  ruleState: WorkState
+  finalState: WorkState
+  finalSource: RecognitionSource
+  modelLabel?: string | null
+  modelProb?: number | null
+  modelState?: WorkState | null
+}
+
 export interface AppSettings {
   theme: 'cyan' | 'violet' | 'green' | 'amber' // 强调色主题，默认 cyan
   appearanceMode: 'light' | 'dark' | 'auto' // 亮暗模式，默认 dark
@@ -668,8 +695,12 @@ export interface AppSettings {
   /** 用户自定义工作/摸鱼归属：进程名 → work | life（星图拖拽调整后持久化） */
   appColumnOverride?: Record<string, string>
   launchAtLogin: boolean
+  /** 启动时显示欢迎界面（splash），默认开 */
+  showSplash: boolean
   slackHideSec: number // 持续摸鱼自动隐身阈值，默认 180
   slackAutoHide: boolean // 启用摸鱼自动隐身，默认开
+  recognitionMode: RecognitionMode // 识别引擎模式，默认 shadow（规则出状态，模型只记账）
+  performanceMode: boolean // 性能模式：停屏幕 OCR 采集/降桌宠负载，保留监控与识别核心
   // ── v2.6 注意力评分 ──
   userType?: UserType // 用户类型；未设置时自动识别
   userTypeAuto: boolean // 自动识别用户类型，默认开
@@ -682,10 +713,16 @@ export interface AppSettings {
   // ── v3.0 硬件自适应 ──
   hardwareTier?: 'L0' | 'L1' | 'L2' // 硬件等级（自动检测，可手动覆盖）
   petVrmPath?: string // 自定义 VRM 角色文件路径（L1 上传入口）
+  petFpsTierAuto?: boolean // 帧率档位由硬件分级自动设置中（用户手动改档位后置 false 停止接管）
+  inputProbeEnabled: boolean // 行为探针：全局键鼠聚合计数供识别特征（不记录内容），默认开
   ocrEngine?: 'tesseract' | 'rapidocr' // OCR 引擎选择，默认 rapidocr
   folders?: string[] // v3.0 文件夹 ingestion：用户配置的工作目录
   mutualExclusive?: boolean // v3.1 互斥模式：桌面形象与浮窗互相排斥
   city?: string // v3.1 用户城市（天气/通勤提醒用）
+  weatherEnabled?: boolean // v3.2 天气功能开关，默认 true
+  weatherHours?: number // v3.2 右上角天气显示时间范围（小时），默认 3
+  weatherApiKey?: string // v3.2 和风天气 API Key（免费版，控制台申请）
+  weatherApiHost?: string // v3.4 和风天气 API Host（形如 xxxxx.qweatherapi.com，控制台设置页查看）
   widgetCompact?: boolean // 浮窗紧凑模式，默认 false
   reportAutoRefreshMin?: number // 报表自动刷新间隔分钟，0=关闭，默认 120
   
@@ -747,8 +784,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
   widgetPosX: -1,
   widgetPosY: -1,
   launchAtLogin: false,
+  showSplash: true,
   slackHideSec: 180,
   slackAutoHide: true,
+  recognitionMode: 'shadow',
+  performanceMode: false,
+  inputProbeEnabled: true,
   // v2.6：userType/targetWorkMin/targetPomodoros 留空 = 自动识别 / 用类型默认值
   userTypeAuto: true,
   employmentMode: 'full',
@@ -756,6 +797,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   smartReportAI: true,
   ocrEngine: 'rapidocr',
   city: '',
+  weatherEnabled: true,
+  weatherHours: 3,
+  weatherApiKey: '07b9e0e0e70342b794728af1ccb5641d',
+  weatherApiHost: 'jv6r7339hc.re.qweatherapi.com',
   widgetCompact: false,
   reportAutoRefreshMin: 120
 }
@@ -902,6 +947,57 @@ export interface WorkPattern {
 }
 
 /** OCR 结构化快照（不存原文，隐私，v2.9 模块 D） */
+/** 自定义动作资产（动作工坊产出）：骨骼四元数关键帧（模型空间，构建时按 VRM0 翻转） */
+export interface MotionFrame {
+  t: number // 秒
+  rot: Record<string, [number, number, number, number]> // VRM 骨名 → 四元数 xyzw
+}
+export interface MotionClipData {
+  version: 1
+  fps: number
+  duration: number
+  frames: MotionFrame[]
+}
+
+/** 动作库元信息 */
+export interface MotionMeta {
+  id: string
+  name: string
+  duration: number
+  fps: number
+  createdAt: number
+  cost: number // 积分价（0=免费）
+  owned: boolean // 是否已解锁
+}
+
+/** 智能报表条目人工修正（按 date+entryId 持久化） */
+export interface ReportEntryPatch {
+  id: string // `${date}:${entryId}`
+  date: string
+  entryId: string
+  patch: Record<string, unknown>
+  ts: number
+}
+
+/** 积分流水 */
+export interface PointsEntry {
+  id: string
+  ts: number
+  delta: number // 正=获得 负=消耗
+  reason: string // focus / redeem:<名称> / adjust
+}
+
+/** 截图↔OCR 索引（backlog P0）：截图文件与结构化快照的关联记录（按时间窗召回用） */
+export interface OcrShot {
+  id: string
+  ts: number // 截图时刻（= 文件名时间戳，非 OCR 完成时刻）
+  file: string // 截图绝对路径
+  app: string
+  state: WorkState
+  keywords: string[] // 行业关键词（复用 ocrCollector 提取）
+  classify?: string | null // 内容类别（classifyOcrText）
+}
+
 export interface OcrSnapshot {
   id: string
   ts: number

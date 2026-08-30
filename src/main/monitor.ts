@@ -14,6 +14,7 @@ import { presence } from './presence'
 import { insertActivity, col, updateIn } from './db'
 import { getSettings } from './settings'
 import { identifyApp, INPUT_REQUIRED_STATES } from '@shared/stateMeta'
+import { recognize } from './recognition/decision'
 import { matchBrowserToPlan } from './ai'
 
 import { sendTo } from './windows'
@@ -128,13 +129,26 @@ async function tick(): Promise<void> {
   }
 
   if (fg && fg.app) {
-    const corrected = applyRules(fg.screen, fg.app, fg.title)
-    const identified = identifyApp(corrected.app, corrected.title)
+    // deepMode 时预取 UIA 焦点元素提示（3s 缓存），供 field/text_length 真实化。
+    // 性能：UIA 走 PowerShell 冷启动（300-600ms 突发），只在用户停下（idle≥3s）时做——
+    // 活跃打字/划鼠标期间跳过，特征由行为探针兜底，杜绝每 2s 一次的系统级卡顿。
+    let uiaHint: { controlType: string; valueLength: number; selectedLength: number; docLength: number } | null = null
+    if (getSettings().deepMode && !getSettings().performanceMode && idleSec >= 8 && !isExcludedApp(fg.app, identifyApp(fg.app, fg.title).appName)) {
+      const el = await getFocusedElement().catch(() => null)
+      if (el) {
+        uiaHint = { controlType: el.controlType, valueLength: el.value.length, selectedLength: el.selectedText.length, docLength: el.docLength }
+        presence.setUiaContext(summarizeFocusedElement(el) || undefined)
+      }
+    }
+    // 双管道识别：纠偏规则 → 规则表兜底；shadow/model_first 时 python 小模型并行参与
+    const rec = await recognize({ ts, screen: fg.screen, app: fg.app, title: fg.title, active: true, idleSec, uiaHint })
+    const corrected = { app: rec.app, title: rec.title }
+    const identified = { appName: rec.appName, state: rec.state as WorkState }
     // 隐私快标：标记应用完全停止采集（0 记录）——不截屏、不 OCR、不记标题、不落活动记录
     const excluded = isExcludedApp(corrected.app, identified.appName)
     presence.excludedActive = excluded
     const safeTitle = corrected.title
-    let state: WorkState = (corrected.stateOverride as never) ?? identified.state
+    let state: WorkState = identified.state
     // 输入活跃度校验：>60s 无键鼠操作时，输入型工作态降级为 idle（与 presence 引擎同口径）
     if (idleSec > 60 && INPUT_REQUIRED_STATES.includes(state as WorkState)) state = 'idle'
 
@@ -165,7 +179,7 @@ async function tick(): Promise<void> {
             height: fg.height
           }
         : undefined
-      presence.push({ ts, app: corrected.app, title: safeTitle, screen: fg.screen, active: true, idleSec, winRect })
+      presence.push({ ts, app: corrected.app, title: safeTitle, appName: identified.appName, state: identified.state, screen: fg.screen, active: true, idleSec, winRect })
     } else {
       // 已排除：仅推入空信号维持引擎心跳（presence 不显示该应用，activities 不产生记录）
       presence.push({ ts, app: '', title: '', screen: fg.screen, active: true, idleSec })
@@ -191,13 +205,6 @@ async function tick(): Promise<void> {
     // OCR 深度模式：将最近一次 OCR 上下文注入 presence
     const ocr = getLastOcrContext()
     if (ocr) presence.setOcrContext(ocr.text)
-
-    // UIAutomation 深度模式：将焦点元素摘要注入 presence（3s 缓存，不阻塞 tick）
-    if (getSettings().deepMode && !excluded) {
-      getFocusedElement()
-        .then((el) => presence.setUiaContext(summarizeFocusedElement(el) || undefined))
-        .catch(() => { /* UIA 失败不影响监控 */ })
-    }
 
     // 浏览器行为 → 计划关键词匹配（问题 7：命中则弹确认，30min 不重复；隐私标记应用不参与）
     if (!excluded && /chrome|edge|firefox|opera|brave|arc|msedge/i.test(corrected.app)) {
@@ -258,7 +265,8 @@ export function startMonitor(): void {
   if (running) return
   running = true
   const s = getSettings()
-  if (s.deepMode) startOcr()
+  // 性能模式：屏幕 OCR 采集是最大 CPU 来源（截屏+推理），开启后停用
+  if (s.deepMode && !s.performanceMode) startOcr()
   void tick().finally(scheduleNext)
   console.log(`[monitor] 已启动，基础采样间隔 ${Math.max(2000, s.monitorInterval || 5000)}ms${s.monitorSmart ? '（智能模式）' : ''}`)
 }
@@ -294,4 +302,9 @@ export function stopMonitor(): void {
 export function restartMonitor(): void {
   stopMonitor()
   startMonitor()
+}
+
+/** 开发者性能监控：当前监控采样状态 */
+export function getMonitorPerf(): { running: boolean; intervalMs: number } {
+  return { running, intervalMs: running ? currentInterval() : 0 }
 }

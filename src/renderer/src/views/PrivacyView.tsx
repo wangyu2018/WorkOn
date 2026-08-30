@@ -239,7 +239,7 @@ export default function PrivacyView() {
   const clearCache = async () => {
     setClearing(true)
     try {
-      const r = (await window.api.clearOcrCache(7)) as OcrStats & { freedBytes: number }
+      const r = (await window.api.clearOcrCache(settings.ocrCleanupDays || 14)) as OcrStats & { freedBytes: number }
       setOcrStats({ shotCount: r.shotCount, shotBytes: r.shotBytes, modelBytes: r.modelBytes, totalBytes: r.totalBytes })
       setClearNote(`清理完成，释放 ${fmtBytes(r.freedBytes)} 空间`)
     } catch {
@@ -465,7 +465,7 @@ export default function PrivacyView() {
         <Row label="活动记录留存" desc="原始轨迹保留天数，更早的启动时自动清理">
           <NumberSetting value={settings.activityRetentionDays} min={7} max={180} suffix="天" onCommit={(v) => p({ activityRetentionDays: v })} />
         </Row>
-        <Row label="我所在的位置" desc="城市名，用于天气与通勤提醒（如 天津）。留空则使用自动定位。">
+        <Row label="我所在的位置" desc="城市名，用于天气与通勤提醒（如 天津）。留空则不展示天气（需填写城市）。">
           <TextSetting value={settings.city ?? ''} placeholder="如 天津" onCommit={(v: string) => p({ city: v.trim() })} />
         </Row>
       </Section>

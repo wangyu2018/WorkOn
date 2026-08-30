@@ -7,6 +7,7 @@ import { useAppStore, type ViewKey } from './stores/appStore'
 import { usePresenceStore } from './stores/presenceStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { Icon, type IconName } from './components/Icon'
+import { WeatherBadge } from './components/WeatherBadge'
 import { CATEGORY_META, categoryOfWithOverride, type AppCategory } from '@shared/appCategory'
 import { WORK_STATES } from '@shared/stateMeta'
 import { displayApp } from '@shared/appDisplayName'
@@ -41,6 +42,7 @@ const NAV_GROUPS: NavGroup[] = [
       { key: 'calendar', label: '日历', icon: 'calendar' },
       { key: 'plan', label: '计划', icon: 'target' },
       { key: 'report', label: '报表', icon: 'chart' },
+      { key: 'monitor', label: '监控', icon: 'activity' },
       { key: 'buddy', label: '桌搭', icon: 'cat' }
     ]
   },
@@ -240,6 +242,8 @@ export default function App() {
                 <span className="max-w-[130px] truncate text-[11px] text-slate-300">{currentAppLabel}</span>
               </div>
             ) : null}
+            {/* 天气徽标（当前 + 未来 N 小时，有雨优先） */}
+            <WeatherBadge />
             {/* 窗口控制（独立，与状态胶囊分开） */}
             <button
               className="flex h-7 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.08] hover:text-slate-200"

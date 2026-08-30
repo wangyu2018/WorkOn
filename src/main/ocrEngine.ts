@@ -10,9 +10,9 @@
  * 自动降级：选 rapidocr 但二进制不存在时自动回退 tesseract
  */
 import { execFile } from 'child_process'
+import os from 'os'
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import { app } from 'electron'
 import { getSettings } from './settings'
 
@@ -78,7 +78,7 @@ function runRapidOCR(imageBuffer: Buffer): Promise<string> {
       return
     }
 
-    execFile(
+    const ocrChild = execFile(
       exe,
       [
         '--models=.',

@@ -52,11 +52,11 @@ const PHASES: Record<TimeOfDay, PhaseLighting> = {
     exposure: 1.05
   },
   night: {
-    keyColor: '#B0C8FF', keyIntensity: 0.4,
-    fillColor: '#6080B0', fillIntensity: 0.3,
-    hemiSky: '#2030A0', hemiGround: '#1A1A30', hemiIntensity: 0.25,
-    rimColor: '#4060B0', rimIntensity: 0.4,
-    exposure: 0.85
+    keyColor: '#D0DCFF', keyIntensity: 0.62,
+    fillColor: '#A8B8D8', fillIntensity: 0.4,
+    hemiSky: '#8A96D8', hemiGround: '#4A4A5A', hemiIntensity: 0.42,
+    rimColor: '#6080C0', rimIntensity: 0.45,
+    exposure: 0.98
   }
 }
 
@@ -82,6 +82,7 @@ export class Lighting {
   private fill: THREE.DirectionalLight
   private rim: THREE.SpotLight | null = null
   private hemi: THREE.HemisphereLight
+  private ambient: THREE.AmbientLight
   private status: THREE.PointLight | null = null
   private statusTarget = new THREE.Color(STATUS_COLORS.idle.color)
   private statusIntensityTarget = STATUS_COLORS.idle.intensity
@@ -113,6 +114,11 @@ export class Lighting {
     // Hemisphere：环境光
     this.hemi = new THREE.HemisphereLight(phase.hemiSky, phase.hemiGround, phase.hemiIntensity)
     scene.add(this.hemi)
+
+    // 中性环境光地板：MToon 材质对光源颜色极敏感，纯蓝夜光会把肤色染成深蓝；
+    // 一层微弱白光保证任何时段肤色都有中性基准
+    this.ambient = new THREE.AmbientLight('#FFFFFF', 0.18)
+    scene.add(this.ambient)
 
     if (characterRoot) this.attachCharacterRoot(characterRoot)
   }

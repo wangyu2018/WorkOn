@@ -289,6 +289,8 @@ export default function ProfileView() {
   const [nick, setNick] = useState('')
   const [hobbiesDraft, setHobbiesDraft] = useState<string | null>(null)
   const [city, setCity] = useState(settings.city ?? '')
+  const [weather, setWeather] = useState<{ text: string; tempC: number; feelsC: number; humidity: number; windKph: number; maxC: number; minC: number } | null>(null)
+  const [weatherErr, setWeatherErr] = useState<string | null>(null)
   const [exportNote, setExportNote] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [confirmClearLogs, setConfirmClearLogs] = useState(false)
@@ -356,6 +358,31 @@ export default function ProfileView() {
       setRefreshing(false)
     }
   }
+
+  // 城市变化时拉取天气预览（wttr.in，按城市名查询）
+  useEffect(() => {
+    const c = city.trim()
+    if (!c) {
+      setWeather(null)
+      setWeatherErr(null)
+      return
+    }
+    let alive = true
+    setWeatherErr(null)
+    window.api.getWeather(c).then((res) => {
+      if (!alive) return
+      if ('error' in res) {
+        setWeather(null)
+        setWeatherErr(res.error)
+      } else {
+        setWeather(res)
+        setWeatherErr(null)
+      }
+    })
+    return () => {
+      alive = false
+    }
+  }, [city])
 
   const doExport = async () => {
     const path = (await window.api.exportPersona()) as string | null
@@ -1182,6 +1209,24 @@ export default function ProfileView() {
             }}
           />
         </SettingRow>
+        {weather && (
+          <div className="mt-2 flex items-center gap-3 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-[12px]">
+            <span className="text-[22px] leading-none">{weather.text}</span>
+            <div className="flex flex-col">
+              <span className="text-[16px] font-semibold text-slate-100">{weather.tempC}°C</span>
+              <span className="text-[10px] text-slate-500">体感 {weather.feelsC}°C · {weather.minC}~{weather.maxC}°C</span>
+            </div>
+            <div className="ml-auto flex flex-col items-end gap-0.5 text-[10px] text-slate-500">
+              <span>湿度 {weather.humidity}%</span>
+              <span>风速 {weather.windKph} km/h</span>
+            </div>
+          </div>
+        )}
+        {weatherErr && (
+          <div className="mt-2 rounded-lg border border-red-500/20 bg-red-500/[0.06] px-3 py-1.5 text-[11px] text-red-400">
+            {weatherErr}
+          </div>
+        )}
       </section>
 
       {/* 清除 AI 访问日志确认弹窗 */}

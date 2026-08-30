@@ -38,6 +38,8 @@ export class Stage {
   private recoverStreak = 0
   /** 帧率档位（用户设置） */
   private tier: FpsTier = 'smooth'
+  /** 深度闲置：长时间零交互时压到 1fps（透明置顶窗常驻渲染是持续 GPU 消耗） */
+  private deepIdle = false
   private lastFrame = 0
   private tierListeners: Array<(t: FpsTier) => void> = []
   /** 动态帧率提升（拖拽/过渡期间）：来源集合非空时保持 boost */
@@ -53,8 +55,8 @@ export class Stage {
     })
     this.renderer.setClearColor(0x000000, 0)
     // 清晰度：透明窗口在 Windows HiDPI 下有合成 bug（内容被放大 dpr 倍），
-    // 此前用 pixelRatio=1 规避但发虚。改为 pixelRatio=dpr 并验证合成是否正常。
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    // pixelRatio 上限 1.5：2K/4K 屏省 ~44% 像素填充，视觉差异可忽略
+    this.renderer.setPixelRatio(this.pixelRatioCap())
     this.renderer.setSize(this.width, this.height)
     // 贴图各向异性过滤：斜视角下纹理更锐利（清晰度优化）
     this.maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy()
@@ -125,15 +127,29 @@ export class Stage {
     return t === 'eco' ? 0 : t === 'standard' ? 1 : t === 'smooth' ? 2 : 3
   }
 
+  /** pixelRatio 上限：dpr>1.5 的屏幕一律压到 1.5（性能与清晰度平衡点） */
+  private pixelRatioCap(): number {
+    return Math.min(window.devicePixelRatio, 1.5)
+  }
+
+  /** 深度闲置开关（main.ts 闲置 120s 后开启，任意交互关闭）；boost 自动解除 */
+  setDeepIdle(on: boolean): void {
+    if (this.deepIdle === on) return
+    this.deepIdle = on
+    // ⚠ 透明置顶窗禁止运行时切换 pixelRatio——会触发 Windows 合成 bug（整窗变黑）
+    // 深度闲置只把帧率压到 1fps，分辨率恒定
+    console.info('[pet] 深度闲置 ' + (on ? '开启（1fps）' : '关闭'))
+  }
+
   /** 临时提升帧率（拖拽/状态过渡期间调用），对应 unboostFps 解除 */
   boostFps(source = 'generic', target: FpsTier = 'smooth'): void {
     const wasEmpty = this.boostSources.size === 0
     this.boostSources.add(source)
+    if (this.deepIdle) this.setDeepIdle(false) // 临时升帧 = 有活动，退出深度闲置
     if (!wasEmpty) return
     if (Stage.tierRank(target) <= Stage.tierRank(this.tier)) return
     this.preBoostTier = this.tier
     this.tier = target
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     for (const cb of this.tierListeners) cb(target)
   }
 
@@ -142,8 +158,7 @@ export class Stage {
     if (this.boostSources.size > 0 || this.preBoostTier === null) return
     this.tier = this.preBoostTier
     this.preBoostTier = null
-    const prCap = this.tier === 'ultra' || this.tier === 'smooth' ? Math.min(window.devicePixelRatio, 2) : 1
-    this.renderer.setPixelRatio(prCap)
+    this.renderer.setPixelRatio(this.pixelRatioCap())
     for (const cb of this.tierListeners) cb(this.tier)
   }
 
@@ -154,9 +169,6 @@ export class Stage {
     this.preBoostTier = null
     if (t === this.tier) return
     this.tier = t
-    // 清晰度：smooth/ultra 都给满 dpr（上限 2），eco/standard 降到 1
-    const prCap = t === 'ultra' || t === 'smooth' ? Math.min(window.devicePixelRatio, 2) : 1
-    this.renderer.setPixelRatio(prCap)
     for (const cb of this.tierListeners) cb(t)
   }
 
@@ -193,7 +205,6 @@ export class Stage {
         if (++this.degradeStreak >= 4) {
           this.degradeStreak = 0
           this.degraded = true
-          this.renderer.setPixelRatio(1)
           for (const cb of this.degradeListeners) cb()
           console.info(`[pet] 连续10s fps<${degradeBelow.toFixed(0)}，自动降级：pixelRatio→1、粒子减半、关闭 rim 光`)
         }
@@ -206,8 +217,6 @@ export class Stage {
         if (++this.recoverStreak >= 12) {
           this.recoverStreak = 0
           this.degraded = false
-          const prCap = this.tier === 'ultra' || this.tier === 'smooth' ? Math.min(window.devicePixelRatio, 2) : 1
-          this.renderer.setPixelRatio(prCap)
           for (const cb of this.recoverListeners) cb()
           console.info(`[pet] 连续30s fps>${recoverAbove.toFixed(0)}，性能恢复：pixelRatio 回满、粒子/轮廓光恢复`)
         }
@@ -224,12 +233,12 @@ export class Stage {
     const loop = (now: number) => {
       if (!this.running) return
       requestAnimationFrame(loop)
-      // 帧率档位限制：未到间隔直接跳过本帧
-      const limit = FPS_LIMIT[this.tier]
+      // 帧率档位限制：未到间隔直接跳过本帧（深度闲置 1fps）
+      const limit = this.deepIdle ? 1 : FPS_LIMIT[this.tier]
       if (limit > 0 && now - this.lastFrame < 1000 / limit - 1) return
       this.lastFrame = now
       // dt 上限随档位弹性调整：eco 帧间隔 100ms，若仍按 50ms 截断动画会跑半速（慢动作）
-      const dtCap = this.tier === 'eco' ? 0.12 : this.tier === 'standard' ? 0.06 : 0.05
+      const dtCap = this.deepIdle ? 1.0 : this.tier === 'eco' ? 0.12 : this.tier === 'standard' ? 0.06 : 0.05
       const dt = Math.min((now - this.last) / 1000, dtCap)
       this.last = now
       this.fpsSample(dt)

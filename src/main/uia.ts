@@ -16,7 +16,7 @@
  *  - 3 秒缓存避免频繁调用
  */
 
-import { execFile } from 'child_process'
+import { execFile, type ChildProcess } from 'child_process'
 import type { UIElementInfo, UITreeNode } from '@shared/types'
 
 // ───────────────────────── PowerShell 脚本 ─────────────────────────
@@ -49,6 +49,15 @@ try {
     }
   }
 } catch {}
+$docLen = 0
+try {
+  if ($tp) {
+    # 读 20001 字符探测文档长度（避免整页大文档全文读取）
+    $docText = $tp.DocumentRange.GetText(20001)
+    $docLen = $docText.Length
+    if ($docLen -ge 20001) { $docLen = 20000 }
+  }
+} catch {}
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [pscustomobject]@{
   name = $name
@@ -57,6 +66,7 @@ try {
   automationId = $autoId
   value = if ($value) { $value.Substring(0, [Math]::Min(500, $value.Length)) } else { '' }
   selectedText = if ($selText) { $selText.Trim().Substring(0, [Math]::Min(200, $selText.Trim().Length)) } else { '' }
+  docLength = $docLen
   processId = $procId
   isFocused = $true
 } | ConvertTo-Json -Compress
@@ -121,13 +131,23 @@ const TREE_CACHE_MS = 10000    // UI 树 10 秒缓存
 
 // ───────────────────────── PowerShell 执行 ─────────────────────────
 
+// 后台工作进程降优先级：UIA 探测绝不允许抢占前台鼠标调度
+function lowerPriority(pid: number | undefined): void {
+  if (!pid) return
+  try {
+    const os = require('os') as typeof import('os')
+    os.setPriority(pid, os.constants.priority.PRIORITY_BELOW_NORMAL)
+  } catch { /* 平台不支持/已退出则忽略 */ }
+}
+
 function runPs(encoded: string, timeoutMs: number, maxBuf: number): Promise<string | null> {
   return new Promise((resolve) => {
-    execFile(
+    const child = execFile(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
       { timeout: timeoutMs, windowsHide: true, maxBuffer: maxBuf, encoding: 'utf8' },
       (err, stdout) => {
+        lowerPriority(child.pid)
         if (err) {
           // 超时或错误不中断，静默返回 null
           if (!/timed out/i.test(err.message)) {
@@ -169,6 +189,7 @@ export async function getFocusedElement(): Promise<UIElementInfo | null> {
       automationId: String(raw.automationId ?? ''),
       value: String(raw.value ?? ''),
       selectedText: String(raw.selectedText ?? ''),
+      docLength: Math.max(0, Number(raw.docLength ?? 0)),
       processId: Number(raw.processId ?? 0),
       isFocused: true
     }

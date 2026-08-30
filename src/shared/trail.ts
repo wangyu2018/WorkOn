@@ -16,7 +16,24 @@ export function dateKey(ts: number): string {
 }
 
 /** 把一天的 ActivityRecord 合并为 MergedTrail */
+// 同日+同记录尾 → 直接复用上一次结果（78k 记录下每次重建 ~几十 ms，plans:forecast 单次调用要建 8 天）
+const _trailCache = new Map<string, { key: string; trail: MergedTrail }>()
+
 export function buildMergedTrail(records: ActivityRecord[], date: string): MergedTrail {
+  const last = records.length ? records[records.length - 1] : null
+  const cacheKey = records.length + ':' + (last ? last.id + ':' + last.ts : 'empty')
+  const hit = _trailCache.get(date)
+  if (hit && hit.key === cacheKey) return hit.trail
+  const built = buildMergedTrailInner(records, date)
+  _trailCache.set(date, { key: cacheKey, trail: built })
+  if (_trailCache.size > 12) {
+    const oldest = _trailCache.keys().next().value
+    if (oldest !== undefined) _trailCache.delete(oldest)
+  }
+  return built
+}
+
+function buildMergedTrailInner(records: ActivityRecord[], date: string): MergedTrail {
   const sorted = [...records].sort((a, b) => a.ts - b.ts)
   const segments: TrailSegment[] = []
   const screenMinutes: Record<number, number> = {}

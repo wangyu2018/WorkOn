@@ -75,15 +75,30 @@ export class SpatialController {
     return this._docked
   }
 
-  /** 收纳：锁定角色位置，不再响应自动状态切换 */
+  /** 收纳：动画滑向任务栏角落并缩小（随后由 main.ts 隐藏窗口，GPU 归零），
+   *  期间锁定位置不再响应自动状态切换 */
   dock(): void {
     this._docked = true
-    this.restore()
+    this.userPlacedPos = null
+    this.roam.reset(0)
+    const target = { x: this.screenW - 70, y: this.screenH - TASKBAR_HEIGHT - 34 }
+    this.lastFullTransition = performance.now()
+    this.transition = new Transition({
+      kind: 'A',
+      from: { ...this.pos },
+      to: target,
+      fromScale: this.scale,
+      toScale: 0.35,
+      duration: 0.7,
+      screenH: this.screenH
+    })
+    this.boostTransition()
   }
 
   /** 唤出：解除收纳锁，恢复自动跟随 */
   undock(): void {
     this._docked = false
+    this.restore()
   }
 
   constructor(char: VrmCharacter, anim: Animator, micro: MicroBehaviors) {
@@ -222,13 +237,16 @@ export class SpatialController {
 
   /** 状态切换主入口（§16 transitionTo + 底部粘性 + 过渡冲突 + 冷却期 + 缩放锁） */
   transitionTo(name: SpatialStateName, poseOverride?: string, fromPending = false): void {
-    // 收纳锁：dock/undock 通过 restore/dock/undock 直接操作，不走这条路径
-    if (this._docked && !fromPending) return
+    // 收纳锁：收纳期间任何状态切换都不执行（pending 到期也一并作废）
+    if (this._docked) {
+      if (fromPending) this.pendingState = null
+      return
+    }
     if (name === this.current && !poseOverride) {
       // 自愈：状态未变但姿态被残留覆盖（如闭眼姿态卡住不恢复）时，重新应用本状态姿态
       const cfgNow = SPATIAL_STATE_TABLE[name]
       if (cfgNow && this.anim.currentPoseName !== cfgNow.poseName) {
-        this.anim.setPose(cfgNow.poseName, 0.4)
+        this.anim.playState(name, cfgNow.poseName)
       }
       return
     }
@@ -248,14 +266,16 @@ export class SpatialController {
     ) {
       this.current = name
       this.roam.reset(12)
-      this.anim.setPose(poseOverride ?? cfg.poseName, 0.4)
+      if (poseOverride) this.anim.setPose(poseOverride, 0.4)
+      else this.anim.playState(name, cfg.poseName)
       return
     }
 
     // P1 过渡冷却：上次完整过渡开始不到 3s，新状态只切姿态（记入 pending 稍后执行）
     if (!cfg.urgent && !fromPending && performance.now() - this.lastFullTransition < SpatialController.TRANSITION_COOLDOWN) {
       this.pendingState = { name, pose: poseOverride }
-      this.anim.setPose(poseOverride ?? cfg.poseName, 0.4)
+      if (poseOverride) this.anim.setPose(poseOverride, 0.4)
+      else this.anim.playState(name, cfg.poseName)
       return
     }
 
@@ -268,7 +288,8 @@ export class SpatialController {
         // 同层且位置差异小：取消新过渡，只切姿态，避免半途抖动
         this.current = name
         this.roam.reset(12)
-        this.anim.setPose(poseOverride ?? cfg.poseName, 0.4)
+        if (poseOverride) this.anim.setPose(poseOverride, 0.4)
+        else this.anim.playState(name, cfg.poseName)
         return
       }
       // 否则：快速收尾当前过渡再开新过渡
@@ -311,7 +332,8 @@ export class SpatialController {
 
     // 姿态在过渡中段开始混合（放缓：0.5-0.9s，动作更从容）
     const pose = poseOverride ?? cfg.poseName
-    this.anim.setPose(pose, THREE.MathUtils.clamp(dur * 0.5, 0.5, 0.9))
+    if (poseOverride) this.anim.setPose(pose, THREE.MathUtils.clamp(dur * 0.5, 0.5, 0.9))
+    else this.anim.playState(name, cfg.poseName, THREE.MathUtils.clamp(dur * 0.5, 0.5, 0.9))
 
     const render = Z_LAYER_RENDER[cfg.zLayer]
     this.char.setRenderOrder(render.renderOrder)
@@ -333,7 +355,7 @@ export class SpatialController {
       screenH: this.screenH
     })
     this.boostTransition()
-    this.anim.setPose(cfg.poseName, 0.4)
+    this.anim.playState(cfg.name, cfg.poseName)
   }
 
   private resolvePosition(cfg: SpatialStateConfig): Vec2 {
@@ -484,13 +506,14 @@ export class SpatialController {
           this.facing = dx > 0 ? 1 : -1
           this.bobPhase += dt * (upd.mode === 'run' ? 14 : 9)
         }
+        if (this.anim.clipMode) this.anim.stopClip(0.15) // 移动中 clip 会让腿僵住（太空步）
         this.micro.setLocomotion(upd.mode, upd.mode === 'run' ? 1.2 : 1)
       } else {
         this.micro.setLocomotion(null)
         this.bobPhase = 0
         // 到达后回当前状态姿态（仅站姿，无需变体切换）
-        if (this.roam.state !== 'move' && this.anim.currentPoseName !== this.cfg.poseName) {
-          this.anim.setPose(this.cfg.poseName, 0.4)
+        if (this.roam.state !== 'move') {
+          this.anim.playState(this.cfg.name, this.cfg.poseName)
         }
       }
     }

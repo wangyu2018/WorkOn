@@ -21,8 +21,13 @@ const api = {
 
   // 实时状态
   getPresence: () => ipcRenderer.invoke('presence:get'),
+  getRecentRecognition: () => ipcRenderer.invoke('recognition:recent'),
   onPresence: on('presence:update'),
   getDesktop: () => ipcRenderer.invoke('desktop:get'),
+
+  // 天气（wttr.in，按城市名查询）
+  getWeather: (city?: string) => ipcRenderer.invoke('weather:get', city),
+  getWeatherNext: (hours: number, city?: string) => ipcRenderer.invoke('weather:next', hours, city),
 
   // 轨迹 / 日历 / 计划
   getTrail: (date?: string) => ipcRenderer.invoke('trail:get', date),
@@ -30,6 +35,7 @@ const api = {
   assignSegmentPlan: (segStartTs: number, planId: string | null) => ipcRenderer.invoke('trail:assignPlan', segStartTs, planId),
   getSegmentPlans: (date?: string) => ipcRenderer.invoke('trail:getSegmentPlans', date),
   getAppVisuals: () => ipcRenderer.invoke('appVisuals:get'),
+  getPerfStats: () => ipcRenderer.invoke('perf:stats'),
   listEntries: (date: string) => ipcRenderer.invoke('entries:list', date),
   saveEntry: (entry: unknown) => ipcRenderer.invoke('entries:save', entry),
   removeEntry: (id: string) => ipcRenderer.invoke('entries:remove', id),
@@ -62,6 +68,21 @@ const api = {
   getTodos: () => ipcRenderer.invoke('analysis:todos'),
   getTips: () => ipcRenderer.invoke('analysis:tips'),
   askQA: (q: string) => ipcRenderer.invoke('qa:ask', q),
+  askQAWithShots: (q: string, windowMin?: number) => ipcRenderer.invoke('qa:askWithShots', q, windowMin),
+
+  // 动作库 + 积分
+  motionsList: () => ipcRenderer.invoke('motions:list'),
+  motionsData: (id: string) => ipcRenderer.invoke('motions:data', id),
+  motionsSave: (payload: { name: string; duration: number; fps: number; data: unknown; coverDataUrl?: string; cost?: number }) =>
+    ipcRenderer.invoke('motions:save', payload),
+  motionsRemove: (id: string) => ipcRenderer.invoke('motions:remove', id),
+  motionsSetCost: (id: string, cost: number) => ipcRenderer.invoke('motions:setCost', id, cost),
+  motionsRedeem: (id: string) => ipcRenderer.invoke('motions:redeem', id),
+  motionsPlay: (id: string) => ipcRenderer.invoke('motions:play', id),
+  motionStudioOpen: () => ipcRenderer.send('motion-studio:open'),
+  onPetPlayMotion: on('pet:play-motion'),
+  pointsGet: () => ipcRenderer.invoke('points:get'),
+  pointsAdd: (delta: number, reason: string) => ipcRenderer.invoke('points:add', delta, reason),
   askQAStream: (q: string) => ipcRenderer.invoke('qa:askStream', q),
   onAIStreamChunk: on('ai:streamChunk'),
   onAIStreamDone: on('ai:streamDone'),
@@ -98,6 +119,8 @@ const api = {
   petAffection: () => ipcRenderer.invoke('pet:affection'),
   petRestore: () => ipcRenderer.send('pet:restore'),
   onPetRestore: on('pet:restore'),
+  petHide: () => ipcRenderer.send('pet:hide'),
+  onPetUndock: on('pet:undock'),
   petIntroReplay: () => ipcRenderer.send('pet:introReplay'),
   onPetIntroReplay: on('pet:introReplay'),
   onPetSettings: on('pet:settings'),
@@ -113,6 +136,8 @@ const api = {
   onPetStats: on('pet:stats'),
   // VRM 角色上传
   selectVrmFile: () => ipcRenderer.invoke('pet:selectVrm'),
+  vrmPickInspect: () => ipcRenderer.invoke('pet:vrmPickInspect'),
+  vrmApply: (pendingPath: string) => ipcRenderer.invoke('pet:vrmApply', pendingPath),
   resetVrm: () => ipcRenderer.invoke('pet:resetVrm'),
   onReloadVrm: on('pet:reloadVrm'),
   // v3.0 文件夹
@@ -173,6 +198,9 @@ const api = {
   // OCR 资源 / 用户画像
   getOcrStats: () => ipcRenderer.invoke('ocr:stats'),
   clearOcrCache: (keepRecentDays?: number) => ipcRenderer.invoke('ocr:clear', keepRecentDays),
+  exportOcrDataset: () => ipcRenderer.invoke('dev:ocrExport'),
+  runOcrBatch: (limit?: number) => ipcRenderer.invoke('dev:ocrBatch', limit),
+  exportAiPrompts: () => ipcRenderer.invoke('dev:prompts'),
   getUserProfile: () => ipcRenderer.invoke('profile:get'),
   getPrivacyStats: () => ipcRenderer.invoke('privacy:stats'),
   clearAppPrivacy: (appName: string) => ipcRenderer.invoke('privacy:clearApp', appName),
@@ -219,6 +247,7 @@ const api = {
   setDefaultReportTemplate: (id: string) => ipcRenderer.invoke('report:setDefault', id),
   confirmReportEntry: (date: string, entryId: string, patch: unknown, templateId?: string) =>
     ipcRenderer.invoke('report:confirmEntry', date, entryId, patch, templateId),
+  reportPatchesList: (date: string) => ipcRenderer.invoke('report:patches:list', date),
   parseReportTemplate: (raw: string) => ipcRenderer.invoke('report:parseTemplate', raw)
 }
 

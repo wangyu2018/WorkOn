@@ -10,24 +10,33 @@ import { createTray } from './tray'
 import { registerShortcuts, unregisterShortcuts } from './globalShortcut'
 import { registerIpc } from './ipc'
 import { startMonitor } from './monitor'
+import { disposeModelClient } from './recognition/modelClient'
+import { startInputProbe } from './recognition/inputProbe'
+import { addPoints } from './motions'
 import { startIntegration } from './integration'
 import { startOnerAutoSync } from './oner'
 import { autoCleanOcrCache } from './ocr'
 import { bus } from './state'
 import { startAttentionEngine, setPetNotifier } from './attention'
-import { refreshPersona } from './persona'
+import { refreshPersona, getPersona } from './persona'
+import { getWeatherBrief } from './weather'
 import { startOcrCollector } from './report/ocrCollector'
 import { startFolderWatch } from './folderWatcher'
+import { detectHardware } from './hardwareDetect'
+import { stopWinInfoServer } from './winInfo'
 import { presence } from './presence'
 import { genQuestion, analyzeDay, deriveHabits } from './ai'
 import { genPersonaGapQuestion } from './qa/questionGenerator'
 import { aiDevAdvice } from './projects'
-import { listActivities, insertInto, col, updateIn } from './db'
+import { listActivities, listActivitiesRange, insertInto, col, updateIn } from './db'
 import type { UserHabits, PlanItem } from '@shared/types'
+import { WORK_LIKE_STATES } from '@shared/stateMeta'
 import { dateKey, buildMergedTrail } from '@shared/trail'
 import { genId } from '@shared/types'
 
 let quitting = false
+/** 应用启动时间戳（用于周末建议"开机后 1 小时内"判断） */
+const appStartTs = Date.now()
 
 // 父进程（npm/electron-vite 外壳）退出后，stdout 管道断开，
 // console.log 会抛 EPIPE 未捕获异常弹错误框；这里吞掉该错误，不影响应用运行
@@ -156,6 +165,78 @@ function startPeriodicJobs(): void {
       console.warn('[reminder] 检查失败', e)
     }
   }, 30 * 1000)
+
+  // ── 天气提醒：下班提醒 + 周末出行建议（30s 检查一次，日期标记防重复）──
+  // 下班提醒：工作日到 preferredWorkHours.end 时弹「今晚+明天」；周五提前 30 分钟弹
+  // 周末建议：周末开机后 1 小时内弹一次「今天+明天」
+  let lastWeatherRemindKey = ''
+  setInterval(() => {
+    try {
+      const s = getSettings()
+      if (!s.city) return
+      const now = new Date()
+      const d = dateKey(now.getTime())
+      const nowMin = now.getHours() * 60 + now.getMinutes()
+      const day = now.getDay() // 0=周日 6=周六
+      const isWeekend = day === 0 || day === 6
+      const isFriday = day === 5
+
+      // 下班时间（画像可手动维护）
+      const wh = getPersona().preferences.preferredWorkHours
+      const endStr = wh?.end
+      const endMin = endStr ? parseHHMM(endStr) : null
+
+      // 触发条件：工作日到点 / 周五提前 30 分钟 / 周末开机后 1 小时内
+      let shouldFire = false
+      let kind: 'offwork' | 'weekend' = 'offwork'
+      if (isWeekend) {
+        // 周末：开机后 1 小时内弹一次（用启动时间判断）
+        const bootMin = Math.floor((Date.now() - appStartTs) / 60000)
+        if (bootMin <= 60) {
+          shouldFire = true
+          kind = 'weekend'
+        }
+      } else if (endMin != null) {
+        const fireMin = isFriday ? endMin - 30 : endMin
+        if (nowMin >= fireMin && nowMin < fireMin + 5) {
+          shouldFire = true
+          kind = 'offwork'
+        }
+      }
+
+      if (!shouldFire) return
+      const key = `${d}:${kind}`
+      if (key === lastWeatherRemindKey) return
+      lastWeatherRemindKey = key
+
+      void (async () => {
+        const brief = await getWeatherBrief(s.city)
+        if ('error' in brief) return
+        const t = brief.tonight
+        const tm = brief.tomorrow
+        const tonightTxt = t ? `${t.text} ${t.tempC}°C` : '暂无'
+        const msg =
+          kind === 'offwork'
+            ? isFriday
+              ? `周五啦~ 今晚${tonightTxt}，明天${tm.text} ${tm.minC}~${tm.maxC}°C，周末出行记得看天气哦 ☔`
+              : `下班啦~ 今晚${tonightTxt}，明天${tm.text} ${tm.minC}~${tm.maxC}°C，路上注意天气哦 🌤`
+            : `周末好~ 今天${tonightTxt}，明天${tm.text} ${tm.minC}~${tm.maxC}°C，适合出门走走吗？`
+        bus.setPet({ message: msg })
+      })()
+    } catch (e) {
+      console.warn('[weather-remind] 检查失败', e)
+    }
+  }, 30 * 1000)
+}
+
+/** 解析 "HH:MM" 为分钟数（0-1439），非法返回 null */
+function parseHHMM(s: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s.trim())
+  if (!m) return null
+  const h = Number(m[1])
+  const mm = Number(m[2])
+  if (h < 0 || h > 23 || mm < 0 || mm > 59) return null
+  return h * 60 + mm
 }
 
 app.whenReady().then(() => {
@@ -178,10 +259,17 @@ app.whenReady().then(() => {
   setupBusForwarding()
   autoCleanOcrCache() // 按设置周期清理截屏缓存（0=永不）
 
+  // 硬件分级：首次运行/硬件变化时自动定帧率档位与 VRM 模型版本（PowerShell 异步，不阻塞启动）
+  void detectHardware().catch((e) => console.warn('[hardware] 检测失败:', e))
+  // 行为探针（识别二期）：设置开关控制，聚合键鼠计数供识别特征
+  if (getSettings().inputProbeEnabled) startInputProbe()
+
   // 开启动画：独立窗口先播 splash（~8s），主窗口后台加载，播完再亮
+  // 设置「欢迎界面」关闭时跳过 splash，直接亮主窗口
+  const showSplash = getSettings().showSplash !== false
   const splashAt = Date.now()
-  createSplashWindow()
-  createMainWindow({ deferShow: true })
+  if (showSplash) createSplashWindow()
+  createMainWindow({ deferShow: showSplash })
   const ww = createWidgetWindow()
   if (ww && !ww.isDestroyed() && getSettings().widgetVisible) ww.show()
   createTray()
@@ -225,7 +313,7 @@ app.whenReady().then(() => {
       }
       if (getSettings().petEnabled) createPetWindow()
     },
-    Math.max(800, 8300 - (Date.now() - splashAt))
+    showSplash ? Math.max(800, 8300 - (Date.now() - splashAt)) : 0
   )
 
   // 欢迎气泡
@@ -233,6 +321,32 @@ app.whenReady().then(() => {
     bus.setPet({ message: '今天也一起加油吧~', workState: bus.pet.workState })
     sendTo('pet', 'pet:update', bus.pet)
   }, 3000)
+
+  // 积分：每 30 分钟按专注/工作分钟数自动加分（1 分钟 = 1 积分，封顶 30/轮）
+  setInterval(() => {
+    try {
+      const end = Date.now()
+      const start = end - 30 * 60000
+      const recs = listActivitiesRange(start, end).filter(
+        (r) => r.active && WORK_LIKE_STATES.includes(r.state)
+      )
+      let minutes = 0
+      const seen = new Set<number>()
+      for (const r of recs) {
+        const segStart = Math.max(r.startTs ?? r.ts, start)
+        const segEnd = Math.min(r.ts, end)
+        // 双屏并行只记一次：按起始秒去重
+        const secKey = Math.floor(segStart / 1000)
+        if (segEnd <= segStart || seen.has(secKey)) continue
+        seen.add(secKey)
+        minutes += (segEnd - segStart) / 60000
+      }
+      const pts = Math.min(30, Math.round(minutes))
+      if (pts >= 5) addPoints(pts, 'focus')
+    } catch (e) {
+      console.warn('[points] 结算失败', e)
+    }
+  }, 30 * 60 * 1000)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
@@ -251,6 +365,8 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   quitting = true
   unregisterShortcuts()
+  disposeModelClient()
+  stopWinInfoServer()
   flushNow()
   void quitting
 })

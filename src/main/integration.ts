@@ -23,11 +23,15 @@ function broadcast(payload: unknown): void {
   }
 }
 
+let lastSnapshotJson = ''
 function writeSnapshot(): void {
   if (!getSettings().stateSnapshot) return
   try {
+    const json = JSON.stringify(bus.desktopState(), null, 2)
+    if (json === lastSnapshotJson) return // 内容没变不写盘（原为每 5s 无条件同步写）
+    lastSnapshotJson = json
     const file = path.join(app.getPath('userData'), 'state.json')
-    fs.writeFileSync(file, JSON.stringify(bus.desktopState(), null, 2), 'utf-8')
+    fs.writeFileSync(file, json, 'utf-8')
   } catch (e) {
     console.warn('[integration] state.json 写入失败', e)
   }

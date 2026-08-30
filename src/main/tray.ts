@@ -4,7 +4,7 @@
 import { app, Menu, Tray, nativeImage } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import { createMainWindow, toggleWidget, togglePet, sendTo, setWidgetPenetration } from './windows'
+import { createMainWindow, toggleWidget, togglePet, sendTo, setWidgetPenetration, petWindow } from './windows'
 import { getSettings, setSettings } from './settings'
 
 let tray: Tray | null = null
@@ -52,7 +52,14 @@ function buildMenu(): void {
     })
   }
   if (s.petEnabled) {
-    items.push({ label: '桌搭 显/隐', click: () => togglePet() })
+    items.push({
+      label: '桌搭 显/隐',
+      click: () => {
+        const showing = petWindow && !petWindow.isDestroyed() && petWindow.isVisible()
+        togglePet()
+        if (!showing) sendTo('pet', 'pet:undock') // 唤出时解除收纳，回到工作锚点
+      }
+    })
   }
   items.push({ type: 'separator' })
   items.push({

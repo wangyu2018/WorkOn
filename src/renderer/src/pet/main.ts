@@ -6,6 +6,7 @@ import { Stage } from './scene/Stage'
 import { Lighting } from './scene/Lighting'
 import { VrmCharacter } from './character/VrmCharacter'
 import { Animator } from './anim/Animator'
+import { AnimationManager } from './anim/AnimationManager'
 import { MicroBehaviors } from './anim/microBehaviors'
 import { SpatialController } from './spatial/SpatialController'
 import { ParticleSystem } from './fx/particles'
@@ -61,11 +62,42 @@ async function boot(): Promise<void> {
   // ── Phase 2：VRM 加载（期间有占位提示） ──
   // 从设置读取自定义 VRM 路径，无则用默认姵儿
   const s = (await window.api?.getSettings?.()) as { petVrmPath?: string } | undefined
-  const vrmPath = s?.petVrmPath || './vrm/peier.vrm'
-  let char = await VrmCharacter.load(vrmPath).catch(async (err) => {
+  // 默认加载 Draco 压缩版（9.6MB vs 21.9MB），加载时间约减半
+  const vrmPath = s?.petVrmPath || './vrm/peier-compressed.vrm'
+  // DOM 进度条（比 3D sprite 更清晰）：下载 0-85%，解析/归一化 85-100%
+  const progressEl = document.createElement('div')
+  progressEl.id = 'pet-progress'
+  progressEl.style.cssText =
+    'position:fixed;left:50%;bottom:18%;transform:translateX(-50%);width:180px;height:5px;' +
+    'border-radius:3px;background:rgba(140,140,170,0.25);overflow:hidden;z-index:50;pointer-events:none'
+  const barEl = document.createElement('div')
+  barEl.style.cssText = 'height:100%;width:0%;border-radius:3px;background:linear-gradient(90deg,#8B5CF6,#22D3EE);transition:width 0.15s ease'
+  progressEl.appendChild(barEl)
+  document.body.appendChild(progressEl)
+  const reportProgress = (p: number): void => {
+    barEl.style.width = `${Math.round(p * 100)}%`
+  }
+  let char: VrmCharacter
+  try {
+    char = await VrmCharacter.load(vrmPath, reportProgress)
+  } catch (err) {
     console.warn('[pet] VRM 加载失败，回退默认角色:', err)
-    return VrmCharacter.load('./vrm/peier.vrm')
-  })
+    try {
+      char = await VrmCharacter.load('./vrm/peier.vrm', reportProgress)
+    } catch (err2) {
+      console.error('[pet] 默认角色也加载失败:', err2)
+      progressEl.remove()
+      const errEl = document.createElement('div')
+      errEl.style.cssText =
+        'position:fixed;left:50%;top:45%;transform:translateX(-50%);color:#F87171;' +
+        'font:14px "Microsoft YaHei",sans-serif;z-index:60;pointer-events:none'
+      errEl.textContent = '角色加载失败，请重启应用'
+      document.body.appendChild(errEl)
+      return
+    }
+  }
+  reportProgress(1)
+  window.setTimeout(() => progressEl.remove(), 250)
   stage.scene.remove(loadingHint)
   stage.scene.add(char.root)
   char.attachLookTarget(stage.scene)
@@ -86,6 +118,9 @@ async function boot(): Promise<void> {
   // ── Phase 3：子系统组装 ──
   lighting.attachCharacterRoot(char.root)
   const anim = new Animator(char)
+  anim.emotionEnabled = false // 与互动开关默认一致（settings 就绪后由 applyInteractions 覆盖）
+  const animMgr = new AnimationManager(char, anim)
+  anim.attachClipManager(animMgr)
   const micro = new MicroBehaviors(char, anim)
   const spatial = new SpatialController(char, anim, micro)
   const particles = new ParticleSystem(stage.scene)
@@ -98,7 +133,15 @@ async function boot(): Promise<void> {
   // SpringBone 预热：模型加载后弹簧骨（头发/发卡）尚未收敛，
   // 不预热首次可见会看见头发从脚底缓慢上移。先模拟 ~1.5s 物理再亮相。
   stage.scene.updateMatrixWorld(true)
-  for (let i = 0; i < 90; i++) char.update(1 / 60)
+  await new Promise<void>((resolve) => {
+    let done = 0
+    const step = (): void => {
+      for (let i = 0; i < 15 && done < 90; i++, done++) char.update(1 / 60)
+      if (done < 90) requestAnimationFrame(step)
+      else resolve()
+    }
+    requestAnimationFrame(step)
+  })
   // shader 预编译：避免首帧/首次姿态变化时因编译着色器掉帧
   void stage.renderer.compileAsync(stage.scene, stage.camera).catch(() => stage.renderer.compile(stage.scene, stage.camera))
 
@@ -107,7 +150,8 @@ async function boot(): Promise<void> {
     const s0 = (await window.api?.getSettings?.()) as { introPlayed?: boolean } | undefined
     if (!s0?.introPlayed) {
       const { playIntroCG } = await import('./intro')
-      await playIntroCG({ stage, char, anim, micro, spatial, particles, bubble })
+      spatial.setRoamEnabled(false) // CG 期间游荡会拉起 clip 打断分镜
+      await playIntroCG({ stage, char, anim, micro, spatial, particles, bubble, animMgr })
       // CG 后接 3 步气泡引导（小白上手：点我 / 右键聊我 / 拖我）
       const guideLines = ['嗨！以后我就住在这里啦～', '点我一下试试？会有惊喜哦', '右键我可以聊天，拖我可以去任何地方！']
       for (const line of guideLines) {
@@ -139,8 +183,13 @@ async function boot(): Promise<void> {
   const IDLE_DROP = 30
   let idleDropped = false
   let preIdleTier: 'eco' | 'standard' | 'smooth' | 'ultra' = 'smooth'
-  function noteActivity(): void {
+    let deepIdleOn = false
+    function noteActivity(): void {
     idleTimer = 0
+    if (deepIdleOn) {
+      deepIdleOn = false
+      stage.setDeepIdle(false)
+    }
     if (idleDropped) {
       idleDropped = false
       stage.setFpsTier(preIdleTier)
@@ -214,6 +263,24 @@ async function boot(): Promise<void> {
     particles.setDensity(d)
     weather.setDensity(d)
     micro.ecoMode = t === 'eco'
+    animMgr.setEco(t === 'eco') // 10fps 播动画像幻灯片 → eco 回落静态姿态
+  })
+  // 自定义动作库：启动时加载已解锁动作（工坊产出）
+  void (async () => {
+    try {
+      const metas = (await window.api?.motionsList?.()) ?? []
+      for (const m of metas) {
+        if (!m.owned && m.cost > 0) continue
+        const data = await window.api?.motionsData?.(m.id)
+        if (data) animMgr.registerMotionFromData(m.id, data as never)
+      }
+      if (metas.length) console.info(`[pet] 自定义动作已加载 ${metas.length} 个`)
+    } catch { /* 动作库加载失败不阻塞 */ }
+  })()
+  window.api?.onPetPlayMotion?.((p) => {
+    const id = (p as { id: string }).id
+    animMgr.playClip(id, { loop: false, restart: true })
+    noteActivity()
   })
   window.api?.onPetRestore?.(() => spatial.restore())
   // 重播启动 CG（桌搭页入口）
@@ -247,19 +314,11 @@ async function boot(): Promise<void> {
   let downAt = 0
   /** 首次拖拽提示（每次启动只提示一次） */
   let dragTipped = false
-  /** 气泡悬停检测用的鼠标位置 */
-  let lastMouseX = -1
-  let lastMouseY = -1
-  const bubbleRaycaster = new THREE.Raycaster()
-  const bubbleNdc = new THREE.Vector2()
-
   hit.onFrame((r) => {
     hoverPart = r.hit ? r.part : null
   })
 
   window.addEventListener('mousemove', (e) => {
-    lastMouseX = e.clientX
-    lastMouseY = e.clientY
     hit.setMouse(e.clientX, e.clientY)
     spatial.setMouse(e.clientX, e.clientY)
     micro.setGazeTarget(
@@ -294,11 +353,13 @@ async function boot(): Promise<void> {
           const action = btn.dataset.action
           if (action === 'dock') {
             spatial.dock()
-            bubble.show('回来啦~', 2.5, 'character')
+            bubble.show('收好啦，托盘唤我~', 2, 'character')
+            window.setTimeout(() => window.api?.petHide?.(), 950)
           } else if (action === 'undock') {
             spatial.undock()
             bubble.show('来啦！', 2.5, 'character')
           } else if (action === 'pose') {
+            anim.stopClip()
             const currentPose = anim.currentPoseName
             const others = CLICK_POSES.filter((p) => p !== currentPose)
             const pick = others[Math.floor(Math.random() * others.length)]
@@ -503,9 +564,23 @@ async function boot(): Promise<void> {
           // 微表情 + 占位气泡（合并到同一个气泡，不闪跳）
           anim.expressionImpulse({ browRaise: 0.25, squint: 0.12 }, 1.2)
           bubble.show('嗯…让我想想…', 8, 'character')
-          const answer = (await window.api.petAsk(m)) as string
-          // 回答内容直接追加覆盖到同一气泡（不会有双泡重叠）
-          bubble.show(answer, Math.max(6, Math.min(15, answer.length * 0.3)), 'character')
+          let answer = (await window.api.petAsk(m)) as string
+          // 情绪/动作标签解析：[emotion:happy] [action:idle_greet] → 驱动表情与动画
+          const emo = answer.match(/\[emotion:([a-z_]+)\]/i)
+          const act = answer.match(/\[action:([a-z_]+)\]/i)
+          answer = answer.replace(/\s*\[(emotion|action):[a-z_]+\]/gi, '').trim()
+          if (emo) {
+            const map: Record<string, Partial<Parameters<typeof anim.expressionImpulse>[0]>> = {
+              happy: { smile: 0.45 }, sad: { frown: 0.4 }, angry: { browRaise: -0.4, squint: 0.3 },
+              surprised: { eyeWide: 0.6, mouthOpen: 0.35 }, sleepy: { squint: 0.45, eyeOpen: -0.2 },
+              shy: { blush: 0.5, smile: 0.2 }
+            }
+            const imp = map[emo[1].toLowerCase()]
+            if (imp) anim.expressionImpulse(imp, 1.6)
+          }
+          if (act) animMgr.playClip(act[1].toLowerCase(), { loop: false })
+          // 打字机流式显现（LLM 一次性返回时也有逐字说话感）
+          bubble.show(answer || '…', undefined, 'character', { stream: true })
           anim.expressionImpulse({ smile: 0.3 }, 1)
         } catch {
           bubble.show('出了一点小问题，晚点再聊吧~', 4, 'character')
@@ -679,6 +754,7 @@ async function boot(): Promise<void> {
     clickFx.update(dt)
     // 闲置减负：静止（无拖拽/无过渡/无气泡）时 Animator 走收敛快路径（内部判定）
     anim.update(dt)
+    animMgr.update(dt)
     micro.update(dt)
     char.update(dt)
     lighting.update(dt)
@@ -706,6 +782,11 @@ async function boot(): Promise<void> {
         preIdleTier = stage.fpsTier
         stage.setFpsTier('eco')
       }
+      // 深度闲置：120s 零交互 → 1fps（透明置顶窗常驻渲染是持续 GPU/CPU 消耗）
+      if (idleTimer > 120 && !deepIdleOn) {
+        deepIdleOn = true
+        stage.setDeepIdle(true)
+      }
     }
 
     const p = spatial.position
@@ -723,13 +804,6 @@ async function boot(): Promise<void> {
       }
       // P3 气泡可见期间交互锁定（不因闲置被拉走）
       spatial.noteBubbleVisible()
-    }
-
-    // P8 气泡悬停检测：命中则暂停消失计时
-    if (lastMouseX >= 0) {
-      bubbleNdc.set((lastMouseX / window.innerWidth) * 2 - 1, -(lastMouseY / window.innerHeight) * 2 + 1)
-      bubbleRaycaster.setFromCamera(bubbleNdc, stage.camera)
-      bubble.setHovered(bubble.hitTest(bubbleRaycaster))
     }
 
     hit.update(dt)

@@ -14,3 +14,11 @@ assets/rapidocr/ppocr_keys_v1.txt
 assets/rapidocr/rec_*.onnx
 *.traineddata
 src/main/devOcr.ts
+
+# ── 第三批：重资产与本地产物（模型可经镜像重新获取，见 ml/EXPERIMENTS.md） ──
+assets/pose-model/
+ml/models/
+ml/models_noleak/
+screenshots/
+dev-live.log
+src/renderer/public/mediapipe/

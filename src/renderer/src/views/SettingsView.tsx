@@ -3,6 +3,7 @@ import type { AppSettings } from '@shared/types'
 import { useSettingsStore } from '../stores/settingsStore'
 import { Icon } from '../components/Icon'
 import { Toggle } from '../components/Toggle'
+import { PerfPanel } from '../components/PerfPanel'
 
 function WatchedFolders() {
   const [dirs, setDirs] = useState<string[]>([])
@@ -234,6 +235,27 @@ export default function SettingsView() {
   const [aiEnabling, setAiEnabling] = useState(false)
   const [introOpen, setIntroOpen] = useState(false)
   const p = (patchObj: Partial<AppSettings>) => void patch(patchObj)
+  const [devOcrNote, setDevOcrNote] = useState<string | null>(null)
+
+  /** 导出 OCR 数据集（本地） */
+  const exportOcr = async () => {
+    const file = (await window.api.exportOcrDataset?.()) as string | null
+    setDevOcrNote(file ? `已导出：${file}` : '已取消')
+    window.setTimeout(() => setDevOcrNote(null), 6000)
+  }
+  /** 批量 OCR 截图 → 标注集（本地） */
+  const batchOcr = async () => {
+    setDevOcrNote('正在批量 OCR（约每张 2 秒）…')
+    const r = (await window.api.runOcrBatch?.()) as { ok: number; empty: number; total: number; outDir: string } | null
+    setDevOcrNote(r ? `完成：识别成功 ${r.ok}/${r.total}，输出 → ${r.outDir}` : '已取消')
+    window.setTimeout(() => setDevOcrNote(null), 10000)
+  }
+  /** 导出 AI 提示词/规则集（本地） */
+  const exportPrompts = async () => {
+    const file = (await window.api.exportAiPrompts?.()) as string | null
+    setDevOcrNote(file ? `已导出：${file}` : '已取消')
+    window.setTimeout(() => setDevOcrNote(null), 6000)
+  }
 
   /** 启用/停用 AI：开启前先校验连通性（有 Key 且能连上才允许开启） */
   const toggleAI = async (v: boolean): Promise<void> => {
@@ -315,7 +337,7 @@ export default function SettingsView() {
       )}
       {/* 1. 监控 */}
       <Section title="监控" icon="activity">
-        <Row label="计划完成预测" desc="监控/日历时间轴上按计划完成概率三色标注（绿=可完成 橙=可能延迟 红=高风险）">
+        <Row label="计划完成预测（监控页三色标注）" desc="监控/日历时间轴上按计划完成概率三色标注（绿=可完成 橙=可能延迟 红=高风险）">
           <Toggle checked={settings.planForecastEnabled} onChange={(v) => p({ planForecastEnabled: v })} />
         </Row>
         <Row label="会议模式" desc="检测到会议软件时的默认行为">
@@ -477,12 +499,6 @@ export default function SettingsView() {
             ))}
           </div>
         </Row>
-        <Row label="日历分析背景带" desc="日视图叠加你的习惯午休/高效时段底色（数据来自近 7 天习惯画像）">
-          <Toggle checked={settings.calAnalysisBands} onChange={(v) => p({ calAnalysisBands: v })} />
-        </Row>
-        <Row label="动效" desc="开启保留过渡与动画；关闭后全局禁用，界面更省资源、切换更直接">
-          <Toggle checked={settings.animationsEnabled} onChange={(v) => p({ animationsEnabled: v })} />
-        </Row>
       </Section>
 
       {/* Oner 数据同步（能力 + 开关 + 折叠详情） */}
@@ -531,8 +547,73 @@ export default function SettingsView() {
         <Row label="开机自启">
           <Toggle checked={settings.launchAtLogin} onChange={(v) => p({ launchAtLogin: v })} />
         </Row>
-        <Row label="开发者选项" desc="开启后显示桌搭资源占用面板与 AI 提示词三层上下文（调试用）">
+        <Row label="欢迎界面" desc="启动时显示欢迎动画（约 8 秒）。关闭后直接进入主界面，启动更快">
+          <Toggle checked={settings.showSplash} onChange={(v) => p({ showSplash: v })} />
+        </Row>
+        <Row label="动效" desc="开启保留过渡与动画；关闭后全局禁用，界面更省资源、切换更直接">
+          <Toggle checked={settings.animationsEnabled} onChange={(v) => p({ animationsEnabled: v })} />
+        </Row>
+        <Row label="开发者选项" desc="开启后显示性能监控面板与 AI 提示词三层上下文（调试用）">
           <Toggle checked={settings.devMode} onChange={(v) => p({ devMode: v })} />
+        </Row>
+        <Row label="识别引擎" desc="rules=纯规则；shadow=规则出状态、小模型只记账（推荐）；model_first=模型高置信时接管">
+          <div className="flex items-center gap-1.5">
+            {(['rules', 'shadow', 'model_first'] as const).map((m) => (
+              <button
+                key={m}
+                className={`glass-btn !px-2.5 !py-1 !text-[11px] ${settings.recognitionMode === m ? 'primary' : ''}`}
+                onClick={() => p({ recognitionMode: m })}
+              >
+                {m === 'rules' ? '纯规则' : m === 'shadow' ? '影子' : '模型优先'}
+              </button>
+            ))}
+          </div>
+        </Row>
+        <Row label="行为探针" desc="全局键鼠聚合计数（只记次数与快捷键组合，不记录任何键入内容），供小模型识别真实行为。关闭后识别回退占位特征">
+          <Toggle checked={settings.inputProbeEnabled} onChange={(v) => p({ inputProbeEnabled: v })} />
+        </Row>
+        {settings.devMode ? <PerfPanel /> : null}
+        {settings.devMode ? (
+          <Row label="OCR 数据集（开发者）" desc="本地导出截图/结构化数据，或批量 OCR 生成标注集（数据不出本机）">
+            <div className="flex items-center gap-2">
+              <button className="glass-btn !px-2.5 !py-1 !text-[11px]" onClick={() => void exportOcr()} title="导出结构化快照 + 截屏清单">
+                <Icon name="folder" size={12} /> 导出数据
+              </button>
+              <button className="glass-btn !px-2.5 !py-1 !text-[11px]" onClick={() => void batchOcr()} title="对全部截屏批量 RapidOCR 生成标注集">
+                <Icon name="scan" size={12} /> 批量 OCR 标注
+              </button>
+              <button className="glass-btn !px-2.5 !py-1 !text-[11px]" onClick={() => void exportPrompts()} title="导出 AI 提示词/规则集，用于训练本地小模型">
+                <Icon name="brain" size={12} /> 导出提示词集
+              </button>
+            </div>
+            {devOcrNote ? <div className="anim-fade-in mt-1 text-[11px] text-neon-green">{devOcrNote}</div> : null}
+          </Row>
+        ) : null}
+      </Section>
+
+      {/* v3.2 天气 */}
+      <Section title="天气" icon="activity">
+        <Row label="启用天气" desc="右上角显示当前天气与未来趋势，下班/周末自动提醒（按下方城市查询天气（不使用定位））">
+          <Toggle checked={settings.weatherEnabled !== false} onChange={(v) => p({ weatherEnabled: v })} />
+        </Row>
+        <Row label="和风 API Key" desc="和风天气密钥，在 console.qweather.com 申请，仅存本地">
+          <TextSetting password value={settings.weatherApiKey ?? ''} placeholder="和风天气 Key" onCommit={(v) => p({ weatherApiKey: v })} />
+        </Row>
+        <Row label="和风 API Host" desc="控制台设置页的专属域名，形如 xxxxx.qweatherapi.com">
+          <TextSetting value={settings.weatherApiHost ?? ''} placeholder="xxxxx.qweatherapi.com" onCommit={(v) => p({ weatherApiHost: v })} />
+        </Row>
+        <Row label="显示时间范围" desc="右上角天气图标展示未来几小时的趋势，有雨时优先显示降雨">
+          <div className="flex gap-1">
+            {[3, 6, 12].map((h) => (
+              <button
+                key={h}
+                onClick={() => p({ weatherHours: h })}
+                className={`rounded-md px-2.5 py-1 text-[11px] transition-colors ${(settings.weatherHours ?? 3) === h ? 'bg-neon-cyan/20 text-neon-cyan' : 'bg-white/[0.05] text-slate-400 hover:bg-white/[0.1]'}`}
+              >
+                {h}h
+              </button>
+            ))}
+          </div>
         </Row>
       </Section>
 

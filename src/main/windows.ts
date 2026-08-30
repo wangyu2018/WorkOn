@@ -107,6 +107,16 @@ export function createMainWindow(opts?: { deferShow?: boolean }): BrowserWindow 
     void shell.openExternal(url)
     return { action: 'deny' }
   })
+  // 渲染层错误转发到主进程日志（定位白屏/黑屏问题）
+  mainWindow.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+    if (level >= 2) console.error(`[renderer] ${message} (${sourceId}:${line})`)
+  })
+  mainWindow.webContents.on('render-process-gone', (_e, d) => {
+    console.error(`[renderer-gone] ${d.reason} exitCode=${d.exitCode}`)
+  })
+  mainWindow.webContents.on('preload-error', (_e, p, err) => {
+    console.error('[preload-error]', p, err)
+  })
   load(mainWindow, 'index')
   return mainWindow
 }
@@ -183,6 +193,35 @@ export function createWidgetWindow(): BrowserWindow {
   widgetPenetration = !!s.widgetPenetration
   if (widgetPenetration) widgetWindow.setIgnoreMouseEvents(true)
   return widgetWindow
+}
+
+/** 动作工坊窗口（动作录制/预览/入库） */
+export function createMotionWindow(): BrowserWindow {
+  const existing = BrowserWindow.getAllWindows().find((w) => w.title === 'WorkOn Motion')
+  if (existing) {
+    existing.show()
+    existing.focus()
+    return existing
+  }
+  const win = new BrowserWindow({
+    width: 1020,
+    height: 760,
+    minWidth: 880,
+    minHeight: 640,
+    show: false,
+    autoHideMenuBar: true,
+    backgroundColor: '#0B1220',
+    title: 'WorkOn Motion',
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false
+    }
+  })
+  win.once('ready-to-show', () => win.show())
+  load(win, 'motion')
+  return win
 }
 
 /** 桌宠窗口：全屏透明 overlay（方案B：置顶 + 区域点击穿透） */

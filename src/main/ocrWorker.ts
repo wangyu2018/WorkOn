@@ -3,7 +3,7 @@
  * 支持 Tesseract.js（默认回退）和 RapidOCR-json（5x 提速）
  * 仅在 deepMode 开启时运行，变化驱动采样 + 每应用自适应频率
  */
-import { desktopCapturer, app } from 'electron'
+import { desktopCapturer, app, powerMonitor } from 'electron'
 import sharp from 'sharp'
 import fs from 'fs'
 import path from 'path'
@@ -13,7 +13,7 @@ import { getActiveEngine, recognizeWithRapidOCR } from './ocrEngine'
 import type { WorkState } from '@shared/types'
 
 // v2.9 报表 OCR 采集订阅：每次 OCR 产出文本行时广播给订阅者（ocrCollector 落库结构化快照）
-export type OcrLinesListener = (lines: string[], app: string, state: WorkState) => void
+export type OcrLinesListener = (lines: string[], app: string, state: WorkState, shotFile: string) => void
 const ocrLinesListeners = new Set<OcrLinesListener>()
 
 /** 订阅 OCR 文本产出；返回取消订阅函数 */
@@ -53,6 +53,10 @@ function shotsDir(): string {
   return path.join(app.getPath('userData'), 'screenshots')
 }
 
+/** 最近一次截图落盘路径（runOcr 广播给 ocrShots 索引用） */
+let lastShotFile: string | null = null
+const PNG_FILE_RE = /\.(png|jpg)$/
+
 /** 从桌面截图提取文字关键词 */
 export async function ocrScreen(): Promise<string[]> {
   try {
@@ -79,14 +83,29 @@ export async function ocrScreen(): Promise<string[]> {
       } else {
         fs.writeFileSync(file, png)
       }
-      // 只保留最近 N 张（缓存上限可配）
+      lastShotFile = file
+      // 保留策略（P0 按时间为主）：超过 ocrCleanupDays 天（0=永不）删除；
+      // 张数上限仅作兜底（防极端高频轮写撑爆磁盘）
+      const days = Math.max(0, getSettings().ocrCleanupDays ?? 14)
       const limit = Math.max(50, getSettings().ocrCacheLimit || 200)
-      const files = fs.readdirSync(dir).filter((f) => /\.(png|jpg)$/.test(f)).sort()
-      if (files.length > limit) {
-        for (const f of files.slice(0, files.length - limit)) {
-          try { fs.unlinkSync(path.join(dir, f)) } catch { /* ignore */ }
+      const files = fs.readdirSync(dir).filter((f) => PNG_FILE_RE.test(f)).sort()
+      const cutoff = days > 0 ? Date.now() - days * 86400000 : 0
+      let removed = 0
+      for (let i = 0; i < files.length - limit; i++, removed++) {
+        try { fs.unlinkSync(path.join(dir, files[i])) } catch { /* ignore */ }
+      }
+      if (cutoff > 0) {
+        for (const f of files) {
+          try {
+            const st = fs.statSync(path.join(dir, f))
+            if (st.mtimeMs < cutoff) {
+              fs.unlinkSync(path.join(dir, f))
+              removed++
+            }
+          } catch { /* ignore */ }
         }
       }
+      if (removed > 0 && !fs.existsSync(file)) lastShotFile = null
     } catch { /* 落盘失败不影响 OCR */ }
 
     // 缩小 + 灰度化（OCR 更快更准）
@@ -181,11 +200,13 @@ let lastOcrSig = ''            // 最近一次前台窗口签名（app|title）�
 let lastOcrAt = 0              // 最近一次真正执行 OCR 的时间戳，用于防抖节流
 let lastShotHash = ''          // 最近一次屏幕感知哈希，用于画面内容变化检测
 const OCR_MIN_INTERVAL = 1500  // 两次 OCR 之间最小间隔，防滚动抖动触发 OCR 风暴
+const OCR_ACTIVE_SKIP_SEC = 8  // 用户活跃（键鼠空闲 < 8s）时连轻量截屏都跳过：
+                               // desktopCapturer 抓屏 50-200ms/次，是周期性卡顿鼠标的最大元凶
 const HASH_DIM = 8             // 感知哈希维度 8x8 = 64bit
 const HASH_CHANGE_THRESHOLD = 5 // 64bit 中差异位数 >= 该值视为画面变化
 // —— P1 自适应频率 ——
-const DELAY_ACTIVE_MS = 1000   // 前台 app 高频变化时探测间隔（高帧率）
-const DELAY_IDLE_MS = 8000     // 前台 app 稳定时探测间隔（低帧率）
+const DELAY_ACTIVE_MS = 2500   // 前台 app 高频变化时探测间隔
+const DELAY_IDLE_MS = 15000    // 前台 app 稳定时探测间隔
 const APP_ACTIVITY_ALPHA = 0.2 // 活跃度 EMA 系数（0~1，越大越快学习）
 const appActivity: Record<string, number> = {}  // 应用变化活跃度 EMA，0~1，默认 0.5（中性）
 
@@ -235,6 +256,13 @@ function nextPollDelay(): number {
 async function detectAndMaybeOcr(): Promise<void> {
   if (ocrRunning) return
   if (presence.excludedActive) { lastShotHash = ''; return }
+  // 性能关键：用户活跃操作时（键鼠 < 5s）连轻量截屏都跳过——
+  // desktopCapturer 抓屏一次 50-200ms，活跃期每 1s 一次就是"鼠标每隔几秒卡一下"的元凶。
+  // 用户停下后探测恢复，画面变化的补录由窗口签名兜底。
+  if (powerMonitor.getSystemIdleTime() < OCR_ACTIVE_SKIP_SEC) {
+    lastShotHash = ''
+    return
+  }
   const snap = presence.getSnapshot()
   const main = snap.screens.find((s) => s.screen === snap.mainScreen)
   const sig = main ? `${main.app}|${main.title}` : ''
@@ -250,6 +278,9 @@ async function detectAndMaybeOcr(): Promise<void> {
   appActivity[app] = appEma(appActivity[app], hit)
   if (!windowChanged && !hashChanged) return
   if (Date.now() - lastOcrAt < OCR_MIN_INTERVAL) return
+  // 性能保护：用户正在活跃操作（键鼠 < 3s）时跳过 OCR 识别，避免截屏+识别抢占 CPU 导致卡顿；
+  // 仅保留轻量探测，待用户空闲后再补做备份。既保流畅又不丢备份。
+  if (powerMonitor.getSystemIdleTime() < OCR_ACTIVE_SKIP_SEC) return
   void runOcr()
 }
 
@@ -294,7 +325,7 @@ async function runOcr(): Promise<void> {
       const main = snap.screens.find((s) => s.screen === snap.mainScreen)
       for (const cb of ocrLinesListeners) {
         try {
-          cb(lines, main?.app ?? '', snap.state)
+          cb(lines, main?.app ?? '', snap.state, lastShotFile ?? '')
         } catch { /* ignore */ }
       }
     }

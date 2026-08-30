@@ -20,6 +20,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/renderer/index.html'),
+          motion: resolve(__dirname, 'src/renderer/motion.html'),
           pet: resolve(__dirname, 'src/renderer/pet.html'),
           widget: resolve(__dirname, 'src/renderer/widget.html'),
           vrmPreview: resolve(__dirname, 'src/renderer/vrm-preview.html')

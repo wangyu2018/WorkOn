@@ -794,7 +794,8 @@ export async function askWithContext(
   question: string,
   analysis: UserAnalysis | null,
   trail: MergedTrail | null,
-  habits?: UserHabits | null
+  habits?: UserHabits | null,
+  screenContext?: string
 ): Promise<{ content: string | null; references: ProfileReference[] }> {
   insertInto<QAMessage>('qa', { id: genId('qa'), role: 'user', content: question, ts: Date.now() })
   // v2.7：画像引用经脱敏网关取数；LLM 成功/规则回退都带 references（system prompt 已注入画像）
@@ -809,6 +810,7 @@ export async function askWithContext(
   const recentQA = col<QAMessage>('qa').slice(-6)
   const llm = await chatWithToolLoop([
     { role: 'system', content: buildSystemPrompt(analysis, habits, bus.pet.intimacy) },
+    ...(screenContext ? [{ role: 'user' as const, content: screenContext }] : []),
     ...(facts ? [{ role: 'user' as const, content: `（当日事实）${JSON.stringify(facts)}` }] : []),
     ...(confirmed.length
       ? [{ role: 'user' as const, content: `（已确认偏好）${confirmed.map((f) => `${f.question}→是`).join('；')}` }]
@@ -832,7 +834,8 @@ export async function askWithContextStream(
   trail: MergedTrail | null,
   onChunk: StreamCallback,
   onToolCall?: (toolName: string) => void,
-  habits?: UserHabits | null
+  habits?: UserHabits | null,
+  screenContext?: string
 ): Promise<{ content: string; references: ProfileReference[] }> {
   insertInto<QAMessage>('qa', { id: genId('qa'), role: 'user', content: question, ts: Date.now() })
   let references: ProfileReference[] = []
@@ -846,6 +849,7 @@ export async function askWithContextStream(
   const llm = await chatWithToolLoopStream(
     [
       { role: 'system', content: buildSystemPrompt(analysis, habits, bus.pet.intimacy) },
+      ...(screenContext ? [{ role: 'user' as const, content: screenContext }] : []),
       ...(facts ? [{ role: 'user' as const, content: `（当日事实）${JSON.stringify(facts)}` }] : []),
       ...(confirmed.length
         ? [{ role: 'user' as const, content: `（已确认偏好）${confirmed.map((f) => `${f.question}→是`).join('；')}` }]
@@ -941,7 +945,8 @@ export async function petAskShort(question: string, habits?: UserHabits | null):
           '工作相关问题给实用建议；闲聊就陪她聊。' +
           '你可以通过工具查看用户当前状态、帮用户添加备忘、显示气泡消息。' +
           '用户问"我在干嘛"时调用 get_presence，说"帮我记"时调用 add_memo。' +
-          '天气、新闻、股价等实时问题，可爱地说明"我查不了实时信息哦"。' +
+          '天气问题请调用 get_weather 工具查询（默认查设置中的城市）；新闻、股价等其他实时问题，可爱地说明"我查不了实时信息哦"。' +
+          (s.city ? `用户所在城市：${s.city}。` : '') +
           `你和用户的亲密度 ${bus.pet.intimacy}/5，${bus.pet.intimacy >= 3 ? '可以亲昵一点' : '礼貌一点'}。` +
           (habits?.preferredWorkHours ? `用户偏好工作时段：${habits.preferredWorkHours}。` : '') +
           (habits?.lunchTime ? `通常 ${habits.lunchTime} 午休。` : '') +

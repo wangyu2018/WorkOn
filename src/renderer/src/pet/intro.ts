@@ -21,6 +21,7 @@ interface IntroDeps {
   spatial: SpatialController
   particles: ParticleSystem
   bubble: Bubble
+  animMgr?: { update(dt: number): void } | null
 }
 
 const CAPTIONS = [
@@ -31,7 +32,7 @@ const CAPTIONS = [
 ]
 
 export async function playIntroCG(deps: IntroDeps): Promise<void> {
-  const { stage, char, anim, micro, spatial, particles, bubble } = deps
+  const { stage, char, anim, micro, spatial, particles, bubble, animMgr } = deps
   let skipped = false
 
   // ── DOM 覆盖层：左侧能力卡 + 顶部 logo + 底部进度条 + 跳过按钮 ──
@@ -74,6 +75,7 @@ export async function playIntroCG(deps: IntroDeps): Promise<void> {
   const drive = (dt: number): void => {
     spatial.update(dt)
     anim.update(dt)
+    animMgr?.update(dt) // CG 期间若 clip 被拉起，mixer 不喂会僵在首帧
     micro.update(dt)
     char.update(dt)
     const p = spatial.position
@@ -99,12 +101,13 @@ export async function playIntroCG(deps: IntroDeps): Promise<void> {
     }
     char.setGlobalOpacity(1)
 
-    // 分镜 3：挥手问候（2.2 → 3.4s）
+    // 分镜 3：挥手问候（2.2 → 4.4s）
+    // 保持自然站姿，由 triggerWave 从下垂手臂连续挥手（抬起→摆动数次→放下），动作更完整流畅
     if (!skipped) {
-      anim.setPose('stand_greet', 0.5)
-      micro.triggerWave()
+      anim.setPose('stand_idle', 0.3)
+      micro.triggerWave(2.2)
       bubble.show('你好呀，我是姵儿！', 2.4, 'character')
-      await waitS(1200)
+      await waitS(2200)
     }
 
     // 分镜 4-6：能力卡依次展示（3.4 → 6.4s）

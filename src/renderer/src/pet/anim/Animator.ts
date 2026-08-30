@@ -13,6 +13,7 @@ import {
   type Expression
 } from '../character/expression'
 import { DEFAULT_HIPS_Y } from '../character/VrmCharacter'
+import type { SpatialStateName } from '../spatial/stateTable'
 
 const D2R = THREE.MathUtils.degToRad
 
@@ -70,15 +71,58 @@ export class Animator {
   currentPoseName = 'stand_idle'
   /** 表情反馈总开关（互动开关：关闭后表情脉冲/状态表情不再注入，姿态自带表情除外） */
   emotionEnabled = true
+  /**
+   * clip 模式（AnimationManager 播放 VRMA/程序化动画时置位）：
+   * 姿态与加性骨骼写入全部挂起（mixer 接管同批骨骼），表情/眨眼/视线照常
+   */
+  clipMode = false
+  /** 动画管理器（可选回接：playState 按空间态优先选 clip） */
+  private clipMgr: { hasStateClip(s: SpatialStateName): boolean; playForState(s: SpatialStateName, restart?: boolean): boolean; stop(fade?: number): void } | null = null
 
   constructor(char: VrmCharacter) {
     this.char = char
   }
 
-  /** 切换姿态（0.3-0.5s 混合） */
+  /** 接入动画管理器（main.ts 装配时调用） */
+  attachClipManager(mgr: NonNullable<Animator['clipMgr']>): void {
+    this.clipMgr = mgr
+  }
+
+  /**
+   * 空间态动作入口：优先播该状态的 clip（crossFade），
+   * 无 clip（eco/未映射）→ 停掉当前 clip 后回落静态姿态
+   */
+  playState(state: SpatialStateName, poseName: string, duration = 0.4): void {
+    if (this.clipMgr?.playForState(state)) {
+      // 关键：clip 只驱动骨骼不携带表情。若不重置表情，上一状态（如睡觉姿态）的
+      // 闭眼表情会永久残留——这就是"眼睛睁不开"的根因。切 clip 时平滑到目标状态
+      // 基础姿态的表情（睡觉=闭眼、其余=中性开眼），与旧 setPose 的行为对齐。
+      const pose = POSES[poseName] ?? DEFAULT_POSE
+      // 同步姿态簿记：退出 clip（eco/stop）时 Animator 从该基线混合，不做过期快照跳变
+      this.currentPoseName = poseName
+      this.toPose = pose
+      this.fromPose = pose
+      this.poseT = 1
+      this.poseDur = 0.4
+      this.hipsFrom = this.hipsTo = pose.hipsY ?? DEFAULT_HIPS_Y
+      const expr = { ...cloneExpression(NEUTRAL_EXPRESSION), ...pose.expression }
+      this.setPoseExpression(expr, 0.6)
+      return
+    }
+    this.clipMgr?.stop(0.2)
+    this.setPose(poseName, duration)
+  }
+
+  /** 手动姿态覆盖（快捷栏换动作等）前调用：停掉正在播的 clip，否则 mixer 会盖回来 */
+  stopClip(fade = 0.2): void {
+    this.clipMgr?.stop(fade)
+  }
+
+  /** 切换姿态（0.3-0.5s 混合）；若 clip 正在播则先停，否则会被 mixer 每帧覆盖 */
   setPose(name: string, duration = 0.4): void {
     const pose = POSES[name]
     if (!pose) return
+    if (this.clipMode) this.clipMgr?.stop(0.15)
     if (this.currentPoseName !== name) console.info(`[anim] setPose ${this.currentPoseName} → ${name} (${duration.toFixed(2)}s)`)
     this.fromPose = this.snapshotCurrentPose()
     this.toPose = pose
@@ -115,8 +159,9 @@ export class Animator {
     this.exprImpulses.push({ delta, t: 0, dur })
   }
 
-  /** 加性角度偏移（度），每帧由微行为/行走/拖拽写入 */
+  /** 加性角度偏移（度），每帧由微行为/行走/拖拽写入；clip 模式下忽略（mixer 接管骨骼） */
   add(bone: string, x: number, y = 0, z = 0): void {
+    if (this.clipMode) return
     let v = this.additive.get(bone)
     if (!v) {
       v = new THREE.Vector3()
@@ -130,6 +175,14 @@ export class Animator {
   private poseValue(pose: PoseEntry, bone: BoneName): THREE.Vector3 {
     const e = pose.bones[bone] ?? DEFAULT_POSE.bones[bone] ?? [0, 0, 0]
     return new THREE.Vector3(e[0], e[1], e[2])
+  }
+
+  /** 写骨骼旋转：rest（模型绑定姿态）⊗ 姿态欧拉 —— A-pose 模型自动补偿 */
+  private writeBoneRot(bone: string, x: number, y: number, z: number): void {
+    const node = this.char.bone(bone)
+    _e.set(D2R(x), D2R(y), D2R(z), 'XYZ')
+    _q.setFromEuler(_e)
+    node.quaternion.copy(this.char.restQuatOf(bone)).multiply(_q)
   }
 
   private snapshotCurrentPose(): PoseEntry {
@@ -153,19 +206,38 @@ export class Animator {
   }
 
   update(dt: number): void {
+    this.poseT += dt / this.poseDur
+    this.exprT += dt / this.exprDur
+
+    // clip 模式：骨骼由 AnimationMixer 接管，这里只推进表情混合
+    if (this.clipMode) {
+      this.additive.clear() // 防止退出 clip 首帧消费进 clip 前的陈旧偏移
+      const et = this.ease(this.exprT)
+      const expr = lerpExpression(this.fromExpr, this.toExpr, et)
+      this.exprImpulses = this.exprImpulses.filter((imp) => {
+        imp.t += dt
+        if (imp.t >= imp.dur) return false
+        const env = Math.sin((imp.t / imp.dur) * Math.PI)
+        for (const [k, v] of Object.entries(imp.delta)) {
+          const key = k as keyof Expression
+          expr[key] = THREE.MathUtils.clamp(expr[key] + (v ?? 0) * env, -1, 1.5)
+        }
+        return true
+      })
+      this.char.face.apply(expr)
+      return
+    }
+
     // 混合已收敛且本帧无加性偏移 → 直接写目标姿态，跳过 lerp 重算（闲置减负）
     const poseDone = this.poseT >= 1
     const noAdditive = this.additive.size === 0
-    this.poseT += dt / this.poseDur
-    this.exprT += dt / this.exprDur
     const pt = this.ease(this.poseT)
 
     // 姿态混合 + 加性叠加
     for (const b of BLEND_BONES) {
-      const node = this.char.bone(b)
       if (poseDone && noAdditive) {
         const c = this.poseValue(this.toPose, b)
-        node.rotation.set(D2R(c.x), D2R(c.y), D2R(c.z))
+        this.writeBoneRot(b, c.x, c.y, c.z)
         continue
       }
       const a = this.poseValue(this.fromPose, b)
@@ -174,7 +246,7 @@ export class Animator {
       const x = a.x + (c.x - a.x) * pt + (add?.x ?? 0)
       const y = a.y + (c.y - a.y) * pt + (add?.y ?? 0)
       const z = a.z + (c.z - a.z) * pt + (add?.z ?? 0)
-      node.rotation.set(D2R(x), D2R(y), D2R(z))
+      this.writeBoneRot(b, x, y, z)
     }
     this.char.bone('hips').position.y = this.currentHipsY()
     this.additive.clear()
@@ -195,3 +267,6 @@ export class Animator {
     this.char.face.apply(expr)
   }
 }
+
+const _e = new THREE.Euler()
+const _q = new THREE.Quaternion()

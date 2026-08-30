@@ -18,6 +18,9 @@ export interface PresenceSample {
   ts: number
   app: string
   title: string
+  /** 识别结果直传（recognition 决策层产出；缺省时 presence 内部回退规则表） */
+  appName?: string
+  state?: WorkState
   screen: number
   active: boolean
   idleSec: number
@@ -60,7 +63,10 @@ class PresenceEngine extends EventEmitter {
   /** 推入一轮采样（monitor 调用）。mediaSticky: 该屏样本来自媒体类应用 */
   push(sample: PresenceSample): PresenceSnapshot {
     const { screen, ts } = sample
-    const identified = identifyApp(sample.app, sample.title)
+    const fallbackId = identifyApp(sample.app, sample.title)
+    const identified = sample.state
+      ? { appName: sample.appName || fallbackId.appName, state: sample.state }
+      : fallbackId
     const isMediaApp = /^(Music|Video|VideoSite)$/.test(identified.appName)
 
     let sp = this.screens.get(screen)

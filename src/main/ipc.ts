@@ -5,14 +5,23 @@ import { ipcMain, dialog, app } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import type {
-  AppSettings, PlanItem, TimeEntry, UserFeedback, CorrectionRule,
-  ActivityCorrection, PetState, PlanStatus
+  AppSettings,
+  PlanItem,
+  TimeEntry,
+  UserFeedback,
+  CorrectionRule,
+  ActivityCorrection,
+  PetState,
+  PlanStatus,
+  ReportEntryPatch
 } from '@shared/types'
 import { genId } from '@shared/types'
 import { dateKey, buildMergedTrail } from '@shared/trail'
 import { planVsActual, forecastPlan, BUILTIN_CATEGORIES } from '@shared/planAnalysis'
 import { getSettings, setSettings } from './settings'
+import { getWeather, getWeatherNextHours } from './weather'
 import { getAllAppVisuals } from './appVisuals'
+import { buildDevDataset, buildDevOcrBatch, buildDevPrompts } from './devOcr'
 import {
   listProjects, saveProject, removeProject, listTasks, saveTask, removeTask,
   aiBreakdown, linkAppToProject, projectLinkedApps, projectTimeForTrail, projectLinks, dayProjectLinks,
@@ -20,6 +29,7 @@ import {
 } from './projects'
 import {
   col, insertInto, updateIn, removeFrom, listActivities, listActivitiesRange, deleteActivitiesByApp,
+  listRecentRecognitionLogs,
   updateActivityTitleByStartTs
 } from './db'
 import { presence } from './presence'
@@ -30,9 +40,11 @@ import {
   aggregateFacts, buildSystemPrompt, selectModel
 } from './ai'
 import { onerPull, onerPushStatus, startOnerAutoSync } from './oner'
-import { restartMonitor, PRIVACY_ALIASES } from './monitor'
+import { restartMonitor, PRIVACY_ALIASES, getMonitorPerf } from './monitor'
+import { startInputProbe, stopInputProbe } from './recognition/inputProbe'
 import { startIntegration } from './integration'
 import { getOcrStorageStats, clearOcrCache } from './ocr'
+import { startOcr, stopOcr } from './ocrWorker'
 import { startFolderWatch, updateFolders, scanFolders, getWatchDirs } from './folderWatcher'
 import { saveWorkChain } from './qa/questionGenerator'
 import { refreshTray, syncTrayFromSettings } from './tray'
@@ -51,6 +63,12 @@ import {
 } from './windows'
 import type { UserAnalysis, MergedTrail, CustomCategory, UserHabits, Achievement, UserType, ReportTemplate, CategoryInference, SegmentPlanLink } from '@shared/types'
 import { generateReport, generateWeeklyReport } from './report/engine'
+import { screenContextForWindow } from './report/ocrCollector'
+import {
+  listMotions, getMotionData, saveMotion, removeMotion, setMotionCost, redeemMotion,
+  getPoints, addPoints
+} from './motions'
+import { createMotionWindow } from './windows'
 import { listTemplates } from './report/templates'
 import { parseUserTemplate } from './report/templateParser'
 
@@ -81,6 +99,19 @@ export function registerIpc(): void {
     // 后端校验：无 API Key 不允许启用 AI（前端提示可能被绕过，这里兜底）
     if (patch.aiEnabled && !next.aiApiKey) {
       next = setSettings({ aiEnabled: false })
+    }
+    // 用户手动改帧率档位 → 硬件分级停止自动接管档位
+    if (patch.petFpsTier !== undefined) setSettings({ petFpsTierAuto: false })
+    // 行为探针开关即时生效
+    if (patch.inputProbeEnabled !== undefined) {
+      if (patch.inputProbeEnabled) startInputProbe()
+      else stopInputProbe()
+    }
+    // 性能模式开关：即时启停屏幕 OCR 采集（最大 CPU 来源），并重启监控应用门控
+    if (patch.performanceMode !== undefined) {
+      if (patch.performanceMode) stopOcr()
+      else if (getSettings().deepMode) startOcr()
+      restartMonitor()
     }
     if (patch.monitorInterval || patch.monitorSmart !== undefined) restartMonitor()
     if (patch.deepMode !== undefined) restartMonitor()
@@ -134,7 +165,12 @@ export function registerIpc(): void {
 
   // ── 实时状态 ──
   ipcMain.handle('presence:get', () => presence.getSnapshot())
+  ipcMain.handle('recognition:recent', () => listRecentRecognitionLogs(20))
   ipcMain.handle('desktop:get', () => bus.desktopState())
+
+  // ── 天气（wttr.in，按城市名查询，本地维护城市）──
+  ipcMain.handle('weather:get', (_e, city?: string) => getWeather(city))
+  ipcMain.handle('weather:next', (_e, hours: number, city?: string) => getWeatherNextHours(city, hours))
 
   // ── 轨迹 ──
   ipcMain.handle('trail:get', (_e, date?: string) => {
@@ -148,9 +184,9 @@ export function registerIpc(): void {
     return updated ? { success: true } : { success: false }
   })
 
-  ipcMain.handle('trail:assignPlan', (_e, segStartTs: number, planId: string | null) => {
+  ipcMain.handle('trail:assignPlan', (_e, segStartTs: number, planId: string | null, app?: string) => {
     const date = dateKey(segStartTs)
-    const id = `${date}:${segStartTs}`
+    const id = `${date}:${segStartTs}:${app ?? ''}`
     if (planId) {
       const existing = col<SegmentPlanLink>('segmentPlans').find((x) => x.id === id)
       if (existing) updateIn<SegmentPlanLink>('segmentPlans', id, { planId })
@@ -186,7 +222,12 @@ export function registerIpc(): void {
       ...plan, id: genId('plan')
     } as PlanItem)
   })
-  ipcMain.handle('plans:remove', (_e, id: string) => removeFrom('plans', id))
+  ipcMain.handle('plans:remove', (_e, id: string) => {
+    // 级联清理段→计划关联：孤儿关联会让时间轴上的活动段凭空消失
+    const links = col<SegmentPlanLink>('segmentPlans').filter((x) => x.planId === id)
+    for (const l of links) removeFrom('segmentPlans', l.id)
+    return removeFrom('plans', id)
+  })
   ipcMain.handle('plans:setStatus', async (_e, id: string, status: PlanStatus) => {
     const updated = updateIn<PlanItem>('plans', id, { status })
     if (updated && updated.source === 'oner') await onerPushStatus(updated)
@@ -215,6 +256,62 @@ export function registerIpc(): void {
   ipcMain.handle('projects:aiReview', (_e, projectId: string, trailMinutes: number) => aiReview(String(projectId), Number(trailMinutes) || 0))
   ipcMain.handle('projects:aiDevAdvice', (_e, ctx) => aiDevAdvice(ctx))
 
+  // ── 开发者性能监控 ──
+  ipcMain.handle('perf:stats', () => {
+    const metrics = app.getAppMetrics().map((m) => ({
+      pid: m.pid,
+      type: m.type,
+      cpu: Math.round(m.cpu.percentCPUUsage),
+      memoryMB: Math.round((m.memory.workingSetSize ?? 0) / 1048576),
+      privateMB: Math.round((m.memory.privateBytes ?? 0) / 1048576)
+    }))
+    const s = getSettings()
+    return {
+      metrics,
+      modules: {
+        monitor: getMonitorPerf(),
+        deepMode: s.deepMode,
+        petEnabled: s.petEnabled,
+        widgetVisible: s.widgetVisible,
+        aiEnabled: s.aiEnabled,
+        ocrCleanupDays: s.ocrCleanupDays,
+        smartPolling: s.monitorSmart
+      },
+      totalMemoryMB: metrics.reduce((a, m) => a + m.memoryMB, 0),
+      totalCpu: Math.round(metrics.reduce((a, m) => a + m.cpu, 0))
+    }
+  })
+
+  // ── 开发者 OCR 工具（本地数据处理，数据不上传；仅 devMode 下由本地补丁 UI 调用） ──
+  ipcMain.handle('dev:ocrExport', async () => {
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: '导出 OCR 数据集',
+      defaultPath: `workon-ocr-${dateKey(Date.now()).replace(/-/g, '')}.json`,
+      filters: [{ name: 'JSON', extensions: ['json'] }]
+    })
+    if (canceled || !filePath) return null
+    fs.writeFileSync(filePath, JSON.stringify(buildDevDataset(), null, 2), 'utf-8')
+    return filePath
+  })
+  ipcMain.handle('dev:ocrBatch', async (_e, limit?: number) => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      title: '选择 OCR 标注集输出目录',
+      properties: ['openDirectory', 'createDirectory']
+    })
+    if (canceled || !filePaths?.length) return null
+    return buildDevOcrBatch(filePaths[0], limit ?? 0)
+  })
+  ipcMain.handle('dev:prompts', async () => {
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: '导出 AI 提示词/规则集',
+      defaultPath: `workon-ai-prompts-${dateKey(Date.now()).replace(/-/g, '')}.json`,
+      filters: [{ name: 'JSON', extensions: ['json'] }]
+    })
+    if (canceled || !filePath) return null
+    fs.writeFileSync(filePath, JSON.stringify(buildDevPrompts(), null, 2), 'utf-8')
+    return filePath
+  })
+
   // ── AI 分析 ──
   ipcMain.handle('analysis:get', (_e, date?: string) => latestAnalysis(date ?? dateKey(Date.now())))
   ipcMain.handle('analysis:refresh', async () => {
@@ -238,14 +335,42 @@ export function registerIpc(): void {
     return askWithContext(question, ana, todayTrail(), habitsOfUser())
   })
 
+  // ── 动作库 + 积分（第三批：动作工坊） ──
+  ipcMain.handle('motions:list', () => listMotions())
+  ipcMain.handle('motions:data', (_e, id: string) => getMotionData(id))
+  ipcMain.handle('motions:save', (_e, payload: { name: string; duration: number; fps: number; data: unknown; coverDataUrl?: string; cost?: number }) => {
+    const meta = saveMotion(payload as { name: string; duration: number; fps: number; data: never; coverDataUrl?: string; cost?: number })
+    return meta
+  })
+  ipcMain.handle('motions:remove', (_e, id: string) => removeMotion(id))
+  ipcMain.handle('motions:setCost', (_e, id: string, cost: number) => setMotionCost(id, cost))
+  ipcMain.handle('motions:redeem', (_e, id: string) => redeemMotion(id))
+  ipcMain.handle('motions:play', (_e, id: string) => {
+    sendTo('pet', 'pet:play-motion', { id })
+    return true
+  })
+  ipcMain.on('motion-studio:open', () => createMotionWindow())
+  ipcMain.handle('points:get', () => getPoints())
+  ipcMain.handle('points:add', (_e, delta: number, reason: string) => addPoints(delta, reason))
+
+  // P0 截图问答：按时间窗召回 ocrShots/ocrSnapshots 脱敏摘要注入上下文（默认最近 30 分钟）
+  ipcMain.handle('qa:askWithShots', async (_e, question: string, windowMin?: number) => {
+    const end = Date.now()
+    const start = end - Math.max(1, windowMin ?? 30) * 60000
+    const screenContext = screenContextForWindow(start, end)
+    const ana = latestAnalysis(dateKey(Date.now()))
+    return askWithContext(question, ana, todayTrail(), habitsOfUser(), screenContext ?? undefined)
+  })
+
   // ── 流式问答 ──
   // 渲染端调用后，主进程通过事件流式推送 chunk
   ipcMain.handle('qa:askStream', async (_e, question: string) => {
     const s = getSettings()
     const ana = latestAnalysis(dateKey(Date.now()))
+    const screenContext = screenContextForWindow(Date.now() - 30 * 60000, Date.now())
     if (!s.aiStreaming) {
       // 流式未启用 → 回退普通模式
-      const result = await askWithContext(question, ana, todayTrail(), habitsOfUser())
+      const result = await askWithContext(question, ana, todayTrail(), habitsOfUser(), screenContext ?? undefined)
       sendTo('main', 'ai:streamDone', result.content)
       return result
     }
@@ -311,6 +436,10 @@ export function registerIpc(): void {
   ipcMain.handle('pet:get', () => bus.pet)
   ipcMain.handle('pet:set', (_e, patch: Partial<PetState>) => bus.setPet(patch))
   ipcMain.on('pet:hit', (_e, over: boolean) => setPetIgnoreMouse(!over))
+  ipcMain.on('pet:hide', () => {
+    if (petWindow && !petWindow.isDestroyed()) petWindow.hide()
+  })
+  ipcMain.on('pet:undock', () => sendTo('pet', 'pet:undock'))
   ipcMain.on('pet:modal', (_e, active: boolean) => setPetModal(active))
   ipcMain.on('pet:hide', () => { if (petWindow) petWindow.hide() })
   ipcMain.on('pet:show', () => { if (petWindow) { createPetWindow(); petWindow.show() } })
@@ -357,6 +486,40 @@ export function registerIpc(): void {
   ipcMain.on('pet:stats', (_e, stats: unknown) => sendTo('main', 'pet:stats', stats))
 
   // ── VRM 角色上传（L1：用户上传自定义 .vrm 文件） ──
+  // VRM 方案一：选择 → 返回文件缓冲给渲染层体检，确认后再应用
+  ipcMain.handle('pet:vrmPickInspect', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      title: '选择 VRM 模型',
+      filters: [
+        { name: 'VRM 模型', extensions: ['vrm'] },
+        { name: 'glTF 模型', extensions: ['gltf', 'glb'] },
+        { name: '所有文件', extensions: ['*'] }
+      ],
+      properties: ['openFile']
+    })
+    if (canceled || !filePaths.length) return null
+    const srcPath = filePaths[0]
+    const destDir = path.join(app.getPath('userData'), 'vrm-custom')
+    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
+    const pendingPath = path.join(destDir, `pending-${Date.now()}${path.extname(srcPath)}`)
+    fs.copyFileSync(srcPath, pendingPath)
+    const sizeMB = Math.round((fs.statSync(pendingPath).size / 1024 / 1024) * 10) / 10
+    const buffer = fs.readFileSync(pendingPath)
+    return {
+      pendingPath,
+      name: path.basename(srcPath),
+      sizeMB,
+      buffer: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
+    }
+  })
+
+  ipcMain.handle('pet:vrmApply', async (_e, pendingPath: string) => {
+    if (!pendingPath || !fs.existsSync(pendingPath)) return false
+    setSettings({ petVrmPath: pendingPath } as Partial<AppSettings>)
+    sendTo('pet', 'pet:reloadVrm', pendingPath)
+    return true
+  })
+
   ipcMain.handle('pet:selectVrm', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog({
       title: '选择 VRM 角色文件',
@@ -827,13 +990,23 @@ export function registerIpc(): void {
   })
   // 条目确认：条目是即时生成的、不做持久化；确认只在前端当次视图生效。
   // 这里仅累计模板 userCorrections（模板匹配质量学习信号，条目级学习留后续迭代）
-  ipcMain.handle('report:confirmEntry', (_e, _date: string, _entryId: string, _patch: unknown, templateId?: string) => {
+  ipcMain.handle('report:confirmEntry', (_e, date: string, entryId: string, patch: Record<string, unknown> | undefined, templateId?: string) => {
+    // P0 修复：人工修正持久化（按 date+entryId），重新生成报表时套用
+    if (patch && Object.keys(patch).length) {
+      const pid = `${date}:${entryId}`
+      const existing = col<ReportEntryPatch>('reportPatches').find((x) => x.id === pid)
+      if (existing) updateIn<ReportEntryPatch>('reportPatches', pid, { patch, ts: Date.now() })
+      else insertInto<ReportEntryPatch>('reportPatches', { id: pid, date, entryId, patch, ts: Date.now() })
+    }
     if (templateId && !String(templateId).startsWith('preset-')) {
       const t = col<ReportTemplate>('reportTemplates').find((x) => x.id === templateId)
       if (t) return updateIn<ReportTemplate>('reportTemplates', t.id, { userCorrections: t.userCorrections + 1 })
     }
     return null
   })
+  ipcMain.handle('report:patches:list', (_e, date: string) =>
+    col<ReportEntryPatch>('reportPatches').filter((x) => x.date === date)
+  )
   // v2.8 AI 模板解析：解析失败/AI 未开启返回 null，前端提示「需要开启 AI 模式」
   ipcMain.handle('report:parseTemplate', (_e, raw: string) => parseUserTemplate(String(raw ?? '')))
 

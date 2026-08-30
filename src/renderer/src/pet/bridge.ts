@@ -154,7 +154,7 @@ export class Bridge {
     e.smile = 0.25 + pet.emotion.pleasure * 0.4
     e.blush = Math.max(0.1, 0.25 + pet.emotion.pleasure * 0.35)
     e.eyeWide = Math.max(0, pet.emotion.arousal) * 0.4
-    e.eyeOpen = 1 + pet.emotion.arousal * 0.08
+    // 注意：不写 eyeOpen——PAD 情绪无权覆盖眼睑，否则睡觉/困倦姿态的闭眼会被周期性睁开
     e.browRaise = pet.emotion.dominance * 0.5
     // 仅在无姿态表情覆盖时平滑跟随（避免与姿态表情打架，权重 0.5 近似）
     this.deps.anim.setExpression(e, 0.5)
