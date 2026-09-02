@@ -615,6 +615,9 @@ function SmartDayReportView({ onSynced }: { onSynced?: () => void }) {
       .catch(() => undefined)
   }, [report, date])
 
+  // A3：报表载入/重新生成后，套用已持久化的人工修正（不再丢失）
+
+
   /* 确认 / 编辑条目 */
   const confirmEntry = (entryId: string, entryPatch?: Partial<ReportEntry>) => {
     void window.api.confirmReportEntry(date, entryId, entryPatch ?? {}, report?.templateId).catch(() => undefined)

@@ -21,6 +21,9 @@ export interface PresenceSample {
   /** 识别结果直传（recognition 决策层产出；缺省时 presence 内部回退规则表） */
   appName?: string
   state?: WorkState
+  /** 当前活动关联的计划/项目标题（monitor 计算后传入） */
+  planTitle?: string | null
+  projectName?: string | null
   screen: number
   active: boolean
   idleSec: number
@@ -36,6 +39,8 @@ class PresenceEngine extends EventEmitter {
   private lastActiveScreen = 0
   private slackSince: number | null = null
   private focusSince: number | null = null
+  private lastPlanTitle: string | null = null
+  private lastProjectName: string | null = null
   private snapshot: PresenceSnapshot
   private _ocrContext: string | undefined
   private _uiaContext: string | undefined
@@ -63,6 +68,8 @@ class PresenceEngine extends EventEmitter {
   /** 推入一轮采样（monitor 调用）。mediaSticky: 该屏样本来自媒体类应用 */
   push(sample: PresenceSample): PresenceSnapshot {
     const { screen, ts } = sample
+    if (sample.planTitle !== undefined) this.lastPlanTitle = sample.planTitle
+    if (sample.projectName !== undefined) this.lastProjectName = sample.projectName
     const fallbackId = identifyApp(sample.app, sample.title)
     const identified = sample.state
       ? { appName: sample.appName || fallbackId.appName, state: sample.state }
@@ -180,6 +187,8 @@ class PresenceEngine extends EventEmitter {
       continuousSlackSec: this.slackSince ? Math.round((ts - this.slackSince) / 1000) : 0,
       continuousFocusSec: this.focusSince ? Math.round((ts - this.focusSince) / 1000) : 0,
       idleSec,
+      planTitle: this.lastPlanTitle,
+      projectName: this.lastProjectName,
       ocrContext: this._ocrContext,
       uiaContext: this._uiaContext,
       winRect: ts - this.winRectTs < 60_000 ? this.winRect : undefined

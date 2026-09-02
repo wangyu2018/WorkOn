@@ -4,6 +4,7 @@ import { genId } from '@shared/types'
 import { PRIVACY_LEVEL_META } from '@shared/personaMeta'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EmptyState } from '../components/EmptyState'
 import { useSettingsStore } from '../stores/settingsStore'
 import peierAvatar from '../assets/peier-avatar.png'
@@ -66,6 +67,7 @@ export default function QAReview() {
   const [qaList, setQaList] = useState<Array<{id:string, date:string, question:string, answer:string, ts:number}>>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [pruneMode, setPruneMode] = useState(false)
+  const [confirmPrune, setConfirmPrune] = useState(false)
 
   const LOCAL_EXAMPLES = ['今天专注了多久？', '我什么时候效率最高？', '今天摸鱼多久了？', '我最常用的应用？', '双屏并行占比？']
 
@@ -157,14 +159,28 @@ export default function QAReview() {
             <h4 className="text-[13px] font-semibold text-slate-200">选择保留的日期</h4>
             <div className="flex gap-2">
               <button className="glass-btn text-[11px]" onClick={() => setPruneMode(false)}>取消</button>
-              <button className="glass-btn primary text-[11px]" onClick={async () => {
-                const keep = [...selectedIds]
-                await window.api?.pruneQA?.(keep)
-                // 就地刷新：重新拉取问答列表，不再整页 reload
-                const list = ((await window.api?.listQA?.().catch(() => [])) ?? []) as QAMessage[]
-                setMessages(list)
-              }}>保留所选，删除其余</button>
+              <button className="glass-btn danger text-[11px]" onClick={() => setConfirmPrune(true)}>保留所选，删除其余</button>
             </div>
+            {confirmPrune && (
+              <ConfirmDialog
+                open
+                danger
+                title="确认删除"
+                message={`将删除未勾选的全部问答记录（保留 ${selectedIds.size} 个日期的数据）。此操作不可恢复。`}
+                confirmLabel="确认删除"
+                onConfirm={() => {
+                  setConfirmPrune(false)
+                  const keep = [...selectedIds]
+                  void (async () => {
+                    await window.api?.pruneQA?.(keep)
+                    const list = ((await window.api?.listQA?.().catch(() => [])) ?? []) as QAMessage[]
+                    setMessages(list)
+                    setPruneMode(false)
+                  })()
+                }}
+                onCancel={() => setConfirmPrune(false)}
+              />
+            )}
           </div>
           {Object.entries(qaList.reduce<Record<string, typeof qaList>>((acc, q) => { const d = q.date ?? new Date(q.ts).toISOString().slice(0, 10); if (!acc[d]) acc[d] = []; acc[d].push(q); return acc }, {})).map(([date, items]) => (
             <div key={date} className="mb-2">

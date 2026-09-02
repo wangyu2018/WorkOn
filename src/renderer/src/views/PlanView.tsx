@@ -20,7 +20,8 @@ const STATUS_LABEL: Record<PlanStatus, string> = {
 const PLAN_TYPE_LABEL: Record<PlanType, string> = {
   reminder: '提醒',
   phase: '持续工作',
-  task: '待办'
+  task: '待办',
+  burst: '机动开发'
 }
 
 /** 计划类型图标：reminder ◆紫 / phase ▬绿 / task ☐琥珀 */
@@ -338,6 +339,7 @@ export default function PlanView() {
       })
     if (actions.length === 0) { setImportMsg('纪要中未发现行动项'); return }
     // 逐个创建计划项
+    setImportMsg(`正在导入 ${actions.length} 条行动项…`)
     setImportMsg(`正在导入 ${actions.length} 条行动项…`)
     for (const title of actions) {
       await window.api.savePlan({

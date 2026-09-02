@@ -84,6 +84,10 @@ export class Lighting {
   private hemi: THREE.HemisphereLight
   private ambient: THREE.AmbientLight
   private status: THREE.PointLight | null = null
+  /** 角色专属中性光（layer 1）：纯白恒定，昼夜/情绪彩色光永不染肤色 */
+  private charKey: THREE.DirectionalLight
+  private charFill: THREE.DirectionalLight
+  private charAmbient: THREE.AmbientLight
   private statusTarget = new THREE.Color(STATUS_COLORS.idle.color)
   private statusIntensityTarget = STATUS_COLORS.idle.intensity
   private time = 0
@@ -120,6 +124,20 @@ export class Lighting {
     this.ambient = new THREE.AmbientLight('#FFFFFF', 0.18)
     scene.add(this.ambient)
 
+    // 角色专属中性光组（layer 1）：纯白恒定，昼夜/情绪彩色光永不染肤色
+    this.charKey = new THREE.DirectionalLight('#FFFFFF', 0.95)
+    this.charKey.position.set(-300, 450, 350)
+    this.charKey.layers.set(1)
+    scene.add(this.charKey)
+    this.charFill = new THREE.DirectionalLight('#FFFFFF', 0.4)
+    this.charFill.position.set(320, -120, 260)
+    this.charFill.layers.set(1)
+    scene.add(this.charFill)
+    this.charAmbient = new THREE.AmbientLight('#FFFFFF', 0.32)
+    this.charAmbient.layers.set(1)
+    scene.add(this.charAmbient)
+
+    // 彩色氛围光（key/fill/hemi/status/rim）只作用于 layer 0 的场景装饰
     if (characterRoot) this.attachCharacterRoot(characterRoot)
   }
 
@@ -129,29 +147,17 @@ export class Lighting {
     this.applyExposure()
   }
 
-  /** 角色加载后挂载 Rim/Status 光源到角色根节点（幂等） */
+  /** 角色加载后：角色全部网格迁到 layer 1（只受中性白光，彩色氛围光不再染肤色） */
   attachCharacterRoot(root: THREE.Object3D): void {
-    if (this.rim) return
-    const phase = PHASES[this.currentPhase]
-    // Rim：SpotLight，正后方
-    this.rim = new THREE.SpotLight(phase.rimColor, phase.rimIntensity, 900, Math.PI / 4, 0.5, 1)
-    this.rim.position.set(0, 260, -320)
-    const rimTarget = new THREE.Object3D()
-    rimTarget.position.set(0, 140, 0)
-    root.add(rimTarget)
-    this.rim.target = rimTarget
-    root.add(this.rim)
-
-    // Status：PointLight 挂角色根
-    this.status = new THREE.PointLight(STATUS_COLORS.idle.color, STATUS_COLORS.idle.intensity, 500, 1.2)
-    this.status.position.set(0, 150, 80)
-    root.add(this.status)
+    root.traverse((o) => {
+      const mesh = o as THREE.Mesh
+      if (mesh.isMesh) mesh.layers.set(1)
+    })
   }
 
   setMood(mood: StatusMood): void {
-    const s = STATUS_COLORS[mood]
-    this.statusTarget.set(s.color)
-    this.statusIntensityTarget = s.intensity
+    // 状态情绪光已随彩色光照系统移出角色（不再染皮肤），保留接口兼容
+    void mood
   }
 
   /** 降级：关闭 rim 光 */
@@ -243,14 +249,7 @@ export class Lighting {
 
   update(dt: number): void {
     this.time += dt
-    // 昼夜过渡
+    // 昼夜过渡（仅影响场景氛围光；角色由中性光层独立照明）
     this.updatePhaseLerp(dt)
-    // 状态光
-    if (!this.status) return
-    const k = 1 - Math.exp(-dt / 0.25)
-    this.status.color.lerp(this.statusTarget, k)
-    const pulse = 1 + Math.sin(this.time * (Math.PI * 2) / 1.5) * 0.12
-    const cur = this.status.intensity + (this.statusIntensityTarget - this.status.intensity) * k
-    this.status.intensity = cur * pulse
   }
 }

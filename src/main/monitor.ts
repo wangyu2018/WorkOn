@@ -15,6 +15,7 @@ import { insertActivity, col, updateIn } from './db'
 import { getSettings } from './settings'
 import { identifyApp, INPUT_REQUIRED_STATES } from '@shared/stateMeta'
 import { recognize } from './recognition/decision'
+import { devSessionTick } from './devSession'
 import { matchBrowserToPlan } from './ai'
 
 import { sendTo } from './windows'
@@ -24,7 +25,7 @@ import { getFocusedElement, summarizeFocusedElement } from './uia'
 import { trackAppSwitch, matchKnownChain } from './qa/questionGenerator'
 import { bus } from './state'
 import { genId } from '@shared/types'
-import type { CorrectionRule, PlanItem, WorkState } from '@shared/types'
+import type { CorrectionRule, PlanItem, Project, ProjectTimeLink, SegmentPlanLink, WorkState } from '@shared/types'
 
 /** 浏览器计划匹配：30 分钟内不重复问同一计划 */
 const planAskedAt = new Map<string, number>()
@@ -107,6 +108,22 @@ export function isExcludedApp(app: string, appName: string): boolean {
   return false
 }
 
+/** 当前段关联的计划标题（拖拽归类/会话确认产生的关联） */
+function currentPlanTitle(segStartTs: number): string | null {
+  const links = col<SegmentPlanLink>('segmentPlans').filter((l) => l.segStartTs === segStartTs)
+  if (!links.length) return null
+  const planId = links[links.length - 1].planId
+  return col<PlanItem>('plans').find((pl) => pl.id === planId)?.title ?? null
+}
+
+/** 当前应用归属的项目名（projectTimeLinks 最近一条） */
+function currentProjectName(app: string): string | null {
+  const links = col<ProjectTimeLink>('projectTimeLinks').filter((l) => l.app === app.toLowerCase())
+  if (!links.length) return null
+  const last = links.reduce((a, b) => (b.ts > a.ts ? b : a))
+  return col<Project>('projects').find((x) => x.id === last.projectId)?.name ?? null
+}
+
 async function tick(): Promise<void> {
   const ts = Date.now()
   // 200ms 防抖：窗口高频切换时避免 tick 抖动
@@ -146,6 +163,8 @@ async function tick(): Promise<void> {
     const identified = { appName: rec.appName, state: rec.state as WorkState }
     // 隐私快标：标记应用完全停止采集（0 记录）——不截屏、不 OCR、不记标题、不落活动记录
     const excluded = isExcludedApp(corrected.app, identified.appName)
+    if (!excluded) devSessionTick(corrected.app, corrected.title, ts, idleSec)
+    // 开发会话识别（P0）：dev 工具/localhost 组合 → 机动片段（排除应用不参与）
     presence.excludedActive = excluded
     const safeTitle = corrected.title
     let state: WorkState = identified.state
@@ -154,6 +173,9 @@ async function tick(): Promise<void> {
 
     let tr = tracks.get(fg.screen)
     const changed = !tr || tr.app !== corrected.app || tr.title !== safeTitle
+    // 语义标签：当前段关联的计划标题 / 项目名（顶栏与悬浮窗显示）
+    const planTitle = currentPlanTitle(tr ? tr.startTs : ts)
+    const projectName = currentProjectName(corrected.app)
     if (!excluded) {
       // 提取/补写图标+主题色（captureAppVisual 命中缓存即返回，仅首次真正提取 exe 图标）
       void captureAppVisual(corrected.app, fg.exePath, identified.appName)
@@ -179,7 +201,7 @@ async function tick(): Promise<void> {
             height: fg.height
           }
         : undefined
-      presence.push({ ts, app: corrected.app, title: safeTitle, appName: identified.appName, state: identified.state, screen: fg.screen, active: true, idleSec, winRect })
+      presence.push({ ts, app: corrected.app, title: safeTitle, appName: identified.appName, state: identified.state, planTitle, projectName, screen: fg.screen, active: true, idleSec, winRect })
     } else {
       // 已排除：仅推入空信号维持引擎心跳（presence 不显示该应用，activities 不产生记录）
       presence.push({ ts, app: '', title: '', screen: fg.screen, active: true, idleSec })

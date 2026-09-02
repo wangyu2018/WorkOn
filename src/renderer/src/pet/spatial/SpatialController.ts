@@ -50,6 +50,7 @@ export class SpatialController {
   private avoidRect: { x: number; y: number; width: number; height: number } | null = null
   private owner: ControlOwner = 'spatial'
   private bobPhase = 0
+  private yawTarget: number | null = null
   /** 最近一次交互（拖拽/点击）时间；闲置超时自动回位 */
   private lastInteract = performance.now()
   /** 页面切换抑制（ms）：>0 期间 transitionTo 延迟到归零后执行最后一个 */
@@ -501,12 +502,17 @@ export class SpatialController {
         const dy = this.roam.target.y - this.pos.y
         const dist = Math.hypot(dx, dy)
         if (dist > 1) {
-          this.pos.x += (dx / dist) * upd.speed * dt
-          this.pos.y += (dy / dist) * upd.speed * dt
+          const step = Math.min(dist, upd.speed * dt)
+          this.pos.x += (dx / dist) * step
+          this.pos.y += (dy / dist) * step
           this.facing = dx > 0 ? 1 : -1
-          this.bobPhase += dt * (upd.mode === 'run' ? 14 : 9)
+          // 朝向 = 移动方向（连续偏航，8/s 平滑收敛在 applyTransform）
+          this.yawTarget = Math.atan2(dx, dy)
+          // 步相与实际位移同步：每 34px 一步（π），消除滑步
+          this.bobPhase += (step / 34) * Math.PI
         }
         if (this.anim.clipMode) this.anim.stopClip(0.15) // 移动中 clip 会让腿僵住（太空步）
+        this.micro.setWalkPhase(this.bobPhase) // 腿摆相位 = 位移步相（不滑步）
         this.micro.setLocomotion(upd.mode, upd.mode === 'run' ? 1.2 : 1)
       } else {
         this.micro.setLocomotion(null)
@@ -526,23 +532,30 @@ export class SpatialController {
     const wx = this.pos.x - this.screenW / 2
     const wy = this.screenH / 2 - this.pos.y
     // 行走上下起伏
-    const bob = this.micro && Math.abs(this.bobPhase) > 0 ? Math.abs(Math.sin(this.bobPhase)) * 6 : 0
+    // 平滑余弦起伏（每步一谷），替代 |sin| 尖谷的跳跃感
+    const bob = this.micro && Math.abs(this.bobPhase) > 0 ? (0.5 - 0.5 * Math.cos(this.bobPhase * 2)) * 3.5 : 0
     this.char.root.position.set(wx, wy + bob, 0)
     this.char.root.scale.setScalar(this.scale * this.userScale)
 
-    // 朝向：位置驱动（面向屏幕中段视觉中心）；拖拽中暂按速度朝向，松手回正
+    // 朝向：游荡行走时面向移动方向（连续偏航）；其余按屏幕位置分区
     // rotation.y 负 = 面朝屏幕左，正 = 面朝屏幕右
     const ratio = this.pos.x / this.screenW
     let target: number
     if (this.owner === 'drag') {
       target = this.facing * -0.85 // 拖拽中保持速度朝向
+    } else if (this.roamMoving) {
+      target = this.yawTarget ?? (this.facing * -0.85) // 面朝移动方向（横着走根治）
     } else {
       target = ratio < 0.33 ? 0.6 : ratio > 0.66 ? -0.6 : 0
       // 底部停靠（贴任务栏/冒头）：幅度减半，避免侧脸过于明显
       if (this.pos.y > this.screenH - 150) target *= 0.5
     }
-    const k = dt > 0 ? 1 - Math.exp(-dt / 0.8) : 1 // ~0.8s 平滑到位（更慢更沉稳）
-    this.facingCur += (target - this.facingCur) * k
+    // 最短角度路径平滑（避免 ±π 绕远）
+    let diff = target - this.facingCur
+    while (diff > Math.PI) diff -= Math.PI * 2
+    while (diff < -Math.PI) diff += Math.PI * 2
+    const k = dt > 0 ? 1 - Math.exp(-dt / 0.45) : 1
+    this.facingCur += diff * k
     this.char.root.rotation.y = this.facingCur
   }
 }

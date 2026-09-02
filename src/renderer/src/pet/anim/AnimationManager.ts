@@ -95,8 +95,8 @@ const PROCEDURAL: Record<string, { dur: number; loop: boolean; spec: PoseBoneFra
     spec: { pose: 'stand_idle', sway: { spine_02: [1.2, 0, 0, 1, 0], head: [0.6, 0.5, 0, 1, 0.8] } }
   },
   idle_greet: {
-    dur: 2.4, loop: true,
-    spec: { pose: 'stand_greet', sway: { forearm_R: [0, 0, 9, 3, 0], upperarm_R: [0, 0, 2.5, 1, 1.6], head: [0, 1.2, 0, 1, 0.5] } }
+    dur: 2.6, loop: false, // 一次性：挥 2 次收手，结束后自动回落 idle_breath
+    spec: { pose: 'stand_greet', sway: { forearm_R: [0, 0, 9, 2, 0], upperarm_R: [0, 0, 2.5, 1, 1.6], head: [0, 1.2, 0, 1, 0.5] } }
   },
   relax_sway: {
     dur: 4.5, loop: true,
@@ -167,9 +167,17 @@ export class AnimationManager {
   }
 
   private lastState: SpatialStateName = 'working'
+  /** 一次性动作 → 结束后自动接的循环 clip */
+  private static ENTRY_FOLLOW: Record<string, string> = { idle_greet: 'idle_breath' }
 
   private onClipFinished = (): void => {
-    // 一次性动作播完 → 回空间态默认 clip（强制从头播，自然衔接）
+    // 一次性动作播完 → 优先接「回落 clip」（如 greet 完接呼吸），否则回空间态 clip
+    const id = this.currentId
+    const follow = id ? AnimationManager.ENTRY_FOLLOW[id] : null
+    if (follow && this.clips.has(follow)) {
+      this.playClip(follow, { fade: 0.3 })
+      return
+    }
     if (this.currentId) this.playForState(this.lastState, true)
   }
 

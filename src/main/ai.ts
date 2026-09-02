@@ -1046,6 +1046,7 @@ export function confirmToPlan(
   question: string,
   browserInfo?: { app: string; title: string }
 ): PlanItem | null {
+  if (ctx.startsWith('devsession:')) return null // 会话片段已由 devSession 直接落库，避免重复
   const planInfo = parseContextToPlan(ctx, browserInfo)
   if (!planInfo) return null
   const today = dateKey(Date.now())

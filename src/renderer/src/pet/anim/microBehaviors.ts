@@ -58,6 +58,11 @@ export class MicroBehaviors {
     )
   }
 
+  /** 行走相位由位移驱动（SpatialController 按步幅推进），消除滑步 */
+  setWalkPhase(phase: number): void {
+    this.locomotionPhase = phase
+  }
+
   setLocomotion(mode: LocomotionMode, speedFactor = 1): void {
     if (mode !== this.locomotion) this.locomotionPhase = 0
     this.locomotion = mode

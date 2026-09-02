@@ -132,8 +132,8 @@ export interface TimeEntry {
 }
 
 export type PlanStatus = 'planned' | 'in_progress' | 'partial' | 'done' | 'delayed' | 'cancelled'
-export type PlanType = 'reminder' | 'phase' | 'task'
-export type PlanSource = 'manual' | 'oner' | 'import' | 'qa-confirm'
+export type PlanType = 'reminder' | 'phase' | 'task' | 'burst'
+export type PlanSource = 'manual' | 'oner' | 'import' | 'qa-confirm' | 'session'
 export type PlanCategory = string // 内置分类 id（ai-dev/work-customer/leader/personal/other）或自定义分类 id
 
 export interface PlanItem {
@@ -148,6 +148,9 @@ export interface PlanItem {
   source: PlanSource
   /** 计划类型：reminder=提醒(里程碑) / phase=持续工作(默认) / task=待办 */
   planType?: PlanType
+  /** 会话派生（devSession 自动记录的机动片段） */
+  sessionDerived?: boolean
+  linkedProjectId?: string
   /** reminder 是否已触发（触发一次后不再重复弹通知） */
   fired?: boolean
   /** 完成比例 0-1（拖动设置；1=完成） */
@@ -426,6 +429,10 @@ export interface PresenceSnapshot {
   continuousSlackSec: number // 持续摸鱼秒数
   continuousFocusSec: number
   idleSec: number
+  /** 当前活动关联的计划标题（拖拽归类/会话归属） */
+  planTitle?: string | null
+  /** 当前活动归属的项目名 */
+  projectName?: string | null
   ocrContext?: string // 深度模式 OCR 识别的屏幕内容摘要
   uiaContext?: string // 深度模式 UIAutomation 焦点元素摘要
   /** 主屏前台窗口矩形（桌宠窗口本地坐标；桌宠漫游避让用，60s 无更新自动失效） */

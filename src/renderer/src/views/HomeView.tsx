@@ -581,6 +581,10 @@ export default function HomeView() {
           <span style={{ position: 'absolute', left: 0, top: 5, bottom: 5, width: 3, borderRadius: 2,
                          background: `var(${c})`, opacity: 0.95, pointerEvents: 'none' }} />
         )}
+        {!ghost && (
+          <span style={{ position: 'absolute', left: 0, top: 5, bottom: 5, width: 3, borderRadius: 2,
+                         background: `var(${c})`, opacity: 0.95, pointerEvents: 'none' }} />
+        )}
         {!ghost && !glance && width > 44 && (
           <span style={{
             fontSize: 11, fontWeight: 500,
@@ -1527,6 +1531,7 @@ function PinnedWidgets({ trail }: { trail: MergedTrail | null }) {
       <div className="grid gap-3 lg:grid-cols-2">
         {pins.includes('state') && <div className="glass-card p-3"><h4 className="text-[11px] text-slate-400 mb-2">状态分布</h4>{Object.entries(stateMinutes).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([s,m])=><div key={s} className="flex justify-between text-[11px] text-slate-300"><span>{s}</span><span>{Math.round(m)}m</span></div>)}</div>}
         {pins.includes('topapps') && <div className="glass-card p-3"><h4 className="text-[11px] text-slate-400 mb-2">TOP 应用</h4>{topApps.map(a=><div key={a.app} className="flex justify-between text-[11px] text-slate-300"><span>{a.app}</span><span>{Math.round(a.minutes)}m</span></div>)}</div>}
+        {pins.includes('attention') && <AttentionPin />}
         {pins.includes('attention') && <AttentionPin />}
       </div>
     </section>
