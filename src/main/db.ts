@@ -181,7 +181,7 @@ function flushActivityBuffer(): void {
   } catch (e) {
     // 写入失败不再静默：主窗口弹错误横幅（用户可感知数据丢失风险）
     console.warn('[db] 活动批量写入失败', e)
-    sendTo('main', 'error-banner', `活动记录写入失败：${(e as Error).message}（请检查磁盘空间）`)
+    sendTo('main', 'error-banner', `ERR_DB_WRITE_FAILED · 活动记录写入失败：${(e as Error).message}（请检查磁盘空间；恢复后自动从中断处继续）`)
   }
 }
 

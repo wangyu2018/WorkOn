@@ -34,7 +34,7 @@ import {
 } from './db'
 import { presence } from './presence'
 import { getFocusChainState } from './focusChain'
-import { registerNotifyIpc } from './notify'
+import { registerNotifyIpc, pushNotify } from './notify'
 import { listAutomations, saveAutomation, removeAutomation, toggleAutomation, automationMinuteTick } from './automation'
 import { starGraphForDays } from './starGraph'
 import { attributionTick, getAttribution, listBindings, bindProject, unbindProject, answerAttribution } from './attributions'
@@ -465,8 +465,18 @@ export function registerIpc(): void {
 
   // ── 纠错与规则 ──
   ipcMain.handle('corrections:list', () => col('corrections'))
-  ipcMain.handle('corrections:add', (_e, c: Omit<ActivityCorrection, 'id' | 'ts'>) =>
-    insertInto<ActivityCorrection>('corrections', { ...c, id: genId('corr'), ts: Date.now() }))
+  ipcMain.handle('corrections:add', (_e, c: Omit<ActivityCorrection, 'id' | 'ts'>) => {
+    const saved = insertInto<ActivityCorrection>('corrections', { ...c, id: genId('corr'), ts: Date.now() })
+    // v7 修正可撤销流：通知带「改回去」，撤销=删除该修正记录
+    pushNotify(
+      'correction',
+      '时段已修正',
+      `${c.date ?? ''} 的时段归类已更新（${String((c as unknown as { toState?: string }).toState ?? '新状态')}）。点「改回去」可撤销。`,
+      [{ label: '改回去', action: `undo-correction:${saved.id}` }, { label: '就这样', action: 'dismiss', primary: true }],
+      45
+    )
+    return saved
+  })
   ipcMain.handle('corrections:remove', (_e, id: string) => removeFrom('corrections', id))
   ipcMain.handle('rules:list', () => col('rules'))
   ipcMain.handle('rules:save', (_e, rule: Partial<CorrectionRule> & { screen: number; matchApp: string; matchTitleContains: string }) => {

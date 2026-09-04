@@ -57,7 +57,7 @@ function expire(id: string): void {
 
 /** 注册 IPC：通知操作回调 */
 export function registerNotifyIpc(openMainView: (view?: string) => void): void {
-  ipcMain.handle('notify:action', (_e, id: string, action: string) => {
+  ipcMain.handle('notify:action', async (_e, id: string, action: string) => {
     expire(id)
     switch (action) {
       case 'open-report':
@@ -73,6 +73,13 @@ export function registerNotifyIpc(openMainView: (view?: string) => void): void {
         ]), 30 * 60 * 1000)
         break
       default:
+        if (action.startsWith('undo-correction:')) {
+          const id = action.slice('undo-correction:'.length)
+          try {
+            const { removeFrom } = await import('./db')
+            removeFrom('corrections', id)
+          } catch { /* ignore */ }
+        }
         break
     }
   })
