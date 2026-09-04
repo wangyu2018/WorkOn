@@ -616,6 +616,7 @@ export default function SuggestionWidget() {
             onDone={() => {
               setShowUnattrAsk(false)
               if (question) answer('yes')
+              if (widgetMode !== 'mini') setMode('mini')
             }}
             projects={allProjects}
             apps={(question as unknown as { apps?: string[] })?.apps}
