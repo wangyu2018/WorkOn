@@ -480,12 +480,19 @@ export default function ReportHub() {
   const aiEnabled = useSettingsStore((s) => s.settings.aiEnabled)
   const settings = useSettingsStore((s) => s.settings)
   const patch = useSettingsStore((s) => s.patch)
-  const [tab, setTab] = useState<Tab>('smart')
+  const [tab, setTab] = useState<Tab>('ai')
   const [showSettings, setShowSettings] = useState(false)
   const [lastSyncAt, setLastSyncAt] = useState<number>(Date.now())
   const [syncing, setSyncing] = useState(false)
   const [tabKey, setTabKey] = useState(0)
   const [kpi, setKpi] = useState<string | null>(null)
+  // 限频参数注入（smart view 低频读取）
+  const smartMax = useSettingsStore((s) => s.settings.smartDailyMaxPerDay)
+  const curveMin = useSettingsStore((s) => s.settings.curveRefreshMin)
+  useEffect(() => {
+    ;(window as unknown as { __woDailyMax?: number }).__woDailyMax = smartMax
+    ;(window as unknown as { __woCurveMin?: number }).__woCurveMin = curveMin
+  }, [smartMax, curveMin])
   // 首页 KPI 卡跳转：切换到对应页签
   useEffect(() => {
     const onGoto = (e: Event): void => {
@@ -493,6 +500,7 @@ export default function ReportHub() {
       if (!tab) return
       setTab(tab)
       setKpi(tab === 'smart' ? ((e as CustomEvent<{ kpi?: string }>).detail?.kpi ?? null) : null)
+      // 低频参数注入（SmartDayReportView 挂载时读取）
       setTabKey((k) => k + 1)
     }
     window.addEventListener('workon:goto-report', onGoto)

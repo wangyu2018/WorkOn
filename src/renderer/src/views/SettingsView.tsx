@@ -492,6 +492,22 @@ export default function SettingsView() {
               </div>
             </div>
           </div>
+          {/* 报表限频 */}
+          <div className="flex flex-col gap-1.5 border-t border-white/[0.05] pt-2.5">
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-slate-300">报表省 token</span>
+              <div className="flex items-center gap-4 text-slate-500">
+                <label className="flex items-center gap-1.5">
+                  日报 AI 每日
+                  <input type="number" min={1} max={10} className="w-12 rounded border border-[var(--line)] bg-transparent px-1 py-0.5 text-slate-300" value={settings.smartDailyMaxPerDay ?? 2} onChange={(e) => void patch({ smartDailyMaxPerDay: Number(e.target.value) || 1 })} /> 次
+                </label>
+                <label className="flex items-center gap-1.5">
+                  曲线刷新
+                  <input type="number" min={1} max={60} className="w-12 rounded border border-[var(--line)] bg-transparent px-1 py-0.5 text-slate-300" value={settings.curveRefreshMin ?? 5} onChange={(e) => void patch({ curveRefreshMin: Number(e.target.value) || 5 })} /> 分钟
+                </label>
+              </div>
+            </div>
+          </div>
           {/* 桌宠 */}
           <div className="flex flex-col gap-1.5 border-t border-white/[0.05] pt-2.5">
             <div className="flex items-center justify-between">

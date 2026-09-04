@@ -571,7 +571,13 @@ function ImportTemplateModal({ presets, aiEnabled, onClose, onSelectPreset, onSa
 /* ── 智能日报主视图 ── */
 
 function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { onSynced?: () => void; onGoWeekly?: () => void; focusKpi?: string | null }) {
-  lastFocusKpi = focusKpiProp ?? null
+  const [focusKpi, setFocusKpiState] = useState<string | null>(focusKpiProp ?? null)
+  useEffect(() => {
+    if (focusKpiProp !== undefined) {
+      lastFocusKpi = focusKpiProp
+      setFocusKpiState(focusKpiProp)
+    }
+  }, [focusKpiProp])
   const settingsAI = useSettingsStore((s) => s.settings.smartReportAI)
   const aiGloballyEnabled = useSettingsStore((s) => s.settings.aiEnabled)
   const patch = useSettingsStore((s) => s.patch)
@@ -606,25 +612,39 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
     void loadTemplates()
   }, [loadTemplates])
 
-  /* 报表生成：日期 / 模板 / AI 开关变化时重新生成 */
-  useEffect(() => {
-    let alive = true
+  /* 报表生成（v7.1 低频）：同一 key 在 curveRefreshMin 内不重复生成；
+     AI 每日限次（smartDailyMaxPerDay，超限本地口径重算不耗 token）；手动刷新可强制 */
+  const [manualKey, setManualKey] = useState(0)
+  const gen = (key: string, useAI: boolean): void => {
     setLoading(true)
     window.api
-      .generateReport(date, selectedTemplateId ?? undefined, aiOn)
+      .generateReport(date, selectedTemplateId ?? undefined, useAI)
       .then((r) => {
-        if (alive) { setReport(r as GeneratedReport); setGeneratedAt(Date.now()); onSynced?.() }
+        setReport(r as GeneratedReport)
+        setGeneratedAt(Date.now())
+        onSynced?.()
       })
       .catch(() => {
-        if (alive) setReport(null)
+        setReport(null)
       })
       .finally(() => {
-        if (alive) setLoading(false)
+        setLoading(false)
       })
-    return () => {
-      alive = false
-    }
-  }, [date, selectedTemplateId, aiOn])
+  }
+  useEffect(() => {
+    const key = `${date}|${selectedTemplateId ?? ''}|${aiOn}`
+    const s = (window as unknown as { __woGen?: { key: string; at: number } }).__woGen
+    const refreshMin = Math.max(1, Number((window as unknown as { __woCurveMin?: number }).__woCurveMin) || 5)
+    const fresh = !!(s && s.key === key && Date.now() - s.at < refreshMin * 60_000)
+    const day = new Date().toISOString().slice(0, 10)
+    const used = Number(localStorage.getItem(`woGenCnt:${day}`) ?? 0)
+    const max = Math.max(1, Number((window as unknown as { __woDailyMax?: number }).__woDailyMax) || 2)
+    const quotaLeft = used < max
+    const useAI = aiOn && !fresh && quotaLeft
+    if (useAI) localStorage.setItem(`woGenCnt:${day}`, String(used + 1))
+    gen(key, useAI)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, selectedTemplateId, aiOn, manualKey])
 
   /* KPI 近 7 天轨迹（仅复用现有 trail:get IPC） */
   useEffect(() => {
@@ -856,6 +876,13 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
         <button className={`glass-btn !px-2.5 !py-1 !text-[11px] ${copied === 'text' ? 'primary' : ''}`} disabled={!report} onClick={() => copy('text')}>
           {copied === 'text' ? '已复制 ✓' : '复制文本'}
         </button>
+        <button
+          className="glass-btn !px-2.5 !py-1 !text-[11px]"
+          title="手动刷新（绕过节流；AI 次数仍受每日上限）"
+          onClick={() => setManualKey((k) => k + 1)}
+        >
+          <Icon name="refresh" size={13} /> 手动刷新
+        </button>
         <button className={`glass-btn !px-2.5 !py-1 !text-[11px] ${copied === 'md' ? 'primary' : ''}`} disabled={!report} onClick={() => copy('md')}>
           {copied === 'md' ? '已复制 ✓' : '复制 MD'}
         </button>
@@ -877,6 +904,7 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
           icon={<Icon name="refresh" size={14} />}
           tone="ai"
           label="切换次数"
+          detail={focusKpi === 'switches' ? { title: '近 7 天切换段数', items: weekM.map((m, i) => ({ label: `D-${weekM.length - i}`, value: `${m.switches} 段` })) } : undefined}
           big={cur.switches}
           trend={trendOf(cur.switches - prev.switches, (n) => `${n} 段`)}
           spark={kpiSpark.switches}
@@ -886,6 +914,7 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
           icon={<Icon name="clock" size={14} />}
           tone="cyan"
           label="最长专注段"
+          detail={focusKpi === 'longest' ? { title: '近 7 天最长专注段', items: weekM.map((m, i) => ({ label: `D-${weekM.length - i}`, value: fmtMin(m.longestFocusMin) })) } : undefined}
           big={fmtMin(cur.longestFocusMin)}
           trend={trendOf(cur.longestFocusMin - prev.longestFocusMin, fmtMin)}
           spark={kpiSpark.longest}

@@ -731,6 +731,8 @@ export interface AppSettings {
   todoWidgetPenetration: boolean // 待办树小组件鼠标穿透
   widgetOnTop: boolean // 监控悬浮窗顶层
   petOpacity: number // 桌宠不透明度 0.3-1
+  smartDailyMaxPerDay: number // 智能日报每日 AI 生成次数上限（省 token）
+  curveRefreshMin: number // 报表头部曲线数据最短刷新间隔（分钟）
   petCareEnabled: boolean // 桌宠关怀调度（休息提醒/里程碑庆祝/整点问候），默认开
   petDndUntilTs: number // 桌宠免打扰截止时间戳（右键菜单「免打扰 1 小时」）
   petPosX: number // 上次拖拽放置位置 X（petRememberPos 用）
@@ -845,6 +847,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   todoWidgetPenetration: false,
   widgetOnTop: true,
   petOpacity: 1,
+  smartDailyMaxPerDay: 2,
+  curveRefreshMin: 5,
   petCareEnabled: true,
   petDndUntilTs: 0,
   petPosX: -1,
