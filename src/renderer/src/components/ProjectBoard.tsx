@@ -408,9 +408,14 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                       <div className="mb-2 border-t border-dashed border-[var(--line)] pt-2">
                         <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-600">✦ 关联的每日待办</div>
                         {linkedPlans[p.id]!.map((pl) => (
-                          <div key={pl.id} className={`py-0.5 text-[11.5px] ${pl.status === 'done' ? 'text-slate-500 line-through' : 'text-slate-300'}`}>
+                          <button
+                            key={pl.id}
+                            className={`block w-full py-0.5 text-left text-[11.5px] ${pl.status === 'done' ? 'text-slate-500 line-through' : 'text-slate-300'} hover:text-[var(--teal-deep)]`}
+                            title="点击编辑该待办"
+                            onClick={() => window.dispatchEvent(new CustomEvent('workon:edit-plan', { detail: { id: pl.id } }))}
+                          >
                             · {pl.title}
-                          </div>
+                          </button>
                         ))}
                       </div>
                     ) : null}

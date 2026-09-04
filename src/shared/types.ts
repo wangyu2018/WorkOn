@@ -213,6 +213,8 @@ export interface PlanItem {
   ts: number
   /** 关联项目（项目 AI 开发管理）：该计划归入哪个项目 */
   projectId?: string
+  /** 关联到项目的具体任务（二级关联） */
+  projectTaskId?: string
 }
 
 /** 计划分类（内置不可删 + 用户自定义） */

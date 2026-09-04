@@ -95,9 +95,15 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
   /** 归属项目（显式关联：计划 ↔ 项目） */
   const [projId, setProjId] = useState(plan.projectId ?? '')
   const [projOptions, setProjOptions] = useState<{ id: string; name: string }[]>([])
+  const [taskOptions, setTaskOptions] = useState<{ id: string; title: string }[]>([])
+  const [taskId, setTaskId] = useState(plan.projectTaskId ?? '')
   useEffect(() => {
     void window.api?.listProjects?.().then((ps) => setProjOptions((ps as { id: string; name: string }[]) ?? [])).catch(() => undefined)
   }, [])
+  useEffect(() => {
+    if (!projId) { setTaskOptions([]); return }
+    void window.api?.listProjectTasks?.(projId).then((ts) => setTaskOptions(((ts as { id: string; title: string }[]) ?? []).slice(0, 30))).catch(() => undefined)
+  }, [projId])
 
   /** 一句话智能解析：把识别到的字段填入表单（用户可再改） */
   const applySmartParse = () => {
@@ -133,7 +139,8 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
       title: t,
       note: note.trim() || undefined,
       planType,
-      projectId: projId || undefined
+      projectId: projId || undefined,
+      projectTaskId: taskId || undefined
     }
     if (planType === 'reminder') {
       payload.startMin = startMin
@@ -263,12 +270,20 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
           />
           <div className="flex items-center gap-2">
             <label className="shrink-0 text-[11px] text-slate-500">归属项目</label>
-            <select className="glass-input !py-1 text-[12px]" value={projId} onChange={(e) => setProjId(e.target.value)}>
+            <select className="glass-input !py-1 text-[12px]" value={projId} onChange={(e) => { setProjId(e.target.value); setTaskId('') }}>
               <option value="">不归属</option>
               {projOptions.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
+            {projId && taskOptions.length ? (
+              <select className="glass-input !py-1 text-[12px]" value={taskId} onChange={(e) => setTaskId(e.target.value)}>
+                <option value="">不挂具体任务</option>
+                {taskOptions.map((tk) => (
+                  <option key={tk.id} value={tk.id}>{tk.title}</option>
+                ))}
+              </select>
+            ) : null}
           </div>
           <div className="mt-1 flex items-center justify-end gap-2 border-t border-white/[0.06] pt-3">
             <button className="glass-btn" onClick={onClose}>
@@ -295,6 +310,20 @@ export default function PlanView() {
   const [forecasts, setForecasts] = useState<Map<string, PlanForecast>>(new Map())
   const [statusFilter, setStatusFilter] = useState<'all' | PlanStatus>('all')
   const [editor, setEditor] = useState<{ plan: Partial<PlanItem> & { date: string }; isNew: boolean } | null>(null)
+  /** 关联任务名映射（行内 chip 显示） */
+  const [taskNames, setTaskNames] = useState<Record<string, string>>({})
+  useEffect(() => {
+    const withTask = plans.filter((p) => p.projectId && p.projectTaskId)
+    if (!withTask.length) return
+    void (async () => {
+      const names: Record<string, string> = {}
+      for (const pid of [...new Set(withTask.map((p) => p.projectId as string))]) {
+        const ts = ((await window.api?.listProjectTasks?.(pid)) as { id: string; title: string }[]) ?? []
+        for (const tk of ts) names[tk.id] = tk.title
+      }
+      setTaskNames((m) => ({ ...m, ...names }))
+    })()
+  }, [plans])
   const [expanded, setExpanded] = useState<string | null>(null)
   const [delayOpen, setDelayOpen] = useState<string | null>(null)
   const [delayDate, setDelayDate] = useState('')
@@ -735,12 +764,16 @@ ${text.slice(0, 3000)}`
                       ) : null}
                       {(() => {
                         const proj = projects.find((x) => x.id === p.projectId)
+                        const taskName = p.projectTaskId ? taskNames[p.projectTaskId] : undefined
                         return proj ? (
                           <span className="chip !py-0" style={{ color: proj.color ?? '#22D3EE', borderColor: `${proj.color ?? '#22D3EE'}44` }}>
                             <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: proj.color ?? '#22D3EE' }} />
                             {proj.name}
+                            {taskName ? <span className="text-slate-500">· {taskName}</span> : null}
                             <button className="ml-0.5 text-slate-500 hover:text-red-400" title="移出项目" onClick={() => void setPlanProject(p.id, null)}>✕</button>
                           </span>
+                        ) : taskName ? (
+                          <span className="chip !py-0" title="已挂任务">{taskName}</span>
                         ) : null
                       })()}
                       {fc && !done && (p.planType ?? 'phase') === 'phase' ? (
