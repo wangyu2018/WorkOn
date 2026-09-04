@@ -804,9 +804,18 @@ export default function SuggestionWidget() {
           </div>
         ) : null}
 
-        {/* 问答条常驻（full 唯一提问入口）+ 桌宠气泡 */}
-        <div className="mx-3 mb-1 flex flex-col gap-2">
-          <AskBar askState={askState === 'hidden' ? 'input' : askState} askText={askText} setAskText={setAskText} submitAsk={submitAsk} onAskBlur={onAskBlur} onEscape={() => setAskState('hidden')} askAnswer={askAnswer} accent={accent} blurTimer={blurTimer} />
+        {/* 问答：默认按钮，点击展开输入框（full 唯一提问入口） */}
+        <div className="mx-3 mb-3 flex flex-col gap-2">
+          {!askState || askState === 'hidden' ? (
+            <button
+              className="flex items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] py-2 text-[12px] text-slate-400 transition-all hover:border-[rgba(139,92,246,0.5)] hover:text-[var(--violet)]"
+              onClick={() => setAskState('input')}
+            >
+              ✦ 问点什么…
+            </button>
+          ) : (
+            <AskBar askState={askState} askText={askText} setAskText={setAskText} submitAsk={submitAsk} onAskBlur={onAskBlur} onEscape={() => setAskState('hidden')} askAnswer={askAnswer} accent={accent} blurTimer={blurTimer} />
+          )}
           {petBubble && !widgetCompact && <PetBubbleLine text={petBubble} accent={accent} />}
         </div>
 
