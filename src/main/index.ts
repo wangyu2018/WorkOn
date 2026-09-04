@@ -13,6 +13,7 @@ import { startMonitor } from './monitor'
 import { disposeModelClient } from './recognition/modelClient'
 import { startInputProbe } from './recognition/inputProbe'
 import { addPoints } from './motions'
+import { pushNotify } from './notify'
 import { startIntegration } from './integration'
 import { startOnerAutoSync } from './oner'
 import { autoCleanOcrCache } from './ocr'
@@ -156,9 +157,7 @@ function startPeriodicJobs(): void {
       )
       for (const r of due) {
         updateIn<PlanItem>('plans', r.id, { fired: true })
-        if (Notification.isSupported()) {
-          new Notification({ title: 'WorkOn 提醒', body: r.title }).show()
-        }
+        pushNotify('rest', 'WorkOn 提醒', r.title, [{ label: '知道了', action: 'dismiss', primary: true }], 30)
         sendTo('main', 'plan-updated')
       }
     } catch (e) {

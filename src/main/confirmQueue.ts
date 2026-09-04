@@ -25,10 +25,10 @@ function canInterrupt(): boolean {
   const snap = presence.getSnapshot() as { focusLevel?: number; state?: string }
   const state = snap.state ?? 'idle'
   const lowStates = new Set(['slack', 'relax', 'break', 'lunch', 'idle'])
+  // 明确放松/摸鱼/空闲 → 可打断
   if (lowStates.has(state)) return true
-  if ((snap.focusLevel ?? 0) < 60) return true
-  if (!getFocusChainState().active) return true
-  return false
+  // 其余情况要求更严格：专注度 <40 且 链路未激活 才打扰（阈值宁高勿低）
+  return (snap.focusLevel ?? 0) < 40 && !getFocusChainState().active
 }
 
 /** 入队（指纹去重；已答指纹由调用方过滤） */

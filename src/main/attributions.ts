@@ -50,7 +50,7 @@ interface AttributionRuntime {
 
 const UNATTRIBUTED_SEC = 10 * 60
 const DRIFT_MIN_SEC = 15 * 60
-const DAILY_QUOTA = 5
+const DAILY_QUOTA = 2
 
 let rt: AttributionRuntime = {
   projectId: null,
