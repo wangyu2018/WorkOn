@@ -939,10 +939,6 @@ export default function SuggestionWidget() {
           ) : null}
         </div>
 
-        {/* ── 对话 ── */}
-        <div className="mx-3 mb-1 mt-2 flex flex-col gap-2">
-          <AskBar askState={askState} askText={askText} setAskText={setAskText} submitAsk={submitAsk} onAskBlur={onAskBlur} onEscape={() => setAskState('hidden')} askAnswer={askAnswer} accent={accent} blurTimer={blurTimer} />
-        </div>
         </>
 
         <ResizeHandle onDown={onResizePointerDown} onMove={onResizePointerMove} onUp={onResizePointerUp} />
@@ -979,7 +975,7 @@ function UnattrAskCard({ onDone, projects, apps, fp, date }: { onDone: () => voi
     onDone()
   }
   return (
-    <div className="w-[320px] rounded-2xl border border-[rgba(139,92,246,0.3)] p-3" style={PANEL_STYLE}>
+    <div className="w-full rounded-2xl border border-[rgba(139,92,246,0.3)] p-3" style={PANEL_STYLE}>
       <div className="mb-2 text-[11.5px] font-medium text-slate-200">现在干的活要归到哪个项目？</div>
       <div className="mb-2 flex flex-col gap-1">
         {projects.slice(0, 5).map((p) => (
