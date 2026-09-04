@@ -49,7 +49,7 @@ def main() -> None:
         sys.stdout.reconfigure(encoding="utf-8")
 
     model_dir = Path(args.model_dir) if args.model_dir else Path(__file__).parent / "models"
-    model_path = model_dir / "action_model_v2.json"
+    model_path = model_dir / "action_model_v3_real.json"
     feature_columns = json.loads((model_dir / "feature_columns.json").read_text(encoding="utf-8"))
     label_classes = json.loads((model_dir / "label_classes.json").read_text(encoding="utf-8"))
 
