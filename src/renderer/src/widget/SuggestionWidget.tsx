@@ -683,47 +683,39 @@ export default function SuggestionWidget() {
             <HeaderBtn icon="chevronRight" rotate={90} title="收起到最小" onClick={() => setMode('mini')} />
           </WidgetHeader>
           <div className="flex items-center gap-3 pl-4 py-3 pr-3">
+            <FocusRing size={44} focus={focus} color={meta.color} emoji={mainCatEmoji || meta.emoji} icon={mainCat ?? undefined} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 <span className="text-[14px] font-bold" style={{ color: meta.color }}>{meta.label}</span>
-                {/* v7 口径：链路时长可验证、诚实；链路未激活时才回落专注度 */}
-                <span className="text-[10px] text-slate-500 tabular-nums">
-                  {chain?.active
-                    ? `⚡ 链路 ${Math.max(1, Math.round(chain.sec / 60))}min`
-                    : `专注度 ${focus}`}
+                <span className="text-[10px] tabular-nums text-slate-500">
+                  {chain?.active ? `⚡ 链路 ${Math.max(1, Math.round(chain.sec / 60))}min` : `专注度 ${focus}`}
                 </span>
               </div>
-              {attr?.projectId ? (
-                <div className="mt-0.5 flex min-w-0 items-center gap-1"><GrainChip projectName={attr.projectName} taskTitle={attr.taskTitle} sec={attr.sec} /></div>
-              ) : (
-                <div className="mt-0.5 text-[12px] text-slate-600">{attrBtn}</div>
-              )}
+              <div className="mt-0.5 truncate text-[12px] text-slate-300">
+                {attr?.projectId
+                  ? (attr.taskTitle || attr.projectName)
+                  : liveTitle || '等待采集…'}
+              </div>
               {chain ? (
-                <div className="mt-0.5 text-[10px] text-slate-500">
-                  今日 {chain.chainsToday} 段链路 · 最长 {Math.max(1, Math.round(chain.longestChainSecToday / 60))}min · 摸鱼中断 {chain.interruptionsToday}
+                <div className="mt-0.5 truncate text-[10px] text-slate-500">
+                  今日 {chain.chainsToday} 段 · 最长 {Math.max(1, Math.round(chain.longestChainSecToday / 60))}m · 中断 {chain.interruptionsToday}
                 </div>
               ) : null}
-              {presence && presence.continuousFocusSec > 60 ? (
-                <div className="mt-0.5 text-[10px]" style={{ color: accent }}>已连续专注 {Math.round(presence.continuousFocusSec / 60)} 分钟</div>
-              ) : null}
             </div>
-            <FocusRing size={44} focus={focus} color={meta.color} emoji={mainCatEmoji || meta.emoji} icon={mainCat ?? undefined} />
+            {!attr?.projectId ? attrBtn : (
+              <button
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--violet)] transition-colors hover:bg-white/10"
+                title="问点什么…"
+                onClick={() => setAskState(askState === 'hidden' || askState === 'answer' ? 'input' : 'hidden')}
+              >
+                <Icon name="message" size={20} />
+              </button>
+            )}
           </div>
           <div className="mx-3 mb-3 flex flex-col gap-2 overflow-y-auto" style={{ maxHeight: 120 }}>
             <AskBar askState={askState} askText={askText} setAskText={setAskText} submitAsk={submitAsk} onAskBlur={onAskBlur} onEscape={() => setAskState('hidden')} askAnswer={askAnswer} accent={accent} blurTimer={blurTimer} />
             {petBubble && !widgetCompact && <PetBubbleLine text={petBubble} accent={accent} />}
           </div>
-          {/* 问答 FAB */}
-          {(
-            <button
-              className="absolute bottom-3 right-3 z-20 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-transform hover:scale-110 active:scale-95"
-              style={{ background: 'var(--aura)', boxShadow: 'var(--glow-i)' }}
-              title="问点什么…"
-              onClick={() => setAskState(askState === 'hidden' ? 'input' : 'hidden')}
-            >
-              <Icon name="message" size={15} />
-            </button>
-          )}
           <ResizeHandle onDown={onResizePointerDown} onMove={onResizePointerMove} onUp={onResizePointerUp} />
         </div>
       </div>
