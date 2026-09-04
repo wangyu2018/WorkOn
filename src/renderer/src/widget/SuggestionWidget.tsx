@@ -772,8 +772,14 @@ export default function SuggestionWidget() {
             ) : (
               <div className="mt-0.5">{attrBtn}</div>
             )}
+            {presence && presence.continuousFocusSec > 60 && showFocusMinutes && (
+              <div className="mt-0.5 text-[11px]" style={{ color: accent }}>
+                已专注 {Math.round(presence.continuousFocusSec / 60)} 分钟
+              </div>
+            )}
+          </div>
             <button
-              className={`ml-auto flex h-10 w-10 shrink-0 items-start justify-center rounded-lg pt-0.5 transition-colors hover:bg-white/10 ${askState !== 'hidden' && askState !== 'answer' ? 'text-slate-500 hover:text-slate-200' : 'text-[var(--violet)]'}`}
+              className={`ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-white/10 ${askState !== 'hidden' && askState !== 'answer' ? 'text-slate-500 hover:text-slate-200' : 'text-[var(--violet)]'}`}
               title="问点什么…"
               onClick={() => setAskState(askState === 'hidden' || askState === 'answer' ? 'input' : 'hidden')}
             >
@@ -782,13 +788,6 @@ export default function SuggestionWidget() {
                 <span className="absolute inset-0 flex items-center justify-center text-[8px] font-black" style={{ color: 'var(--violet)' }}>AI</span>
               </span>
             </button>
-            {presence && presence.continuousFocusSec > 60 && showFocusMinutes && (
-              <div className="mt-0.5 text-[11px]" style={{ color: accent }}>
-                已专注 {Math.round(presence.continuousFocusSec / 60)} 分钟
-              </div>
-            )}
-          </div>
-
         </div>
 
         {unattrCard}
