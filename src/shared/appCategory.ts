@@ -38,8 +38,8 @@ const APP_CATEGORY: Record<string, AppCategory> = {
   // 开发
   code: 'dev', 'code - insiders': 'dev', cursor: 'dev', intellij: 'dev', idea: 'dev', idea64: 'dev', ideaIU: 'dev',
   devenv: 'dev', rider64: 'dev', webstorm64: 'dev', pycharm64: 'dev', goland64: 'dev',
-  windsurf: 'dev', trae: 'dev', claude: 'dev', chatgpt: 'dev', codex: 'dev', cline: 'dev',
-  opencode: 'dev', 'trae cn': 'dev', 'qoderwork': 'dev',
+  windsurf: 'dev', trae: 'dev', 'trae cn': 'dev', claude: 'dev', chatgpt: 'dev', codex: 'dev', cline: 'dev', zcode: 'dev', 'codebuddy cn': 'dev', qoder: 'dev',
+  opencode: 'dev', 'qoderwork': 'dev',
   terminal: 'dev', windowsterminal: 'dev', wt: 'dev', '终端': 'dev', 'windows 终端': 'dev', cmd: 'dev', powershell: 'dev',
   postman: 'dev', apifox: 'dev', datagrip: 'dev', dbeaver: 'dev', navicat: 'dev',
   matlab: 'dev', spss: 'dev',

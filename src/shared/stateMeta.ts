@@ -92,6 +92,8 @@ export const APP_RULES: AppRule[] = [
   },
   { match: /^(windsurf)\.exe$/i, name: 'Windsurf', state: 'aidev' },
   { match: /^(trae)\.exe$/i, name: 'Trae', state: 'aidev' },
+  { match: /^zcode\.exe$/i, name: 'ZCode', state: 'aidev' },
+  { match: /^codebuddy.*\.exe$/i, name: 'CodeBuddy', state: 'aidev' },
   { match: /^(claude|claude[\w-]*)\.exe$/i, name: 'Claude', state: 'aidev', titleState: [{ match: /\.md\b|readme|文档|笔记/i, state: 'writing' }] },
   { match: /^(chatgpt|chatgpt[\w-]*)\.exe$/i, name: 'ChatGPT', state: 'aiqa', titleState: [{ match: /(代码|写|实现|函数|bug|修复|重构|开发|编程|调试|code|function|script|项目|需求)/i, state: 'aidev' }] },
   { match: /^(codex|cline|aider|gemini|gemini[\w-]*|kimi|kimichat)\.exe$/i, name: 'AI Dev', state: 'aidev' },

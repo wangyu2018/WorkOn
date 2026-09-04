@@ -251,8 +251,8 @@ export function attributionTick(app: string, title: string, ts: number, idleSec:
   }
 }
 
-/** 归属确认回调（widget 问题按钮 → IPC） */
-export function answerAttribution(fp: string, answer: string, payload: { projectId?: string; projectName?: string; apps?: string[] }): void {
+/** 归属确认回调（widget 问题按钮 → IPC）。返回最终归属的项目 id/名 */
+export function answerAttribution(fp: string, answer: string, payload: { projectId?: string; projectName?: string; apps?: string[] }): { projectId: string | null; projectName: string } {
   rememberAnswer(fp, answer)
   if (answer === 'bind' && payload.projectId) {
     bindProject(payload.projectId, { apps: payload.apps })
@@ -275,6 +275,7 @@ export function answerAttribution(fp: string, answer: string, payload: { project
     // ignore：清空粘滞，进未归类（当日指纹已记忆不再问）
     rt = { ...rt, projectId: null, projectName: '', taskId: null, taskTitle: '', sinceTs: 0, unattrSinceTs: null, unattrAppSet: [] }
   }
+  return { projectId: rt.projectId, projectName: rt.projectName }
 }
 
 export function getAttribution(): AttributionState {

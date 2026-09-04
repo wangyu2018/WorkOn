@@ -586,6 +586,9 @@ export default function SuggestionWidget() {
               if (question) answer('yes')
             }}
             projects={allProjects}
+            apps={(question as unknown as { apps?: string[] })?.apps}
+            fp={(question?.ctx ?? '').startsWith('attrib:') ? question!.ctx.slice(7) : undefined}
+            date={new Date().toISOString().slice(0, 10)}
           />
         ) : null}
         <Firefly active={firefly}>
@@ -855,7 +858,12 @@ export default function SuggestionWidget() {
 
           {question && (question.ctx ?? '').startsWith('attrib') ? (
             <div className="rounded-xl border border-[rgba(139,92,246,0.3)] p-2.5">
-              <UnattrAskCard projects={allProjects} onDone={() => answer('yes')} />
+              <UnattrAskCard
+                projects={allProjects}
+                apps={(question as unknown as { apps?: string[] })?.apps}
+                fp={(question?.ctx ?? '').startsWith('attrib:') ? question!.ctx.slice(7) : undefined}
+                onDone={() => answer('yes')}
+              />
             </div>
           ) : question ? (
             <AlertShell color="#8B5CF6" label="📋 轻问诊" collapsed={!!alertCollapsed['q']} onToggle={() => toggleAlert('q')}>
@@ -897,13 +905,31 @@ export default function SuggestionWidget() {
   )
 }
 
-/** 未归因轻问卡：归到已有项目 / 现场新建 / 忽略（当日指纹记忆在 main 侧） */
-function UnattrAskCard({ onDone, projects }: { onDone: () => void; projects: Project[] }) {
+/** 未归因轻问卡：先问在干啥 → 归到已有项目 / 现场新建（真指纹+真应用，归属后自动落一条计划） */
+function UnattrAskCard({ onDone, projects, apps, fp, date }: { onDone: () => void; projects: Project[]; apps?: string[]; fp?: string; date?: string }) {
   const [pick, setPick] = useState<string>('')
   const [newName, setNewName] = useState('')
-  const apps = '当前工作'
+  const [doing, setDoing] = useState('')
+  const realApps = (apps ?? []).filter(Boolean)
   const answer = (answer: string, payload?: { projectId?: string; projectName?: string }): void => {
-    void window.api?.answerAttribution?.(`unattr-ui:${Date.now()}`, answer, { apps: [apps], ...payload })
+    void window.api
+      ?.answerAttribution?.(fp || `unattr-ui:${Date.now()}`, answer, { apps: realApps, ...payload })
+      ?.then((res) => {
+        const r = res as { projectId?: string | null; projectName?: string } | undefined
+        const pid = r?.projectId ?? payload?.projectId
+        // 归属成功且填了"在干啥" → 落一条今日计划挂到该项目
+        if (pid && doing.trim()) {
+          void window.api?.savePlan?.({
+            date: date ?? new Date().toISOString().slice(0, 10),
+            title: doing.trim().slice(0, 100),
+            category: 'other',
+            status: 'planned',
+            projectId: pid,
+            source: 'manual',
+            note: '来自归属归类'
+          })
+        }
+      })
     onDone()
   }
   return (
@@ -923,14 +949,22 @@ function UnattrAskCard({ onDone, projects }: { onDone: () => void; projects: Pro
         ))}
         {!projects.length ? <div className="text-[10.5px] text-slate-500">还没有项目</div> : null}
       </div>
-      <div className="flex items-center gap-1.5">
-        <input
-          className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-white/5 px-2 py-1 text-[11px] text-slate-200 outline-none focus:border-[var(--border-active)]"
-          placeholder="或新建项目名…"
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-        />
-      </div>
+      <input
+        className="mb-2 w-full rounded-lg border border-[var(--line)] bg-white/5 px-2 py-1 text-[11px] text-slate-200 outline-none focus:border-[var(--border-active)]"
+        placeholder="刚才在干什么？（如：调 DM8 连接）"
+        value={doing}
+        onChange={(e) => setDoing(e.target.value)}
+      />
+      {!pick ? (
+        <div className="flex items-center gap-1.5">
+          <input
+            className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-white/5 px-2 py-1 text-[11px] text-slate-200 outline-none focus:border-[var(--border-active)]"
+            placeholder="或新建项目名…"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+          />
+        </div>
+      ) : null}
       <div className="mt-2 flex justify-end gap-1.5">
         <button className="rounded-lg bg-white/5 px-2.5 py-1 text-[10.5px] text-slate-400 hover:bg-white/10" onClick={onDone}>
           忽略
@@ -938,7 +972,7 @@ function UnattrAskCard({ onDone, projects }: { onDone: () => void; projects: Pro
         <button
           className="rounded-lg bg-[var(--teal)] px-2.5 py-1 text-[10.5px] font-bold text-white disabled:opacity-40"
           disabled={!pick && !newName.trim()}
-          onClick={() => answer(pick ? 'bind' : 'create', pick ? { projectId: pick } : { projectName: newName.trim() })}
+          onClick={() => answer(pick ? 'bind' : 'create', pick ? { projectId: pick } : { projectName: newName.trim() || doing.trim() })}
         >
           {pick ? '归到该项目' : '创建并归入'}
         </button>
