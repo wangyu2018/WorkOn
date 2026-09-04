@@ -777,7 +777,10 @@ export default function SuggestionWidget() {
               title="问点什么…"
               onClick={() => setAskState(askState === 'hidden' || askState === 'answer' ? 'input' : 'hidden')}
             >
-              <Icon name="message" size={22} />
+              <span className="relative inline-flex items-center justify-center">
+                <Icon name="message" size={22} />
+                <span className="absolute inset-0 flex items-center justify-center text-[8px] font-black" style={{ color: 'var(--violet)' }}>AI</span>
+              </span>
             </button>
             {presence && presence.continuousFocusSec > 60 && showFocusMinutes && (
               <div className="mt-0.5 text-[11px]" style={{ color: accent }}>
