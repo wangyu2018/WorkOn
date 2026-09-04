@@ -355,6 +355,37 @@ export default function SuggestionWidget() {
     const t = window.setInterval(pull, 8000)
     return () => window.clearInterval(t)
   }, [])
+  const loadProjects = (): void => {
+    void window.api?.listProjects?.().then((ps) => setAllProjects((ps as Project[]) ?? [])).catch(() => undefined)
+  }
+  /** 未归类时的操作钮（各态共用） */
+  const attrBtn = (
+    <button
+      className="shrink-0 rounded-full bg-[rgba(139,92,246,0.15)] px-2 py-0.5 text-[10px] font-bold text-[var(--violet)]"
+      onClick={(e) => {
+        e.stopPropagation()
+        loadProjects()
+        setShowUnattrAsk(true)
+      }}
+    >
+      归类
+    </button>
+  )
+  /** 未归因卡（compact/full 内嵌） */
+  const unattrCard = showUnattrAsk && !attr?.projectId ? (
+    <div className="mx-3 mb-2 rounded-xl border border-[rgba(139,92,246,0.3)] p-2.5" style={PANEL_STYLE}>
+      <UnattrAskCard
+        projects={allProjects}
+        apps={(question as unknown as { apps?: string[] })?.apps}
+        fp={(question?.ctx ?? '').startsWith('attrib:') ? question!.ctx.slice(7) : undefined}
+        date={new Date().toISOString().slice(0, 10)}
+        onDone={() => {
+          setShowUnattrAsk(false)
+          if (question) answer('yes')
+        }}
+      />
+    </div>
+  ) : null
   /** 萤火虫：有未处理确认问题 或 AI 回答尚未查看 */
   const firefly = !!question || askState === 'answer' || notifies.length > 0
   /** 归属项目的今日待办（full 态直接勾选） */
@@ -641,6 +672,7 @@ export default function SuggestionWidget() {
     return (
       <div className="flex h-screen w-screen flex-col items-end justify-end gap-2 p-3">
         <NotificationStack list={notifies} onDone={(id) => setNotifies((l) => l.filter((x) => x.id !== id))} />
+        {unattrCard}
         <div className="relative flex w-[300px] flex-col overflow-hidden rounded-2xl" style={PANEL_STYLE}>
           {/* 左缘状态色条 */}
           <div className="absolute left-0 top-0 bottom-0 w-[4px]" style={{ background: meta.color }} />
@@ -663,7 +695,9 @@ export default function SuggestionWidget() {
               {attr?.projectId ? (
                 <div className="mt-0.5 flex min-w-0 items-center gap-1"><GrainChip projectName={attr.projectName} taskTitle={attr.taskTitle} sec={attr.sec} /></div>
               ) : (
-                <div className="mt-0.5 text-[13px] text-slate-500">未归类 · 点右下「归类」标记项目</div>
+                <div className="mt-0.5 flex items-center gap-2 text-[13px] text-slate-500">
+                  未归类 {attrBtn}
+                </div>
               )}
               {chain ? (
                 <div className="mt-0.5 text-[10px] text-slate-500">
@@ -737,7 +771,9 @@ export default function SuggestionWidget() {
             {attr?.projectId ? (
               <div className="mt-0.5 flex min-w-0 items-center gap-1"><GrainChip projectName={attr.projectName} taskTitle={attr.taskTitle} sec={attr.sec} /></div>
             ) : (
-              <div className="mt-0.5 text-[11px] text-slate-500">未归类 · 在下方「归类」标记后开始累计</div>
+              <div className="mt-0.5 flex items-center gap-2 text-[11px] text-slate-500">
+                未归类 {attrBtn}
+              </div>
             )}
             {presence && presence.continuousFocusSec > 60 && showFocusMinutes && (
               <div className="mt-0.5 text-[11px]" style={{ color: accent }}>
@@ -748,6 +784,7 @@ export default function SuggestionWidget() {
 
         </div>
 
+        {unattrCard}
         {/* 归属项目今日待办（颗粒勾选） */}
         {attrPlans.length ? (
           <div className="mx-3 mb-2 rounded-xl border border-[var(--line)] bg-white/[0.02] px-2.5 py-2">
