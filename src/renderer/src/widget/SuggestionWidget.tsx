@@ -361,14 +361,15 @@ export default function SuggestionWidget() {
   /** 未归类时的操作钮（各态共用） */
   const attrBtn = (
     <button
-      className="shrink-0 rounded-full bg-[rgba(139,92,246,0.15)] px-2 py-0.5 text-[10px] font-bold text-[var(--violet)]"
+      className="shrink-0 rounded-full border border-[var(--line)] px-2 py-0.5 text-[10px] text-slate-500 transition-colors hover:border-[rgba(139,92,246,0.5)] hover:text-[var(--violet)]"
+      title="把当前工作挂到一个项目，时长才会计入"
       onClick={(e) => {
         e.stopPropagation()
         loadProjects()
         setShowUnattrAsk(true)
       }}
     >
-      归类
+      ◈ 归到项目
     </button>
   )
   /** 未归因卡（compact/full 内嵌） */
@@ -636,7 +637,7 @@ export default function SuggestionWidget() {
             ) : (
               <>
                 <StateDot color={meta.color} size={11} />
-                <span className="min-w-0 flex-1 truncate text-[11px] text-slate-300">当前工作未归类</span>
+                <span className="min-w-0 flex-1 truncate text-[11px] text-slate-500">做点什么，然后归到项目</span>
                 <button
                   className="shrink-0 rounded-full bg-[rgba(139,92,246,0.15)] px-2 py-0.5 text-[9.5px] font-bold text-[var(--violet)]"
                   onClick={(e) => { e.stopPropagation(); void window.api?.listProjects?.().then((ps) => setAllProjects((ps as Project[]) ?? [])).catch(() => undefined); setShowUnattrAsk(true) }}
@@ -695,9 +696,7 @@ export default function SuggestionWidget() {
               {attr?.projectId ? (
                 <div className="mt-0.5 flex min-w-0 items-center gap-1"><GrainChip projectName={attr.projectName} taskTitle={attr.taskTitle} sec={attr.sec} /></div>
               ) : (
-                <div className="mt-0.5 flex items-center gap-2 text-[13px] text-slate-500">
-                  未归类 {attrBtn}
-                </div>
+                <div className="mt-0.5 text-[12px] text-slate-600">{attrBtn}</div>
               )}
               {chain ? (
                 <div className="mt-0.5 text-[10px] text-slate-500">
@@ -771,9 +770,7 @@ export default function SuggestionWidget() {
             {attr?.projectId ? (
               <div className="mt-0.5 flex min-w-0 items-center gap-1"><GrainChip projectName={attr.projectName} taskTitle={attr.taskTitle} sec={attr.sec} /></div>
             ) : (
-              <div className="mt-0.5 flex items-center gap-2 text-[11px] text-slate-500">
-                未归类 {attrBtn}
-              </div>
+              <div className="mt-0.5">{attrBtn}</div>
             )}
             {presence && presence.continuousFocusSec > 60 && showFocusMinutes && (
               <div className="mt-0.5 text-[11px]" style={{ color: accent }}>
