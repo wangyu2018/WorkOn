@@ -325,7 +325,7 @@ export default function PlanView() {
         window.api.getTrail(date).catch(() => null),
         window.api.listProjects().catch(() => [])
       ])
-      setPlans((ps as PlanItem[]) ?? [])
+      setPlans(((ps as PlanItem[]) ?? []).filter((p) => !p.archived))
       setPva(pv as PlanVsActual)
       setTrail(tr as { segments: { mainApp: string; durationMin: number; mainState: string }[] } | null)
       setProjects((prjs as { id: string; name: string; color?: string }[]) ?? [])
@@ -1018,6 +1018,41 @@ ${text.slice(0, 3000)}`
       <ProjectBoard trail={trail} />
       </>
       )}
+
+      {/* ── 确认归档（第三分区）：已确认项分类展示 / 编辑 / 归档 ── */}
+      {(() => {
+        const confirmed = plans.filter((p) => p.confirmedFromQA || p.source === 'qa-confirm' || p.source === 'session')
+        const daily = confirmed.filter((p) => !p.projectId)
+        const projRel = confirmed.filter((p) => p.projectId)
+        if (!confirmed.length) return null
+        const group = (label: string, list: PlanItem[]) =>
+          list.length ? (
+            <div key={label} className="min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
+              <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-600">{label} · {list.length}</div>
+              {list.map((p) => (
+                <div key={p.id} className="flex items-center gap-2 py-1">
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-slate-300">{p.title}</span>
+                  <button className="glass-btn !px-2 !py-0.5 !text-[10px]" onClick={() => setEditor({ plan: p, isNew: false })}>编辑</button>
+                  <button
+                    className="glass-btn !px-2 !py-0.5 !text-[10px]"
+                    title="归档后从计划列表消失，可在此区查看"
+                    onClick={() => { void window.api.savePlan({ id: p.id, archived: true }); void load() }}
+                  >归档</button>
+                </div>
+              ))}
+            </div>
+          ) : null
+        return (
+          <div className="anim-fade-up mt-5">
+            <div className="mb-2 text-[10px] uppercase tracking-[0.14em] text-slate-600">确认归档 · 已确认内容（可编辑 / 归档）</div>
+            <div className="flex flex-wrap items-stretch gap-3">
+              {group('每日计划', daily)}
+              {group('项目开发', projRel)}
+              {group('问答确认', confirmed.filter((p) => p.source === 'qa-confirm' || p.confirmedFromQA))}
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

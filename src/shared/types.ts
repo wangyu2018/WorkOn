@@ -205,6 +205,7 @@ export interface PlanItem {
   delayReason?: string
   /** 是否来自问答确认（浏览器行为确认 / 手动确认） */
   confirmedFromQA?: boolean
+  archived?: boolean // 已归档：不再出现在计划列表/统计，只在确认归档区可查
   confirmContext?: string
   browserDerived?: boolean
   extId?: string // oner 外部 id（增量去重依据）
