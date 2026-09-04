@@ -230,7 +230,7 @@ async function tick(): Promise<void> {
     automationMinuteTick()
     automationOnFocusTick(presence.getSnapshot().continuousFocusSec ?? 0)
     // 归属引擎 + 目录活动落库（项目循环）；隐私排除应用不参与归属
-    attributionTick(excluded ? '' : corrected.app || '', excluded ? '' : safeTitle || '', ts, idleSec, excluded)
+    attributionTick(excluded ? '' : corrected.app || '', excluded ? '' : safeTitle || '', ts, idleSec, excluded, state)
     dirWatcherTick()
     dispatchConfirmQueue()
 

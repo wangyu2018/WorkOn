@@ -10,6 +10,7 @@ import { getSettings, setSettings } from './settings'
 import { bus } from './state'
 import { genId } from '@shared/types'
 import { fuzzyMatch } from '@shared/fuzzy'
+import { categoryOfWithOverride } from '@shared/appCategory'
 import { enqueueAsk } from './confirmQueue'
 import type { Project, ProjectTask } from '@shared/types'
 
@@ -51,6 +52,7 @@ interface AttributionRuntime {
 const UNATTRIBUTED_SEC = 10 * 60
 const DRIFT_MIN_SEC = 15 * 60
 const DAILY_QUOTA = 2
+const SLACK_LIKE = new Set(['slack', 'relax', 'break', 'lunch'])
 
 let rt: AttributionRuntime = {
   projectId: null,
@@ -177,7 +179,7 @@ function matchTask(projectId: string, title: string): ProjectTask | null {
 /**
  * 归属 tick（monitor 每 tick 调用）：返回当前归属并处理漂移/未归因确认
  */
-export function attributionTick(app: string, title: string, ts: number, idleSec: number, excluded = false): AttributionState {
+export function attributionTick(app: string, title: string, ts: number, idleSec: number, excluded = false, state?: string): AttributionState {
   // 隐私排除应用：不累计未归因（避免"银行类应用也来问归哪个项目"），并复位计时
   if (excluded) {
     rt.unattrSinceTs = null
@@ -211,6 +213,13 @@ export function attributionTick(app: string, title: string, ts: number, idleSec:
     }
   } else if (rt.projectId) {
     // 粘滞中但当前应用不在任何绑定：漂移计时
+    // 摸鱼/娱乐内容显然不是项目工作：不触发漂移询问（打断你看视频很蠢）
+    const catNow = categoryOfWithOverride(app ?? '', getSettings().appCategoryOverride)
+    if (catNow === 'media' || catNow === 'game' || SLACK_LIKE.has(state ?? '')) {
+      rt.unattrSinceTs = null
+      rt.unattrAppSet = []
+      return getAttribution()
+    }
     rt.unattrSinceTs = rt.unattrSinceTs ?? ts
     if (!rt.unattrAppSet.includes(app)) rt.unattrAppSet.push(app)
     const driftSec = (ts - rt.unattrSinceTs) / 1000
@@ -227,7 +236,13 @@ export function attributionTick(app: string, title: string, ts: number, idleSec:
       }
     }
   } else {
-    // 无归属持续工作 → 轻问归因（指纹=应用集+日期，忽略后当日不再问）
+    // 摸鱼/娱乐：同样不问（没人会给抖音做项目归属）
+    const catNow = categoryOfWithOverride(app ?? '', getSettings().appCategoryOverride)
+    if (catNow === 'media' || catNow === 'game' || SLACK_LIKE.has(state ?? '')) {
+      rt.unattrSinceTs = null
+      rt.unattrAppSet = []
+      return getAttribution()
+    }
     rt.unattrSinceTs = rt.unattrSinceTs ?? ts
     if (!rt.unattrAppSet.includes(app)) rt.unattrAppSet.push(app)
     const unattrSec = (ts - rt.unattrSinceTs) / 1000
