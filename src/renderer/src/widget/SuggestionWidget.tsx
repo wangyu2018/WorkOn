@@ -773,11 +773,11 @@ export default function SuggestionWidget() {
               <div className="mt-0.5">{attrBtn}</div>
             )}
             <button
-              className={`ml-auto -mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-white/10 ${askState !== 'hidden' && askState !== 'answer' ? 'text-slate-500 hover:text-slate-200' : 'text-[var(--violet)]'}`}
+              className={`ml-auto flex h-10 w-10 shrink-0 items-start justify-center rounded-lg pt-0.5 transition-colors hover:bg-white/10 ${askState !== 'hidden' && askState !== 'answer' ? 'text-slate-500 hover:text-slate-200' : 'text-[var(--violet)]'}`}
               title="问点什么…"
               onClick={() => setAskState(askState === 'hidden' || askState === 'answer' ? 'input' : 'hidden')}
             >
-              <Icon name="message" size={15} />
+              <Icon name="message" size={22} />
             </button>
             {presence && presence.continuousFocusSec > 60 && showFocusMinutes && (
               <div className="mt-0.5 text-[11px]" style={{ color: accent }}>
