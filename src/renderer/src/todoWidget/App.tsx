@@ -36,6 +36,17 @@ export default function TodoWidgetApp() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [onTop, setOnTop] = useState(true)
   const [collapsed, setCollapsed] = useState(false)
+  /** 编辑模式：三分区显隐（⚙ 进入，localStorage 持久化） */
+  const [editMode, setEditMode] = useState(false)
+  const [zones, setZones] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem('woTodoZones') ?? '{}') } catch { return {} }
+  })
+  const zoneOn = (k: string, dflt = true): boolean => zones[k] ?? dflt
+  const toggleZone = (k: string): void => {
+    const next = { ...zones, [k]: !zoneOn(k) }
+    setZones(next)
+    localStorage.setItem('woTodoZones', JSON.stringify(next))
+  }
 
   const refresh = async (): Promise<void> => {
     try {
@@ -150,10 +161,27 @@ export default function TodoWidgetApp() {
           <button className="ml-auto text-[11px] text-slate-500 transition-colors hover:text-slate-200" onClick={() => void toggleLayer()} title={onTop ? '切到底层（穿透）' : '切到顶层'}>
             {onTop ? '◉' : '○'}
           </button>
+          <button className="text-[11px] text-slate-500 transition-colors hover:text-slate-200" onClick={() => setEditMode((m) => !m)} title="编辑分区显隐">
+            ⚙
+          </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
+          {editMode ? (
+            <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-lg border border-dashed border-[var(--line)] p-1.5">
+              <span className="text-[10px] text-slate-500">显示分区：</span>
+              {([['projects', '项目'], ['todos', '待办'], ['life', '生活']] as const).map(([k, label]) => (
+                <button
+                  key={k}
+                  className={`rounded-full border px-2 py-0.5 text-[10px] font-bold transition-all ${zoneOn(k) ? 'border-[rgba(15,181,164,0.5)] bg-[var(--teal-soft)] text-[var(--teal-deep)]' : 'border-[var(--line)] text-slate-500'}`}
+                  onClick={() => toggleZone(k)}
+                >
+                  {label}{zoneOn(k) ? ' ✓' : ''}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {/* ── 项目区：一级项目 + 二级任务树 ── */}
-          {projects.map((p) => {
+          {zoneOn('projects') && projects.map((p) => {
             const list = tasks[p.id] ?? []
             const { done, total, pct } = progressOf(list)
             const open = expanded[p.id] ?? true
@@ -195,7 +223,7 @@ export default function TodoWidgetApp() {
           {!projects.length ? <div className="py-1 text-[11px] text-slate-600">还没有活跃项目 · Alt+Space 打开对话框创建</div> : null}
 
           {/* ── 待办区 ── */}
-          {todoZone.length ? (
+          {zoneOn('todos') && todoZone.length ? (
             <>
               <div className="mb-0.5 mt-3 border-t border-[var(--line)] pt-2 text-[10px] uppercase tracking-wider text-slate-600">待办</div>
               {todoZone.map((p) => (
@@ -213,7 +241,7 @@ export default function TodoWidgetApp() {
           ) : null}
 
           {/* ── 生活区 ── */}
-          {lifeZone.length ? (
+          {zoneOn('life') && lifeZone.length ? (
             <>
               <div className="mb-0.5 mt-3 border-t border-[var(--line)] pt-2 text-[10px] uppercase tracking-wider text-slate-600">生活</div>
               {lifeZone.map((p) => (

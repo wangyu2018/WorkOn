@@ -11,9 +11,14 @@ export function WeatherCard() {
   const [hours, setHours] = useState<HourItem[]>([])
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  /** 城市切换（本地覆盖；清空=跟随全局设置） */
+  const [city, setCity] = useState<string>(() => localStorage.getItem('woWeatherCity') ?? '')
+  const cityRef = useRef(city)
+  cityRef.current = city
 
   const load = (): void => {
-    void window.api?.getWeather?.().then((w) => {
+    const c = localStorage.getItem('woWeatherCity') ?? undefined
+    void window.api?.getWeather?.(c).then((w) => {
       const o = w as { text?: string; tempC?: number; error?: string }
       if (o && !o.error && typeof o.tempC === 'number') setNow({ text: o.text ?? '', tempC: o.tempC })
     }).catch(() => undefined)
@@ -27,7 +32,7 @@ export function WeatherCard() {
 
   useEffect(() => {
     if (!open) return
-    void window.api?.getWeatherNext?.(72).then((hs) => {
+    void window.api?.getWeatherNext?.(72, localStorage.getItem('woWeatherCity') ?? undefined).then((hs) => {
       const arr = hs as HourItem[]
       if (Array.isArray(arr)) setHours(arr.filter((h) => h && typeof h.tempC === 'number'))
     }).catch(() => undefined)
@@ -102,6 +107,23 @@ export function WeatherCard() {
               })}
               {!dayKeys.length ? <span className="text-slate-600">—</span> : null}
             </div>
+          </div>
+          {/* 城市切换 */}
+          <div className="mt-2.5 flex items-center gap-1.5 border-t border-[var(--line)] pt-2">
+            <span className="shrink-0 text-[10px] uppercase tracking-wider text-slate-500">城市</span>
+            <input
+              className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-transparent px-2 py-1 text-[11px] text-slate-300 outline-none focus:border-[var(--border-active)]"
+              placeholder="留空跟随全局设置"
+              defaultValue={city}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const v = (e.target as HTMLInputElement).value.trim()
+                  localStorage.setItem('woWeatherCity', v)
+                  setCity(v)
+                  load()
+                }
+              }}
+            />
           </div>
         </div>
       ) : null}
