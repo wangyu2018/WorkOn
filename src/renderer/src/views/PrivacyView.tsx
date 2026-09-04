@@ -207,6 +207,122 @@ function PrivacyStats({ reloadToken, excludedKey, onCleared }: { reloadToken: nu
   )
 }
 
+/** 「不采集」类别名单：静态五项，开关增删 privacyExcludedApps 关键词（别名包含式匹配） */
+const DO_NOT_COLLECT_ITEMS = [
+  { emoji: '💬', label: '微信 / 聊天', keyword: '微信', desc: '聊天应用不截屏、不记标题' },
+  { emoji: '🏦', label: '银行 / 支付', keyword: '银行', desc: '含「银行」字样的应用与页面' },
+  { emoji: '💊', label: '健康 / 医疗', keyword: '健康', desc: '健康类应用不进入任何分析' },
+  { emoji: '🖼️', label: '相册 / 照片', keyword: '相册', desc: '照片类应用跳过 OCR 与记录' },
+  { emoji: '🔑', label: '密码管理器', keyword: '密码', desc: '1Password / Bitwarden 等不记录' }
+] as const
+
+/** 不采集名单网格：两列卡（emoji + 名称 + 开关），绑定 settings.privacyExcludedApps 字符串数组 */
+function DoNotCollectGrid({ excluded, onToggle }: { excluded: string[]; onToggle: (keyword: string, on: boolean) => void }) {
+  return (
+    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+      {DO_NOT_COLLECT_ITEMS.map(({ emoji, label, keyword, desc }) => {
+        const on = excluded.includes(keyword)
+        return (
+          <div
+            key={keyword}
+            className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 transition-colors ${
+              on ? '' : 'opacity-70'
+            }`}
+            style={{
+              borderColor: on ? 'rgba(16,185,129,.35)' : 'var(--line)',
+              background: on ? 'rgba(16,185,129,.06)' : 'var(--surface-2)'
+            }}
+            title={desc}
+          >
+            <span
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[14px]"
+              style={{ background: 'var(--surface-3)', border: '1px solid var(--line)' }}
+            >
+              {emoji}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[12.5px] font-medium text-slate-200">{label}</div>
+              <div className="mt-0.5 truncate text-[10.5px] text-slate-500">{desc}</div>
+            </div>
+            <Toggle checked={on} onChange={(v) => onToggle(keyword, v)} />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+interface PrivacyStatRow {
+  app: string
+  count: number
+  lastTs: number
+  excluded: boolean
+}
+
+/** 存储占用条：活动记录（真实条数，体积即将支持）/ AI 上下文缓存（OCR 实测字节）/ 报表附件（即将支持） */
+function StorageBars() {
+  const [ocr, setOcr] = useState<OcrStats | null>(null)
+  const [recordCount, setRecordCount] = useState<number | null>(null)
+  useEffect(() => {
+    window.api
+      .getOcrStats()
+      .then((r) => setOcr(r as OcrStats))
+      .catch(() => setOcr(null))
+    window.api
+      .getPrivacyStats()
+      .then((r) => {
+        const rows = (r as PrivacyStatRow[] | null) ?? []
+        setRecordCount(rows.reduce((a, b) => a + (b.count || 0), 0))
+      })
+      .catch(() => setRecordCount(null))
+  }, [])
+  /** 满格基准：200MB */
+  const REF = 200 * 1024 * 1024
+  const rows: { emoji: string; label: string; gradient: string; width: number; value: string; pending?: boolean }[] = [
+    {
+      emoji: '📝',
+      label: '活动记录',
+      gradient: 'linear-gradient(90deg, rgba(15,181,164,.95), rgba(15,181,164,.4))',
+      width: 26,
+      value: recordCount != null ? `${recordCount.toLocaleString()} 条 · 体积统计即将支持` : '统计中…'
+    },
+    {
+      emoji: '🤖',
+      label: 'AI 上下文缓存',
+      gradient: 'var(--aura)',
+      width: ocr ? Math.max(4, Math.min(100, Math.round((ocr.totalBytes / REF) * 100))) : 3,
+      value: ocr ? `${fmtBytes(ocr.totalBytes)}（截屏 ${ocr.shotCount} 张 + 模型）` : '统计中…'
+    },
+    {
+      emoji: '📎',
+      label: '报表附件',
+      gradient: 'linear-gradient(90deg, rgba(139,92,246,.8), rgba(6,182,212,.45))',
+      width: 12,
+      value: '即将支持',
+      pending: true
+    }
+  ]
+  return (
+    <div className="flex flex-col gap-3 py-1">
+      {rows.map(({ emoji, label, gradient, width, value, pending }) => (
+        <div key={label} className="flex items-center gap-3">
+          <span className="w-28 shrink-0 truncate text-[12px] text-slate-400">
+            {emoji} {label}
+          </span>
+          <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--surface-3)' }}>
+            <span
+              className={`block h-full rounded-full ${pending ? 'opacity-40' : ''}`}
+              style={{ width: `${width}%`, background: gradient, transition: 'width .5s var(--ease-soft)' }}
+            />
+          </span>
+          <span className={`w-44 shrink-0 text-right text-[11px] tabular-nums ${pending ? 'text-slate-600' : 'text-slate-500'}`}>{value}</span>
+        </div>
+      ))}
+      <p className="text-[10.5px] text-slate-600">数据全部存储在本机 userData 目录；清空方式见上方「一键清空」与下方留存策略。</p>
+    </div>
+  )
+}
+
 /** 隐私管理：应用排除 + OCR 资源 + 数据留存 + 用户画像（从设置中心独立） */
 export default function PrivacyView() {
   const settings = useSettingsStore((s) => s.settings)
@@ -261,6 +377,49 @@ export default function PrivacyView() {
     <div className="view-enter mx-auto flex w-full max-w-[960px] flex-col gap-5">
       {/* 页面标题区 */}
       <PageHeader icon="shield" title="隐私与数据管理" desc="应用级采集控制 · OCR 资源 · 本地数据留存与画像" />
+
+      {/* 0.1 绿盾声明：本地优先 */}
+      <div
+        className="anim-fade-up glass-card hoverable flex flex-wrap items-center gap-3.5 !p-4"
+        style={{
+          background: 'linear-gradient(135deg, rgba(16,185,129,.10), rgba(15,181,164,.05))',
+          border: '1px solid rgba(16,185,129,.35)'
+        }}
+      >
+        <span
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
+          style={{ background: 'linear-gradient(135deg, #10b981, #34d399)', boxShadow: '0 4px 14px rgba(16,185,129,.35)' }}
+        >
+          <Icon name="shield" size={20} className="text-white" />
+        </span>
+        <div className="min-w-[220px] flex-1">
+          <div className="flex flex-wrap items-center gap-2 text-[14px] font-semibold text-slate-100">
+            本地优先 · 0 云端上传
+            <span className="rounded-full border px-1.5 py-0.5 text-[10px] font-medium" style={{ borderColor: 'rgba(16,185,129,.4)', background: 'rgba(16,185,129,.12)', color: '#34d399' }}>
+              已验证
+            </span>
+          </div>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">
+            活动记录、画像与报表只写本机数据库；联网仅限天气查询与 AI（默认关闭），且不包含任何窗口正文内容。
+          </p>
+        </div>
+        <button className="glass-btn primary shrink-0" onClick={() => setConfirmClear(true)} title="清空本机缓存数据（截屏缓存等）">
+          <Icon name="trash" size={13} /> 一键清空
+        </button>
+      </div>
+
+      {/* 0.2 不采集名单 */}
+      <Section title="不采集名单" icon="eye" delay={30}>
+        <div className="py-2.5">
+          <p className="mb-2.5 text-[12px] text-slate-500">打开开关的类别完全停止采集：不截屏、不 OCR、不记标题、不产生活动记录。</p>
+          <DoNotCollectGrid excluded={excludedApps} onToggle={(k, v) => toggleExcludedApp(k, v)} />
+        </div>
+      </Section>
+
+      {/* 0.3 存储占用 */}
+      <Section title="存储占用" icon="chart" delay={60}>
+        <StorageBars />
+      </Section>
 
       {/* 1. 应用级不采集 */}
       <Section title="隐私保护" icon="shield">

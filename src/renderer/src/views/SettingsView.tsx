@@ -540,26 +540,46 @@ export default function SettingsView() {
             ))}
           </div>
         </Row>
-        <Row label="亮暗模式" desc="跟随系统时随操作系统自动切换">
-          <div className="flex gap-2">
-            {(
-              [
-                ['light', '☀️', '亮色'],
-                ['dark', '🌙', '暗色'],
-                ['auto', '🖥️', '跟随系统']
-              ] as const
-            ).map(([id, emoji, label]) => (
+        <div className="flex items-center gap-4 py-2.5">
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] text-slate-300">亮暗模式</div>
+            <div className="mt-0.5 text-[11px] text-slate-500">跟随系统时随操作系统自动切换</div>
+          </div>
+        </div>
+        {/* 外观三卡：浅色 / 深色 / 跟随系统（绑定 settings.appearanceMode） */}
+        <div className="grid grid-cols-3 gap-3 pb-3 pt-1">
+          {(
+            [
+              ['light', '☀️', '浅色', '明亮界面，日间使用'],
+              ['dark', '🌙', '深色', '低蓝光，夜间更护眼'],
+              ['auto', '🪄', '跟随系统', '随操作系统亮暗自动切换']
+            ] as const
+          ).map(([id, emoji, label, desc]) => {
+            const active = settings.appearanceMode === id
+            return (
               <button
                 key={id}
-                className={`pill-btn flex items-center gap-1.5${settings.appearanceMode === id ? ' active' : ''}`}
                 onClick={() => p({ appearanceMode: id })}
+                className="rounded-xl px-3 py-3 text-left transition-all duration-150 hover:scale-[1.02]"
+                style={{
+                  border: `2px solid ${active ? 'var(--teal)' : 'var(--line)'}`,
+                  background: active ? 'var(--surface-2)' : 'transparent',
+                  boxShadow: active ? 'var(--glow-t)' : 'var(--shadow-sm)'
+                }}
               >
-                <span>{emoji}</span>
-                {label}
+                <span className="flex items-center gap-2">
+                  <span className="text-[16px] leading-none">{emoji}</span>
+                  <span className={`text-[13px] font-medium ${active ? 'text-slate-100' : 'text-slate-300'}`}>{label}</span>
+                  <span
+                    className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full transition-all"
+                    style={{ background: active ? 'var(--teal)' : 'transparent', boxShadow: active ? '0 0 6px var(--teal)' : 'none' }}
+                  />
+                </span>
+                <span className="mt-1 block text-[10.5px] leading-relaxed text-slate-500">{desc}</span>
               </button>
-            ))}
-          </div>
-        </Row>
+            )
+          })}
+        </div>
       </Section>
 
       {/* Oner 数据同步（能力 + 开关 + 折叠详情） */}

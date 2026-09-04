@@ -3,9 +3,10 @@
  * 依据：workon-design-spec-v2.7 §1.2 八层画像、§2 五级隐私、§4 可追溯访问日志
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { AccessLog, PrivacyLevel, ProfileField, UserPersona, UserType } from '@shared/types'
+import type { AccessLog, MergedTrail, PrivacyLevel, ProfileField, UserPersona, UserType } from '@shared/types'
 import { PERSONA_LAYERS, PRIVACY_LEVEL_META, completenessLabel, completenessOf, type PersonaLayerMeta } from '@shared/personaMeta'
 import { USER_TYPE_META } from '@shared/attention'
+import { WORK_LIKE_STATES } from '@shared/stateMeta'
 import { Icon } from '../components/Icon'
 import { Toggle } from '../components/Toggle'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -275,6 +276,170 @@ function LayerBanner({ layerKey }: { layerKey: PersonaLayerKey }) {
         <span className="text-slate-400">{meta.desc}。</span> AI 访问方式：{meta.aiUsage}
       </div>
     </div>
+  )
+}
+
+// ───────────────────────── 注意力节律卡 ─────────────────────────
+
+/** 热力矩阵列：8~22 点共 15 列 */
+const RHYTHM_HOURS = Array.from({ length: 15 }, (_, i) => i + 8)
+/** var(--teal) 的 RGB 通道（五档透明度直接派生，深浅模式通用） */
+const TEAL_RGB = '15, 181, 164'
+
+interface RhythmData {
+  /** [工作日, 周末] 各小时平均工作分钟（index = 小时 - 8） */
+  avg: [number[], number[]]
+  /** 参与均值的 [工作日, 周末] 天数 */
+  dayCount: [number, number]
+  /** 最热 2 小时窗；weekend=true 表示周末均值更高 */
+  peak: { startHour: number; weekend: boolean } | null
+}
+
+/** 近 14 天轨迹 → (是否周末, 小时) 工作分钟均值矩阵 + 峰值 2 小时窗（复用现有 getTrail，无新 IPC） */
+function useAttentionRhythm(): RhythmData | null {
+  const [data, setData] = useState<RhythmData | null>(null)
+  useEffect(() => {
+    let alive = true
+    const dates: string[] = []
+    for (let i = 0; i < 14; i++) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      dates.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)
+    }
+    void (async () => {
+      const sums: [number[], number[]] = [Array<number>(15).fill(0), Array<number>(15).fill(0)]
+      const dayCount: [number, number] = [0, 0]
+      await Promise.all(
+        dates.map(async (date) => {
+          const d = new Date(`${date}T00:00:00`)
+          const row = d.getDay() === 0 || d.getDay() === 6 ? 1 : 0
+          dayCount[row]++
+          let trail: MergedTrail | null = null
+          try {
+            trail = (await window.api.getTrail(date)) as MergedTrail | null
+          } catch {
+            /* 单日失败忽略 */
+          }
+          if (!trail?.segments?.length) return
+          const dayStart = d.getTime()
+          const dayEnd = dayStart + 86400000
+          for (const seg of trail.segments) {
+            if (seg.glance || !WORK_LIKE_STATES.includes(seg.mainState)) continue
+            // 跨小时段按小时边界切分归属
+            let t = Math.max(seg.startTs, dayStart)
+            const end = Math.min(seg.endTs, dayEnd)
+            while (t < end) {
+              const cur = new Date(t)
+              const hourEnd = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate(), cur.getHours() + 1).getTime()
+              const pieceEnd = Math.min(end, hourEnd)
+              const idx = cur.getHours() - 8
+              if (idx >= 0 && idx < 15) sums[row][idx] += (pieceEnd - t) / 60000
+              t = pieceEnd
+            }
+          }
+        })
+      )
+      if (!alive) return
+      const avg: [number[], number[]] = [
+        sums[0].map((v) => (dayCount[0] ? v / dayCount[0] : 0)),
+        sums[1].map((v) => (dayCount[1] ? v / dayCount[1] : 0))
+      ]
+      // 最热 2 小时窗：两行合计最高；并判断哪一行更活跃
+      let best = 0
+      let peak: RhythmData['peak'] = null
+      for (let i = 0; i < 14; i++) {
+        const wd = avg[0][i] + avg[0][i + 1]
+        const we = avg[1][i] + avg[1][i + 1]
+        if (wd + we > best) {
+          best = wd + we
+          peak = { startHour: 8 + i, weekend: we > wd }
+        }
+      }
+      setData({ avg, dayCount, peak })
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
+  return data
+}
+
+/** 注意力节律卡：工作日/周末 × 8~22 点热力矩阵（teal 五档）+ 峰值结论 + 图例 */
+function RhythmSection() {
+  const data = useAttentionRhythm()
+  const max = data ? Math.max(1, ...data.avg[0], ...data.avg[1]) : 1
+  /** 五档：0=底色 1~4=teal .25/.5/.75/1 */
+  const tierOf = (v: number) => (v <= 0 ? 0 : Math.max(1, Math.min(4, Math.ceil((v / max) * 4))))
+  const cellBg = (tier: number) => (tier === 0 ? 'var(--surface-3)' : `rgba(${TEAL_RGB}, ${tier * 0.25})`)
+  const hh = (h: number) => String(h).padStart(2, '0')
+  return (
+    <section className="glass-card hoverable">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <h3 className="text-[14px] font-semibold text-slate-200">⏱ 注意力节律</h3>
+        <span className="text-[11px] text-slate-500">近 14 天工作时段分布 · 越亮代表该小时平均投入越深</span>
+        {/* 图例：少 → 多 */}
+        <span className="ml-auto flex items-center gap-1 text-[10px] text-slate-500">
+          少
+          {[0, 1, 2, 3, 4].map((t) => (
+            <span key={t} className="h-3 w-3 rounded-[4px]" style={{ background: cellBg(t), border: '1px solid var(--line)' }} />
+          ))}
+          多
+        </span>
+      </div>
+      {!data ? (
+        <div className="flex h-16 items-center justify-center text-[12px] text-slate-500">
+          <span className="pulse-dot mr-2 h-1.5 w-1.5 rounded-full" style={{ background: 'var(--teal)' }} /> 节律计算中…
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-col gap-1.5">
+            {(['工作日', '周末'] as const).map((rowLabel, row) => (
+              <div key={rowLabel} className="flex items-center gap-2">
+                <span className="w-11 shrink-0 text-right text-[11px] text-slate-500">{rowLabel}</span>
+                <div className="grid min-w-0 flex-1 gap-1" style={{ gridTemplateColumns: 'repeat(15, minmax(0, 1fr))' }}>
+                  {RHYTHM_HOURS.map((h, i) => {
+                    const v = data.avg[row][i]
+                    return (
+                      <span
+                        key={h}
+                        title={`${rowLabel} ${hh(h)}:00 · 平均 ${fmtMin(Math.round(v))}`}
+                        className="h-6 rounded-md transition-transform duration-150 hover:scale-110"
+                        style={{ background: cellBg(tierOf(v)) }}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* 小时刻度（偶数列标注） */}
+          <div className="mt-1 flex items-center gap-2">
+            <span className="w-11 shrink-0" />
+            <div className="grid min-w-0 flex-1" style={{ gridTemplateColumns: 'repeat(15, minmax(0, 1fr))' }}>
+              {RHYTHM_HOURS.map((h) => (
+                <span key={h} className="text-center text-[9px] tabular-nums text-slate-600">
+                  {h % 2 === 0 ? h : ''}
+                </span>
+              ))}
+            </div>
+          </div>
+          {/* 结论行 */}
+          <div className="mt-2.5 rounded-lg border px-3 py-2 text-[12px] text-slate-300" style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }}>
+            {data.peak ? (
+              <>
+                ⭐ 你的节律峰值{' '}
+                <span className="font-semibold" style={{ color: 'var(--teal)' }}>
+                  {hh(data.peak.startHour)}:00–{hh(data.peak.startHour + 2)}:00
+                </span>
+                <span className="text-slate-500"> · {data.peak.weekend ? '周末也相当活跃' : '工作日尤其稳定'}</span>
+              </>
+            ) : (
+              <span className="text-slate-500">数据积累中 · 产生活动记录后即可解读你的节律峰值</span>
+            )}
+          </div>
+        </>
+      )}
+    </section>
   )
 }
 
@@ -1191,6 +1356,9 @@ export default function ProfileView() {
           </div>
         </aside>
       </div>
+
+      {/* 注意力节律（近 14 天 工作日/周末 × 8~22 点热力矩阵） */}
+      <RhythmSection />
 
       <section className="glass-card hoverable">
         <h3 className="mb-3 text-[14px] font-semibold text-slate-200">📍 我的位置</h3>

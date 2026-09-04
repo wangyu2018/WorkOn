@@ -4,7 +4,7 @@
  * - 与现有「动作工坊」（MotionLab 录制动作+积分）并列，互不影响
  */
 import { useEffect, useState } from 'react'
-import type { AutomationRule } from '@shared/types'
+import type { AutomationRule, AutomationAction } from '@shared/types'
 
 type TriggerKind = AutomationRule['trigger']['kind']
 type ActionKind = AutomationRule['actions'][number]['kind']
@@ -35,7 +35,7 @@ interface Draft {
   focusHours: number
   workdayOnly: boolean
   minFocusHours: number
-  actions: ActionKind[]
+  actions: AutomationAction[]
 }
 
 const EMPTY_DRAFT: Draft = {
@@ -46,24 +46,24 @@ const EMPTY_DRAFT: Draft = {
   focusHours: 2,
   workdayOnly: true,
   minFocusHours: 0,
-  actions: ['genReport']
+  actions: [{ kind: 'genReport' }]
 }
 
 const TEMPLATES: { name: string; desc: string; rule: Draft }[] = [
   {
     name: '每天 18:00 生成日报',
     desc: '工作日 18:00 自动生成今日日报，桌宠递上',
-    rule: { name: '每天 18:00 生成日报', triggerKind: 'daily', time: '18:00', app: '', focusHours: 2, workdayOnly: true, minFocusHours: 0, actions: ['genReport', 'petCelebrate'] }
+    rule: { name: '每天 18:00 生成日报', triggerKind: 'daily', time: '18:00', app: '', focusHours: 2, workdayOnly: true, minFocusHours: 0, actions: [{ kind: 'genReport' }, { kind: 'petCelebrate' }] }
   },
   {
     name: '专注满 2h 提醒休息',
     desc: '连续专注达 2 小时 → 通知休息',
-    rule: { name: '专注满 2h 提醒休息', triggerKind: 'focusReached', time: '18:00', app: '', focusHours: 2, workdayOnly: false, minFocusHours: 0, actions: ['notify'] }
+    rule: { name: '专注满 2h 提醒休息', triggerKind: 'focusReached', time: '18:00', app: '', focusHours: 2, workdayOnly: false, minFocusHours: 0, actions: [{ kind: 'notify' }] }
   },
   {
     name: '切到 B 站提醒',
     desc: '切到 Bilibili 时桌宠提醒你 🐟',
-    rule: { name: '切到 B 站提醒', triggerKind: 'appSwitch', time: '18:00', app: 'Bili', focusHours: 2, workdayOnly: false, minFocusHours: 0, actions: ['notify'] }
+    rule: { name: '切到 B 站提醒', triggerKind: 'appSwitch', time: '18:00', app: 'Bili', focusHours: 2, workdayOnly: false, minFocusHours: 0, actions: [{ kind: 'notify' }] }
   }
 ]
 
@@ -79,14 +79,14 @@ function toApiRule(d: Draft): Partial<AutomationRule> & { name: string; trigger:
       workdayOnly: d.workdayOnly
     },
     minFocusHours: d.minFocusHours > 0 ? d.minFocusHours : undefined,
-    actions: d.actions.map((kind) => ({
-      kind,
+    actions: d.actions.map((a) => ({
+      kind: a.kind,
       text:
-        kind === 'notify' && d.triggerKind === 'appSwitch'
+        a.kind === 'notify' && d.triggerKind === 'appSwitch'
           ? `检测到你切到了 ${d.app || '目标应用'}，注意节奏哦 🐟`
-          : kind === 'petCelebrate'
+          : a.kind === 'petCelebrate'
             ? `自动化「${d.name || '未命名'}」完成啦 🎉`
-            : undefined
+            : a.text
     }))
   }
 }
@@ -109,6 +109,8 @@ function actionsSummary(r: AutomationRule): string {
 export function AutomationLab() {
   const [rules, setRules] = useState<AutomationRule[]>([])
   const [draft, setDraft] = useState<Draft | null>(null)
+  /** 拖拽画布：当前拖拽的积木（'trg:daily' | 'cnd:workday' | 'act:genReport' …） */
+  const [dragKind, setDragKind] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [tip, setTip] = useState('')
 
@@ -155,6 +157,23 @@ export function AutomationLab() {
   }
 
   const set = (patch: Partial<Draft>): void => setDraft((d) => (d ? { ...d, ...patch } : d))
+
+  /** 积木落位：触发器=替换 / 条件=开关 / 动作=追加（拖拽与点击同一路径） */
+  const dropBlock = (kind: string): void => {
+    if (!draft) setDraft({ ...EMPTY_DRAFT })
+    const [cls, id] = kind.split(':')
+    if (cls === 'trg') {
+      set({ triggerKind: id as Draft['triggerKind'] })
+    } else if (cls === 'cnd') {
+      if (id === 'workday') set({ workdayOnly: true })
+      else if (id === 'focus') set({ minFocusHours: Math.max(1, draft?.minFocusHours ?? 1) })
+    } else if (cls === 'act') {
+      if (!draft) return
+      const actKind = id as ActionKind
+      if (draft.actions.some((a) => a.kind === actKind)) return
+      set({ actions: [...draft.actions, { kind: actKind }] })
+    }
+  }
 
   return (
     <div className="mt-4 border-t border-white/[0.06] pt-3">
@@ -226,17 +245,60 @@ export function AutomationLab() {
             {(Object.keys(TRIGGER_LABEL) as TriggerKind[]).map((k) => (
               <button
                 key={k}
-                className={`rounded-md border px-2 py-1 text-[10.5px] transition-all ${
+                draggable
+                onDragStart={(e) => { e.dataTransfer.setData('text/plain', `trg:${k}`); setDragKind(`trg:${k}`) }}
+                onDragEnd={() => setDragKind(null)}
+                onClick={() => set({ triggerKind: k })}
+                className={`cursor-grab rounded-md border px-2 py-1 text-[10.5px] transition-all active:cursor-grabbing ${
                   draft.triggerKind === k
                     ? 'border-[rgba(15,181,164,0.5)] bg-[var(--teal-soft)] text-[var(--teal-deep)]'
                     : 'border-[var(--line)] text-slate-400 hover:text-slate-200'
                 }`}
-                onClick={() => set({ triggerKind: k })}
               >
                 {TRIGGER_LABEL[k]}
               </button>
             ))}
           </div>
+          {/* 链画布：拖放落位 + 节点可删 */}
+          <div
+            className="mt-2 flex min-h-[52px] flex-wrap items-center gap-2 rounded-xl border border-dashed p-2"
+            style={{ borderColor: dragKind ? 'rgba(139,92,246,0.5)' : 'var(--line)', background: dragKind ? 'rgba(139,92,246,0.04)' : 'transparent' }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault()
+              const kind = dragKind ?? e.dataTransfer.getData('text/plain')
+              if (kind) dropBlock(kind)
+              setDragKind(null)
+            }}
+          >
+            <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${draft.triggerKind ? 'bg-[var(--teal-soft)] text-[var(--teal-deep)]' : 'bg-white/5 text-slate-500'}`}>
+              {draft.triggerKind ? TRIGGER_LABEL[draft.triggerKind] : '⬇ 拖入触发器'}
+            </span>
+            {draft.workdayOnly ? (
+              <span className="flex items-center gap-1 rounded bg-[rgba(245,158,11,0.12)] px-1.5 py-0.5 text-[9px] font-bold text-[#fbbf24]">
+                仅工作日
+                <button className="hover:text-slate-200" onClick={() => set({ workdayOnly: false })}>✕</button>
+              </span>
+            ) : null}
+            {draft.minFocusHours > 0 ? (
+              <span className="flex items-center gap-1 rounded bg-[rgba(245,158,11,0.12)] px-1.5 py-0.5 text-[9px] font-bold text-[#fbbf24]">
+                专注≥{draft.minFocusHours}h
+                <button className="hover:text-slate-200" onClick={() => set({ minFocusHours: 0 })}>✕</button>
+              </span>
+            ) : null}
+            <span className="text-slate-600">→</span>
+            {draft.actions.length ? (
+              draft.actions.map((a, i) => (
+                <span key={a.kind + String(i)} className="flex items-center gap-1 rounded bg-[rgba(139,92,246,0.12)] px-1.5 py-0.5 text-[9px] font-bold text-[var(--violet)]">
+                  {ACTION_LABEL[a.kind]}
+                  <button className="hover:text-slate-200" onClick={() => set({ actions: draft.actions.filter((_, j) => j !== i) })}>✕</button>
+                </span>
+              ))
+            ) : (
+              <span className="text-[9px] text-slate-500">⬇ 拖入动作</span>
+            )}
+          </div>
+
           {/* 触发参数 */}
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
             {draft.triggerKind === 'daily' ? (
@@ -265,16 +327,19 @@ export function AutomationLab() {
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <span className="rounded bg-[rgba(139,92,246,0.12)] px-1.5 py-0.5 text-[9px] font-bold text-[var(--violet)]">动作</span>
             {(Object.keys(ACTION_LABEL) as ActionKind[]).map((k) => {
-              const on = draft.actions.includes(k)
+              const on = draft.actions.some((a) => a.kind === k)
               return (
                 <button
                   key={k}
-                  className={`rounded-md border px-2 py-1 text-[10.5px] transition-all ${
+                  draggable
+                  onDragStart={(e) => { e.dataTransfer.setData('text/plain', `act:${k}`); setDragKind(`act:${k}`) }}
+                  onDragEnd={() => setDragKind(null)}
+                  onClick={() => set({ actions: on ? draft.actions.filter((a) => a.kind !== k) : [...draft.actions, { kind: k }] })}
+                  className={`cursor-grab rounded-md border px-2 py-1 text-[10.5px] transition-all active:cursor-grabbing ${
                     on
                       ? 'border-[rgba(139,92,246,0.5)] bg-[rgba(139,92,246,0.12)] text-[var(--violet)]'
                       : 'border-[var(--line)] text-slate-400 hover:text-slate-200'
                   }`}
-                  onClick={() => set({ actions: on ? draft.actions.filter((a) => a !== k) : [...draft.actions, k] })}
                 >
                   {ACTION_LABEL[k]}
                 </button>
