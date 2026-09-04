@@ -674,9 +674,8 @@ export default function SuggestionWidget() {
       <div className="flex h-screen w-screen flex-col items-end justify-end gap-2 p-3">
         <NotificationStack list={notifies} onDone={(id) => setNotifies((l) => l.filter((x) => x.id !== id))} />
         {unattrCard}
-        <div className="relative flex w-[300px] flex-col overflow-hidden rounded-2xl" style={PANEL_STYLE}>
+        <div className="relative flex w-[300px] flex-col overflow-hidden rounded-2xl" style={{ ...PANEL_STYLE, boxShadow: 'none' }}>
           {/* 左缘状态色条 */}
-          <div className="absolute left-0 top-0 bottom-0 w-[4px]" style={{ background: meta.color }} />
           <WidgetHeader>
             <HeaderBtn icon="chevronRight" rotate={-90} title="展开" onClick={() => setMode('full')} />
             <HeaderBtn icon="eyeOff" title={penetrationTitle} onClick={togglePenetration} active={penetration} accent={accent} />
@@ -725,9 +724,8 @@ export default function SuggestionWidget() {
   // ── full 态：完整面板 ──
   return (
     <div className="flex h-screen w-screen items-end justify-end p-3">
-      <div className="relative flex w-full flex-col overflow-hidden rounded-2xl" style={PANEL_STYLE}>
+      <div className="relative flex w-full flex-col overflow-hidden rounded-2xl" style={{ ...PANEL_STYLE, boxShadow: 'none' }}>
         {/* 左缘状态色条 */}
-        <div className="absolute left-0 top-0 bottom-0 w-[4px]" style={{ background: meta.color }} />
         <WidgetHeader>
           <HeaderBtn icon="eyeOff" title={penetrationTitle} onClick={togglePenetration} active={penetration} accent={accent} />
           <HeaderBtn icon="chevronRight" rotate={90} title="收起" onClick={() => setMode('mini')} />
