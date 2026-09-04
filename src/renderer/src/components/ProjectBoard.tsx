@@ -4,6 +4,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import type { Project, ProjectTask } from '@shared/types'
+import { fuzzyMatch } from '@shared/fuzzy'
 import { Icon } from '../components/Icon'
 import { displayApp } from '@shared/appDisplayName'
 import { fmtMin } from '../components/utils'
@@ -52,9 +53,28 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
     const ts = (await window.api.listProjectTasks(pid)) as ProjectTask[]
     setTasks((prev) => ({ ...prev, [pid]: ts }))
   }
+  /** 反显：挂到本项目的每日待办（PlanItem.projectId） */
+  const [linkedPlans, setLinkedPlans] = useState<Record<string, { id: string; title: string; status: string }[]>>({})
+
+  const loadLinked = async (): Promise<void> => {
+    try {
+      const all = ((await window.api?.listPlans?.()) as { id: string; title: string; status: string; projectId?: string }[]) ?? []
+      const map: Record<string, { id: string; title: string; status: string }[]> = {}
+      for (const pl of all) {
+        if (!pl.projectId) continue
+        ;(map[pl.projectId] ??= []).push({ id: pl.id, title: pl.title, status: pl.status })
+      }
+      setLinkedPlans(map)
+    } catch { /* ignore */ }
+  }
+
   useEffect(() => {
     if (expanded) void loadTasks(expanded)
   }, [expanded])
+
+  useEffect(() => {
+    void loadLinked()
+  }, [])
 
   const toggleProject = (pid: string) => {
     setExpanded(expanded === pid ? null : pid)
@@ -64,6 +84,12 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
   const addProject = async () => {
     const name = newName.trim()
     if (!name) return
+    // 模糊查重：大小写/相近名不重复建（workon / WorkOn开发 / wokon 视为同一项目）
+    const dup = projects.find((p) => fuzzyMatch(name, p.name, 0.75))
+    if (dup) {
+      window.alert(`已有相似项目「${dup.name}」，不重复创建。如需绑定工具/目录，请在归属确认或项目设置里操作。`)
+      return
+    }
     await window.api.saveProject({ name })
     setNewName('')
     setAdding(false)
@@ -213,6 +239,32 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                     {isActive ? <span className="chip ml-2 !text-[9px] !text-neon-cyan">今日开发中</span> : null}
                   </button>
                   <span className="text-[10px] text-slate-500">{ts.length ? `${doneCount}/${ts.length}` : ''}</span>
+                            {p.deadline ? (
+                    (() => {
+                      const days = Math.ceil((new Date(`${p.deadline}T23:59:59`).getTime() - Date.now()) / 86400000)
+                      return (
+                        <span
+                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${
+                            days < 0 ? 'bg-[rgba(239,68,68,0.12)] text-[#f87171]' : days <= 7 ? 'bg-[rgba(245,158,11,0.12)] text-[#fbbf24]' : 'bg-[var(--teal-soft)] text-[var(--teal-deep)]'
+                          }`}
+                          title={`上线目标日 ${p.deadline}`}
+                        >
+                          {days < 0 ? `超期 ${-days} 天` : `↦ ${days} 天上线`}
+                        </span>
+                      )
+                    })()
+                  ) : (
+                    <input
+                      type="date"
+                      title="设置上线目标日（距上线刻度）"
+                      className="shrink-0 rounded border border-[var(--line)] bg-transparent px-1 py-0 text-[9px] text-slate-500 outline-none hover:text-slate-300"
+                      onChange={(e) => {
+                        if (!e.target.value) return
+                        void window.api.saveProject({ id: p.id, deadline: e.target.value })
+                        void load()
+                      }}
+                    />
+                  )}
                   {ts.length > 0 ? (
                     <div className="h-1.5 w-16 overflow-hidden rounded-full bg-white/[0.06]">
                       <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, background: p.color ?? '#22D3EE' }} />
@@ -241,7 +293,17 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                         onKeyDown={(e) => { if (e.key === 'Enter') { void addTask(p.id, (e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = '' } }}
                       />
                     </div>
-                    {review[p.id]?.text ? (
+                    {(linkedPlans[p.id]?.length ?? 0) > 0 ? (
+                      <div className="mb-2 border-t border-dashed border-[var(--line)] pt-2">
+                        <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-600">✦ 关联的每日待办</div>
+                        {linkedPlans[p.id]!.map((pl) => (
+                          <div key={pl.id} className={`py-0.5 text-[11.5px] ${pl.status === 'done' ? 'text-slate-500 line-through' : 'text-slate-300'}`}>
+                            · {pl.title}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                                  {review[p.id]?.text ? (
                       <div className="mb-2 whitespace-pre-wrap rounded-lg border border-white/[0.07] bg-white/[0.02] p-2 text-[11px] leading-relaxed text-slate-300">
                         {review[p.id].text}
                       </div>

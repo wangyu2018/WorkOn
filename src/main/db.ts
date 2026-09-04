@@ -16,8 +16,12 @@ import type {
   ReportTemplate, OcrSnapshot, CategoryInference, SegmentPlanLink,
   Project, ProjectTask, ProjectTimeLink,
   RecognitionLogRecord, OcrShot,
-  MotionMeta, PointsEntry, ReportEntryPatch
+  MotionMeta, PointsEntry, ReportEntryPatch,
+  AutomationRule
 } from '@shared/types'
+import type { ProjectBinding } from './attributions'
+import type { DirActivity } from './dirWatcher'
+import type { ConfirmMemory } from './attributions'
 import type { ChainDayReport } from '@shared/chain'
 import { dateKey } from '@shared/trail'
 import { getSettings } from './settings'
@@ -53,6 +57,10 @@ interface JsonData {
   projects: Project[] // v3.1 项目 AI 开发管理：项目
   projectTasks: ProjectTask[] // 项目下任务
   projectTimeLinks: ProjectTimeLink[] // 开发时间归类
+  automations: AutomationRule[] // v7 MotionLab 自动化链
+  projectBindings: ProjectBinding[] // v7 项目软绑定（工具/关键词/目录）
+  confirmMemory: ConfirmMemory[] // v7 确认记忆（指纹去重）
+  dirActivity: DirActivity[] // v7 目录活动（按 项目:日期 唯一）
 }
 
 const EMPTY: JsonData = {
@@ -60,7 +68,7 @@ const EMPTY: JsonData = {
   usages: [], corrections: [], rules: [], feedbacks: [], qa: [], categories: [],
   attentionScores: [], achievements: [], accessLogs: [], personas: [],
   reportTemplates: [], ocrSnapshots: [], chains: [], categoryInferences: [], segmentPlans: [],
-  projects: [], projectTasks: [], projectTimeLinks: []
+  projects: [], projectTasks: [], projectTimeLinks: [], automations: [], projectBindings: [], confirmMemory: [], dirActivity: []
 ,
   ocrShots: []
   ,

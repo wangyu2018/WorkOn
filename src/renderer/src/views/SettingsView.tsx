@@ -457,6 +457,51 @@ export default function SettingsView() {
       </Section>
 
       {/* 4. 外观 */}
+      <Section title="桌面组件" icon="monitor">
+        <div className="flex flex-col gap-3 py-1 text-[12px]">
+          {/* 监控悬浮窗 */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-slate-300">监控悬浮窗</span>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1.5 text-slate-500">
+                  <input type="checkbox" checked={settings.widgetPenetration ?? false} onChange={(e) => void patch({ widgetPenetration: e.target.checked })} /> 穿透
+                </label>
+                <label className="flex items-center gap-1.5 text-slate-500">
+                  <input type="checkbox" checked={settings.widgetOnTop !== false} onChange={(e) => void patch({ widgetOnTop: e.target.checked })} /> 顶层
+                </label>
+                <input type="range" min={0.3} max={1} step={0.05} value={settings.widgetOpacity ?? 1} className="w-20" onChange={(e) => void patch({ widgetOpacity: Number(e.target.value) })} title="透明度" />
+              </div>
+            </div>
+          </div>
+          {/* 待办树小组件 */}
+          <div className="flex flex-col gap-1.5 border-t border-white/[0.05] pt-2.5">
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-slate-300">待办树小组件</span>
+              <div className="flex items-center gap-3">
+                <button className="glass-btn !px-2 !py-0.5 text-[10px]" onClick={() => void window.api?.toggleTodoWidget?.()}>
+                  {settings.todoWidgetVisible ? '隐藏' : '显示'}
+                </button>
+                <label className="flex items-center gap-1.5 text-slate-500">
+                  <input type="checkbox" checked={settings.todoWidgetPenetration ?? false} onChange={(e) => void patch({ todoWidgetPenetration: e.target.checked })} /> 穿透
+                </label>
+                <label className="flex items-center gap-1.5 text-slate-500">
+                  <input type="checkbox" checked={settings.todoWidgetOnTop !== false} onChange={(e) => void patch({ todoWidgetOnTop: e.target.checked })} /> 顶层
+                </label>
+                <input type="range" min={0.3} max={1} step={0.05} value={settings.todoWidgetOpacity ?? 0.95} className="w-20" onChange={(e) => void patch({ todoWidgetOpacity: Number(e.target.value) })} title="透明度" />
+              </div>
+            </div>
+          </div>
+          {/* 桌宠 */}
+          <div className="flex flex-col gap-1.5 border-t border-white/[0.05] pt-2.5">
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-slate-300">虚拟角色（桌宠）</span>
+              <input type="range" min={0.3} max={1} step={0.05} value={settings.petOpacity ?? 1} className="w-20" onChange={(e) => void patch({ petOpacity: Number(e.target.value) })} title="透明度" />
+            </div>
+          </div>
+        </div>
+      </Section>
+
       <Section title="外观" icon="sparkles">
         <Row label="强调色主题" desc="全局高亮色，切换立即生效">
           <div className="flex gap-2">

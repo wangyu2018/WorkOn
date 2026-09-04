@@ -4,6 +4,8 @@ import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState } from '../components/EmptyState'
 import { ProgressRing } from '../components/ProgressRing'
+import { InsightCard } from '../components/ui/InsightCard'
+import { AiThinking } from '../components/ui/AiThinking'
 import { addDays, clockOf, fmtDateLabel, fmtMin, timeToMin, todayKey } from '../components/utils'
 import { parsePlanText } from '../components/parsePlanText'
 import { ProjectBoard } from '../components/ProjectBoard'
@@ -36,6 +38,34 @@ function planTypeColor(t: PlanType): string {
   return '#F59E0B'
 }
 
+/** 状态徽章配色：进行中 teal / 已完成 mint / 部分 amber / 延期 red / 取消 灰 */
+const STATUS_COLOR: Record<PlanStatus, string> = {
+  planned: '#94A3B8',
+  in_progress: '#0FB5A4',
+  partial: '#F59E0B',
+  done: '#10B981',
+  delayed: '#EF4444',
+  cancelled: '#64748B'
+}
+
+/** 计划卡左侧 3px 状态色条：进行中 teal / 风险(AI 预测<40%)·延期 red / 已完成 mint / 部分 amber / 取消 灰 */
+function planStatusColor(p: PlanItem, risky: boolean): string {
+  if (p.status === 'done') return STATUS_COLOR.done
+  if (risky) return STATUS_COLOR.delayed
+  return STATUS_COLOR[p.status]
+}
+
+/** 进度条渐变填色（与状态色条同源） */
+function planBarGradient(p: PlanItem, risky: boolean): string {
+  if (p.status === 'done') return 'linear-gradient(90deg, #10B981, #34D399)'
+  if (risky) return 'linear-gradient(90deg, #EF4444, #F97316)'
+  if (p.status === 'in_progress') return 'linear-gradient(90deg, var(--teal), #22D3EE)'
+  if (p.status === 'partial') return 'linear-gradient(90deg, #F59E0B, #FBBF24)'
+  if (p.status === 'delayed') return 'linear-gradient(90deg, #EF4444, #F59E0B)'
+  if (p.status === 'cancelled') return 'linear-gradient(90deg, #64748B, #94A3B8)'
+  return 'linear-gradient(90deg, var(--line-strong), var(--teal))'
+}
+
 /** 计划来源标记（浏览器确认 🌐 / 手动确认 💬 / 手动创建 ✏️ / 其他同步源） */
 function SourceMark({ plan }: { plan: PlanItem }) {
   if (plan.browserDerived) return <span className="chip !py-0" title="浏览器行为确认">🌐 浏览器确认</span>
@@ -62,6 +92,12 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
   const [smartText, setSmartText] = useState('')
   const [smartHint, setSmartHint] = useState('')
   const [planType, setPlanType] = useState<PlanType>(plan.planType ?? 'phase')
+  /** 归属项目（显式关联：计划 ↔ 项目） */
+  const [projId, setProjId] = useState(plan.projectId ?? '')
+  const [projOptions, setProjOptions] = useState<{ id: string; name: string }[]>([])
+  useEffect(() => {
+    void window.api?.listProjects?.().then((ps) => setProjOptions((ps as { id: string; name: string }[]) ?? [])).catch(() => undefined)
+  }, [])
 
   /** 一句话智能解析：把识别到的字段填入表单（用户可再改） */
   const applySmartParse = () => {
@@ -96,7 +132,8 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
       date: savedDate,
       title: t,
       note: note.trim() || undefined,
-      planType
+      planType,
+      projectId: projId || undefined
     }
     if (planType === 'reminder') {
       payload.startMin = startMin
@@ -224,6 +261,15 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
+          <div className="flex items-center gap-2">
+            <label className="shrink-0 text-[11px] text-slate-500">归属项目</label>
+            <select className="glass-input !py-1 text-[12px]" value={projId} onChange={(e) => setProjId(e.target.value)}>
+              <option value="">不归属</option>
+              {projOptions.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
           <div className="mt-1 flex items-center justify-end gap-2 border-t border-white/[0.06] pt-3">
             <button className="glass-btn" onClick={onClose}>
               取消
@@ -254,12 +300,21 @@ export default function PlanView() {
   const [delayDate, setDelayDate] = useState('')
   const [delayReason, setDelayReason] = useState('')
   const [folderModal, setFolderModal] = useState(false)
+  /** v7 粘贴文本导入：贴任意进展/纪要文本 → AI 解析成待办 */
+  const [pasteOpen, setPasteOpen] = useState(false)
+  const [pasteText, setPasteText] = useState('')
+  const [pasteItems, setPasteItems] = useState<string[]>([])
+  const [pasteBusy, setPasteBusy] = useState(false)
   const [folderDirs, setFolderDirs] = useState<string[]>([])
   const [ratioDraft, setRatioDraft] = useState<Record<string, number>>({})
   const ratioTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const [importMsg, setImportMsg] = useState('')
   const [scanProgress, setScanProgress] = useState(0)
   const [scanFile, setScanFile] = useState('')
+  /** ✦ AI 拆解结果（按计划 id）：loading 中显示思考态 */
+  const [breakdowns, setBreakdowns] = useState<Record<string, { loading: boolean; text: string }>>({})
+  /** 连续达成天数（截至所选日期前一天，逐日用现有 planVsActual 推导） */
+  const [streak, setStreak] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -285,6 +340,27 @@ export default function PlanView() {
     void load()
   }, [load])
 
+  // 连续达成：截至所选日期前一天，日达成率 ≥50% 记为达成，逐日回看最多 7 天（复用现有 IPC，不新增）
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      let n = 0
+      for (let i = 1; i <= 7; i++) {
+        try {
+          const pv = (await window.api.planVsActual(addDays(date, -i))) as PlanVsActual | null
+          if (!pv || pv.achievement < 50) break
+          n++
+        } catch {
+          break
+        }
+      }
+      if (alive) setStreak(n)
+    })()
+    return () => {
+      alive = false
+    }
+  }, [date])
+
   // 命令面板「打开项目开发」→ 切到项目 Tab
   useEffect(() => {
     const onGoto = () => setTab('project')
@@ -306,6 +382,24 @@ export default function PlanView() {
     void load()
   }
 
+  /** ✦ AI 拆解：把计划拆成可执行步骤（复用问答 IPC，本地模式走规则引擎） */
+  const doBreakdown = async (p: PlanItem) => {
+    if (breakdowns[p.id]?.loading) return
+    setExpanded(p.id)
+    setBreakdowns((b) => ({ ...b, [p.id]: { loading: true, text: '' } }))
+    try {
+      const ans = await window.api.askQAWithShots(
+        `请把计划「${p.title}」拆解成 3-5 个具体可执行的步骤，每行一条、尽量简短，并在行尾标注预估耗时。`
+      )
+      const payload = typeof ans === 'string' ? { content: ans } : ((ans ?? {}) as { content?: string | null })
+      const text =
+        typeof payload.content === 'string' && payload.content ? payload.content : '（未生成拆解结果，请确认 AI 已配置后重试）'
+      setBreakdowns((b) => ({ ...b, [p.id]: { loading: false, text } }))
+    } catch {
+      setBreakdowns((b) => ({ ...b, [p.id]: { loading: false, text: '拆解失败，请稍后再试。' } }))
+    }
+  }
+
   const [confirmDelId, setConfirmDelId] = useState<string | null>(null)
   const remove = async (p: PlanItem) => {
     await window.api.removePlan(p.id)
@@ -324,6 +418,44 @@ export default function PlanView() {
     })
     return off
   }, [])
+
+  const parsePaste = async (): Promise<void> => {
+    const text = pasteText.trim()
+    if (!text || pasteBusy) return
+    setPasteBusy(true)
+    try {
+      const r = (await window.api?.askQA?.(
+        `从下面的文本里提取"可执行的待办/需求项"，输出 JSON 数组（每项一个 title 字符串，不要解释）：
+
+${text.slice(0, 3000)}`
+      )) as { content?: string } | string | undefined
+      const content = typeof r === 'string' ? r : r?.content ?? ''
+      const m = content.match(/\[[\s\S]*?\]/)
+      const items: string[] = m ? JSON.parse(m[0]) : []
+      setPasteItems(items.filter((x) => typeof x === 'string').slice(0, 12))
+    } catch {
+      setPasteItems([])
+    } finally {
+      setPasteBusy(false)
+    }
+  }
+
+  const savePasted = async (): Promise<void> => {
+    for (const title of pasteItems) {
+      await window.api.savePlan({
+        date,
+        title: title.slice(0, 100),
+        category: 'other',
+        status: 'planned' as const,
+        source: 'import' as const,
+        note: '来自文本导入'
+      })
+    }
+    setPasteItems([])
+    setPasteText('')
+    setPasteOpen(false)
+    void load()
+  }
 
   const importFromMeeting = async () => {
     if (folderDirs.length === 0) { setFolderModal(true); return }
@@ -364,6 +496,12 @@ export default function PlanView() {
   const forecastList = [...forecasts.values()]
   const avgProb = forecastList.length ? Math.round(forecastList.reduce((a, f) => a + f.completionProb, 0) / forecastList.length) : null
   const riskCount = forecastList.filter((f) => f.completionProb < 40).length
+  // 顶部统计行数据（由现有 plans / pva 推导）
+  const activePlans = plans.filter((p) => p.status !== 'cancelled')
+  const doneCount = activePlans.filter((p) => p.status === 'done').length
+  const inProgressCount = activePlans.filter((p) => p.status === 'in_progress').length
+  const partialCount = activePlans.filter((p) => p.status === 'partial').length
+  const delayedCount = activePlans.filter((p) => p.status === 'delayed').length
 
   return (
     <div className="view-enter flex flex-col gap-5">
@@ -374,12 +512,16 @@ export default function PlanView() {
         desc="安排目标 · 跟踪达成率与完成预测"
         actions={
           <>
-            <button className="glass-btn text-[12px]" onClick={() => void importFromMeeting()}>
-              📋 从会议纪要导入
+            <button className="glass-btn text-[12px]" onClick={() => setPasteOpen(true)}>
+              📋 粘贴文本导入
             </button>
             {importMsg ? <div className="mt-1.5 rounded-lg bg-neon-cyan/10 px-3 py-1.5 text-[11px] text-neon-cyan">{importMsg}</div> : null}
-            <button className="glass-btn text-[12px]" onClick={() => setFolderModal(true)}>
-              ⚙ 配置文件目录
+            <button
+              className="glass-btn text-[12px]"
+              title="在桌面常驻显示项目/待办/生活三区小组件（Ctrl+Alt+T 也可开关）"
+              onClick={() => void window.api?.toggleTodoWidget?.()}
+            >
+              🖥 桌面待办组件
             </button>
             <button className="glass-btn primary" onClick={() => setEditor({ plan: { date }, isNew: true })}>
               <Icon name="plus" size={14} /> 新建计划
@@ -400,7 +542,7 @@ export default function PlanView() {
           </button>
         ))}
       </div>
-      {tab === 'plan' ? (
+      {(
       <>
 
       {scanProgress > 0 && (
@@ -432,42 +574,59 @@ export default function PlanView() {
         </span>
       </div>
 
-      {/* 计划 vs 实际 + 预测汇总 */}
-      <section className="glass-card anim-fade-up flex items-center gap-6 !p-5" style={{ animationDelay: '120ms' }}>
-        <ProgressRing value={achievement} size={110} stroke={9} color={ringColor}>
-          <div className="text-center">
-            <div className="text-2xl font-bold leading-none text-slate-100">{Math.round(achievement)}%</div>
-            <div className="mt-1 text-[10px] text-slate-500">达成率</div>
-          </div>
-        </ProgressRing>
-        <div className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-xl border border-white/[0.05] bg-white/[0.03] px-3 py-2.5">
-            <div className="text-lg font-bold leading-tight text-slate-100">{pva ? fmtMin(pva.plannedMin) : '—'}</div>
-            <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500">
-              <Icon name="calendar" size={11} /> 计划时长
-            </div>
-          </div>
-          <div className="rounded-xl border border-white/[0.05] bg-white/[0.03] px-3 py-2.5">
-            <div className="text-lg font-bold leading-tight text-neon-green">{pva ? fmtMin(pva.actualWorkMin) : '—'}</div>
-            <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500">
-              <Icon name="activity" size={11} /> 实际工作
-            </div>
-          </div>
-          <div className="rounded-xl border border-white/[0.05] bg-white/[0.03] px-3 py-2.5">
-            <div className="text-lg font-bold leading-tight text-neon-cyan">{pva ? `${pva.matchedCount} 项` : '—'}</div>
-            <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500">
-              <Icon name="check" size={11} /> 被实际覆盖
-            </div>
-          </div>
-          <div className="rounded-xl border border-white/[0.05] bg-white/[0.03] px-3 py-2.5">
-            <div className={`text-lg font-bold leading-tight ${riskCount > 0 ? 'text-neon-red' : 'text-neon-green'}`}>
-              {avgProb !== null ? `${avgProb}%${riskCount > 0 ? ` · ${riskCount} 风险` : ''}` : '—'}
-            </div>
-            <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500">
-              <Icon name="brain" size={11} /> 完成概率均值
-            </div>
-          </div>
-        </div>
+      {/* 顶部统计行：InsightCard 横排（达成率 / 今日计划 / 进行中 / 连续达成） */}
+      <section className="anim-fade-up grid grid-cols-2 gap-3 lg:grid-cols-4" style={{ animationDelay: '120ms' }}>
+        <InsightCard
+          icon={<Icon name="target" size={14} />}
+          tone="teal"
+          label="今日达成率"
+          big={
+            <span className="flex items-center gap-2">
+              <ProgressRing value={achievement} size={34} stroke={4} color={ringColor} />
+              {Math.round(achievement)}%
+            </span>
+          }
+          base={pva ? <>计划 {fmtMin(pva.plannedMin)} · 实际工作 {fmtMin(pva.actualWorkMin)}</> : '今日暂无对照数据'}
+        />
+        <InsightCard
+          icon={<Icon name="calendar" size={14} />}
+          tone="ai"
+          label="今日计划"
+          big={
+            <>
+              {doneCount}
+              <span className="text-[15px] font-bold text-slate-500">/{activePlans.length}</span>
+            </>
+          }
+          base={
+            <>
+              被实际覆盖 {pva ? pva.matchedCount : 0} 项 · 已延期 {delayedCount} 项
+            </>
+          }
+        />
+        <InsightCard
+          icon={<Icon name="activity" size={14} />}
+          tone="cyan"
+          label="进行中"
+          big={inProgressCount}
+          base={partialCount > 0 ? <>另有 {partialCount} 项部分完成</> : inProgressCount > 0 ? '正在推进，保持节奏' : '暂无进行中的计划'}
+        />
+        <InsightCard
+          icon={<Icon name="flame" size={14} />}
+          tone="amber"
+          label="连续达成"
+          big={streak === null ? '…' : `${streak} 天`}
+          base={
+            <span className="block">
+              按日达成率 ≥50% 连续统计（截至前一天）
+              {avgProb !== null ? (
+                <span className="block">
+                  AI 预测：均值 {avgProb}%{riskCount > 0 ? ` · ${riskCount} 项有风险` : ' · 暂无风险项'}
+                </span>
+              ) : null}
+            </span>
+          }
+        />
       </section>
 
       {/* 筛选 */}
@@ -501,12 +660,14 @@ export default function PlanView() {
             const done = p.status === 'done'
             const cancelled = p.status === 'cancelled'
             const fc = forecasts.get(p.id)
+            const risky = !done && !cancelled && !!fc && fc.completionProb < 40
+            const ratio = done ? 100 : Math.round((p.completionRatio ?? 0) * 100)
             const isExpanded = expanded === p.id
             return (
               <div
                 key={p.id}
                 className="glass-card hoverable anim-fade-up !p-3.5"
-                style={{ animationDelay: `${240 + Math.min(idx * 40, 240)}ms`, borderLeftWidth: 3, borderLeftColor: planTypeColor(p.planType ?? 'phase') }}
+                style={{ animationDelay: `${240 + Math.min(idx * 40, 240)}ms`, borderLeftWidth: 3, borderLeftColor: planStatusColor(p, risky) }}
               >
                 <div className="flex items-center gap-3">
                   <span
@@ -525,8 +686,20 @@ export default function PlanView() {
                   >
                     <Icon name="check" size={12} />
                   </button>
-                  <button className="min-w-0 flex-1 text-left" onClick={() => setExpanded(isExpanded ? null : p.id)}>
-                    <div className={`text-[13px] font-medium ${done || cancelled ? 'text-slate-500 line-through' : 'text-slate-200'}`}>{p.title}</div>
+                  <button className={`min-w-0 flex-1 text-left ${done || cancelled ? 'opacity-60' : ''}`} onClick={() => setExpanded(isExpanded ? null : p.id)}>
+                    <div className={`flex min-w-0 items-center gap-1.5 text-[13px] font-medium ${done || cancelled ? 'text-slate-500 line-through' : 'text-slate-200'}`}>
+                      <span className="min-w-0 truncate">{p.title}</span>
+                      <span
+                        className="inline-flex shrink-0 items-center rounded-full px-1.5 py-px text-[9px] font-bold leading-[1.6]"
+                        style={{
+                          color: STATUS_COLOR[p.status],
+                          background: `${STATUS_COLOR[p.status]}1f`,
+                          border: `1px solid ${STATUS_COLOR[p.status]}55`
+                        }}
+                      >
+                        {STATUS_LABEL[p.status]}
+                      </span>
+                    </div>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
                       {(p.planType ?? 'phase') === 'reminder' ? (
                         p.startMin !== undefined ? (
@@ -585,6 +758,15 @@ export default function PlanView() {
                     {p.note ? <div className="mt-0.5 truncate text-[11px] text-slate-600">{p.note}</div> : null}
                   </button>
                   <div className="flex shrink-0 items-center gap-1.5">
+                    {!done && !cancelled ? (
+                      <button
+                        className="glass-btn ai !px-2 !py-1 !text-[11px]"
+                        title="AI 拆解为可执行步骤"
+                        onClick={() => void doBreakdown(p)}
+                      >
+                        ✦ AI 拆解
+                      </button>
+                    ) : null}
                     <button className="glass-btn !px-2 !py-1" title="编辑" onClick={() => setEditor({ plan: p, isNew: false })}>
                       <Icon name="edit" size={13} />
                     </button>
@@ -593,9 +775,39 @@ export default function PlanView() {
                     </button>
                   </div>
                 </div>
-                {/* 展开面板：预测详情 + 完成比例拖动 + 延期 */}
+                {/* 进度条：渐变填色 + 圆角（完成比例，已完成满格） */}
+                {ratio > 0 ? (
+                  <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{ width: `${ratio}%`, background: planBarGradient(p, risky) }}
+                    />
+                  </div>
+                ) : null}
+                {/* 展开面板：AI 拆解 + 预测详情 + 完成比例拖动 + 延期 */}
                 {isExpanded ? (
                   <div className="anim-fade-in mt-3 border-t border-white/[0.06] pt-3">
+                    {/* ✦ AI 拆解结果（AI 场景：aura 底 + 思考态） */}
+                    {breakdowns[p.id] ? (
+                      breakdowns[p.id].loading ? (
+                        <div className="mb-2.5 rounded-xl border border-white/[0.06] p-2.5" style={{ background: 'var(--aura-soft)' }}>
+                          <AiThinking hints={['正在拆解计划为执行步骤…', '正在估算各步耗时…', '整理执行清单中…']} />
+                        </div>
+                      ) : (
+                        <div className="mb-2.5 rounded-xl border border-[rgba(139,92,246,0.28)] p-2.5" style={{ background: 'var(--aura-soft)' }}>
+                          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-[var(--violet)]">
+                            <span
+                              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] text-[9px] leading-none text-white"
+                              style={{ background: 'var(--aura)', boxShadow: 'var(--glow-i)' }}
+                            >
+                              ✦
+                            </span>
+                            AI 拆解步骤
+                          </div>
+                          <div className="whitespace-pre-wrap text-[11.5px] leading-relaxed text-slate-300">{breakdowns[p.id].text}</div>
+                        </div>
+                      )
+                    ) : null}
                     {fc && (p.planType ?? 'phase') === 'phase' ? (
                       <>
                         <div className="mb-2 flex items-center gap-3 text-[11px]">
@@ -751,6 +963,37 @@ export default function PlanView() {
           }}
         />
       ) : null}
+        {pasteOpen ? (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setPasteOpen(false)}>
+            <div className="glass-card anim-scale-in w-[440px] !p-5" style={{ borderRadius: 'var(--r-xl)', boxShadow: 'var(--shadow-lg)' }} onClick={(e) => e.stopPropagation()}>
+              <div className="mb-2 text-[14px] font-semibold text-slate-100">粘贴文本导入</div>
+              <textarea
+                className="min-h-[140px] w-full rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-2.5 text-[12px] leading-relaxed text-slate-200 outline-none focus:border-[var(--border-active)]"
+                placeholder="把会议纪要、聊天记录、需求描述粘进来，AI 会提取可执行的待办…"
+                value={pasteText}
+                onChange={(e) => { setPasteText(e.target.value); setPasteItems([]) }}
+              />
+              {pasteItems.length ? (
+                <div className="mt-2 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-2.5">
+                  <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-600">解析出 {pasteItems.length} 项</div>
+                  {pasteItems.map((it, i) => (
+                    <div key={i} className="py-0.5 text-[12px] text-slate-300">· {it}</div>
+                  ))}
+                </div>
+              ) : null}
+              <div className="mt-3 flex justify-end gap-2">
+                <button className="glass-btn text-[12px]" onClick={() => setPasteOpen(false)}>取消</button>
+                {pasteItems.length ? (
+                  <button className="glass-btn primary text-[12px]" onClick={() => void savePasted()}>导入 {pasteItems.length} 项</button>
+                ) : (
+                  <button className="glass-btn ai text-[12px]" disabled={pasteBusy || !pasteText.trim()} onClick={() => void parsePaste()}>
+                    ✦ {pasteBusy ? '解析中…' : 'AI 解析'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
       {folderModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setFolderModal(false)}>
           <div className="glass-card anim-scale-in w-[400px] max-h-[60vh] overflow-auto" onClick={e => e.stopPropagation()}>
@@ -771,9 +1014,9 @@ export default function PlanView() {
           </div>
         </div>
       )}
+      {/* ── 项目开发（与每日计划同页平铺，经归属引擎与任务双向关联） ── */}
+      <ProjectBoard trail={trail} />
       </>
-      ) : (
-        <ProjectBoard trail={trail} />
       )}
     </div>
   )

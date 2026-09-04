@@ -117,12 +117,8 @@ function settle(): void {
 
   const pts = addPoints(minutes * POINTS_PER_MIN, `burst:${plan.title}`).delta
 
-  bus.setQuestion({
-    id: genId('q'),
-    ctx: `devsession:${plan.id}`,
-    question: `检测到 ${minutes} 分钟开发冲刺「${summary}」✓ 已记入${proj ? `项目「${proj.name}」` : '记录'}并 +${pts} 积分`,
-    ts: Date.now()
-  })
+  // 回执走桌宠气泡（低打扰），不占确认通道——数据已自动落库，无需用户确认
+  bus.setPet({ message: `${minutes} 分钟冲刺「${summary}」已记入${proj ? `「${proj.name}」` : ''} +${pts} ⭐` })
 
   resetSession()
 }

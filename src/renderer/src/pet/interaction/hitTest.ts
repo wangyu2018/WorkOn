@@ -51,6 +51,9 @@ export class HitTest {
     this.camera = camera
     this.target = target
     this.proxy = proxy ?? null
+    // 角色网格已全部迁到 layer 1（中性光专属层），raycaster 必须同步启用，
+    // 否则 intersectObject 的 layers.test 永远失配 → 永远打不中 → 窗口永久穿透
+    this.raycaster.layers.enable(1)
     // 初始化即隐藏光标，避免窗口加载时系统光标短暂可见
     document.body.style.cursor = 'default'
   }

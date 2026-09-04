@@ -5,7 +5,7 @@
 import { app, BrowserWindow, Notification } from 'electron'
 import { initSettings, getSettings } from './settings'
 import { initDb, flushNow } from './db'
-import { createMainWindow, createWidgetWindow, createPetWindow, createSplashWindow, closeSplash, sendTo, widgetWindow, mainWindow } from './windows'
+import { createMainWindow, createWidgetWindow, createPetWindow, createSplashWindow, closeSplash, sendTo, widgetWindow, mainWindow, createTodoWidgetWindow } from './windows'
 import { createTray } from './tray'
 import { registerShortcuts, unregisterShortcuts } from './globalShortcut'
 import { registerIpc } from './ipc'
@@ -272,6 +272,8 @@ app.whenReady().then(() => {
   createMainWindow({ deferShow: showSplash })
   const ww = createWidgetWindow()
   if (ww && !ww.isDestroyed() && getSettings().widgetVisible) ww.show()
+  // v7 待办树小组件（设置开启时创建）
+  if (getSettings().todoWidgetVisible) createTodoWidgetWindow()
   createTray()
   registerShortcuts()
 

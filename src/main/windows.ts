@@ -247,11 +247,20 @@ export function createPetWindow(): BrowserWindow {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: false,
+      // 全屏透明 overlay 会被系统判定为「被遮挡」而冻结 rAF → 角色消失/点击失效；
+      // 桌宠必须始终渲染
+      backgroundThrottling: false
     }
   })
   // 方案B 默认：整体点击穿透 + forward，由渲染层按命中结果逐帧切换
   petWindow.setIgnoreMouseEvents(true, { forward: true })
+  // 置顶提到 screen-saver 档：普通 topmost 应用（聊天窗等）不再盖住桌宠
+  petWindow.setAlwaysOnTop(true, 'screen-saver')
+  // 渲染层错误转发（定位角色不显示/加载失败）
+  petWindow.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+    if (level >= 2) console.error(`[pet-renderer] ${message} (${sourceId}:${line})`)
+  })
   load(petWindow, 'pet')
   return petWindow
 }
@@ -341,9 +350,151 @@ export function closePetWindow(): void {
   petWindow = null
 }
 
-export function sendTo(page: 'main' | 'widget' | 'pet', channel: string, ...args: unknown[]): void {
-  const win = page === 'main' ? mainWindow : page === 'widget' ? widgetWindow : petWindow
+export function sendTo(page: 'main' | 'widget' | 'pet' | 'dialog' | 'todoWidget', channel: string, ...args: unknown[]): void {
+  const win =
+    page === 'main'
+      ? mainWindow
+      : page === 'widget'
+        ? widgetWindow
+        : page === 'pet'
+          ? petWindow
+          : page === 'dialog'
+            ? dialogWindow
+            : todoWidgetWindow
   if (win && !win.isDestroyed()) win.webContents.send(channel, ...args)
+}
+
+// ── 全局对话框 + 待办树小组件（v7 项目循环） ──
+
+export let dialogWindow: BrowserWindow | null = null
+export let todoWidgetWindow: BrowserWindow | null = null
+
+export function createDialogWindow(): BrowserWindow {
+  if (dialogWindow && !dialogWindow.isDestroyed()) {
+    if (!dialogWindow.isVisible()) dialogWindow.show()
+    dialogWindow.focus()
+    return dialogWindow
+  }
+  const display = screen.getPrimaryDisplay()
+  const wa = display.workArea
+  dialogWindow = new BrowserWindow({
+    width: 380,
+    height: 540,
+    x: wa.x + wa.width - 404,
+    y: wa.y + wa.height - 564,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    hasShadow: false,
+    backgroundColor: '#00000000',
+    show: true,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      backgroundThrottling: false
+    }
+  })
+  load(dialogWindow, 'dialog')
+  return dialogWindow
+}
+
+export function toggleDialogWindow(): void {
+  if (!dialogWindow || dialogWindow.isDestroyed()) {
+    createDialogWindow()
+    return
+  }
+  if (dialogWindow.isVisible()) dialogWindow.hide()
+  else {
+    dialogWindow.show()
+    dialogWindow.focus()
+  }
+}
+
+export function createTodoWidgetWindow(): BrowserWindow {
+  if (todoWidgetWindow && !todoWidgetWindow.isDestroyed()) return todoWidgetWindow
+  const s = getSettings()
+  const display = screen.getPrimaryDisplay()
+  const wa = display.workArea
+  const w = 300
+  const h = 560
+  todoWidgetWindow = new BrowserWindow({
+    width: w,
+    height: h,
+    x: wa.x + wa.width - w - 12,
+    y: wa.y + 48,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: s.todoWidgetOnTop !== false,
+    skipTaskbar: true,
+    resizable: false,
+    hasShadow: false,
+    backgroundColor: '#00000000',
+    show: !!s.todoWidgetVisible,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      backgroundThrottling: false
+    }
+  })
+  todoWidgetWindow.setOpacity(s.todoWidgetOpacity ?? 0.95)
+  if (s.todoWidgetOnTop === false) {
+    // 底层模式：点击穿透 + 沉底
+    todoWidgetWindow.setIgnoreMouseEvents(true, { forward: true })
+    todoWidgetWindow.setAlwaysOnTop(false)
+  }
+  load(todoWidgetWindow, 'todoWidget')
+  return todoWidgetWindow
+}
+
+export function toggleTodoWidget(): void {
+  const s = getSettings()
+  const next = !s.todoWidgetVisible
+  setSettings({ todoWidgetVisible: next })
+  if (!todoWidgetWindow || todoWidgetWindow.isDestroyed()) {
+    if (next) createTodoWidgetWindow()
+    return
+  }
+  if (next) todoWidgetWindow.show()
+  else todoWidgetWindow.hide()
+}
+
+/** 顶层/底层切换（穿透 + 沉底） */
+export function setTodoWidgetLayer(onTop: boolean): void {
+  setSettings({ todoWidgetOnTop: onTop })
+  if (!todoWidgetWindow || todoWidgetWindow.isDestroyed()) return
+  if (onTop) {
+    if (!getSettings().todoWidgetPenetration) todoWidgetWindow.setIgnoreMouseEvents(false)
+    todoWidgetWindow.setAlwaysOnTop(true, 'screen-saver')
+  } else {
+    todoWidgetWindow.setIgnoreMouseEvents(true, { forward: true })
+    todoWidgetWindow.setAlwaysOnTop(false)
+  }
+}
+
+/** 待办小组件：鼠标穿透（设置驱动） */
+export function setTodoWidgetPenetration(v: boolean): void {
+  setSettings({ todoWidgetPenetration: v })
+  if (!todoWidgetWindow || todoWidgetWindow.isDestroyed()) return
+  if (v) todoWidgetWindow.setIgnoreMouseEvents(true, { forward: true })
+  else if (getSettings().todoWidgetOnTop !== false) todoWidgetWindow.setIgnoreMouseEvents(false)
+}
+
+/** 监控悬浮窗：顶层开关 */
+export function setWidgetOnTop(v: boolean): void {
+  setSettings({ widgetOnTop: v })
+  if (widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.setAlwaysOnTop(v, v ? 'screen-saver' : 'floating')
+}
+
+/** 桌宠：不透明度（渲染层自身 hit-test 逻辑不受影响） */
+export function setPetOpacity(v: number): void {
+  setSettings({ petOpacity: v })
+  if (petWindow && !petWindow.isDestroyed()) petWindow.setOpacity(v)
 }
 
 export function broadcast(channel: string, ...args: unknown[]): void {

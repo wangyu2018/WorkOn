@@ -7,7 +7,7 @@ import { useAppStore, type ViewKey } from './stores/appStore'
 import { usePresenceStore } from './stores/presenceStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { Icon, type IconName } from './components/Icon'
-import { WeatherBadge } from './components/WeatherBadge'
+import { WeatherCard } from './components/WeatherCard'
 import { CATEGORY_META, categoryOfWithOverride, type AppCategory } from '@shared/appCategory'
 import { WORK_STATES } from '@shared/stateMeta'
 import { displayApp } from '@shared/appDisplayName'
@@ -86,10 +86,10 @@ function NavButton({ item, active, onClick }: { item: NavItem; active: boolean; 
   return (
     <button
       onClick={onClick}
-      className={`group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] transition-colors duration-150 ${
-        active ? 'text-slate-100' : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-200'
+      className={`group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] transition-all duration-150 ${
+        active ? 'text-slate-100' : 'text-slate-400 hover:bg-[var(--surface-2)] hover:text-slate-200'
       }`}
-      style={active ? { background: 'var(--accent-softer)' } : undefined}
+      style={active ? { background: 'var(--surface-2)', boxShadow: 'var(--shadow-sm)' } : undefined}
     >
       {/* active 左侧指示条 */}
       <span
@@ -228,22 +228,8 @@ export default function App() {
             <span className="text-[13px] font-semibold text-slate-200">{VIEW_TITLES[view]}</span>
           </div>
           <div className="app-no-drag flex items-center gap-2">
-            {/* 实时状态：环 + 状态名 + 分类图标 + 当前应用（横向一行，无底板） */}
-            {presence ? (
-              <div className="flex items-center gap-2 mr-1" title={`当前状态 ${presence.state} · ${currentAppLabel}`}>
-                <span className="inline-block h-[13px] w-[13px] shrink-0 rounded-full" style={{ background: WORK_STATES[presence.state]?.color ?? '#22d3ee', boxShadow: `0 0 8px ${WORK_STATES[presence.state]?.color ?? '#22d3ee'}66`, border: '2px solid rgba(11,16,27,0.9)' }} />
-                <span className="text-[12px] font-bold leading-none text-slate-100">{WORK_STATES[presence.state]?.label ?? presence.state}</span>
-                <span className="mx-0.5 h-4 w-px shrink-0 bg-white/[0.1]" />
-                {mainCat ? (
-                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="shrink-0" style={{ color: CATEGORY_META[mainCat].color }}>
-                    <use href={`#cat-${mainCat}`} />
-                  </svg>
-                ) : null}
-                <span className="max-w-[130px] truncate text-[11px] text-slate-300">{currentAppLabel}</span>
-              </div>
-            ) : null}
-            {/* 天气徽标（当前 + 未来 N 小时，有雨优先） */}
-            <WeatherBadge />
+            {/* 天气卡（现在 / 未来几小时 / 未来几天） */}
+            <WeatherCard />
             {/* 窗口控制（独立，与状态胶囊分开） */}
             <button
               className="flex h-7 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.08] hover:text-slate-200"

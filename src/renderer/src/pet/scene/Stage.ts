@@ -71,6 +71,8 @@ export class Stage {
     // fov=40，z 固定距离，换算使世界高度 = 屏幕像素高度（§1.4）
     this.camera = new THREE.PerspectiveCamera(40, this.width / this.height, 10, 8000)
     this.updateCamera()
+    // 角色在 layer 1（独立光照层），相机需要同时看 layer 0 + 1
+    this.camera.layers.enable(1)
 
     window.addEventListener('resize', () => this.onResize())
     document.addEventListener('visibilitychange', () => {

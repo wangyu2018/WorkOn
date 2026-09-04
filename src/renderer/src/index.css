@@ -2,12 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── CSS 变量体系（静谧深空 · 暗色默认） ── */
+/* ── CSS 变量体系（WorkOn 青绿 × Aura 紫 双品牌 · 暗色默认） ── */
 :root {
-  --bg-deep: #0b101b;
-  --bg-surface: #121826;
-  --bg-elevated: #1a2233;
-  --border-subtle: rgba(255, 255, 255, 0.07);
+  --bg-deep: #0d1117;
+  --bg-surface: #151c24;
+  --bg-elevated: #1a232c;
+  --border-subtle: #26323d;
+  /* ── 表面 / 线 / 文字（对齐 workon-redesign-v6 暗色） ── */
+  --surface-2: #1a232c;
+  --surface-3: #202c37;
+  --line: #26323d;
+  --line-strong: #324250;
+  --text-1: #e8f0f3;
+  --text-2: #a7b8c1;
+  --text-3: #647a85;
+  /* 双品牌：teal = 功能/数据色；aura 渐变 = AI 专属（✦ 日报/搭子/AI 拆解） */
+  --teal: #0fb5a4;
+  --teal-deep: #0a8f82;
+  --teal-soft: rgba(15, 181, 164, 0.12);
+  --glow-t: 0 6px 22px rgba(15, 181, 164, 0.35);
+  --indigo: #6366f1;
+  --violet: #8b5cf6;
+  --cyan: #06b6d4;
+  --aura: linear-gradient(135deg, #6366f1, #8b5cf6 55%, #06b6d4);
+  --aura-soft: linear-gradient(135deg, rgba(99,102,241,.1), rgba(139,92,246,.06) 55%, rgba(6,182,212,.08));
+  --glow-i: 0 8px 26px rgba(124, 58, 237, 0.3);
+  --glow-v: 0 6px 24px rgba(139, 92, 246, 0.35);
+  --glow-c: 0 6px 24px rgba(6, 182, 212, 0.35);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.06);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.18), 0 12px 36px rgba(0,0,0,.12);
+  --shadow-lg: 0 14px 44px rgba(0,0,0,.35), 0 28px 72px rgba(0,0,0,.25);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --ease-soft: cubic-bezier(.23, 1, .32, 1);
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-xl: 22px;
   /* 星图语义色（RGB通道，方便rgba(var(--star-x)/opacity)派生） */
   --star-work: 16 185 129;
   --star-life: 251 191 36;
@@ -27,10 +57,10 @@
   --star-life-label: rgb(var(--star-life) / 0.95);
   --star-badge-bg: rgba(255, 255, 255, 0.06);
   --star-badge-text: #aab3c5;
-  --border-active: rgba(34, 211, 238, 0.35);
-  --text-primary: #e8edf5;
-  --text-secondary: #8a93a6;
-  --text-muted: #5a6478;
+  --border-active: rgba(15, 181, 164, 0.35);
+  --text-primary: #e8f0f3;
+  --text-secondary: #a7b8c1;
+  --text-muted: #647a85;
   /* 浮层卡（hover 预览 / 详情弹层）主题变量：随亮暗模式切换 */
   --pop-bg: rgba(15, 21, 34, 0.96);
   --pop-border: rgba(255, 255, 255, 0.09);
@@ -40,10 +70,10 @@
   --pop-text-strong: #c3cad8;
   --pop-badge-bg: rgba(255, 255, 255, 0.07);
   --pop-badge-text: #aab3c5;
-  /* 3 级动效：hover 150ms / 面板 250ms / 页面 400ms */
-  --t-hover: 150ms ease-out;
-  --t-panel: 250ms ease-out;
-  --t-page: 400ms ease-out;
+  /* 3 级动效：hover 150ms 弹性 / 面板 250ms / 页面 400ms */
+  --t-hover: 150ms cubic-bezier(.34, 1.56, .64, 1);
+  --t-panel: 250ms cubic-bezier(.23, 1, .32, 1);
+  --t-page: 400ms cubic-bezier(.23, 1, .32, 1);
 
   /* 时间轴（暗色默认） */
   --tl-work-fill: rgba(59, 138, 221, 0.35);
@@ -97,11 +127,11 @@ body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   user-select: none;
-  /* 静谧深空：柔和双辉光 + 纵向微渐变，无网格噪音 */
+  /* WorkOn 深空底：青绿/紫罗兰双辉光 + 纵向微渐变，无网格噪音 */
   background:
-    radial-gradient(1100px 480px at 78% -12%, rgba(56, 120, 200, 0.1), transparent 62%),
-    radial-gradient(880px 420px at 8% 112%, rgba(52, 211, 153, 0.05), transparent 60%),
-    linear-gradient(165deg, #0d1322 0%, #0b101b 52%, #090d16 100%);
+    radial-gradient(1100px 480px at 78% -12%, rgba(15, 181, 164, 0.1), transparent 62%),
+    radial-gradient(880px 420px at 8% 112%, rgba(139, 92, 246, 0.06), transparent 60%),
+    linear-gradient(165deg, #10161d 0%, #0d1117 52%, #0b0f14 100%);
 }
 
 input,
@@ -133,17 +163,11 @@ textarea {
 @layer components {
   /* 玻璃卡片：柔边框 + 细腻投影 + 极轻顶部提亮 */
   .glass-card {
-    @apply rounded-2xl border p-4;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0) 22%),
-      rgba(18, 24, 38, 0.66);
-    border-color: var(--border-subtle);
-    backdrop-filter: blur(14px) saturate(1.15);
-    -webkit-backdrop-filter: blur(14px) saturate(1.15);
-    box-shadow:
-      0 10px 30px rgba(0, 0, 0, 0.32),
-      0 1px 4px rgba(0, 0, 0, 0.2),
-      inset 0 1px 0 rgba(255, 255, 255, 0.045);
+    @apply border p-4;
+    border-radius: var(--r-lg);
+    background: var(--bg-surface);
+    border-color: var(--line);
+    box-shadow: var(--shadow-sm);
     transition:
       border-color var(--t-hover),
       transform var(--t-hover),
@@ -151,32 +175,28 @@ textarea {
     transform-style: preserve-3d;
   }
   .glass-card.hoverable:hover {
-    border-color: rgba(255, 255, 255, 0.14);
+    border-color: var(--line-strong);
     transform: translateY(-2px);
-    box-shadow:
-      0 16px 40px rgba(0, 0, 0, 0.4),
-      0 1px 6px rgba(0, 0, 0, 0.24),
-      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    box-shadow: var(--shadow-md);
   }
 
   /* 卡片内的次级面板（统一此前三种并存的手写子卡） */
   .sub-card {
     @apply rounded-xl border p-3;
-    background: rgba(255, 255, 255, 0.028);
-    border-color: rgba(255, 255, 255, 0.06);
+    background: var(--surface-2);
+    border-color: var(--line);
   }
 
   .glass-btn {
     @apply inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] text-slate-300;
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(255, 255, 255, 0.08);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    background: var(--surface-2);
+    border-color: var(--line);
     transition: all var(--t-hover);
   }
   .glass-btn:hover {
-    border-color: rgba(255, 255, 255, 0.16);
-    background: rgba(255, 255, 255, 0.08);
-    color: #e8edf5;
+    border-color: var(--line-strong);
+    background: var(--surface-3);
+    color: var(--text-1);
   }
   .glass-btn:active {
     transform: scale(0.97);
@@ -185,16 +205,71 @@ textarea {
     opacity: 0.45;
     pointer-events: none;
   }
+  /* 功能主按钮：青绿渐变 + 白字 + 青绿辉光 + 扫光（数据/工作类动作） */
   .glass-btn.primary {
-    background: linear-gradient(180deg, var(--accent-soft), var(--accent-softer));
-    border-color: var(--border-active);
-    color: var(--accent);
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #0fb5a4, #0d9e8f);
+    border-color: transparent;
+    color: #fff;
+    font-weight: 500;
+    box-shadow: var(--glow-t);
+  }
+  .glass-btn.primary::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -80%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+    transform: skewX(-18deg);
+    transition: left 0.5s;
+    pointer-events: none;
+  }
+  .glass-btn.primary:hover::before {
+    left: 150%;
   }
   .glass-btn.primary:hover {
-    background: var(--accent-soft);
-    border-color: var(--accent);
-    color: var(--accent);
+    background: linear-gradient(135deg, #14ccba, #0fb5a4);
+    border-color: transparent;
+    color: #fff;
+    transform: translateY(-2px);
+    filter: brightness(1.06);
+    box-shadow: 0 8px 26px rgba(15, 181, 164, 0.45);
+  }
+  /* AI 专属按钮：aura 三色渐变（✦ 生成日报 / 问 AI / AI 拆解等，双品牌语义） */
+  .glass-btn.ai {
+    position: relative;
+    overflow: hidden;
+    background: var(--aura);
+    border-color: transparent;
+    color: #fff;
+    font-weight: 500;
+    box-shadow: var(--glow-i);
+  }
+  .glass-btn.ai::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -80%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+    transform: skewX(-18deg);
+    transition: left 0.5s;
+    pointer-events: none;
+  }
+  .glass-btn.ai:hover::before {
+    left: 150%;
+  }
+  .glass-btn.ai:hover {
+    background: var(--aura);
+    border-color: transparent;
+    color: #fff;
+    transform: translateY(-2px);
+    filter: brightness(1.08);
+    box-shadow: 0 8px 26px rgba(124, 58, 237, 0.45);
   }
   .glass-btn.danger {
     border-color: rgba(239, 68, 68, 0.3);
@@ -208,9 +283,8 @@ textarea {
 
   .glass-input {
     @apply w-full rounded-lg border px-3 py-1.5 text-[13px] text-slate-200 outline-none;
-    background: rgba(5, 8, 15, 0.4);
-    border-color: rgba(255, 255, 255, 0.08);
-    box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.2);
+    background: var(--surface-2);
+    border-color: var(--line);
     transition:
       border-color var(--t-hover),
       box-shadow var(--t-hover);
@@ -223,30 +297,30 @@ textarea {
     color: var(--text-muted);
   }
   select.glass-input option {
-    background: #121826;
-    color: #e8edf5;
+    background: var(--bg-surface);
+    color: var(--text-1);
   }
 
   .chip {
     @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-slate-300;
-    border-color: rgba(255, 255, 255, 0.09);
-    background: rgba(255, 255, 255, 0.045);
+    border-color: var(--line);
+    background: var(--surface-2);
     transition: all var(--t-hover);
   }
   .chip:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--surface-3);
   }
 
   /* 选项胶囊（设置/隐私等单选按钮组的统一写法） */
   .pill-btn {
     @apply rounded-lg border px-2.5 py-1.5 text-[12px] text-slate-400;
-    border-color: rgba(255, 255, 255, 0.08);
+    border-color: var(--line);
     background: transparent;
     transition: all var(--t-hover);
   }
   .pill-btn:hover {
-    border-color: rgba(255, 255, 255, 0.18);
-    color: #e8edf5;
+    border-color: var(--line-strong);
+    color: var(--text-1);
   }
   .pill-btn.active {
     border-color: var(--border-active);
@@ -343,6 +417,57 @@ textarea {
   animation: welcome-pop 3s ease-out both;
 }
 
+/* ── Aura 微交互工具类 ── */
+@keyframes aura-pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.35);
+  }
+  55% {
+    box-shadow: 0 0 0 7px rgba(99, 102, 241, 0);
+  }
+}
+.pulse-glow {
+  animation: aura-pulse-glow 2.2s var(--ease-soft) infinite;
+}
+.btn-sweep {
+  position: relative;
+  overflow: hidden;
+}
+.btn-sweep::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -80%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transform: skewX(-18deg);
+  transition: left 0.5s;
+  pointer-events: none;
+}
+.btn-sweep:hover::before {
+  left: 150%;
+}
+.aura-text {
+  background: var(--aura);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+@keyframes aura-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+.float-y {
+  animation: aura-float 4s ease-in-out infinite;
+}
+
 /* 无边框窗口：标题栏拖拽区 */
 .app-drag {
   -webkit-app-region: drag;
@@ -354,10 +479,10 @@ textarea {
 
 /* ── 强调色主题（默认青，支持 violet/green/amber） ── */
 :root {
-  --accent: #22d3ee;
-  --accent-soft: rgba(34, 211, 238, 0.15);
-  --accent-softer: rgba(34, 211, 238, 0.12);
-  --accent-glow: rgba(34, 211, 238, 0.35);
+  --accent: #0fb5a4;
+  --accent-soft: rgba(15, 181, 164, 0.15);
+  --accent-softer: rgba(15, 181, 164, 0.12);
+  --accent-glow: rgba(15, 181, 164, 0.35);
 }
 [data-theme='violet'] {
   --accent: #a78bfa;
@@ -396,6 +521,25 @@ textarea {
 [data-theme='violet'] .shadow-glow { box-shadow: 0 0 14px rgba(167, 139, 250, 0.22) !important; }
 [data-theme='green'] .shadow-glow { box-shadow: 0 0 14px rgba(52, 211, 153, 0.22) !important; }
 [data-theme='amber'] .shadow-glow { box-shadow: 0 0 14px rgba(251, 191, 36, 0.22) !important; }
+
+/* 主题色下 primary 按钮退回强调色柔和样式（aura 三色渐变仅默认主题使用） */
+[data-theme='violet'] .glass-btn.primary,
+[data-theme='green'] .glass-btn.primary,
+[data-theme='amber'] .glass-btn.primary {
+  background: linear-gradient(180deg, var(--accent-soft), var(--accent-softer));
+  border-color: var(--border-active);
+  color: var(--accent);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+}
+[data-theme='violet'] .glass-btn.primary:hover,
+[data-theme='green'] .glass-btn.primary:hover,
+[data-theme='amber'] .glass-btn.primary:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: none;
+  filter: none;
+}
 [data-theme='violet'] input[type='range']::-webkit-slider-thumb { background: #a78bfa; box-shadow: 0 0 6px rgba(167, 139, 250, 0.45); }
 [data-theme='green'] input[type='range']::-webkit-slider-thumb { background: #34d399; box-shadow: 0 0 6px rgba(52, 211, 153, 0.45); }
 [data-theme='amber'] input[type='range']::-webkit-slider-thumb { background: #fbbf24; box-shadow: 0 0 6px rgba(251, 191, 36, 0.45); }
@@ -414,10 +558,31 @@ textarea {
 /* ── 亮色模式（data-mode=light，覆盖少量硬编码工具类） ── */
 [data-mode='light'] body {
   background:
-    radial-gradient(1100px 480px at 78% -12%, rgba(56, 120, 200, 0.08), transparent 62%),
-    radial-gradient(880px 420px at 8% 112%, rgba(52, 211, 153, 0.06), transparent 60%),
-    linear-gradient(165deg, #eef2f7 0%, #f1f5f9 52%, #e9edf3 100%);
-  color: #1e293b;
+    radial-gradient(1100px 480px at 78% -12%, rgba(15, 181, 164, 0.07), transparent 62%),
+    radial-gradient(880px 420px at 8% 112%, rgba(139, 92, 246, 0.05), transparent 60%),
+    linear-gradient(165deg, #f2f5f7 0%, #eef3f5 52%, #eef3f5 100%);
+  color: #10242b;
+}
+/* 亮色模式重映射 Token（对齐 workon-redesign-v6 亮色） */
+[data-mode='light'] {
+  --bg-deep: #f2f5f7;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f7fafb;
+  --surface-2: #f7fafb;
+  --surface-3: #eef3f5;
+  --line: #e2e9ec;
+  --line-strong: #d4d9ea;
+  --border-subtle: #e2e9ec;
+  --text-1: #10242b;
+  --text-2: #4c6068;
+  --text-3: #8aa0a8;
+  --shadow-sm: 0 1px 3px rgba(16, 36, 43, 0.06), 0 4px 14px rgba(16, 36, 43, 0.05);
+  --shadow-md: 0 4px 12px rgba(16, 36, 43, 0.07), 0 12px 36px rgba(16, 36, 43, 0.08);
+  --shadow-lg: 0 14px 44px rgba(16, 36, 43, 0.12), 0 28px 72px rgba(16, 36, 43, 0.1);
+  --glow-t: 0 6px 22px rgba(15, 181, 164, 0.28);
+  --glow-i: 0 8px 26px rgba(124, 58, 237, 0.25);
+  --glow-v: 0 6px 24px rgba(139, 92, 246, 0.3);
+  --glow-c: 0 6px 24px rgba(6, 182, 212, 0.3);
 }
 [data-mode='light'] {
   --tl-work-fill: #b5d4f4;
@@ -466,49 +631,41 @@ textarea {
 [data-mode='light'] .bg-ink-800\/95 { background-color: rgba(255, 255, 255, 0.92) !important; }
 [data-mode='light'] .bg-ink-900\/60 { background-color: rgba(255, 255, 255, 0.6) !important; }
 [data-mode='light'] .glass-card {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.75) 100%);
-  border-color: rgba(0, 0, 0, 0.07);
-  box-shadow:
-    0 8px 24px rgba(30, 41, 59, 0.08),
-    0 1px 4px rgba(30, 41, 59, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  background: #ffffff;
+  border-color: var(--line);
+  box-shadow: var(--shadow-sm);
 }
 [data-mode='light'] .glass-card.hoverable:hover {
-  border-color: rgba(0, 0, 0, 0.12);
-  box-shadow:
-    0 14px 32px rgba(30, 41, 59, 0.12),
-    0 1px 6px rgba(30, 41, 59, 0.07),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-md);
 }
 [data-mode='light'] .sub-card {
-  background: rgba(0, 0, 0, 0.03);
-  border-color: rgba(0, 0, 0, 0.06);
+  background: var(--surface-3);
+  border-color: var(--line);
 }
 [data-mode='light'] .glass-btn {
-  background: rgba(255, 255, 255, 0.8);
-  border-color: rgba(0, 0, 0, 0.09);
-  color: #475569;
+  background: #ffffff;
+  border-color: var(--line);
+  color: var(--text-2);
 }
 [data-mode='light'] .glass-btn:hover {
-  border-color: rgba(0, 0, 0, 0.16);
-  background: #ffffff;
-  color: #1e293b;
+  border-color: var(--line-strong);
+  background: var(--surface-3);
+  color: var(--text-1);
 }
 [data-mode='light'] .glass-input {
-  background: rgba(255, 255, 255, 0.85);
-  border-color: rgba(0, 0, 0, 0.09);
-  color: #1e293b;
-  box-shadow: inset 0 1px 3px rgba(30, 41, 59, 0.06);
+  background: #ffffff;
+  border-color: var(--line);
+  color: #171c2e;
 }
-[data-mode='light'] .glass-input::placeholder { color: #94a3b8; }
-[data-mode='light'] select.glass-input option { background: #ffffff; color: #1e293b; }
+[data-mode='light'] .glass-input::placeholder { color: var(--text-3); }
+[data-mode='light'] select.glass-input option { background: #ffffff; color: #171c2e; }
 [data-mode='light'] .chip {
-  background: rgba(0, 0, 0, 0.04);
-  border-color: rgba(0, 0, 0, 0.08);
-  color: #475569;
+  background: var(--surface-2);
+  border-color: var(--line);
+  color: var(--text-2);
 }
-[data-mode='light'] .chip:hover { background: rgba(0, 0, 0, 0.07); }
+[data-mode='light'] .chip:hover { background: var(--surface-3); }
 [data-mode='light'] .pill-btn {
   border-color: rgba(0, 0, 0, 0.1);
   color: #64748b;

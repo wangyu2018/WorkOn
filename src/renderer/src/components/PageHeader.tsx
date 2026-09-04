@@ -16,8 +16,8 @@ export function PageHeader({ icon, title, desc, actions }: PageHeaderProps) {
       <span
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border"
         style={{
-          background: 'var(--accent-softer)',
-          borderColor: 'var(--border-active)',
+          background: 'var(--aura-soft)',
+          borderColor: 'var(--line)',
           color: 'var(--accent)'
         }}
       >

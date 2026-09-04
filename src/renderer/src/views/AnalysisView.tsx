@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { UsageStat, UserAnalysis } from '@shared/types'
+import { WORK_LIKE_STATES } from '@shared/stateMeta'
 import { Icon } from '../components/Icon'
 import { EmptyState } from '../components/EmptyState'
 import { ProgressRing } from '../components/ProgressRing'
@@ -7,6 +8,121 @@ import { useSettingsStore } from '../stores/settingsStore'
 
 function scoreColor(v: number): string {
   return v >= 75 ? '#10B981' : v >= 50 ? '#F59E0B' : '#EF4444'
+}
+
+/** 近 7 天趋势 / Top3 / 时段对比数据（v6 深度分析） */
+interface TrendData {
+  days: { key: string; label: string; focusMin: number }[]
+  topApps: { app: string; min: number }[]
+  morningMin: number
+  afternoonMin: number
+}
+
+function useTrend(): TrendData | null {
+  const [data, setData] = useState<TrendData | null>(null)
+  useEffect(() => {
+    const days: { key: string; label: string; focusMin: number }[] = []
+    const appMin = new Map<string, number>()
+    let morning = 0
+    let afternoon = 0
+    void (async () => {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date()
+        d.setDate(d.getDate() - i)
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        days.push({ key, label: `${d.getMonth() + 1}/${d.getDate()}`, focusMin: 0 })
+        try {
+          const trail = (await window.api.getTrail(key)) as { segments?: { mainState: string; mainApp: string; durationMin: number; startTs: number; glance?: boolean }[] } | null
+          for (const seg of trail?.segments ?? []) {
+            if (seg.glance || !WORK_LIKE_STATES.includes(seg.mainState as never)) continue
+            days[days.length - 1].focusMin += seg.durationMin
+            appMin.set(seg.mainApp, (appMin.get(seg.mainApp) ?? 0) + seg.durationMin)
+            const h = new Date(seg.startTs).getHours()
+            if (h >= 6 && h < 12) morning += seg.durationMin
+            else if (h >= 12 && h < 19) afternoon += seg.durationMin
+          }
+        } catch { /* 跳过无数据日 */ }
+      }
+      const topApps = [...appMin.entries()].map(([app, min]) => ({ app, min })).sort((a, b) => b.min - a.min).slice(0, 3)
+      setData({ days, topApps, morningMin: Math.round(morning), afternoonMin: Math.round(afternoon) })
+    })()
+    return
+  }, [])
+  return data
+}
+
+/** 近 7 天专注趋势 + Top3 应用 + ✦时段洞察（v6 深度分析区） */
+function TrendSection() {
+  const t = useTrend()
+  if (!t) return null
+  const max = Math.max(1, ...t.days.map((d) => d.focusMin))
+  const W = 300
+  const H = 64
+  const step = t.days.length > 1 ? W / (t.days.length - 1) : W
+  const pts = t.days.map((d, i) => `${(i * step).toFixed(1)},${(H - 6 - (d.focusMin / max) * (H - 14)).toFixed(1)}`)
+  const peakIdx = t.days.reduce((bi, d, i) => (d.focusMin > t.days[bi].focusMin ? i : bi), 0)
+  const total = t.morningMin + t.afternoonMin
+  const diffPct = total > 0 ? Math.round((Math.abs(t.morningMin - t.afternoonMin) / (total / 2)) * 100) : 0
+  const morningBetter = t.morningMin >= t.afternoonMin
+  const barColors = ['var(--teal)', 'var(--violet)', 'var(--cyan)']
+  return (
+    <section className="glass-card hoverable">
+      <div className="mb-2 flex items-center gap-2">
+        <h3 className="text-[13px] font-semibold text-slate-300">近 7 天专注趋势</h3>
+        <span className="ml-auto text-[10px] text-slate-500">日均 {Math.round(t.days.reduce((a, d) => a + d.focusMin, 0) / 7)}m</span>
+      </div>
+      <div className="flex items-start gap-4">
+        <svg viewBox={`0 0 ${W} ${H}`} className="h-16 flex-1">
+          <defs>
+            <linearGradient id="anag" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="#0fb5a4" stopOpacity=".28" />
+              <stop offset="1" stopColor="#0fb5a4" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <polygon points={`0,${H} ${pts.join(' ')} ${W},${H}`} fill="url(#anag)" />
+          <polyline points={pts.join(' ')} fill="none" stroke="#0fb5a4" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx={(peakIdx * step).toFixed(1)} cy={(H - 6 - (t.days[peakIdx].focusMin / max) * (H - 14)).toFixed(1)} r="3.4" fill="#0fb5a4" stroke="#fff" strokeWidth="1.6" />
+        </svg>
+        <div className="w-[42%] shrink-0">
+          <div className="mb-1.5 text-[10px] font-bold text-slate-500">时间去哪了 · Top 3</div>
+          <div className="flex flex-col gap-1.5">
+            {t.topApps.map((a, i) => (
+              <div key={a.app} className="flex items-center gap-1.5">
+                <span className="w-20 truncate text-[10.5px] text-slate-300" title={a.app}>{a.app}</span>
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
+                  <div className="h-full rounded-full" style={{ width: `${Math.round((a.min / (t.topApps[0]?.min || 1)) * 100)}%`, background: barColors[i] }} />
+                </div>
+                <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-slate-500">{a.min >= 60 ? `${Math.floor(a.min / 60)}h` : `${Math.round(a.min)}m`}</span>
+              </div>
+            ))}
+            {!t.topApps.length ? <span className="text-[10px] text-slate-600">—</span> : null}
+          </div>
+        </div>
+      </div>
+      <div className="mt-2 flex items-center gap-1.5 text-[10px] text-slate-500">
+        <span>{t.days[0]?.label}</span>
+        <div className="flex flex-1 justify-between px-6">
+          {t.days.slice(1, -1).map((d) => (
+            <span key={d.key}>{d.label}</span>
+          ))}
+        </div>
+        <span>今天</span>
+      </div>
+      {total > 0 ? (
+        <div
+          className="mt-2.5 flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] text-slate-300"
+          style={{ background: 'var(--aura-soft)', border: '1px solid rgba(139,92,246,0.25)' }}
+        >
+          <span className="shrink-0" style={{ color: 'var(--violet)' }}>✦</span>
+          <span>
+            {morningBetter ? '上午' : '午后'}的专注比{morningBetter ? '午后' : '上午'}高 <b className="text-[var(--teal-deep)]">{diffPct}%</b>
+            （上午 {Math.floor(t.morningMin / 60)}h{t.morningMin % 60}m / 午后 {Math.floor(t.afternoonMin / 60)}h{t.afternoonMin % 60}m），
+            建议把硬任务放在{morningBetter ? '上午' : '午后'}黄金段。
+          </span>
+        </div>
+      ) : null}
+    </section>
+  )
 }
 
 /** AI 画像 / 用量 / 派生待办 */
@@ -104,6 +220,9 @@ export default function AnalysisView() {
               ) : null}
             </section>
           </div>
+
+          {/* 近 7 天趋势 + Top3 + 时段洞察 */}
+          <TrendSection />
 
           {/* 画像细节 */}
           <div className="grid gap-4 lg:grid-cols-2">

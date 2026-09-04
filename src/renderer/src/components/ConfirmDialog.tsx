@@ -8,6 +8,10 @@ interface ConfirmDialogProps {
   confirmLabel?: string
   cancelLabel?: string
   danger?: boolean
+  /** 危险操作影响范围说明（v7：诊断信息块，红字等宽） */
+  impactNote?: ReactNode
+  /** 额外安全动作（如「先导出备份」），显示在取消按钮左侧 */
+  extraAction?: { label: string; onClick: () => void }
   onConfirm: () => void
   onCancel: () => void
 }
@@ -20,6 +24,8 @@ export function ConfirmDialog({
   confirmLabel = '确定',
   cancelLabel = '取消',
   danger,
+  impactNote,
+  extraAction,
   onConfirm,
   onCancel
 }: ConfirmDialogProps) {
@@ -39,7 +45,11 @@ export function ConfirmDialog({
       className="anim-fade-in fixed inset-0 z-[90] flex items-center justify-center bg-black/50 backdrop-blur-sm"
       onClick={onCancel}
     >
-      <div className="glass-card anim-scale-in w-[340px] !p-5" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="glass-card anim-scale-in w-[340px] !p-5"
+        style={{ borderRadius: 'var(--r-xl)', boxShadow: 'var(--shadow-lg)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center gap-2.5">
           <span
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border"
@@ -56,7 +66,20 @@ export function ConfirmDialog({
         {message ? (
           <div className="mt-2.5 pl-[42px] text-[12px] leading-relaxed text-slate-400">{message}</div>
         ) : null}
-        <div className="mt-4 flex justify-end gap-2 pl-[42px]">
+        {impactNote ? (
+          <div
+            className="mt-2.5 ml-[42px] rounded-lg px-2.5 py-2 font-mono text-[10.5px] leading-relaxed"
+            style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#fca5a5' }}
+          >
+            {impactNote}
+          </div>
+        ) : null}
+        <div className="mt-4 flex items-center justify-end gap-2 pl-[42px]">
+          {extraAction ? (
+            <button className="glass-btn mr-auto" onClick={extraAction.onClick}>
+              {extraAction.label}
+            </button>
+          ) : null}
           <button className="glass-btn" onClick={onCancel}>
             {cancelLabel}
           </button>

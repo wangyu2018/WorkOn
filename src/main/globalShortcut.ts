@@ -4,12 +4,14 @@
  *  - Ctrl+Alt+P：桌宠显隐
  */
 import { globalShortcut } from 'electron'
-import { toggleWidget, togglePet } from './windows'
+import { toggleWidget, togglePet, toggleDialogWindow, createTodoWidgetWindow, toggleTodoWidget } from './windows'
 
 export function registerShortcuts(): void {
   try {
     globalShortcut.register('CommandOrControl+Alt+B', () => toggleWidget())
     globalShortcut.register('CommandOrControl+Alt+P', () => togglePet())
+    globalShortcut.register('Alt+Space', () => toggleDialogWindow())
+    globalShortcut.register('CommandOrControl+Alt+T', () => { createTodoWidgetWindow(); toggleTodoWidget() })
   } catch (e) {
     console.warn('[shortcut] 注册失败:', e)
   }

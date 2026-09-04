@@ -166,9 +166,82 @@ export default function HeatmapView({ range = '7d', yearMonth }: HeatmapViewProp
     )
   }
 
-  // 7d 模式：现有行为
+  // 7d 模式：现有行为 + 结论层（黄金时段 / 峰值 / 低谷 / ✦AI 洞察）
+  // 每小时 7 天合计分钟 → 找最佳连续 2 小时窗口
+  const hourTotals = new Array<number>(24).fill(0)
+  for (const { hours } of rows) hours.forEach((m, h) => (hourTotals[h] += m))
+  let goldenStart = 9
+  let goldenSum = -1
+  for (let h = 6; h <= 22; h++) {
+    const sum = (hourTotals[h] ?? 0) + (hourTotals[h + 1] ?? 0)
+    if (sum > goldenSum) {
+      goldenSum = sum
+      goldenStart = h
+    }
+  }
+  // 峰值时刻（单格最大）
+  let peak = { dayIdx: 0, h: 0, min: 0 }
+  rows.forEach((r, di) =>
+    r.hours.forEach((m, h) => {
+      if (m > peak.min) peak = { dayIdx: di, h, min: m }
+    })
+  )
+  // 工作时段（9-18）低谷：合计最低且有人出现的 2 小时窗
+  let valleyStart = -1
+  let valleySum = Number.MAX_SAFE_INTEGER
+  for (let h = 9; h <= 16; h++) {
+    const sum = (hourTotals[h] ?? 0) + (hourTotals[h + 1] ?? 0)
+    if (sum > 0 && sum < valleySum) {
+      valleySum = sum
+      valleyStart = h
+    }
+  }
+  const goldenTotal = Math.round(hourTotals[goldenStart] + hourTotals[goldenStart + 1])
+  const avgDaily = Math.round(rows.reduce((acc, r) => acc + r.hours.reduce((a, b) => a + b, 0), 0) / Math.max(1, rows.length))
+  const dayLabel = (i: number): string => {
+    const d = new Date(`${rows[i]?.key ?? todayKey()}T00:00:00`)
+    return `周${WEEK_LABELS[(d.getDay() + 6) % 7]}`
+  }
+  const valleyDays = valleyStart >= 0 ? rows.filter((r) => (r.hours[valleyStart] ?? 0) + (r.hours[valleyStart + 1] ?? 0) < goldenSum / 6).length : 0
+
   return (
     <div className="overflow-x-auto">
+      {/* 结论层：黄金时段 / 峰值 / 低谷 */}
+      <div className="mb-3 grid grid-cols-3 gap-3">
+        <div>
+          <div className="text-[16px] font-extrabold text-slate-100">{Math.floor(avgDaily / 60)}h{avgDaily % 60}m</div>
+          <div className="text-[9px] text-slate-500">日均专注 · 近 7 天</div>
+        </div>
+        <div>
+          <div className="text-[16px] font-extrabold text-[var(--teal-deep)]">
+            {dayLabel(peak.dayIdx)} {pad(peak.h)}:00
+          </div>
+          <div className="text-[9px] text-slate-500">峰值时刻 · {Math.round(peak.min)}m</div>
+        </div>
+        <div>
+          <div className="text-[16px] font-extrabold text-[#f87171]">
+            {valleyStart >= 0 ? `${pad(valleyStart)}:00–${pad(valleyStart + 2)}:00` : '—'}
+          </div>
+          <div className="text-[9px] text-slate-500">低谷时段 · 建议排会议</div>
+        </div>
+      </div>
+      <div
+        className="mb-3 flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] text-slate-300"
+        style={{ background: 'var(--aura-soft)', border: '1px solid rgba(139,92,246,0.25)' }}
+      >
+        <span className="shrink-0" style={{ color: 'var(--violet)' }}>✦</span>
+        <span>
+          ⭐ 黄金时段 <b className="text-[var(--teal-deep)]">{pad(goldenStart)}:00–{pad(goldenStart + 2)}:00</b>
+          （合计 {Math.floor(goldenTotal / 60)}h{goldenTotal % 60}m）
+          {valleyStart >= 0 && valleyDays >= 3 ? (
+            <>
+              ；低谷时段 7 天里出现 {valleyDays} 天，与其硬扛，不如固定安排轻量事务（周报、整理、答疑）。
+            </>
+          ) : (
+            <>。建议把硬任务放在这段，会议挪到低谷。</>
+          )}
+        </span>
+      </div>
       <div className="min-w-[640px]">
         {/* 小时表头 */}
         <div className="mb-1 flex gap-1 pl-14">
@@ -189,13 +262,16 @@ export default function HeatmapView({ range = '7d', yearMonth }: HeatmapViewProp
               {hours.map((min, h) => {
                 const alpha = min <= 0 ? 0 : Math.min(1, min / 60) * 0.85 + 0.1
                 const isNow = isToday && h === now.getHours()
+                const isGolden = h === goldenStart || h === goldenStart + 1
                 return (
                   <div
                     key={h}
                     title={`${key} ${h}:00 · 工作 ${Math.round(min)}m`}
                     className={`h-5 flex-1 rounded-[4px] transition-transform hover:scale-110 ${isNow ? 'ring-1 ring-neon-cyan' : ''}`}
                     style={{
-                      background: min > 0 ? `rgba(34,211,238,${alpha.toFixed(2)})` : 'rgba(255,255,255,0.04)'
+                      background: min > 0 ? `rgba(15,181,164,${alpha.toFixed(2)})` : 'rgba(255,255,255,0.04)',
+                      outline: isGolden && min > 0 ? '1.5px solid rgba(15,181,164,0.75)' : undefined,
+                      outlineOffset: isGolden ? 1 : undefined
                     }}
                   />
                 )
@@ -207,10 +283,10 @@ export default function HeatmapView({ range = '7d', yearMonth }: HeatmapViewProp
         <div className="mt-3 flex items-center justify-end gap-1.5 text-[10px] text-slate-500">
           <span>少</span>
           {[0.1, 0.3, 0.55, 0.8, 0.95].map((a) => (
-            <span key={a} className="h-3 w-3 rounded-[3px]" style={{ background: `rgba(34,211,238,${a})` }} />
+            <span key={a} className="h-3 w-3 rounded-[3px]" style={{ background: `rgba(15,181,164,${a})` }} />
           ))}
           <span>多</span>
-          <span className="ml-2">工作类状态分钟数</span>
+          <span className="ml-2">工作类状态分钟数 · 描边列 = 黄金时段</span>
         </div>
       </div>
     </div>

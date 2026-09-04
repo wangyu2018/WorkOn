@@ -7,6 +7,7 @@ import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { Toggle } from '../components/Toggle'
 import { MotionLab } from '../components/MotionLab'
+import { AutomationLab } from '../components/AutomationLab'
 import { VrmUploader } from '../components/VrmUploader'
 
 /** 当前搭子角色（VRM 姵儿，单角色） */
@@ -371,6 +372,8 @@ export default function BuddyStage() {
 
             {/* ── 动作工坊 + 动作库 + 积分（第三批） ── */}
             <MotionLab />
+            {/* ── 自动化工坊（v7：触发器→条件→动作） ── */}
+            <AutomationLab />
           </div>
 
           <div className="text-[10px] uppercase text-slate-600 pt-3">显示参数</div>

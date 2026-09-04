@@ -21,6 +21,31 @@ const api = {
 
   // 实时状态
   getPresence: () => ipcRenderer.invoke('presence:get'),
+  getFocusChain: () => ipcRenderer.invoke('chain:get'),
+  // 归属引擎 / 目录监控 / 状态卡（v7 项目循环）
+  getAttribution: () => ipcRenderer.invoke('attr:get'),
+  listBindings: () => ipcRenderer.invoke('attr:bindings'),
+  bindProject: (projectId: string, patch: { apps?: string[]; keywords?: string[]; dirs?: string[] }) =>
+    ipcRenderer.invoke('attr:bind', projectId, patch),
+  unbindProject: (projectId: string) => ipcRenderer.invoke('attr:unbind', projectId),
+  answerAttribution: (fp: string, answer: string, payload?: { projectId?: string; projectName?: string; apps?: string[] }) =>
+    ipcRenderer.invoke('attr:answer', fp, answer, payload),
+  getTodayActivity: (projectId: string) => ipcRenderer.invoke('attr:todayActivity', projectId),
+  buildStatusCard: (projectId: string) => ipcRenderer.invoke('statuscard:build', projectId),
+  parseStatusCard: (md: string) => ipcRenderer.invoke('statuscard:parse', md),
+  applyCardDiff: (diff: unknown) => ipcRenderer.invoke('statuscard:apply', diff),
+  toggleTodoWidget: () => ipcRenderer.invoke('todoWidget:toggle'),
+  setTodoWidgetLayer: (onTop: boolean) => ipcRenderer.invoke('todoWidget:layer', onTop),
+  // MotionLab 自动化（v7）
+  listAutomations: () => ipcRenderer.invoke('automations:list'),
+  saveAutomation: (rule: unknown) => ipcRenderer.invoke('automations:save', rule),
+  removeAutomation: (id: string) => ipcRenderer.invoke('automations:remove', id),
+  toggleAutomation: (id: string, enabled: boolean) => ipcRenderer.invoke('automations:toggle', id, enabled),
+  // 星图逻辑层（v6）
+  getStarGraph: (days?: number) => ipcRenderer.invoke('star:graph', days),
+  onNotify: on('notify'),
+  onNotifyExpired: on('notify-expired'),
+  notifyAction: (id: string, action: string) => ipcRenderer.invoke('notify:action', id, action),
   getRecentRecognition: () => ipcRenderer.invoke('recognition:recent'),
   onPresence: on('presence:update'),
   getDesktop: () => ipcRenderer.invoke('desktop:get'),

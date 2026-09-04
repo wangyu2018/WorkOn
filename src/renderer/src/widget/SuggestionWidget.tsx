@@ -4,12 +4,93 @@
  * 设计：静谧深空 · accent 变量驱动 · 统一头部/告警壳
  */
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import type { SuggestionQuestion } from '@shared/types'
+import type { SuggestionQuestion, FocusChainState, Project, PlanItem } from '@shared/types'
+
+interface AttributionState {
+  projectId: string | null
+  projectName: string
+  taskId: string | null
+  taskTitle: string
+  sec: number
+  source: 'binding' | 'keyword' | 'question' | 'none'
+}
 import { WORK_STATES } from '@shared/stateMeta'
 import { usePresenceStore } from '../stores/presenceStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { Icon, type IconName } from '../components/Icon'
 import { CATEGORY_META, categoryOfWithOverride, type AppCategory } from '@shared/appCategory'
+import { StateDot, ChainChip, GrainChip, Firefly } from '../components/widgetKit'
+
+/** 应用内通知卡（main notify.ts 推送） */
+interface WidgetNotify {
+  id: string
+  kind: 'report' | 'rest' | 'ai' | 'correction' | 'generic'
+  title: string
+  body: string
+  time: number
+  ttlSec: number
+  actions: { label: string; action: string; primary?: boolean }[]
+}
+
+const NOTIFY_ICON: Record<WidgetNotify['kind'], { emoji: string; bg: string }> = {
+  report: { emoji: '📊', bg: 'rgba(15,181,164,.25)' },
+  rest: { emoji: '☕', bg: 'rgba(245,158,11,.25)' },
+  ai: { emoji: '✦', bg: 'rgba(139,92,246,.28)' },
+  correction: { emoji: '✓', bg: 'rgba(16,185,129,.25)' },
+  generic: { emoji: '🔔', bg: 'rgba(255,255,255,.12)' }
+}
+
+/** 通知卡堆栈（v7）：进度条自动消失 + 操作按钮回传 main */
+function NotificationStack({ list, onDone }: { list: WidgetNotify[]; onDone: (id: string) => void }) {
+  if (!list.length) return null
+  return (
+    <div className="flex w-[320px] flex-col gap-2">
+      {list.map((n) => {
+        const ic = NOTIFY_ICON[n.kind] ?? NOTIFY_ICON.generic
+        return (
+          <div key={n.id} className="relative overflow-hidden rounded-xl border border-white/10 p-2.5" style={PANEL_STYLE}>
+            <div className="flex items-start gap-2.5">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm" style={{ background: ic.bg }}>
+                {ic.emoji}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <b className="text-[11.5px] text-slate-100">{n.title}</b>
+                  <span className="text-[9px] text-slate-500">刚刚</span>
+                  <button
+                    className="ml-auto text-slate-500 transition-colors hover:text-slate-200"
+                    onClick={() => { onDone(n.id); void window.api.notifyAction(n.id, 'dismiss') }}
+                  >✕</button>
+                </div>
+                <div className="mt-0.5 text-[10.5px] leading-relaxed text-slate-400">{n.body}</div>
+                {n.actions.length ? (
+                  <div className="mt-1.5 flex gap-1.5">
+                    {n.actions.map((a) => (
+                      <button
+                        key={a.action}
+                        className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition-all hover:-translate-y-px ${
+                          a.primary ? 'bg-[var(--teal)] text-white' : 'border border-white/15 text-slate-300 hover:bg-white/10'
+                        }`}
+                        onClick={() => { onDone(n.id); void window.api.notifyAction(n.id, a.action) }}
+                      >
+                        {a.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <i
+              className="absolute bottom-0 left-0 h-[2px] bg-[var(--teal)] opacity-70"
+              style={{ animation: `notify-ttl ${n.ttlSec}s linear forwards`, width: '100%' }}
+            />
+          </div>
+        )
+      })}
+      <style>{`@keyframes notify-ttl { from { width: 100%; } to { width: 0%; } }`}</style>
+    </div>
+  )
+}
 
 interface BrowserPlanConfirm {
   planId: string
@@ -75,10 +156,9 @@ function HeaderBtn({ icon, rotate, title, onClick, active, accent }: {
 function WidgetHeader({ children }: { children: ReactNode }) {
   return (
     <div
-      className="flex h-8 shrink-0 cursor-move select-none items-center justify-between border-b border-white/[0.06] px-2.5"
+      className="flex h-7 shrink-0 cursor-move select-none items-center justify-end border-b border-white/[0.06] px-2.5"
       style={APP_DRAG}
     >
-      <span className="pl-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">WorkOn</span>
       <div className="flex items-center gap-0.5">{children}</div>
     </div>
   )
@@ -260,8 +340,44 @@ export default function SuggestionWidget() {
   const [widgetCompact, setWidgetCompact] = useState(false)
   const [alertCollapsed, setAlertCollapsed] = useState<Record<string, boolean>>({})
   const [showFocusMinutes, setShowFocusMinutes] = useState(false)
-  /** full 态 Tab：现在 / 情景 / 对话 */
-  const [fullTab, setFullTab] = useState<'now' | 'scene' | 'chat'>('now')
+  /** 专注链路 v2（悬浮窗只回答「干得怎样」：链路时长取代无口径的专注度数字） */
+  const [chain, setChain] = useState<FocusChainState | null>(null)
+  /** 应用内通知堆栈 */
+  const [notifies, setNotifies] = useState<WidgetNotify[]>([])
+  /** 归属链（项目·任务颗粒）：胶囊显示归属而非窗口标题 */
+  const [attr, setAttr] = useState<AttributionState | null>(null)
+  const [allProjects, setAllProjects] = useState<Project[]>([])
+  /** 未归因轻问浮层 */
+  const [showUnattrAsk, setShowUnattrAsk] = useState(false)
+  useEffect(() => {
+    const pull = (): void => { void window.api?.getAttribution?.().then((a) => setAttr(a as AttributionState)).catch(() => undefined) }
+    pull()
+    const t = window.setInterval(pull, 8000)
+    return () => window.clearInterval(t)
+  }, [])
+  /** 萤火虫：有未处理确认问题 或 AI 回答尚未查看 */
+  const firefly = !!question || askState === 'answer' || notifies.length > 0
+  /** 归属项目的今日待办（full 态直接勾选） */
+  const [attrPlans, setAttrPlans] = useState<PlanItem[]>([])
+  useEffect(() => {
+    if (!attr?.projectId) {
+      setAttrPlans([])
+      return
+    }
+    void window.api
+      ?.listPlans?.()
+      .then((pl) => {
+        const list = ((pl as PlanItem[]) ?? []).filter((x) => x.projectId === attr.projectId && x.status !== 'done')
+        setAttrPlans(list.slice(0, 4))
+      })
+      .catch(() => undefined)
+  }, [attr?.projectId, attr?.taskTitle])
+  useEffect(() => {
+    const pull = (): void => { void window.api.getFocusChain?.().then((c) => setChain(c as FocusChainState)).catch(() => undefined) }
+    pull()
+    const t = window.setInterval(pull, 5000)
+    return () => window.clearInterval(t)
+  }, [])
 
   const setMode = (mode: WidgetMode) => {
     setWidgetMode(mode)
@@ -324,6 +440,8 @@ export default function SuggestionWidget() {
     const offAccent = window.api.onWidgetAccent((a) => {
       if (typeof a === 'string' && a) setAccent(a)
     })
+    const offNotify = window.api.onNotify((n) => setNotifies((l) => [n as WidgetNotify, ...l].slice(0, 3)))
+    const offNotifyExp = window.api.onNotifyExpired((id) => setNotifies((l) => l.filter((x) => x.id !== (id as string))))
 
     return () => {
       cleanup()
@@ -333,6 +451,8 @@ export default function SuggestionWidget() {
       offMD()
       offME()
       offAccent()
+      offNotify()
+      offNotifyExp()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -358,8 +478,8 @@ export default function SuggestionWidget() {
       return
     }
     const base = SIZES[mode].h
-    const extra = hasContent ? Math.min(220,
-      (question ? 90 : 0) + (bpConfirm ? 110 : 0) + (meetingDetected ? 130 : 0) + (askState !== 'hidden' ? 60 : 0)
+    const extra = hasContent ? Math.min(340,
+      (question ? 170 : 0) + (bpConfirm ? 150 : 0) + (meetingDetected ? 170 : 0) + (askState !== 'hidden' ? 70 : 0)
     ) : 0
     const target = Math.min(mode === 'full' ? MAX_FULL_H : base + extra, base + extra)
     const sz = SIZES[mode]
@@ -452,26 +572,55 @@ export default function SuggestionWidget() {
   const mainCat = mainApp ? categoryOfWithOverride(mainApp, appCategoryOverride) : null
   const mainCatEmoji = mainCat ? CATEGORY_META[mainCat].emoji : null
 
-  // ── mini 态：悬浮胶囊（状态环 + 实时工作内容） ──
+  // ── mini 态：胶囊三形态（归属颗粒 / 未归因轻问 / 萤火虫呼吸） ──
   if (widgetMode === 'mini') {
+    const hasAttr = !!(attr?.projectId && attr.projectName)
     return (
-      <div className="flex h-screen w-screen items-end justify-end">
-        <div
-          className={`flex h-11 w-full cursor-pointer items-center gap-2.5 rounded-full px-3 ${shimmer ? 'shimmer-ring' : ''}`}
-          style={PANEL_STYLE}
-          onClick={() => setMode('compact')}
-        >
-          <FocusRing size={26} focus={focus} color={meta.color} emoji={mainCatEmoji || meta.emoji} icon={mainCat ?? undefined} />
-          <span className="min-w-0 flex-1 truncate text-xs text-slate-200">{liveTitle || meta.label}</span>
-          <button
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200"
-            style={{ color: penetration ? accent : undefined }}
-            title={penetrationTitle}
-            onClick={(e) => { e.stopPropagation(); togglePenetration() }}
+      <div className="flex h-screen w-screen flex-col items-end justify-end gap-2 p-3">
+        <NotificationStack list={notifies} onDone={(id) => setNotifies((l) => l.filter((x) => x.id !== id))} />
+        {/* 未归因轻问：无归属时展开询问条 */}
+        {showUnattrAsk && !hasAttr ? (
+          <UnattrAskCard
+            onDone={() => {
+              setShowUnattrAsk(false)
+              if (question) answer('yes')
+            }}
+            projects={allProjects}
+          />
+        ) : null}
+        <Firefly active={firefly}>
+          <div
+            className={`flex h-11 w-full cursor-pointer items-center gap-2 rounded-full px-3 ${shimmer ? 'shimmer-ring' : ''}`}
+            style={PANEL_STYLE}
+            onClick={() => { void window.api?.listProjects?.().then((ps) => setAllProjects((ps as Project[]) ?? [])).catch(() => undefined); setMode('compact') }}
           >
-            <Icon name="eyeOff" size={12} />
-          </button>
-        </div>
+            {hasAttr ? (
+              <>
+                <GrainChip projectName={attr!.projectName} taskTitle={attr!.taskTitle} sec={attr!.sec} />
+                {chain?.active ? <ChainChip sec={chain.sec} interruptions={chain.interruptionsToday} /> : null}
+              </>
+            ) : (
+              <>
+                <StateDot color={meta.color} size={11} />
+                <span className="min-w-0 flex-1 truncate text-[11px] text-slate-300">当前工作未归类</span>
+                <button
+                  className="shrink-0 rounded-full bg-[rgba(139,92,246,0.15)] px-2 py-0.5 text-[9.5px] font-bold text-[var(--violet)]"
+                  onClick={(e) => { e.stopPropagation(); void window.api?.listProjects?.().then((ps) => setAllProjects((ps as Project[]) ?? [])).catch(() => undefined); setShowUnattrAsk(true) }}
+                >
+                  归类
+                </button>
+              </>
+            )}
+            <button
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200"
+              style={{ color: penetration ? accent : undefined }}
+              title={penetrationTitle}
+              onClick={(e) => { e.stopPropagation(); togglePenetration() }}
+            >
+              <Icon name="eyeOff" size={12} />
+            </button>
+          </div>
+        </Firefly>
         <style>{`
           .shimmer-ring { animation: shimmer 2s ease-out; }
           @keyframes shimmer {
@@ -487,7 +636,8 @@ export default function SuggestionWidget() {
   // ── compact 态：状态优先 + 情景流（左缘状态色条 + 实时内容做大 + 问答 FAB） ──
   if (widgetMode === 'compact') {
     return (
-      <div className="flex h-screen w-screen items-end justify-end p-3">
+      <div className="flex h-screen w-screen flex-col items-end justify-end gap-2 p-3">
+        <NotificationStack list={notifies} onDone={(id) => setNotifies((l) => l.filter((x) => x.id !== id))} />
         <div className="relative flex w-[300px] flex-col overflow-hidden rounded-2xl" style={PANEL_STYLE}>
           {/* 左缘状态色条 */}
           <div className="absolute left-0 top-0 bottom-0 w-[4px]" style={{ background: meta.color }} />
@@ -500,9 +650,23 @@ export default function SuggestionWidget() {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 <span className="text-[14px] font-bold" style={{ color: meta.color }}>{meta.label}</span>
-                <span className="text-[10px] text-slate-500 tabular-nums">专注度 {focus}</span>
+                {/* v7 口径：链路时长可验证、诚实；链路未激活时才回落专注度 */}
+                <span className="text-[10px] text-slate-500 tabular-nums">
+                  {chain?.active
+                    ? `⚡ 链路 ${Math.max(1, Math.round(chain.sec / 60))}min`
+                    : `专注度 ${focus}`}
+                </span>
               </div>
-              <div className="mt-0.5 truncate text-[13px] font-medium text-slate-200">{liveTitle || '等待采集…'}</div>
+              {attr?.projectId ? (
+                <div className="mt-0.5 flex min-w-0 items-center gap-1"><GrainChip projectName={attr.projectName} taskTitle={attr.taskTitle} sec={attr.sec} /></div>
+              ) : (
+                <div className="mt-0.5 text-[13px] text-slate-500">未归类 · 点右下「归类」标记项目</div>
+              )}
+              {chain ? (
+                <div className="mt-0.5 text-[10px] text-slate-500">
+                  今日 {chain.chainsToday} 段链路 · 最长 {Math.max(1, Math.round(chain.longestChainSecToday / 60))}min · 摸鱼中断 {chain.interruptionsToday}
+                </div>
+              ) : null}
               {presence && presence.continuousFocusSec > 60 ? (
                 <div className="mt-0.5 text-[10px]" style={{ color: accent }}>已连续专注 {Math.round(presence.continuousFocusSec / 60)} 分钟</div>
               ) : null}
@@ -514,16 +678,16 @@ export default function SuggestionWidget() {
             {petBubble && !widgetCompact && <PetBubbleLine text={petBubble} accent={accent} />}
           </div>
           {/* 问答 FAB */}
-          {aiEnabled ? (
+          {(
             <button
               className="absolute bottom-3 right-3 z-20 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-transform hover:scale-110 active:scale-95"
-              style={{ background: accent, boxShadow: `0 4px 14px ${hexAlpha(accent, 0.45)}` }}
+              style={{ background: 'var(--aura)', boxShadow: 'var(--glow-i)' }}
               title="问点什么…"
               onClick={() => setAskState(askState === 'hidden' ? 'input' : 'hidden')}
             >
               <Icon name="message" size={15} />
             </button>
-          ) : null}
+          )}
           <ResizeHandle onDown={onResizePointerDown} onMove={onResizePointerMove} onUp={onResizePointerUp} />
         </div>
       </div>
@@ -542,27 +706,13 @@ export default function SuggestionWidget() {
           <HeaderBtn icon="x" title="隐藏悬浮窗" onClick={() => window.api.toggleWidget()} />
         </WidgetHeader>
 
-        {/* full 态 Tab：现在 / 情景 / 对话 */}
-        <div className="flex gap-1 px-3 pt-2">
-          {([['now', '现在'], ['scene', '情景'], ['chat', '对话']] as const).map(([k, label]) => (
-            <button
-              key={k}
-              className={`rounded-md px-2.5 py-1 text-[11px] transition-colors ${fullTab === k ? 'text-slate-100' : 'text-slate-500 hover:text-slate-200'}`}
-              style={fullTab === k ? { background: 'rgba(255,255,255,0.08)' } : undefined}
-              onClick={() => setFullTab(k)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
         {welcome && !widgetCompact && (
           <div className="anim-fade-in mx-3 mt-2 rounded-lg border border-neon-green/20 bg-neon-green/10 px-3 py-1.5 text-center text-xs text-neon-green">
             欢迎回到正事
           </div>
         )}
 
-        {fullTab === 'now' ? (
+        {/* ── 状态 ── */}
         <>
         {/* 状态区 */}
         <div
@@ -581,35 +731,49 @@ export default function SuggestionWidget() {
                 专注度 {focus}
               </span>
             </div>
-            <div className="mt-0.5 truncate text-[11px] text-slate-400">
-              {liveTitle || '等待采集…'}
-            </div>
+            {attr?.projectId ? (
+              <div className="mt-0.5 flex min-w-0 items-center gap-1"><GrainChip projectName={attr.projectName} taskTitle={attr.taskTitle} sec={attr.sec} /></div>
+            ) : (
+              <div className="mt-0.5 text-[11px] text-slate-500">未归类 · 在下方「归类」标记后开始累计</div>
+            )}
             {presence && presence.continuousFocusSec > 60 && showFocusMinutes && (
               <div className="mt-0.5 text-[11px]" style={{ color: accent }}>
                 已专注 {Math.round(presence.continuousFocusSec / 60)} 分钟
               </div>
             )}
           </div>
-          {aiEnabled ? (
-            <button
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200"
-              title="问点什么…"
-              onClick={() => setAskState(askState === 'hidden' ? 'input' : 'hidden')}
-            >
-              <Icon name="message" size={12} />
-            </button>
-          ) : null}
+
         </div>
 
-        {/* 折叠态问答条 + 桌宠气泡 */}
-        <div className="mx-3 flex flex-col gap-2">
-          <AskBar askState={askState} askText={askText} setAskText={setAskText} submitAsk={submitAsk} onAskBlur={onAskBlur} onEscape={() => setAskState('hidden')} askAnswer={askAnswer} accent={accent} blurTimer={blurTimer} />
+        {/* 归属项目今日待办（颗粒勾选） */}
+        {attrPlans.length ? (
+          <div className="mx-3 mb-2 rounded-xl border border-[var(--line)] bg-white/[0.02] px-2.5 py-2">
+            <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-600">{attr?.projectName} · 今日待办</div>
+            {attrPlans.map((p) => (
+              <div key={p.id} className="flex items-center gap-2 py-[3px]">
+                <button
+                  className="shrink-0 text-[12px] text-slate-500 transition-colors hover:text-slate-200"
+                  title="完成"
+                  onClick={() => {
+                    void window.api?.setPlanStatus?.(p.id, 'done')
+                    setAttrPlans((l) => l.filter((x) => x.id !== p.id))
+                  }}
+                >
+                  ○
+                </button>
+                <span className="min-w-0 flex-1 truncate text-[11.5px] text-slate-300">{p.title}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {/* 问答条常驻（full 唯一提问入口）+ 桌宠气泡 */}
+        <div className="mx-3 mb-1 flex flex-col gap-2">
+          <AskBar askState={askState === 'hidden' ? 'input' : askState} askText={askText} setAskText={setAskText} submitAsk={submitAsk} onAskBlur={onAskBlur} onEscape={() => setAskState('hidden')} askAnswer={askAnswer} accent={accent} blurTimer={blurTimer} />
           {petBubble && !widgetCompact && <PetBubbleLine text={petBubble} accent={accent} />}
         </div>
-        </>
-        ) : fullTab === 'scene' ? (
-        <>
-        {/* 情景流：浏览器计划确认 / 会议检测 / 会议辅助 / 轻问诊 */}
+
+        {/* ── 情境确认（动态流） ── */}
         <div className="mx-3 mb-1 mt-2 flex max-h-[320px] flex-col gap-2 overflow-y-auto">
           {bpConfirm ? (
             <AlertShell color="#3B82F6" label="🌐 浏览器检测" collapsed={!!alertCollapsed['bp']} onToggle={() => toggleAlert('bp')}>
@@ -689,7 +853,11 @@ export default function SuggestionWidget() {
             </AlertShell>
           ) : null}
 
-          {question ? (
+          {question && (question.ctx ?? '').startsWith('attrib') ? (
+            <div className="rounded-xl border border-[rgba(139,92,246,0.3)] p-2.5">
+              <UnattrAskCard projects={allProjects} onDone={() => answer('yes')} />
+            </div>
+          ) : question ? (
             <AlertShell color="#8B5CF6" label="📋 轻问诊" collapsed={!!alertCollapsed['q']} onToggle={() => toggleAlert('q')}>
               <div className="mb-2 pr-4 text-xs leading-relaxed text-slate-200">{question.question}</div>
               <div className="flex gap-2">
@@ -716,29 +884,64 @@ export default function SuggestionWidget() {
             )
           ) : null}
         </div>
-        </>
-        ) : (
-        <>
-        {/* 对话：问答为主 */}
+
+        {/* ── 对话 ── */}
         <div className="mx-3 mb-1 mt-2 flex flex-col gap-2">
           <AskBar askState={askState} askText={askText} setAskText={setAskText} submitAsk={submitAsk} onAskBlur={onAskBlur} onEscape={() => setAskState('hidden')} askAnswer={askAnswer} accent={accent} blurTimer={blurTimer} />
-          {!askState || askState === 'hidden' ? (
-            aiEnabled ? (
-              <button
-                className="rounded-lg border border-white/[0.08] bg-white/[0.03] py-2 text-[12px] text-slate-400 transition-colors hover:border-neon-cyan/40 hover:text-neon-cyan"
-                onClick={() => setAskState('input')}
-              >
-                💬 问点什么…
-              </button>
-            ) : (
-              <p className="rounded-xl border border-white/[0.05] bg-white/[0.03] px-3 py-2 text-center text-[11px] text-slate-500">开启 AI 后可在此对话</p>
-            )
-          ) : null}
         </div>
         </>
-        )}
 
         <ResizeHandle onDown={onResizePointerDown} onMove={onResizePointerMove} onUp={onResizePointerUp} />
+      </div>
+    </div>
+  )
+}
+
+/** 未归因轻问卡：归到已有项目 / 现场新建 / 忽略（当日指纹记忆在 main 侧） */
+function UnattrAskCard({ onDone, projects }: { onDone: () => void; projects: Project[] }) {
+  const [pick, setPick] = useState<string>('')
+  const [newName, setNewName] = useState('')
+  const apps = '当前工作'
+  const answer = (answer: string, payload?: { projectId?: string; projectName?: string }): void => {
+    void window.api?.answerAttribution?.(`unattr-ui:${Date.now()}`, answer, { apps: [apps], ...payload })
+    onDone()
+  }
+  return (
+    <div className="w-[320px] rounded-2xl border border-[rgba(139,92,246,0.3)] p-3" style={PANEL_STYLE}>
+      <div className="mb-2 text-[11.5px] font-medium text-slate-200">现在干的活要归到哪个项目？</div>
+      <div className="mb-2 flex flex-col gap-1">
+        {projects.slice(0, 5).map((p) => (
+          <button
+            key={p.id}
+            className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-[11px] transition-all ${
+              pick === p.id ? 'border-[rgba(15,181,164,0.5)] bg-[var(--teal-soft)] text-[var(--teal-deep)]' : 'border-[var(--line)] text-slate-300 hover:bg-white/5'
+            }`}
+            onClick={() => setPick(p.id)}
+          >
+            {pick === p.id ? '◉' : '○'} {p.name}
+          </button>
+        ))}
+        {!projects.length ? <div className="text-[10.5px] text-slate-500">还没有项目</div> : null}
+      </div>
+      <div className="flex items-center gap-1.5">
+        <input
+          className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-white/5 px-2 py-1 text-[11px] text-slate-200 outline-none focus:border-[var(--border-active)]"
+          placeholder="或新建项目名…"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+        />
+      </div>
+      <div className="mt-2 flex justify-end gap-1.5">
+        <button className="rounded-lg bg-white/5 px-2.5 py-1 text-[10.5px] text-slate-400 hover:bg-white/10" onClick={onDone}>
+          忽略
+        </button>
+        <button
+          className="rounded-lg bg-[var(--teal)] px-2.5 py-1 text-[10.5px] font-bold text-white disabled:opacity-40"
+          disabled={!pick && !newName.trim()}
+          onClick={() => answer(pick ? 'bind' : 'create', pick ? { projectId: pick } : { projectName: newName.trim() })}
+        >
+          {pick ? '归到该项目' : '创建并归入'}
+        </button>
       </div>
     </div>
   )

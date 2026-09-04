@@ -62,3 +62,10 @@ python train.py \
 - 姿态模型：pose_landmarker_lite.task（5.7MB）从 npm 镜像获取：
   `https://cdn.jsdelivr.net/npm/expo-pose-landmarker@0.1.1/android/src/main/assets/pose_landmarker_lite.task`
   放到 `src/renderer/public/mediapipe/`（两者均不入库，克隆后需手动补齐）
+
+## 2026-09-03 · 专注判定 v2（链路思维）默认开启
+
+- 口径变更：focusChainV2=true（默认）。链路内应用切换（IDE→AI问答→文档）不再切碎专注，
+  摸鱼/休息类状态持续 ≥45s 才判为「摸鱼中断」（链路切断+中断计数），离开 ≥120s 切断但不计中断。
+- 悬浮窗口径同步：专注度数字 → 「⚡ 链路 Xmin · 今日 N 段 · 最长 Ymin · 中断 Z」。
+- 回退：设置 focusChainV2=false 即恢复 v1 严格口径（focusChain 模块休眠）。

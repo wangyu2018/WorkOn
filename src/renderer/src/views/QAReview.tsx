@@ -2,41 +2,41 @@ import { useEffect, useRef, useState } from 'react'
 import type { ProfileReference, QAMessage } from '@shared/types'
 import { genId } from '@shared/types'
 import { PRIVACY_LEVEL_META } from '@shared/personaMeta'
-import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EmptyState } from '../components/EmptyState'
+import { AiThinking } from '../components/ui/AiThinking'
 import { useSettingsStore } from '../stores/settingsStore'
-import peierAvatar from '../assets/peier-avatar.png'
 
-/** 姵儿圆形头像（加载失败时优雅降级为 emoji 圆标） */
-function PeierAvatar() {
-  const [broken, setBroken] = useState(false)
-  if (broken) {
-    return (
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-neon-cyan/30 bg-neon-cyan/10 text-lg">
-        🐱
-      </div>
-    )
-  }
+/** ✦ 渐变头像（AI 专属身份标识：aura 渐变圆角方块 + 白✦ + 辉光） */
+function AuraAvatar({ size = 26 }: { size?: number }) {
   return (
-    <img
-      src={peierAvatar}
-      alt="姵儿"
-      className="h-10 w-10 shrink-0 rounded-full border-2 border-neon-cyan/30 object-cover"
-      onError={() => setBroken(true)}
-    />
+    <span
+      className="flex shrink-0 items-center justify-center rounded-[9px] text-[13px] leading-none text-white"
+      style={{ width: size, height: size, background: 'var(--aura)', boxShadow: 'var(--glow-i)' }}
+    >
+      ✦
+    </span>
   )
 }
 
-/** 助手气泡底部的画像引用标记：去重层级 chip（L3/L4 防御过滤不显示），title 显示引用摘要 */
+/** AI 思考态场景文案（AiThinking 轮换） */
+const QA_THINK_HINTS = ['正在翻阅你的时段记录…', '正在比对历史问答…', '整理答案中…']
+
+/** 输入框上方的追问快捷 chips（点击即填入并发送） */
+const FOLLOW_UP_CHIPS = ['📊 生成今日小结', '🔥 哪段最专注？', '🐟 摸鱼都去哪了？', '🗓 帮我排下午计划']
+
+/** 助手气泡底部的引用来源行：⛓ 来源摘要 + 去重层级 chip（L3/L4 防御过滤不显示） */
 function ReferenceChips({ refs }: { refs?: ProfileReference[] }) {
   const visible = (refs ?? []).filter((r) => r.layer !== 'L3' && r.layer !== 'L4')
   if (visible.length === 0) return null
   const byLayer = [...new Map(visible.map((r) => [r.layer, r])).values()]
+  const sources = [...new Set(visible.map((r) => (r.summary.length > 22 ? `${r.summary.slice(0, 22)}…` : r.summary)))].slice(0, 3)
   return (
     <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-white/[0.06] pt-1.5">
-      <span className="text-[10px] text-slate-500">本次回复引用了你的画像数据</span>
+      <span className="text-[10px] text-slate-500" title={visible.map((r) => r.summary).join('\n')}>
+        ⛓ 来源：{sources.length > 0 ? sources.join(' · ') : '你的画像数据'}
+      </span>
       {byLayer.map((r) => {
         const pm = PRIVACY_LEVEL_META[r.layer] ?? PRIVACY_LEVEL_META.L0
         return (
@@ -57,7 +57,7 @@ function ReferenceChips({ refs }: { refs?: ProfileReference[] }) {
 /** 本地消息：在 QAMessage 基础上附带本次回复的画像引用标记（v2.7） */
 type LocalQAMessage = QAMessage & { references?: ProfileReference[] }
 
-/** 问答回顾：消息流（助手气泡带姵儿头像）+ 底部输入（AI 未配置时为本地统计模式） */
+/** 问答回顾：消息流（✦ AI 头像 + aura 用户气泡）+ 追问 chips + 底部输入（AI 未配置时为本地统计模式） */
 export default function QAReview() {
   const aiReady = useSettingsStore((s) => s.settings.aiEnabled && !!s.settings.aiApiKey)
   const [messages, setMessages] = useState<LocalQAMessage[]>([])
@@ -111,6 +111,13 @@ export default function QAReview() {
   }
 
   const send = () => void ask(input.trim())
+
+  /** 追问 chip：填入输入框并直接发送 */
+  const askChip = (q: string) => {
+    if (thinking) return
+    setInput(q)
+    void ask(q)
+  }
 
   return (
     <div className="view-enter flex h-full flex-col gap-4">
@@ -213,8 +220,8 @@ export default function QAReview() {
               if (m.role === 'assistant') {
                 return (
                   <div key={m.id} className="anim-fade-up flex items-end justify-start gap-2">
-                    {isFirstInGroup ? <PeierAvatar /> : <div className="w-10 shrink-0" />}
-                    <div className="max-w-[75%] whitespace-pre-wrap rounded-2xl rounded-bl-sm border border-white/[0.07] bg-white/[0.04] px-3.5 py-2.5 text-[13px] leading-relaxed text-slate-200 shadow-[0_2px_10px_rgba(0,0,0,0.18)]">
+                    {isFirstInGroup ? <AuraAvatar /> : <div className="w-[26px] shrink-0" />}
+                    <div className="max-w-[75%] whitespace-pre-wrap rounded-2xl rounded-bl-sm border border-white/[0.07] bg-[var(--surface-2)] px-3.5 py-2.5 text-[13px] leading-relaxed text-slate-200 shadow-[0_2px_10px_rgba(0,0,0,0.18)]">
                       {m.content}
                       <ReferenceChips refs={m.references} />
                     </div>
@@ -223,26 +230,38 @@ export default function QAReview() {
               }
               return (
                 <div key={m.id} className="anim-fade-up flex justify-end">
-                  <div className="max-w-[75%] whitespace-pre-wrap rounded-2xl rounded-br-sm border border-neon-cyan/25 bg-neon-cyan/15 px-3.5 py-2.5 text-[13px] leading-relaxed text-neon-cyan">
+                  <div
+                    className="max-w-[75%] whitespace-pre-wrap rounded-2xl rounded-tr-sm px-3.5 py-2.5 text-[13px] leading-relaxed text-white"
+                    style={{ background: 'var(--aura)', boxShadow: 'var(--glow-i)' }}
+                  >
                     {m.content}
                   </div>
                 </div>
               )
             })}
             {thinking ? (
-              <div className="anim-fade-up flex items-end justify-start gap-2">
-                <PeierAvatar />
-                <div className="flex items-center gap-1.5 rounded-2xl rounded-bl-sm border border-white/[0.07] bg-white/[0.04] px-3.5 py-2.5 text-[13px] text-slate-400">
-                  <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-neon-violet" />
-                  <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-neon-violet" style={{ animationDelay: '150ms' }} />
-                  <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-neon-violet" style={{ animationDelay: '300ms' }} />
-                  <span className="ml-1">姵儿思考中…</span>
-                </div>
+              <div className="anim-fade-up flex items-end gap-2 pl-0.5">
+                <AiThinking hints={QA_THINK_HINTS} />
               </div>
             ) : null}
             <div ref={bottomRef} />
           </div>
         )}
+      </div>
+      {/* 追问 chips：快捷问题胶囊，点击填入并发送 */}
+      <div className="anim-fade-up flex shrink-0 flex-wrap items-center gap-2" style={{ animationDelay: '150ms' }}>
+        <span className="text-[11px] text-slate-500">✦ 追问</span>
+        {FOLLOW_UP_CHIPS.map((q) => (
+          <button
+            key={q}
+            disabled={thinking}
+            title={q}
+            className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1 text-[11px] text-slate-300 transition-all hover:-translate-y-px hover:border-[var(--violet)] hover:bg-[rgba(139,92,246,0.08)] hover:text-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={() => askChip(q)}
+          >
+            {q}
+          </button>
+        ))}
       </div>
       <div className="glass-card anim-fade-up flex shrink-0 items-center gap-2 !p-2" style={{ animationDelay: '180ms' }}>
         <input
@@ -254,8 +273,8 @@ export default function QAReview() {
             if (e.key === 'Enter' && !e.nativeEvent.isComposing) send()
           }}
         />
-        <button className="glass-btn primary shrink-0 px-4" disabled={!input.trim() || thinking} onClick={send}>
-          <Icon name="send" size={14} /> 发送
+        <button className="glass-btn ai shrink-0 px-4" disabled={!input.trim() || thinking} onClick={send}>
+          ✦ 发送
         </button>
       </div>
     </div>

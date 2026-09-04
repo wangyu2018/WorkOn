@@ -33,6 +33,13 @@ import {
   updateActivityTitleByStartTs
 } from './db'
 import { presence } from './presence'
+import { getFocusChainState } from './focusChain'
+import { registerNotifyIpc } from './notify'
+import { listAutomations, saveAutomation, removeAutomation, toggleAutomation, automationMinuteTick } from './automation'
+import { starGraphForDays } from './starGraph'
+import { attributionTick, getAttribution, listBindings, bindProject, unbindProject, answerAttribution } from './attributions'
+import { startAllWatchers, getTodayActivity, stalledProjects, dirWatcherTick } from './dirWatcher'
+import { buildStatusCard, parseStatusCard, applyCardDiff } from './statusCard'
 import { bus } from './state'
 import {
   analyzeDay, askWithContext, askWithContextStream, recordFeedback, genQuestion,
@@ -59,8 +66,7 @@ import { ACHIEVEMENT_DEFS } from '@shared/achievements'
 import {
   mainWindow, widgetWindow, petWindow, toggleWidget, togglePet, setWidgetPenetration,
   setWidgetMode, resizeWidget, resizeWidgetTransient, moveWidgetBy,
-  setPetIgnoreMouse, setPetModal, createMainWindow, createPetWindow, closePetWindow, sendTo
-} from './windows'
+  setPetIgnoreMouse, setPetModal, createMainWindow, createPetWindow, closePetWindow, sendTo, toggleTodoWidget, setTodoWidgetLayer, setTodoWidgetPenetration, setWidgetOnTop, setPetOpacity, todoWidgetWindow } from './windows'
 import type { UserAnalysis, MergedTrail, CustomCategory, UserHabits, Achievement, UserType, ReportTemplate, CategoryInference, SegmentPlanLink } from '@shared/types'
 import { generateReport, generateWeeklyReport } from './report/engine'
 import { screenContextForWindow } from './report/ocrCollector'
@@ -160,11 +166,55 @@ export function registerIpc(): void {
         petReturnMin: next.petReturnMin
       })
     }
+    // ── 悬浮面运行时属性（透明度/穿透/顶层）：设置驱动统一应用 ──
+    if (patch.widgetOpacity !== undefined && widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.setOpacity(next.widgetOpacity)
+    if (patch.widgetOnTop !== undefined && widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.setAlwaysOnTop(next.widgetOnTop, next.widgetOnTop ? 'screen-saver' : 'floating')
+    if (patch.todoWidgetOpacity !== undefined && todoWidgetWindow && !todoWidgetWindow.isDestroyed()) todoWidgetWindow.setOpacity(next.todoWidgetOpacity)
+    if (patch.todoWidgetPenetration !== undefined) setTodoWidgetPenetration(next.todoWidgetPenetration)
+    if (patch.todoWidgetOnTop !== undefined) setTodoWidgetLayer(next.todoWidgetOnTop)
+    if (patch.petOpacity !== undefined && petWindow && !petWindow.isDestroyed()) petWindow.setOpacity(next.petOpacity)
     return next
   })
 
   // ── 实时状态 ──
   ipcMain.handle('presence:get', () => presence.getSnapshot())
+  ipcMain.handle('chain:get', () => getFocusChainState())
+  // ── 归属引擎 / 目录监控 / 状态卡（v7 项目循环） ──
+  ipcMain.handle('attr:get', () => getAttribution())
+  ipcMain.handle('attr:bindings', () => listBindings())
+  ipcMain.handle('attr:bind', (_e, projectId: string, patch: { apps?: string[]; keywords?: string[]; dirs?: string[] }) => {
+    const r = bindProject(String(projectId), patch ?? {})
+    startAllWatchers()
+    return r
+  })
+  ipcMain.handle('attr:unbind', (_e, projectId: string) => {
+    unbindProject(String(projectId))
+    startAllWatchers()
+  })
+  ipcMain.handle('attr:answer', (_e, fp: string, answer: string, payload: { projectId?: string; projectName?: string; apps?: string[] }) =>
+    answerAttribution(String(fp), String(answer), payload ?? {})
+  )
+  ipcMain.handle('attr:todayActivity', (_e, projectId: string) => getTodayActivity(String(projectId)))
+  ipcMain.handle('attr:stalled', (_e, days: number) => stalledProjects(Number(days) || 3))
+  ipcMain.handle('statuscard:build', (_e, projectId: string) => buildStatusCard(String(projectId)))
+  ipcMain.handle('statuscard:parse', (_e, md: string) => parseStatusCard(String(md)))
+  ipcMain.handle('statuscard:apply', (_e, diff) => applyCardDiff(diff))
+  // ── 待办树小组件 ──
+  ipcMain.handle('todoWidget:toggle', () => toggleTodoWidget())
+  ipcMain.handle('todoWidget:layer', (_e, onTop: boolean) => setTodoWidgetLayer(!!onTop))
+  // ── MotionLab 自动化（v7） ──
+  ipcMain.handle('automations:list', () => listAutomations())
+  ipcMain.handle('automations:save', (_e, rule) => saveAutomation(rule))
+  ipcMain.handle('automations:remove', (_e, id: string) => removeAutomation(String(id)))
+  ipcMain.handle('automations:toggle', (_e, id: string, enabled: boolean) => toggleAutomation(String(id), !!enabled))
+  // 分钟级调度由 monitor tick 驱动，这里兜底一个独立定时器（设置页测试触发用）
+  setInterval(() => automationMinuteTick(), 60_000).unref()
+  // ── 星图逻辑层（v6）：应用关系图 ──
+  ipcMain.handle('star:graph', (_e, days?: number) => starGraphForDays(Number(days) || 7))
+  registerNotifyIpc((view) => {
+    createMainWindow()
+    if (view) setTimeout(() => sendTo('main', 'nav:view', view), 600)
+  })
   ipcMain.handle('recognition:recent', () => listRecentRecognitionLogs(20))
   ipcMain.handle('desktop:get', () => bus.desktopState())
 

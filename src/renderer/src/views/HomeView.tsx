@@ -4,14 +4,17 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { WORK_LIKE_STATES } from '@shared/stateMeta'
-import type { MergedTrail, TrailSegment, WorkState, PlanItem } from '@shared/types'
+import type { MergedTrail, TrailSegment, WorkState, PlanItem, AttentionScore } from '@shared/types'
 import { dateKey } from '@shared/trail'
 import { ActivityHoverCard } from '../components/ActivityHoverCard'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Icon } from '../components/Icon'
+import { InsightCard } from '../components/ui/InsightCard'
+import { Seg } from '../components/ui/Seg'
 import { displayApp } from '@shared/appDisplayName'
 import { matchesExcludedApp } from '@shared/stateMeta'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useAppStore } from '../stores/appStore'
 import { CATEGORY_META, categoryOfWithOverride, type AppCategory } from '@shared/appCategory'
 
 type Channel = 'CMD' | '浏览器' | '微信' | 'IDE' | '其他'
@@ -53,6 +56,41 @@ function hexBg(hex: string, alpha: number): string {
   return `rgba(${hexToRgb(hex)}, ${alpha})`
 }
 
+/** v6 KPI 基线口径 */
+type BaselineKey = 'yest' | 'week' | 'd30' | 'best'
+const BASELINE_SHORT: Record<BaselineKey, string> = { yest: '昨日', week: '近7天', d30: '近30天', best: '高效日' }
+const baselineSource = (key: BaselineKey, baseMin: number): string =>
+  key === 'yest'
+    ? `基线来源：昨日同时段 ${fmtMin(baseMin)}`
+    : key === 'week'
+      ? `基线来源：近 7 天同时段均值 ${fmtMin(baseMin)}`
+      : key === 'd30'
+        ? `基线来源：近 30 天同时段均值 ${fmtMin(baseMin)}`
+        : `基线来源：高效日同时段 ${fmtMin(baseMin)}`
+
+/** trail 内某组状态的墙钟分钟（glance 不计） */
+function dayStateMin(tr: MergedTrail, states: string[]): number {
+  let v = 0
+  for (const s of tr.segments) {
+    if (s.glance) continue
+    if (states.includes(s.mainState)) v += s.durationMin
+  }
+  return v
+}
+
+/** 某段轨迹内，从 startTs 起等长 windowMs 的指定状态分钟（KPI 同时段基线用） */
+function windowStateMin(tr: MergedTrail, states: string[], startTs: number, windowMs: number): number {
+  const endTs = startTs + windowMs
+  let v = 0
+  for (const s of tr.segments) {
+    const s0 = Math.max(s.startTs, startTs)
+    const s1 = Math.min(s.endTs, endTs)
+    if (s1 <= s0) continue
+    if (states.includes(s.mainState)) v += (s1 - s0) / 60000
+  }
+  return v
+}
+
 // 时间轴缩放档位：从全天到 1 小时
 const ZOOM_STOPS = [
   { label: '全天', span: 1440 },
@@ -75,13 +113,6 @@ function makeDragImage(app: string, ma?: string | null): HTMLDivElement {
   return el
 }
 
-function STATE_TEXT_VAR(seg: TrailSegment): string {
-  const s = senseOf(seg.mainState)
-  if (s === 'work') return '--tl-work-text'
-  if (s === 'slack') return '--tl-slack-text'
-  return '--tl-other-text'
-}
-
 type SenseKind = 'work' | 'slack' | 'other'
 function senseOf(state: WorkState): SenseKind {
   const slackStates: WorkState[] = ['slack', 'relax', 'break', 'lunch', 'idle', 'away']
@@ -90,77 +121,61 @@ function senseOf(state: WorkState): SenseKind {
   return 'other'
 }
 
-/** 时间轴散点语义色（RGB 通道，与星图 chroma 保持一致） */
-function CHROMA_OF(seg: TrailSegment): string {
-  const s = senseOf(seg.mainState)
-  if (s === 'work') return '124 158 255'
-  if (s === 'slack') return '255 124 124'
-  return '148 163 184'
+/** v6 星图数据源（window.api.getStarGraph(7) 返回，7 天聚合） */
+interface StarGraphNode {
+  app: string
+  sec: number
+  cluster: 'work' | 'play'
+  /** 星团内排名 1=最重 */
+  weight: number
 }
-
-type StarNodeKind = 'core' | 'cat' | 'app'
-interface StarNode {
-  kind: StarNodeKind
-  key: string
+interface StarGraphEdge { from: string; to: string; count: number }
+interface StarGraphData {
+  nodes: StarGraphNode[]
+  edges: StarGraphEdge[]
+  totalSwitches: number
+  days: number
+}
+/** 布局后的星图节点（x/y 为画布百分比） */
+interface StarPlanet extends StarGraphNode {
   x: number
   y: number
   size: number
-  label?: string      // 主星：工作 / 摸鱼
-  cat?: AppCategory   // 分类节点
-  apps?: number       // 分类下应用数
-  item?: GraphItem    // 应用节点
-  min: number
 }
-interface StarConnection { x1: number; y1: number; x2: number; y2: number; level: 1 | 2 }
 
-const sumDur = (list: GraphItem[]) => list.reduce((s, i) => s + i.seg.durationMin, 0)
+/** v6 星图配色：work=teal / play=violet */
+const STAR_CLUSTER_RGB: Record<StarGraphNode['cluster'], string> = { work: '15,181,164', play: '139,92,246' }
+const starClusterRgba = (cluster: StarGraphNode['cluster'], a: number) => `rgba(${STAR_CLUSTER_RGB[cluster]}, ${a})`
 
-/** 星图层级布局：主星（工作/摸鱼）→ 子星（分类）→ 最末级（应用） */
-function computeStarHierarchy(filtered: GraphItem[], isWork: boolean, override: Record<string, string> | undefined): { nodes: StarNode[]; connections: StarConnection[] } {
-  if (filtered.length === 0) return { nodes: [], connections: [] }
-  const nodes: StarNode[] = []
-  const connections: StarConnection[] = []
-  const totalMin = sumDur(filtered)
-  // 主星：工作 / 摸鱼
-  nodes.push({ kind: 'core', key: isWork ? 'work-core' : 'life-core', x: 50, y: 50, size: 54, label: isWork ? '工作' : '摸鱼', min: totalMin })
-  // 按分类聚合
-  const byCat = new Map<AppCategory, GraphItem[]>()
-  for (const i of filtered) {
-    const c = categoryOfWithOverride(i.seg.mainApp, override)
-    if (!byCat.has(c)) byCat.set(c, [])
-    byCat.get(c)!.push(i)
-  }
-  const cats = [...byCat.entries()].sort((a, b) => sumDur(b[1]) - sumDur(a[1]))
-  const maxCatMin = sumDur(cats[0][1]) || 1
-  const CAT_R = 30
-  cats.forEach(([cat, items], ci) => {
-    const baseAngle = (ci / cats.length) * 2 * Math.PI - Math.PI / 2
-    const catMin = sumDur(items)
-    const cx = 50 + CAT_R * Math.cos(baseAngle)
-    const cy = 50 + CAT_R * Math.sin(baseAngle)
-    nodes.push({ kind: 'cat', key: `cat-${cat}`, x: cx, y: cy, size: Math.max(22, Math.round(25 + (catMin / maxCatMin) * 10)), cat, apps: items.length, min: catMin })
-    connections.push({ x1: 50, y1: 50, x2: cx, y2: cy, level: 1 })
-    // 应用围绕各自分类
-    const apps = [...items].sort((a, b) => b.seg.durationMin - a.seg.durationMin)
-    const n = apps.length
-    const spread = Math.min(0.6, 0.16 * Math.max(1, n - 1))
-    apps.forEach((item, ai) => {
-      // 双环交错：偶数内环 41、奇数外环 50，密集时减少压叠
-      const APP_R = ai % 2 === 0 ? 41 : 50
-      const aAngle = baseAngle + (n === 1 ? 0 : ((ai - (n - 1) / 2) / Math.max(1, n - 1)) * spread)
-      nodes.push({
-        kind: 'app',
-        key: item.seg.mainApp,
-        x: 50 + APP_R * Math.cos(aAngle),
-        y: 50 + APP_R * Math.sin(aAngle),
-        size: Math.max(16, Math.round(18 + (item.seg.durationMin / (apps[0].seg.durationMin || 1)) * 9)),
-        item,
-        min: item.seg.durationMin
-      })
-      connections.push({ x1: cx, y1: cy, x2: 50 + APP_R * Math.cos(aAngle), y2: 50 + APP_R * Math.sin(aAngle), level: 2 })
-    })
+/**
+ * v6 星图布局：单一星团居中（不再区分工作/摸鱼分区）。
+ * 按 sec 降序环形散布（weight 1 = 中心主星），椭圆补偿画布宽高比。
+ */
+function layoutStarCluster(nodes: StarGraphNode[]): StarPlanet[] {
+  if (nodes.length === 0) return []
+  const sorted = [...nodes].sort((a, b) => b.sec - a.sec)
+  const cx = 50
+  const cy = 50
+  const maxSec = sorted[0].sec || 1
+  const out: StarPlanet[] = []
+  sorted.forEach((n, i) => {
+    let x = cx
+    let y = cy
+    if (i > 0) {
+      const ring = i <= 6 ? 1 : 2
+      const ringIdx = ring === 1 ? i - 1 : i - 7
+      const ringCap = ring === 1 ? 6 : Math.max(1, sorted.length - 7)
+      const rx = ring === 1 ? 17 : 31
+      const ry = ring === 1 ? 26 : 34
+      const angle = -Math.PI / 2 + (ringIdx / ringCap) * Math.PI * 2 + (ring === 2 ? Math.PI / ringCap : 0)
+      x = Math.min(94, Math.max(6, cx + rx * Math.cos(angle)))
+      y = Math.min(88, Math.max(14, cy + ry * Math.sin(angle)))
+    }
+    // 节点大小 ∝ sqrt(sec)（全域归一）
+    const size = Math.round(24 + 22 * Math.sqrt(n.sec / maxSec))
+    out.push({ ...n, x, y, size })
   })
-  return { nodes, connections }
+  return out
 }
 
 const STATUS_BG: Record<string,string> = {
@@ -312,8 +327,14 @@ export default function HomeView() {
     return { insight: true, timeline: true, starmap: true }
   })
   const [editing, setEditing] = useState(false)
-  /** 洞察卡对标基线：yest=昨日同期 week=近7天同期 best=高效日同期 */
-  const [baselineKey, setBaselineKey] = useState<'yest' | 'week' | 'best'>('yest')
+/** KPI 卡点击 → 跳转报表对应页签 */
+function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'): void {
+  window.dispatchEvent(new CustomEvent('workon:goto-report', { detail: { tab, kpi } }))
+  useAppStore.getState().setView('report')
+}
+
+  /** 洞察卡对标基线：yest=昨日同期 week=近7天同期 d30=近30天均值 best=高效日同期 */
+  const [baselineKey, setBaselineKey] = useState<BaselineKey>('d30')
   const setWidget = (k: 'insight' | 'timeline' | 'starmap', v: boolean) => {
     setWidgets((prev) => {
       const next = { ...prev, [k]: v }
@@ -346,11 +367,14 @@ export default function HomeView() {
   }, [])
   const [trail, setTrail] = useState<MergedTrail | null>(null)
   const [recentTrails, setRecentTrails] = useState<MergedTrail[]>([])
+  /** 近 30 天 trail（KPI 卡「同时段均值」基线；复用现有 getTrail 按天拉取，仅首次加载） */
+  const [recentTrails30, setRecentTrails30] = useState<MergedTrail[]>([])
+  /** 注意力评分（今日 + 近 8 天走势，AI 综合评分卡用；接口不可用时回退「今日 AI 协作时长」） */
+  const [attention, setAttention] = useState<{ today: AttentionScore; history: AttentionScore[] } | null>(null)
   const [items, setItems] = useState<GraphItem[]>([])
   const [plans, setPlans] = useState<PlanItem[]>([])
-  const [dragFrom, setDragFrom] = useState<{ app: string; col: Column } | null>(null)
-  const [hoverCol, setHoverCol] = useState<Column | null>(null)
   const [tlHover, setTlHover] = useState<{ seg: TrailSegment; rect: DOMRect; mouse?: { x: number; y: number } } | null>(null)
+  const [dragTs, setDragTs] = useState<number | null>(null)
   const [nowMin, setNowMin] = useState(() => {
     const d = new Date(); return d.getHours() * 60 + d.getMinutes()
   })
@@ -358,10 +382,16 @@ export default function HomeView() {
   const [rangeLo, setRangeLo] = useState(() => Math.max(0, nowMin - 180))
   const [rangeHi, setRangeHi] = useState(() => Math.min(1440, nowMin + 180))
   const [starHover, setStarHover] = useState<string | null>(null)
-  const [starHoverRect, setStarHoverRect] = useState<DOMRect | null>(null)
+  /** v6 星图数据：近 7 天聚合（getStarGraph），节点=应用 · 连线=切换次数 */
+  const [starGraph, setStarGraph] = useState<StarGraphData | null>(null)
+  /** 亮暗模式（星点/底纹透明度自适应；auto 跟随系统） */
+  const appearanceMode = useSettingsStore((s) => s.settings.appearanceMode)
+  const isDarkMode =
+    appearanceMode === 'auto'
+      ? typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
+      : appearanceMode === 'dark'
   const [dragSeg, setDragSeg] = useState<number | null>(null)
   const [planSegments, setPlanSegments] = useState<Map<number, string>>(new Map())
-  const [dragTs, setDragTs] = useState<number | null>(null)
   const [dragOverLane, setDragOverLane] = useState<'today' | string | null>(null)
 
   const lastPresenceRefresh = useRef<number>(0)
@@ -377,7 +407,8 @@ export default function HomeView() {
     if (!el) return
     const handler = (e: WheelEvent) => {
       e.preventDefault()
-      ;(onRulerWheelRef.current as unknown as (e: unknown) => void)(e)
+      const fn = onRulerWheelRef.current
+      if (typeof fn === 'function') fn(e)
     }
     el.addEventListener('wheel', handler, { passive: false })
     return () => el.removeEventListener('wheel', handler)
@@ -439,6 +470,49 @@ export default function HomeView() {
     }).catch(() => undefined)
   }, [])
 
+  // 近 30 天 trail：KPI 卡「同时段均值」基线数据源（现有 getTrail 日聚合，仅首次加载）
+  useEffect(() => {
+    void (async () => {
+      const days: (MergedTrail | null)[] = []
+      for (let i = 1; i <= 30; i++) {
+        const d = new Date()
+        d.setDate(d.getDate() - i)
+        try {
+          days.push((await window.api?.getTrail?.(dateKey(d.getTime()))) as MergedTrail | null)
+        } catch {
+          days.push(null)
+        }
+      }
+      setRecentTrails30(days.filter((x): x is MergedTrail => !!x && !!x.segments?.length))
+    })()
+  }, [])
+
+  // 注意力评分：今日 + 近 8 天走势（与报表页同一口径；缺失则 KPI 卡回退 AI 协作时长）
+  useEffect(() => {
+    Promise.all([window.api.todayAttention?.(), window.api.rangeAttention?.(8)])
+      .then(([a, h]) => {
+        if (!a) return
+        setAttention({ today: a as AttentionScore, history: (h as AttentionScore[] | undefined) ?? [] })
+      })
+      .catch(() => setAttention(null))
+  }, [])
+
+  // v6 星图数据：近 7 天聚合（应用节点 + 切换连线），仅首次加载
+  useEffect(() => {
+    window.api?.getStarGraph?.(7)
+      ?.then((g) => setStarGraph(g as StarGraphData))
+      .catch(() => undefined)
+  }, [])
+
+  // NOW 竖线每分钟自动更新
+  useEffect(() => {
+    const t = setInterval(() => {
+      const d = new Date()
+      setNowMin(d.getHours() * 60 + d.getMinutes())
+    }, 60000)
+    return () => clearInterval(t)
+  }, [])
+
   // 时间轴泳道自适应容器宽度（全屏撑满）
   useEffect(() => {
     const el = timelineScrollRef.current
@@ -477,27 +551,101 @@ export default function HomeView() {
 
   const insightData = useMemo(() => (trail ? insight(trail, recentTrails) : null), [trail, recentTrails])
 
-  // 星图按应用聚合：一个应用一个节点（累计时长），不用时间段
-  const starItems = useMemo(() => {
-    const m = new Map<string, GraphItem>()
-    for (const i of items) {
-      if ((i.seg as TrailSegment & { aux?: boolean }).aux) continue // 副屏复制段不计入（防双屏重复累计）
-      const ex = m.get(i.seg.mainApp)
-      if (ex) {
-        ex.seg = {
-          ...ex.seg,
-          durationMin: (ex.seg.durationMin ?? 0) + (i.seg.durationMin ?? 0),
-          startTs: Math.min(ex.seg.startTs, i.seg.startTs), // 悬浮卡时间区间口径自洽
-          endTs: Math.max(ex.seg.endTs, i.seg.endTs)
-        }
-      } else {
-        m.set(i.seg.mainApp, { ...i, seg: { ...i.seg } })
-      }
+  /** KPI 趋势：今日专注/摸鱼/AI 分钟 vs 近 30 天「同时段」基线（窗口对齐，等长外推），附近 7 天 spark */
+  const kpi = useMemo(() => {
+    const dayStartOf = (tr: MergedTrail): number | null => {
+      const acts = tr.segments.filter((s) => !s.glance && s.mainState !== 'idle' && s.mainState !== 'away')
+      if (!acts.length) return null
+      return Math.min(...acts.map((s) => s.startTs))
     }
-    return [...m.values()]
-  }, [items])
-  const workChart = useMemo(() => computeStarHierarchy(starItems.filter(i => i.column === 'work'), true, override), [starItems, override])
-  const lifeChart = useMemo(() => computeStarHierarchy(starItems.filter(i => i.column === 'life'), false, override), [starItems, override])
+    const build = (states: string[]) => {
+      const dayTotalOf = (tr: MergedTrail) => dayStateMin(tr, states)
+      let today = 0
+      const per: number[] = [] // 近 30 天同时段值，倒序（[0]=昨天）
+      if (trail) {
+        const tStart = dayStartOf(trail)
+        if (tStart != null) {
+          const windowMs = Math.max(60000, Date.now() - tStart)
+          today = windowStateMin(trail, states, tStart, windowMs)
+          for (const tr of recentTrails30) {
+            const dStart = dayStartOf(tr)
+            if (dStart == null) continue
+            per.push(windowStateMin(tr, states, dStart, windowMs))
+          }
+        } else {
+          today = dayTotalOf(trail)
+        }
+      }
+      const mean = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0)
+      const pct = (a: number, b: number) => (b > 1 ? Math.round(((a - b) / b) * 100) : null)
+      const base: Record<BaselineKey, number> = {
+        yest: per[0] ?? 0,
+        week: mean(per.slice(0, 7)),
+        d30: mean(per),
+        best: per.length ? Math.max(...per) : 0
+      }
+      const delta: Record<BaselineKey, number | null> = {
+        yest: pct(today, base.yest),
+        week: pct(today, base.week),
+        d30: pct(today, base.d30),
+        best: pct(today, base.best)
+      }
+      const spark = [...per.slice(0, 7)].reverse().map((v) => Math.round(v))
+      spark.push(Math.round(today))
+      return { today: Math.round(today), base, delta, spark }
+    }
+    return {
+      focus: build(['focus', 'coding', 'aidev', 'aiqa']),
+      slack: build(['slack', 'relax', 'break', 'lunch']),
+      ai: build(['aidev', 'aiqa'])
+    }
+  }, [trail, recentTrails30])
+
+  /** AI 综合评分 spark：近 8 天评分走势（日期升序 + 今日） */
+  const scoreSpark = useMemo(() => {
+    if (!attention) return undefined
+    const hs = [...(attention.history ?? [])]
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+      .map((h) => h.finalScore)
+    hs.push(attention.today.finalScore)
+    return hs.length >= 2 ? hs : undefined
+  }, [attention])
+
+  // v6 星图布局：work=左半区 / play=右半区，各自按 sec 降序环形散布（weight1 居中）
+  const starPlanets = useMemo(() => (starGraph ? layoutStarCluster(starGraph.nodes) : []), [starGraph])
+  const planetPos = useMemo(() => new Map(starPlanets.map((p) => [p.app, p])), [starPlanets])
+
+  /** v6 连线：亮度/粗细 ∝ 切换次数（rgba(139,92,246,α)，α=0.25+count/max*0.6；宽 1+count/max*1.5） */
+  const starEdges = useMemo(() => {
+    if (!starGraph) return []
+    const maxCount = Math.max(1, ...starGraph.edges.map((e) => e.count))
+    return starGraph.edges
+      .map((e) => {
+        const a = planetPos.get(e.from)
+        const b = planetPos.get(e.to)
+        if (!a || !b) return null
+        return {
+          key: `${e.from}→${e.to}`,
+          from: e.from,
+          to: e.to,
+          count: e.count,
+          x1: a.x, y1: a.y, x2: b.x, y2: b.y,
+          alpha: 0.25 + (e.count / maxCount) * 0.6,
+          width: 1 + (e.count / maxCount) * 1.5,
+        }
+      })
+      .filter((e): e is NonNullable<typeof e> => e !== null)
+  }, [starGraph, planetPos])
+
+  /** 星空底：确定性伪随机小星点（绝对定位 span），亮色模式透明度降低 */
+  const starDots = useMemo(() => {
+    let seed = 20260903
+    const rnd = () => {
+      seed = (seed * 16807) % 2147483647
+      return seed / 2147483647
+    }
+    return Array.from({ length: 56 }, () => ({ x: rnd() * 100, y: rnd() * 100, s: rnd() > 0.86 ? 2 : 1, o: 0.12 + rnd() * 0.5 }))
+  }, [])
 
   const startMinOf = (seg: TrailSegment) => {
     const d = new Date(seg.startTs)
@@ -539,13 +687,23 @@ export default function HomeView() {
     }
   }, [items, plans, rangeLo, rangeHi, laneW])
 
-  const renderSegBlock = useCallback((seg: TrailSegment, left: number, width: number, colorRgb?: string) => {
+  const renderSegBlock = useCallback((seg: TrailSegment, left: number, width: number) => {
     const app = displayApp(seg.mainApp)
     const ma = (seg as any).microActivity
-    const c = STATE_TEXT_VAR(seg)
-    const chroma = colorRgb || CHROMA_OF(seg)
+    const sense = senseOf(seg.mainState)
     const ghost = dragTs === seg.startTs
     const glance = !!seg.glance
+    // v6 色块：按语义渐变 — 工作=青绿→青 / 摸鱼=琥珀 / 其他=中性面板色（token，亮暗模式自适应）
+    const grad = sense === 'work'
+      ? 'linear-gradient(90deg, #0fb5a4, #22d3ee)'
+      : sense === 'slack'
+        ? 'linear-gradient(90deg, #f59e0b, #fbbf24)'
+        : 'var(--surface-3)'
+    const glow = sense === 'work' ? 'rgba(15,181,164,0.30)' : sense === 'slack' ? 'rgba(245,158,11,0.28)' : 'rgba(100,116,139,0.20)'
+    const blockText = sense === 'work' ? '#ffffff' : sense === 'slack' ? '#451a03' : 'var(--text-2)'
+    const accent = sense === 'other' ? 'var(--text-3)' : 'rgba(255,255,255,0.45)'
+    const baseShadow = `0 1px 5px ${glow}`
+    const hoverShadow = `0 5px 14px ${glow}`
     return (
       <div key={seg.startTs}
         draggable
@@ -561,35 +719,34 @@ export default function HomeView() {
           if (dragTs) return
           if (hoverLeaveTimer.current) { window.clearTimeout(hoverLeaveTimer.current); hoverLeaveTimer.current = null }
           setTlHover({ seg, rect: e.currentTarget.getBoundingClientRect(), mouse: { x: e.clientX, y: e.clientY } })
+          if (!ghost) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = hoverShadow }
         }}
-        onMouseLeave={() => {
+        onMouseLeave={e => {
           hoverLeaveTimer.current = window.setTimeout(() => setTlHover(null), 400)
+          e.currentTarget.style.transform = ''
+          e.currentTarget.style.boxShadow = baseShadow
         }}
         title={`${app}${ma ? ' · ' + ma : ''} · ${fmtTime(seg.startTs)}${glance ? ' · 短切换' : ''}`}
         style={{ position: 'absolute', left, width, top: 6, bottom: 6,
-                 background: ghost ? 'rgba(136,135,128,0.12)' : `linear-gradient(180deg, rgb(${chroma}/0.36), rgb(${chroma}/0.12))`,
+                 background: ghost ? 'rgba(136,135,128,0.12)' : grad,
                  border: ghost ? '1px dashed var(--tl-other-stroke)' : 'none',
                  borderRadius: 999,
                  cursor: dragTs ? 'grabbing' : 'grab',
-                 opacity: ghost ? 0.4 : glance ? 0.35 : 1,
-                 transition: 'opacity .12s, box-shadow .12s',
-                 boxShadow: ghost ? 'none' : `0 0 5px rgb(${chroma}/0.22), 0 0 10px rgb(${chroma}/0.06)`,
+                 opacity: ghost ? 0.4 : glance ? 0.45 : 1,
+                 transition: 'opacity .12s, box-shadow .15s, transform .15s',
+                 boxShadow: ghost ? 'none' : baseShadow,
                  display: 'flex', alignItems: 'center', justifyContent: 'center',
                  overflow: 'hidden' }}
       >
         {!ghost && (
           <span style={{ position: 'absolute', left: 0, top: 5, bottom: 5, width: 3, borderRadius: 2,
-                         background: `var(${c})`, opacity: 0.95, pointerEvents: 'none' }} />
-        )}
-        {!ghost && (
-          <span style={{ position: 'absolute', left: 0, top: 5, bottom: 5, width: 3, borderRadius: 2,
-                         background: `var(${c})`, opacity: 0.95, pointerEvents: 'none' }} />
+                         background: accent, opacity: 0.9, pointerEvents: 'none' }} />
         )}
         {!ghost && !glance && width > 44 && (
           <span style={{
-            fontSize: 11, fontWeight: 500,
-            color: `var(${c})`,
-            textShadow: '0 0 8px rgba(0,0,0,0.45)',
+            fontSize: 11, fontWeight: 600,
+            color: blockText,
+            textShadow: sense === 'slack' ? 'none' : '0 1px 3px rgba(0,0,0,0.2)',
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             padding: '0 4px', pointerEvents: 'none',
           }}>
@@ -690,16 +847,6 @@ export default function HomeView() {
     setDragSeg(null)
   }, [dragSeg])
 
-  const moveItem = useCallback((appKey: string, toCol: Column) => {
-    setItems((prev) => prev.map((i) => (i.seg.mainApp === appKey ? { ...i, column: toCol } : i)))
-    // 持久化工作/摸鱼归属，refresh 不再还原
-    const st = useSettingsStore.getState()
-    const k = appKey.trim().toLowerCase().replace(/\.exe$/i, '')
-    const cur = { ...(st.settings.appColumnOverride ?? {}) }
-    cur[k] = toCol
-    void st.patch({ appColumnOverride: cur })
-  }, [])
-
   /** 不再记录某个程序：弹确认框，确认后加入隐私排除列表并移出时间轴 */
   const [confirmExclude, setConfirmExclude] = useState<TrailSegment | null>(null)
   const doExclude = useCallback((seg: TrailSegment) => {
@@ -768,124 +915,76 @@ export default function HomeView() {
     if (recentCats.length > 0) setOpenCats(new Set(recentCats))
   }, [todayByCategory])
 
-  const starDropProps = (col: Column) => ({
-    onDragOver: (e: React.DragEvent) => { e.preventDefault(); setHoverCol(col) },
-    onDragLeave: () => setHoverCol(null),
-    onDrop: () => { if (dragFrom && dragFrom.col !== col) moveItem(dragFrom.app, col); setHoverCol(null); setDragFrom(null) }
-  })
+  // TODO: 节点拖拽重排 / 跨星团移动（v6 暂不实现，仅 hover 联动高亮）
 
-  const renderStarNode = (node: StarNode, isWork: boolean) => {
-    // 主星：工作 / 摸鱼（不可拖）
-    if (node.kind === 'core') {
-      const colChroma = isWork ? 'var(--star-work)' : 'var(--star-life)'
-      return (
-        <div
-          key={node.key}
-          onMouseEnter={() => setStarHover(node.key)}
-          onMouseLeave={() => setStarHover(null)}
-          className="absolute flex items-center justify-center rounded-full"
-          title={`${node.label} · 共 ${fmtDur(node.min)}`}
-          style={{
-            left: `${node.x}%`, top: `${node.y}%`,
-            width: node.size, height: node.size,
-            transform: 'translate(-50%, -50%)',
-            background: `radial-gradient(circle at 35% 35%, ${isWork ? 'rgb(124 158 255 / 0.95)' : 'rgb(255 124 124 / 0.95)'}, ${isWork ? 'rgb(124 158 255 / 0.45)' : 'rgb(255 124 124 / 0.45)'})`,
-            boxShadow: `0 0 14px ${isWork ? 'rgb(124 158 255 / 0.55)' : 'rgb(255 124 124 / 0.5)'}`,
-            zIndex: 10,
-            scale: starHover === node.key ? '1.08' : '1',
-            border: `1px solid ${isWork ? 'rgb(124 158 255 / 0.4)' : 'rgb(255 124 124 / 0.4)'}`,
-            color: '#fff',
-            fontSize: 11.5,
-            fontWeight: 600,
-          }}
-        >
-          <div className="text-center leading-tight" style={{ background: 'rgba(8, 12, 24, 0.55)', borderRadius: 8, padding: '3px 8px' }}>
-            <div>{node.label}</div>
-            <div style={{ fontSize: 8.5, fontWeight: 400, opacity: 0.85 }}>{fmtDur(node.min)}</div>
-          </div>
-        </div>
-      )
-    }
-    // 子星：分类（不可拖，下方显示分类用时）
-    if (node.kind === 'cat') {
-      const catMeta = CATEGORY_META[node.cat!]
-      return (
-        <div
-          key={node.key}
-          className="absolute flex flex-col items-center"
-          style={{ left: `${node.x}%`, top: `${node.y}%`, transform: 'translate(-50%, -50%)', zIndex: 6 }}
-        >
-          <div
-            onMouseEnter={() => setStarHover(node.key)}
-            onMouseLeave={() => setStarHover(null)}
-            className="flex items-center justify-center rounded-full"
-            title={`${catMeta.label} · ${node.apps ?? 0} 个应用 · ${fmtDur(node.min)}`}
-            style={{
-              width: node.size, height: node.size,
-              background: hexBg(catMeta.color, 0.28),
-              boxShadow: `0 0 10px ${catMeta.color}55`,
-              scale: starHover === node.key ? '1.1' : '1',
-              border: `1px solid ${catMeta.color}66`,
-              cursor: 'default',
-            }}
-          >
-            <svg width={node.size * 0.5} height={node.size * 0.5} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ color: catMeta.color }}>
-              <use href={`#cat-${node.cat}`} />
-            </svg>
-          </div>
-          <span
-            className="mt-0.5 rounded-full px-1.5 py-px text-[9px] tabular-nums"
-            style={{ background: 'var(--pop-bg)', color: catMeta.color, border: `1px solid ${catMeta.color}44` }}
-          >
-            {fmtDur(node.min)}
-          </span>
-        </div>
-      )
-    }
-    // 最末级：应用（可拖到另一列改工作/摸鱼；有真实图标时显示图标+主题色）
-    const isDragging = dragFrom?.app === node.key
-    const isGlance = !!node.item?.seg.glance
-    const visualKey = node.item!.seg.mainApp.trim().toLowerCase().replace(/\.exe$/i, '')
+  /** v6 星图节点：应用圆 + 应用名 + 时长 chip + W1/W2(P1/P2) 角标，hover 联动高亮相连边 */
+  const renderPlanet = (p: StarPlanet) => {
+
+    const hovered = starHover === p.app
+    const dimmed = starHover !== null && !hovered && !starEdges.some((e) => (e.from === starHover && e.to === p.app) || (e.to === starHover && e.from === p.app))
+    const visualKey = p.app.trim().toLowerCase().replace(/\.exe$/i, '')
     const visual = appVisuals[visualKey]
-    const chroma = (() => {
-      const s = senseOf(node.item!.seg.mainState)
-      if (s === 'work') return '124 158 255'
-      if (s === 'slack') return '255 124 124'
-      return isWork ? 'var(--star-work)' : 'var(--star-life)'
-    })()
-    const nodeColor = visual?.themeColor ?? chroma
+    const badge = `#${p.weight}`
+    const nameColor = isDarkMode ? '#cbd5e1' : '#475569'
     return (
       <div
-        key={node.key}
-        draggable
-        onDragStart={() => setDragFrom({ app: node.key, col: node.item!.column })}
-        onDragEnd={() => { setDragFrom(null); setHoverCol(null) }}
-        onMouseEnter={(e) => { setStarHover(node.key); setStarHoverRect(e.currentTarget.getBoundingClientRect()) }}
-        onMouseLeave={() => { setStarHover(null); setStarHoverRect(null) }}
-        className="absolute rounded-full transition-all duration-300 cursor-grab active:cursor-grabbing group"
+        key={p.app}
+        className="absolute flex flex-col items-center transition-opacity duration-200"
         style={{
-          left: `${node.x}%`, top: `${node.y}%`,
-          width: node.size, height: node.size,
-          transform: 'translate(-50%, -50%)',
-          background: visual ? '#ffffff' : `radial-gradient(circle at 35% 35%, rgb(${chroma}/0.85), rgb(${chroma}/0.35))`,
-          boxShadow: `0 0 6px ${nodeColor}/0.45, 0 0 14px ${nodeColor}/0.18`,
-          opacity: isDragging ? 0.25 : isGlance ? 0.3 : 1,
-          zIndex: 5,
-          scale: starHover === node.key ? '1.2' : '1',
-          border: `1px solid ${nodeColor}/0.45`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          overflow: 'hidden',
+          left: `${p.x}%`, top: `${p.y}%`, transform: 'translate(-50%, -50%)',
+          zIndex: p.weight === 1 ? 8 : 6,
+          opacity: dimmed ? 0.35 : 1,
         }}
+        onMouseEnter={() => setStarHover(p.app)}
+        onMouseLeave={() => setStarHover(null)}
+        title={`${displayApp(p.app)} · ${fmtDur(p.sec / 60)} · 停留 #${p.weight}`}
       >
-        {visual ? (
-          <img src={visual.iconDataUrl} alt="" className="h-full w-full object-contain" draggable={false} style={{ padding: 3 }} />
-        ) : (
-          <span style={{ fontSize: Math.max(9, node.size * 0.38), fontWeight: 600, color: '#e2e8f0', pointerEvents: 'none' }}>
-            {displayApp(node.key).replace(/\.exe$/i, '').slice(0, 1)}
-          </span>
-        )}
+        <div
+          className="relative flex items-center justify-center rounded-full transition-transform duration-200"
+          style={{
+            width: p.size, height: p.size,
+            background: starClusterRgba('work', 0.15),
+            border: `1px solid ${starClusterRgba('work', hovered ? 0.75 : 0.45)}`,
+            boxShadow: hovered ? `0 0 14px ${starClusterRgba('work', 0.5)}` : `0 0 8px ${starClusterRgba('work', 0.22)}`,
+            scale: hovered ? '1.12' : '1',
+          }}
+        >
+          {visual ? (
+            <img src={visual.iconDataUrl} alt="" className="h-full w-full object-contain" draggable={false} style={{ padding: 4 }} />
+          ) : (
+            <span style={{ fontSize: Math.max(10, p.size * 0.4), fontWeight: 600, color: starClusterRgba('work', 0.95), pointerEvents: 'none' }}>
+              {displayApp(p.app).replace(/\.exe$/i, '').slice(0, 1)}
+            </span>
+          )}
+          {p.weight <= 2 && (
+            <span
+              className="absolute rounded-full font-bold"
+              style={{
+                top: -5, right: -6, fontSize: 8, lineHeight: '14px', padding: '0 4px',
+                background: starClusterRgba('work', 0.9), color: '#ffffff',
+                boxShadow: `0 0 6px ${starClusterRgba('work', 0.55)}`,
+              }}
+            >
+              {badge}
+            </span>
+          )}
+        </div>
+        <span
+          className="mt-1 max-w-[104px] truncate text-center text-[10px] leading-tight"
+          style={{ color: hovered ? (isDarkMode ? '#f1f5f9' : '#0f172a') : nameColor, pointerEvents: 'none' }}
+        >
+          {displayApp(p.app)}
+        </span>
+        <span
+          className="mt-0.5 rounded-full px-1.5 text-[9px] leading-4 tabular-nums"
+          style={{
+            background: isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.06)',
+            color: starClusterRgba('work', isDarkMode ? 0.95 : 0.9),
+            pointerEvents: 'none',
+          }}
+        >
+          {fmtDur(p.sec / 60)}
+        </span>
       </div>
     )
   }
@@ -912,56 +1011,85 @@ export default function HomeView() {
         </div>
         {insightData ? (
           <>
-            {/* 双栏 split：左工作 / 中徽标差值 / 右摸鱼 */}
-            <div className="grid grid-cols-[1fr_auto_1fr] items-stretch overflow-hidden rounded-2xl border border-white/[0.07]">
-              <div className="px-4 py-4" style={{ background: 'linear-gradient(180deg, rgba(34,197,94,0.08), transparent)' }}>
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                  <span className="inline-block h-2 w-2 rounded-[3px]" style={{ background: '#22c55e' }} />
-                  今日工作{insightData.windowMin > 0 ? ` · 截至 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}` : ''}
-                </div>
-                <div className="mt-1.5 text-[32px] font-extrabold leading-none tabular-nums text-neon-green">
-                  {fmtMin(Math.round(insightData.workMin))}
-                </div>
-                <div className="mt-1.5 text-[11px] leading-snug text-slate-500">{insightData.workDetail || '数据积累中…'}</div>
-              </div>
-              <div className="flex w-[76px] flex-col items-center justify-center gap-1.5 border-x border-white/[0.07] px-2" style={{ background: 'rgba(255,255,255,0.03)' }}>
-                {(() => {
-                  const cur = insightData.baseline.find((b) => b.key === baselineKey)
-                  const delta = cur?.delta ?? null
-                  return (
-                    <>
-                      <div className="text-[20px] font-extrabold tabular-nums" style={{ color: delta === null ? 'var(--text-secondary)' : delta >= 0 ? '#22c55e' : '#f43f5e' }}>
-                        {delta === null ? '—' : `${delta >= 0 ? '+' : ''}${delta}%`}
-                      </div>
-                      <div className="text-center text-[10px] leading-tight text-slate-500">{cur?.label ?? '较昨日同期'}<br />同期对比</div>
-                    </>
-                  )
+            {/* KPI 三卡（v6 InsightCard）：专注 / 摸鱼 / AI 综合评分（无评分数据时回退「今日 AI 协作时长」） */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <InsightCard
+                tone="teal"
+                highlight
+                icon={<Icon name="target" size={14} />}
+                label="专注时长"
+                onClick={() => gotoReport('smart')}
+                big={<span className="tabular-nums">{fmtMin(kpi.focus.today)}</span>}
+                trend={(() => {
+                  const d = kpi.focus.delta[baselineKey]
+                  return d === null ? undefined : { dir: d >= 0 ? ('up' as const) : ('down' as const), text: `${Math.round(Math.abs(d))}% vs ${BASELINE_SHORT[baselineKey]}`, good: d >= 0 }
                 })()}
-              </div>
-              <div className="px-4 py-4" style={{ background: 'linear-gradient(180deg, rgba(244,63,94,0.07), transparent)' }}>
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                  <span className="inline-block h-2 w-2 rounded-[3px]" style={{ background: '#f43f5e' }} />
-                  今日摸鱼
-                </div>
-                <div className="mt-1.5 text-[32px] font-extrabold leading-none tabular-nums text-neon-red">
-                  {fmtMin(Math.round(insightData.slackMin))}
-                </div>
-                <div className="mt-1.5 text-[11px] leading-snug text-slate-500">摸鱼占比 {insightData.slackPct}%</div>
-              </div>
+                base={baselineSource(baselineKey, kpi.focus.base[baselineKey]) + (insightData.windowMin > 0 ? ` · 自 ${insightData.startedAt} 起` : '')}
+                spark={kpi.focus.spark}
+              />
+              <InsightCard
+                tone="red"
+                icon={<Icon name="activity" size={14} />}
+                label="摸鱼 / 分心"
+                onClick={() => gotoReport('smart')}
+                big={<span className="tabular-nums">{fmtMin(kpi.slack.today)}</span>}
+                trend={(() => {
+                  const d = kpi.slack.delta[baselineKey]
+                  return d === null ? undefined : { dir: d >= 0 ? ('up' as const) : ('down' as const), text: `${Math.round(Math.abs(d))}% vs ${BASELINE_SHORT[baselineKey]}`, good: d <= 0 }
+                })()}
+                base={baselineSource(baselineKey, kpi.slack.base[baselineKey])}
+                spark={kpi.slack.spark}
+              />
+              {attention?.today ? (
+                <InsightCard
+                  tone="ai"
+                  highlight
+                  icon={<span className="text-[13px] leading-none">✦</span>}
+                  label="AI 综合评分"
+                  onClick={() => gotoReport('ai')}
+                  big={
+                    <span className="tabular-nums">
+                      {attention.today.finalScore}
+                      <span className="ml-1 text-[11px] font-bold text-slate-500">/ 1000</span>
+                    </span>
+                  }
+                  trend={(() => {
+                    const v = attention.today.vsYesterday
+                    return { dir: v >= 0 ? ('up' as const) : ('down' as const), text: `${v >= 0 ? '+' : ''}${Math.round(v)} 分 vs 昨日`, good: v >= 0 }
+                  })()}
+                  base={`五维加权注意力分 · 等级 ${attention.today.grade} · vs 上周均值 ${attention.today.vsLastWeekAvg >= 0 ? '+' : ''}${Math.round(attention.today.vsLastWeekAvg)}`}
+                  spark={scoreSpark}
+                />
+              ) : (
+                <InsightCard
+                  tone="ai"
+                  highlight
+                  icon={<span className="text-[13px] leading-none">✦</span>}
+                  label="今日 AI 协作时长"
+                  big={<span className="tabular-nums">{fmtMin(kpi.ai.today)}</span>}
+                  trend={(() => {
+                    const d = kpi.ai.delta[baselineKey]
+                    return d === null ? undefined : { dir: d >= 0 ? ('up' as const) : ('down' as const), text: `${Math.round(Math.abs(d))}% vs ${BASELINE_SHORT[baselineKey]}`, good: d >= 0 }
+                  })()}
+                  base={baselineSource(baselineKey, kpi.ai.base[baselineKey])}
+                  spark={kpi.ai.spark}
+                />
+              )}
             </div>
 
-            {/* 对标基线切换 */}
-            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+            {/* 对标基线切换（v6 Seg 分段选择器，联动专注/摸鱼卡趋势徽章） */}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className="text-[11px] text-slate-500">对标基线：</span>
-              {insightData.baseline.map((b) => (
-                <button
-                  key={b.key}
-                  className={`rounded-full border px-2.5 py-1 text-[11px] transition-colors ${baselineKey === b.key ? 'border-neon-cyan/50 bg-neon-cyan/10 text-slate-100' : 'border-white/[0.08] text-slate-500 hover:border-white/[0.18] hover:text-slate-200'}`}
-                  onClick={() => setBaselineKey(b.key)}
-                >
-                  {b.label}
-                </button>
-              ))}
+              <Seg
+                options={[
+                  { value: 'yest', label: '昨日同期' },
+                  { value: 'week', label: '近7天同期' },
+                  { value: 'd30', label: '近30天均值' },
+                  { value: 'best', label: '高效日同期' }
+                ]}
+                value={baselineKey}
+                onChange={(v) => setBaselineKey(v as BaselineKey)}
+              />
             </div>
 
             {/* 节奏预测 */}
@@ -1107,7 +1235,6 @@ export default function HomeView() {
                 {/* 时间轴按分类聚合：泳道 = 分类，段块按真实时间铺，hover 显示应用详情 */}
                 {todayByCategory.map(({ cat, apps, min }) => {
                   const meta = CATEGORY_META[cat]
-                  const rgb = hexToRgb(meta.color)
                   const open = openCats.has(cat)
                   return (
                     <div key={cat} className="mb-1">
@@ -1142,7 +1269,7 @@ export default function HomeView() {
                             transition: 'background .12s',
                           }}
                         >
-                          {apps.flatMap(([, segsArr]) => segsArr.map((s) => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 0.5), rgb)))}
+                          {apps.flatMap(([, segsArr]) => segsArr.map((s) => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 0.5))))}
                         </div>
                         {/* 尾部展开按钮 */}
                         <button
@@ -1189,7 +1316,7 @@ export default function HomeView() {
                                     borderBottom: '1px dashed rgba(255,255,255,0.04)',
                                   }}
                                 >
-                                  {segsArr.map((s) => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 0.5), rgb))}
+                                  {segsArr.map((s) => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 0.5)))}
                                 </div>
                               </div>
                             )
@@ -1282,17 +1409,27 @@ export default function HomeView() {
               const x = LABEL_W + ruler.minToX(nowMin)
               return (
                 <div style={{ position: 'absolute', left: x, top: 0, bottom: 0,
-                              width: 1, background: 'var(--tl-now)', zIndex: 50, pointerEvents: 'none' }}>
+                              width: 2, background: '#ef4444', borderRadius: 1,
+                              boxShadow: '0 0 8px rgba(239,68,68,0.55)',
+                              zIndex: 50, pointerEvents: 'none' }}>
                   <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
-                                width: 7, height: 7, borderRadius: '50%', background: 'var(--tl-now)' }} />
-                  <div style={{ position: 'absolute', top: 9, left: '50%', transform: 'translateX(-50%)',
-                                background: 'var(--tl-now)', color: '#ffffff',
-                                fontSize: 11, fontWeight: 500, padding: '1px 8px', borderRadius: 8,
-                                whiteSpace: 'nowrap' }}>
+                                width: 8, height: 8, borderRadius: '50%', background: '#ef4444',
+                                boxShadow: '0 0 6px rgba(239,68,68,0.8)' }} />
+                  <div style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
+                                background: '#ef4444', color: '#ffffff',
+                                fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
+                                padding: '1px 6px', borderRadius: 8, whiteSpace: 'nowrap' }}>
+                    NOW
+                  </div>
+                  <div style={{ position: 'absolute', top: 25, left: '50%', transform: 'translateX(-50%)',
+                                background: 'rgba(239,68,68,0.14)', color: '#ef4444',
+                                fontSize: 10, fontWeight: 600, padding: '0 5px', borderRadius: 6,
+                                fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)',
+                                fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                     {String(Math.floor(nowMin / 60)).padStart(2,'0')}:{String(nowMin % 60).padStart(2,'0')}
                   </div>
-                  <div style={{ position: 'absolute', bottom: 0, left: -1.5, width: 4.5, height: 18,
-                                background: 'linear-gradient(to bottom, transparent, var(--tl-now))' }} />
+                  <div style={{ position: 'absolute', bottom: 0, left: -2, width: 6, height: 22,
+                                background: 'linear-gradient(to bottom, transparent, #ef4444)', opacity: 0.85 }} />
                 </div>
               )
             })()}
@@ -1317,6 +1454,26 @@ export default function HomeView() {
                 </div>
               )
             })}
+            {/* 图例行：色块语义 + 今日各分类时长合计（todayByCategory 聚合） */}
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-2.5" style={{ borderTop: '0.5px dashed var(--tl-lane-border)' }}>
+              <span className="flex items-center gap-1.5 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
+                <i className="inline-block h-2.5 w-6 rounded-full" style={{ background: 'linear-gradient(90deg,#0fb5a4,#22d3ee)' }} />工作
+              </span>
+              <span className="flex items-center gap-1.5 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
+                <i className="inline-block h-2.5 w-6 rounded-full" style={{ background: 'linear-gradient(90deg,#f59e0b,#fbbf24)' }} />摸鱼
+              </span>
+              <span className="flex items-center gap-1.5 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
+                <i className="inline-block h-2.5 w-6 rounded-full" style={{ background: 'var(--surface-3)', border: '0.5px solid var(--tl-lane-border)' }} />其他
+              </span>
+              <span className="h-3 w-px" style={{ background: 'var(--tl-lane-border)' }} />
+              {todayByCategory.map(({ cat, min }) => (
+                <span key={cat} className="flex items-center gap-1 text-[10.5px]" style={{ color: 'var(--text-3)' }} title={`${CATEGORY_META[cat].label} · 今日合计`}>
+                  <i className="inline-block h-2 w-2 rounded-full" style={{ background: CATEGORY_META[cat].color }} />
+                  {CATEGORY_META[cat].label}
+                  <b className="tabular-nums" style={{ color: 'var(--text-2)', fontWeight: 600 }}>{fmtDur(min)}</b>
+                </span>
+              ))}
+            </div>
             {/* 已停止记录：与隐私页排除列表双向联动，可一键恢复 */}
             {excludedApps.length > 0 && (
               <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-2"
@@ -1371,55 +1528,86 @@ export default function HomeView() {
 
       {widgets.starmap ? (
       <>
-      {/* 星图 — 主星(工作/摸鱼) → 子星(分类) → 末级(应用) */}
-      <section className="star-map glass-card hoverable" style={{ background: 'var(--star-card-bg)' }}>
-        <div className="flex items-center justify-between mb-3 px-1">
+      {/* v6 应用星图：星空画布 + 双星团（左=工作 / 右=摸鱼）+ 切换连线（近 7 天聚合） */}
+      <section className="glass-card hoverable">
+        <div className="flex items-center justify-between mb-2 px-1">
           <div className="flex items-center gap-2">
-            <Icon name="chart" size={16} className="shrink-0" style={{ color: 'var(--star-text)' }} />
-            <h3 className="text-[13px] font-semibold" style={{ color: 'var(--star-text)' }}>今日星图</h3>
+            <span
+              className="flex h-6 w-6 items-center justify-center rounded-lg border"
+              style={{ background: 'var(--accent-softer)', borderColor: 'var(--border-active)', color: 'var(--accent)' }}
+            >
+              <Icon name="chart" size={13} />
+            </span>
+            <h3 className="text-[13px] font-semibold text-slate-200">应用星图</h3>
+            <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>节点大小=时长 · 连线=切换频次</span>
           </div>
-          <span className="text-[11px]" style={{ color: 'var(--star-text-muted)' }}>主星=工作/摸鱼 · 子星=分类 · 末级=应用 · 拖动应用可调整</span>
+          <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>近 {starGraph?.days ?? 7} 天聚合</span>
         </div>
-        <div className="relative flex rounded-xl" style={{ minHeight: 340, background: 'var(--star-card-bg)' }}>
-          <div className="absolute left-1/2 top-4 bottom-4 border-l-2 border-dashed z-10" style={{ borderColor: 'var(--star-line)' }} />
-          {/* 图例 */}
-          <div className="absolute bottom-2 left-3 z-20 flex items-center gap-3 text-[10px]" style={{ color: 'var(--star-text-muted)' }}>
-            <span className="flex items-center gap-1"><i className="inline-block w-2 h-2 rounded-full" style={{ background: '#7c9eff' }} />工作</span>
-            <span className="flex items-center gap-1"><i className="inline-block w-2 h-2 rounded-full" style={{ background: '#ff7c7c' }} />摸鱼</span>
-            <span className="flex items-center gap-1"><i className="inline-block w-2 h-2 rounded-full" style={{ background: '#94a3b8' }} />其他</span>
-          </div>
-          <div className={`relative flex-1 min-h-[340px] transition-colors ${hoverCol === 'work' && dragFrom && dragFrom.col !== 'work' ? 'bg-[rgb(var(--star-work)/0.06)]' : ''}`} style={{ background: 'var(--star-work-bg)' }} {...starDropProps('work')}>
-            <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
-              {workChart.connections.map((c, i) => (
-                <line
-                  key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} vectorEffect="non-scaling-stroke"
-                  strokeWidth={c.level === 1 ? 0.35 : 0.22}
-                  stroke="var(--star-work-line)"
-                  strokeDasharray={c.level === 2 ? '1.5 2' : undefined}
-                  opacity={c.level === 2 ? 0.55 : 0.8}
-                />
-              ))}
+        {/* 星空画布：深色=radial 星云底 + 星点；亮色=淡底 + 低透明星点 */}
+        <div
+          className="relative overflow-hidden"
+          style={{
+            minHeight: 360, borderRadius: 12,
+            background: isDarkMode
+              ? 'radial-gradient(ellipse 55% 75% at 25% 50%, rgba(15,181,164,0.12), transparent 70%), radial-gradient(ellipse 55% 75% at 75% 50%, rgba(139,92,246,0.14), transparent 70%), radial-gradient(circle at 50% 35%, #141d33 0%, #0b101b 100%)'
+              : 'radial-gradient(ellipse 55% 75% at 25% 50%, rgba(15,181,164,0.07), transparent 70%), radial-gradient(ellipse 55% 75% at 75% 50%, rgba(139,92,246,0.08), transparent 70%), #f8fafc',
+            border: isDarkMode ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(15,23,42,0.06)',
+          }}
+        >
+          {/* CSS 生成的小星点（确定性散布，亮色模式透明度降低） */}
+          {starDots.map((d, i) => (
+            <span
+              key={i}
+              className="pointer-events-none absolute rounded-full"
+              style={{
+                left: `${d.x}%`, top: `${d.y}%`, width: d.s, height: d.s,
+                background: isDarkMode ? '#dbe4ff' : '#334155',
+                opacity: d.o * (isDarkMode ? 1 : 0.32),
+              }}
+            />
+          ))}
+          {starGraph === null ? (
+            <p className="absolute inset-0 flex items-center justify-center text-[12px]" style={{ color: 'var(--text-3)' }}>星图加载中… ✦</p>
+          ) : starPlanets.length === 0 ? (
+            <p className="absolute inset-0 flex items-center justify-center text-[12px]" style={{ color: 'var(--text-3)' }}>近 7 天暂无应用数据 ✦</p>
+          ) : (
+            <>
+              {/* 切换连线：亮度/粗细 ∝ count；hover 节点时相连边高亮、其余降到 0.08 */}
+              <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                {starEdges.map((e) => {
+                  const connected = starHover !== null && (e.from === starHover || e.to === starHover)
+                  const opacity = starHover === null ? e.alpha : connected ? Math.max(e.alpha, 0.8) : 0.08
+                  return (
+                    <line
+                      key={e.key} x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
+                      vectorEffect="non-scaling-stroke"
+                      stroke="rgba(139,92,246,1)"
+                      strokeWidth={e.width}
+                      opacity={opacity}
+                      style={{ transition: 'opacity .15s' }}
+                    />
+                  )
+                })}
+              </svg>
+              {starPlanets.map((p) => renderPlanet(p))}
+            </>
+          )}
+        </div>
+        {/* 图例 */}
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[11px]" style={{ color: 'var(--text-3)' }}>
+          <span className="flex items-center gap-1.5">
+            <svg width="26" height="6" className="shrink-0">
+              <line x1="1" y1="3" x2="25" y2="3" stroke="rgba(139,92,246,0.85)" strokeWidth="2.5" strokeLinecap="round" />
             </svg>
-            {workChart.nodes.length === 0 ? (
-              <p className="absolute inset-0 flex items-center justify-center text-[12px]" style={{ color: 'var(--star-text-muted)' }}>把应用拖到这一侧 ✦</p>
-            ) : workChart.nodes.map(n => renderStarNode(n, true))}
-          </div>
-          <div className={`relative flex-1 min-h-[340px] transition-colors ${hoverCol === 'life' && dragFrom && dragFrom.col !== 'life' ? 'bg-[rgb(var(--star-life)/0.06)]' : ''}`} style={{ background: 'var(--star-life-bg)' }} {...starDropProps('life')}>
-            <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
-              {lifeChart.connections.map((c, i) => (
-                <line
-                  key={i} x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} vectorEffect="non-scaling-stroke"
-                  strokeWidth={c.level === 1 ? 0.35 : 0.22}
-                  stroke="var(--star-life-line)"
-                  strokeDasharray={c.level === 2 ? '1.5 2' : undefined}
-                  opacity={c.level === 2 ? 0.55 : 0.8}
-                />
-              ))}
-            </svg>
-            {lifeChart.nodes.length === 0 ? (
-              <p className="absolute inset-0 flex items-center justify-center text-[12px]" style={{ color: 'var(--star-text-muted)' }}>把应用拖到这一侧 ✦</p>
-            ) : lifeChart.nodes.map(n => renderStarNode(n, false))}
-          </div>
+            线越亮 = 切换越频繁
+          </span>
+          <span className="opacity-50">·</span>
+          <span>
+            近 {starGraph?.days ?? 7} 天共 <b className="tabular-nums" style={{ color: 'var(--text-2)' }}>{starGraph?.totalSwitches ?? 0}</b> 次切换
+          </span>
+          <span className="ml-auto hidden items-center gap-1.5 sm:flex">
+            <i className="inline-block h-2 w-2 rounded-full" style={{ background: starClusterRgba('work', 0.85) }} />#N=停留时长排名
+          </span>
         </div>
       </section>
       </>
@@ -1454,35 +1642,11 @@ export default function HomeView() {
             className={`chip ${widgets.starmap ? '!text-neon-green' : 'opacity-50'}`}
             onClick={() => setWidget('starmap', !widgets.starmap)}
           >
-            今日星图 {widgets.starmap ? '✓' : '✕'}
+            应用星图 {widgets.starmap ? '✓' : '✕'}
           </button>
           <span className="ml-auto text-[10px] text-slate-600">点击切换显隐 · 选择会记住</span>
         </div>
       ) : null}
-
-      {/* 星图应用节点悬浮卡：portal 渲染避免被星图边界裁剪 */}
-      {starHover && starHoverRect && (() => {
-        const hoverNode = [...workChart.nodes, ...lifeChart.nodes].find((n) => n.kind === 'app' && n.key === starHover)
-        if (!hoverNode?.item) return null
-        return createPortal(
-          <ActivityHoverCard
-            a={{
-              app: displayApp(hoverNode.item.seg.mainApp),
-              title: hoverNode.item.seg.mainTitle ?? '',
-              state: hoverNode.item.seg.mainState,
-              startText: fmtTime(hoverNode.item.seg.startTs),
-              endText: fmtTime(hoverNode.item.seg.endTs),
-              durationText: fmtDur(hoverNode.item.seg.durationMin),
-              source: '监控',
-              microActivity: (hoverNode.item.seg as any).microActivity ?? null,
-              operation: (hoverNode.item.seg as any).operation ?? null,
-              mode: 'fixed',
-              pos: { x: starHoverRect.left + starHoverRect.width / 2, y: starHoverRect.top },
-            }}
-          />,
-          document.body
-        )
-      })()}
 
       {/* 不再记录确认弹窗 */}
       <ConfirmDialog

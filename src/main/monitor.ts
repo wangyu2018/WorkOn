@@ -22,7 +22,13 @@ import { sendTo } from './windows'
 import { dateKey } from '@shared/trail'
 import { startOcr, stopOcr, getLastOcrContext } from './ocrWorker'
 import { getFocusedElement, summarizeFocusedElement } from './uia'
-import { trackAppSwitch, matchKnownChain } from './qa/questionGenerator'
+import { trackAppSwitch, matchKnownChain, saveWorkChain } from './qa/questionGenerator'
+import { focusChainTick } from './focusChain'
+import { careTick, reportContinuousWork } from './care'
+import { automationMinuteTick, automationOnAppSwitch, automationOnFocusTick } from './automation'
+import { attributionTick } from './attributions'
+import { dirWatcherTick } from './dirWatcher'
+import { dispatchConfirmQueue } from './confirmQueue'
 import { bus } from './state'
 import { genId } from '@shared/types'
 import type { CorrectionRule, PlanItem, Project, ProjectTimeLink, SegmentPlanLink, WorkState } from '@shared/types'
@@ -129,6 +135,8 @@ async function tick(): Promise<void> {
   // 200ms 防抖：窗口高频切换时避免 tick 抖动
   if (ts - lastTickAt < 200) return
   lastTickAt = ts
+  // 手动暂停（托盘勾选）：完全停止采集，恢复后从当前状态继续
+  if (getSettings().recordingPaused) return
   const idleSec = powerMonitor.getSystemIdleTime()
 
   const fg = await getForegroundWindow().catch(() => null)
@@ -207,21 +215,31 @@ async function tick(): Promise<void> {
       presence.push({ ts, app: '', title: '', screen: fg.screen, active: true, idleSec })
     }
 
-    // 作业链路检测：应用切换序列跟踪 → 候选链路弹确认 / 已知链路气泡提醒
+    // 专注链路 v2（链路思维）：链路内切换不切碎；摸鱼/离开达阈值才切断（focusChainV2=false 回退 v1 休眠）
+    focusChainTick(
+      ts,
+      excluded ? '' : identified.appName || corrected.app,
+      excluded ? 'idle' : state,
+      idleSec,
+      getSettings().focusChainV2 !== false && !getSettings().recordingPaused
+    )
+    // 桌宠关怀调度（内部 60s 节流）：连续工作提醒 / 里程碑庆祝 / 整点问候
+    reportContinuousWork(presence.getSnapshot().continuousFocusSec ?? 0)
+    careTick()
+    // MotionLab 自动化：分钟调度 + 专注时长阈值触发
+    automationMinuteTick()
+    automationOnFocusTick(presence.getSnapshot().continuousFocusSec ?? 0)
+    // 归属引擎 + 目录活动落库（项目循环）；隐私排除应用不参与归属
+    attributionTick(excluded ? '' : corrected.app || '', excluded ? '' : safeTitle || '', ts, idleSec, excluded)
+    dirWatcherTick()
+    dispatchConfirmQueue()
+
+    // 作业链路：静默学习（不再弹"是常用链路吗"——AI 时代先行动，错了用户会顺手纠正）
     if (!excluded) {
-      const candidate = trackAppSwitch(identified.appName || corrected.app, ts)
-      if (candidate) {
-        bus.setQuestion({
-          id: genId('q'),
-          ctx: `workchain:${candidate.join('>')}`,
-          question: `检测到你反复走这个流程：${candidate.join(' → ')}，这是你的常用作业链路吗？`,
-          ts
-        })
-      }
-      const known = matchKnownChain()
-      if (known) {
-        bus.setPet({ message: `又在走「${known.join('→')}」流程啦，加油~` })
-      }
+      const switchedApp = identified.appName || corrected.app
+      automationOnAppSwitch(switchedApp)
+      const candidate = trackAppSwitch(switchedApp, ts)
+      if (candidate) saveWorkChain(candidate)
     }
 
     // OCR 深度模式：将最近一次 OCR 上下文注入 presence

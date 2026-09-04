@@ -57,7 +57,14 @@ async function boot(): Promise<void> {
   const lighting = new Lighting(stage.scene, null)
   lighting.attachRenderer(stage.renderer) // 昼夜系统需要调整 toneMappingExposure
   const loadingHint = makeLoadingHint(stage.scene)
+
+  // 诊断色块：验证窗口渲染通路（绿=正常加载 / 红=加载失败）
+  const diagEl = document.createElement('div')
+  diagEl.style.cssText = 'position:fixed;right:20px;top:20px;width:40px;height:40px;border-radius:8px;background:#22c55e;z-index:999;pointer-events:none;box-shadow:0 0 12px rgba(34,197,94,0.5)'
+  document.body.appendChild(diagEl)
+  window.setTimeout(() => diagEl.remove(), 15000)
   stage.start()
+  console.warn(`[pet] boot: stage started ${stage.width}x${stage.height}`)
 
   // ── Phase 2：VRM 加载（期间有占位提示） ──
   // 从设置读取自定义 VRM 路径，无则用默认姵儿
@@ -370,6 +377,12 @@ async function boot(): Promise<void> {
             const pick = CLICK_STATES[Math.floor(Math.random() * CLICK_STATES.length)]
             spatial.transitionTo(pick)
             bubble.show(STATE_LABELS[pick] ?? pick, 2.5, 'character')
+          } else if (action === 'dnd') {
+            // 免打扰 1 小时（关怀调度静默，工作提醒不受影响）
+            void window.api?.getSettings?.().then((s) => {
+              void window.api?.setSettings?.({ ...(s ?? {}), petDndUntilTs: Date.now() + 3600_000 })
+            })
+            bubble.show('好，1 小时后见～', 2.5, 'character')
           }
           spatial.noteInteraction()
           resetIdle()
@@ -531,8 +544,8 @@ async function boot(): Promise<void> {
     saybox.style.display = 'flex'
     // 操作栏：收纳态显示唤出，否则显示收纳
     actions.innerHTML = spatial.docked
-      ? '<button data-action="undock">🔓 唤出</button><button data-action="pose">🎭 换个动作</button><button data-action="state">🎲 随机状态</button>'
-      : '<button data-action="dock">🏠 回到收纳栏</button><button data-action="pose">🎭 换个动作</button><button data-action="state">🎲 随机状态</button>'
+      ? '<button data-action="undock">🔓 唤出</button><button data-action="pose">🎭 换个动作</button><button data-action="dnd">🔕 免打扰 1h</button>'
+      : '<button data-action="dock">🏠 回到收纳栏</button><button data-action="pose">🎭 换个动作</button><button data-action="dnd">🔕 免打扰 1h</button>'
     actions.style.left = `${x}px`
     actions.style.top = `${y + sayH + 4}px`
     actions.style.display = 'flex'
@@ -748,7 +761,18 @@ async function boot(): Promise<void> {
   // ── 主循环 ──
   let lastPhase = lighting.getPhase()
   let phaseWeatherTimer = 0
+  let heartbeatAcc = 0
   stage.onFrame((dt) => {
+    // 诊断心跳：10s 一条（warn 级别才转发到主进程日志），确认渲染循环存活
+    heartbeatAcc += dt
+    if (heartbeatAcc > 10) {
+      heartbeatAcc = 0
+      const hp = spatial.position
+      console.warn(
+        `[pet] alive ${Math.round(performance.now() / 1000)}s pos=(${Math.round(hp.x)},${Math.round(hp.y)}) ` +
+          `tier=${stage.fpsTier} docHidden=${document.hidden}`
+      )
+    }
     spatial.update(dt)
     drag.update(dt)
     clickFx.update(dt)

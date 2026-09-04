@@ -97,10 +97,10 @@ function SourceChip({ field }: { field: ProfileField<unknown> }) {
 /** 设置行：左标签/描述 + 右侧控件（注意力与评分页用） */
 function SettingRow({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
   return (
-    <div className="-mx-2 flex items-center gap-4 rounded-lg px-2 py-2 transition-colors hover:bg-white/[0.03]">
-      <div className="min-w-0 flex-1">
+    <div className="-mx-2 flex flex-col gap-2 rounded-lg px-2 py-2 transition-colors hover:bg-white/[0.03]">
+      <div className="min-w-0">
         <div className="text-[13px] text-slate-300">{label}</div>
-        {desc ? <div className="mt-0.5 text-[11px] text-slate-500">{desc}</div> : null}
+        {desc ? <div className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{desc}</div> : null}
       </div>
       <div className="shrink-0">{children}</div>
     </div>
@@ -811,7 +811,7 @@ export default function ProfileView() {
       </div>
       <div className="flex flex-col divide-y divide-white/[0.05]">
         <SettingRow label="用户类型" desc={settings.userType ? USER_TYPE_META[settings.userType].desc : '选择你的角色，决定五维权重与计分基准；也可交给自动识别'}>
-          <div className="flex max-w-md flex-wrap items-center justify-end gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             {(Object.keys(USER_TYPE_META) as UserType[]).map((t) => {
               const m = USER_TYPE_META[t]
               const active = settings.userType === t

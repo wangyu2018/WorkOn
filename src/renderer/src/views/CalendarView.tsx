@@ -4,6 +4,7 @@ import type { TimeEntry, WorkState, MergedTrail } from '@shared/types'
 import { ALL_STATES, WORK_STATES, WORK_LIKE_STATES } from '@shared/stateMeta'
 import { genId } from '@shared/types'
 import { displayApp } from '@shared/appDisplayName'
+import { CATEGORY_META, categoryOf, type AppCategory } from '@shared/appCategory'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { ActivityHoverCard } from '../components/ActivityHoverCard'
@@ -21,15 +22,15 @@ import {
 
 const SLACK_STATES: WorkState[] = ['slack', 'relax', 'break', 'lunch'] // 口径统一到 shared（不再含 idle/away）
 
-type CalMode = 'week' | 'month' | 'heat'
+type CalMode = 'month' | 'heat'
 
 function savedMode(): CalMode {
   try {
     const v = localStorage.getItem('calMode')
-    if (v === 'week' || v === 'month' || v === 'heat') return v
-    return 'week'
+    if (v === 'month' || v === 'heat') return v
+    return 'month'
   } catch {
-    return 'week'
+    return 'month'
   }
 }
 function saveMode(v: CalMode) {
@@ -281,539 +282,451 @@ function EntryEditor({ entry, isNew, onClose, onSaved }: EditorProps) {
   )
 }
 
-/* ── 周视图：七列状态色块概览 + 事儿层 ── */
-/* ── 月模式：滚动月历（月份流 + 视口高亮 + 天格点击补录） ── */
-function monthKeyOf(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+/* ── 月模式：GitHub 风格专注热力月历（5 档 teal 透明度）+ AI 周回顾 + 选中日详情 ── */
+
+/** 月视图单日统计（专注分钟 = WORK_LIKE_STATES 口径，与 HeatmapView/报表一致） */
+interface MonthDayStat {
+  date: string
+  workMin: number
+  totalMin: number
+  topState: WorkState
 }
 
-function MonthStream() {
-  const months = useMemo(() => {
-    const now = new Date()
-    const out: string[] = []
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      out.push(monthKeyOf(d))
+/** 热力 5 档：surface-3 / teal .25 / .5 / .75 / 1 */
+const HEAT_TIERS = ['var(--surface-3)', 'rgba(15,181,164,0.25)', 'rgba(15,181,164,0.5)', 'rgba(15,181,164,0.75)', 'rgba(15,181,164,1)']
+
+/** 单日专注分钟（工作类状态墙钟合计） */
+function dayWorkMin(trail: MergedTrail | null | undefined): number {
+  if (!trail) return 0
+  return WORK_LIKE_STATES.reduce((s, st) => s + (trail.stateMinutes[st] ?? 0), 0)
+}
+
+function monthLabelOf(ym: string): string {
+  const [y, m] = ym.split('-').map(Number)
+  return `${y}年${m}月`
+}
+
+/** 选中日详情卡：当日专注/墙钟 + 条目列表（点击编辑）+ 底部分类占比堆叠条（与监控页同款式） */
+function DayDetailCard({ date, reloadKey, onEditEntry, onAdd }: {
+  date: string
+  reloadKey: number
+  onEditEntry: (entry: TimeEntry) => void
+  onAdd: () => void
+}) {
+  const today = todayKey()
+  const [trail, setTrail] = useState<MergedTrail | null>(null)
+  const [entries, setEntries] = useState<TimeEntry[]>([])
+  /** v7 粗颗粒复盘：项目归属 / 摸鱼 / 专注代表活动 */
+  const [projMin, setProjMin] = useState<{ name: string; min: number; progress: number | null }[]>([])
+  const [slackMin, setSlackMin] = useState(0)
+  const [focusActs, setFocusActs] = useState<{ app: string; title: string; min: number }[]>([])
+
+  useEffect(() => {
+    const tr = trail as MergedTrail | null
+    if (!tr) return
+    // 摸鱼时长 + 专注代表活动（工作类段按时长取 top3）
+    let slack = 0
+    const workSegs: { app: string; title: string; min: number }[] = []
+    for (const seg of tr.segments ?? []) {
+      if (seg.glance) continue
+      if (seg.mainState === 'slack' || seg.mainState === 'relax') slack += seg.durationMin
+      else if (WORK_LIKE_STATES.includes(seg.mainState)) {
+        workSegs.push({ app: seg.mainApp, title: seg.mainTitle ?? '', min: seg.durationMin })
+      }
     }
-    return out
-  }, [])
-  const [active, setActive] = useState(() => monthKeyOf(new Date()))
-  const [stats, setStats] = useState<Record<string, { date: string; min: number; topState: WorkState }[]>>({})
+    setSlackMin(Math.round(slack))
+    setFocusActs(workSegs.sort((a, b) => b.min - a.min).slice(0, 3).map((s) => ({ ...s, title: s.title || s.app })))
+    // 项目归属：绑定应用/关键词命中 → 项目分钟 + 任务进展
+    ;(async () => {
+      try {
+        const bindings = ((await window.api?.listBindings?.()) as { projectId: string; apps: string[]; keywords: string[] }[]) ?? []
+        const projects = ((await window.api?.listProjects?.()) as { id: string; name: string }[]) ?? []
+        const rows: { name: string; min: number; progress: number | null }[] = []
+        for (const b of bindings) {
+          const proj = projects.find((p) => p.id === b.projectId)
+          if (!proj) continue
+          let min = 0
+          for (const seg of tr.segments ?? []) {
+            if (seg.glance) continue
+            const appHit = b.apps.some((a) => (seg.mainApp ?? '').toLowerCase().includes(a.toLowerCase()))
+            const kwHit = b.keywords.some((k) => (seg.mainTitle ?? '').toLowerCase().includes(k.toLowerCase()))
+            if (appHit || kwHit) min += seg.durationMin
+          }
+          if (min <= 0) continue
+          const tasks = ((await window.api?.listProjectTasks?.(b.projectId)) as { status: string }[]) ?? []
+          const progress = tasks.length ? Math.round((tasks.filter((x) => x.status === 'done').length / tasks.length) * 100) : null
+          rows.push({ name: proj.name, min: Math.round(min), progress })
+        }
+        setProjMin(rows.sort((a, b) => b.min - a.min).slice(0, 4))
+      } catch { /* ignore */ }
+    })()
+  }, [trail])
+
+  useEffect(() => {
+    let alive = true
+    window.api.getTrail(date).then((t) => { if (alive) setTrail((t as MergedTrail) ?? null) }).catch(() => undefined)
+    window.api
+      .listEntries(date)
+      .then((l) => {
+        if (!alive) return
+        setEntries((((l as TimeEntry[]) ?? []).slice()).sort((a, b) => a.startMin - b.startMin))
+      })
+      .catch(() => undefined)
+    return () => { alive = false }
+  }, [date, reloadKey])
+
+  // 当日分类占比（segments 按应用业务分类聚合，与监控页应用分类同口径）
+  const cats = useMemo(() => {
+    if (!trail) return [] as { cat: AppCategory; min: number }[]
+    const map = new Map<AppCategory, number>()
+    for (const seg of trail.segments) {
+      if (!seg.mainApp) continue
+      const cat = categoryOf(seg.mainApp)
+      map.set(cat, (map.get(cat) ?? 0) + seg.durationMin)
+    }
+    return [...map.entries()].filter(([, v]) => v > 0.5).map(([cat, min]) => ({ cat, min })).sort((a, b) => b.min - a.min)
+  }, [trail])
+  const catTotal = cats.reduce((s, c) => s + c.min, 0)
+
+  return (
+    <div className="glass-card anim-fade-up" style={{ animationDelay: '120ms' }}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[14px] font-semibold text-slate-200">{fmtDateLabel(date)}</span>
+        {date === today ? <span className="chip text-[var(--teal)]">今天</span> : null}
+        <span className="chip">专注 {fmtMin(dayWorkMin(trail))}</span>
+        {trail && trail.totalMin > 0 ? <span className="chip">墙钟 {fmtMin(trail.totalMin)}</span> : null}
+        <div className="flex-1" />
+        <button className="glass-btn !px-2.5 !py-1 text-[11px]" onClick={onAdd} title="为该日补录时段">
+          <Icon name="plus" size={12} /> 补录
+        </button>
+      </div>
+      {/* v7 粗颗粒复盘：项目进展 / 摸鱼 / 专注干了哪些活 */}
+      <div className="mt-3 flex flex-col gap-2">
+        {projMin.length ? (
+          <div>
+            <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-600">项目进展</div>
+            {projMin.map((r) => (
+              <div key={r.name} className="flex items-center gap-2 py-0.5 text-[11.5px]">
+                <span className="min-w-0 flex-1 truncate text-slate-300">{r.name}</span>
+                {r.progress !== null ? <span className="shrink-0 text-[10px] tabular-nums text-[var(--teal-deep)]">{r.progress}%</span> : null}
+                <span className="shrink-0 text-[10px] tabular-nums text-slate-500">{r.min}m</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {slackMin > 0 ? (
+          <div className="flex items-center gap-2 text-[11.5px]">
+            <span className="text-slate-500">🐟 摸鱼</span>
+            <span className="tabular-nums text-[#fbbf24]">{slackMin}m</span>
+          </div>
+        ) : null}
+        {focusActs.length ? (
+          <div>
+            <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-600">专注干了哪些活</div>
+            {focusActs.map((a, i) => (
+              <div key={i} className="flex items-center gap-2 py-0.5 text-[11.5px]">
+                <span className="min-w-0 flex-1 truncate text-slate-300">{a.title}</span>
+                <span className="shrink-0 text-[10px] tabular-nums text-slate-500">{a.min}m</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      {/* 当日条目（手动/AI/导入）：点击进入编辑 */}
+      <div className="mt-2.5 flex flex-col gap-1">
+        {entries.length === 0 ? (
+          <div className="text-[11px] text-slate-600">暂无手动记录 · 点击右上角「补录」添加时段</div>
+        ) : (
+          entries.map((e) => {
+            const meta = WORK_STATES[e.state ?? 'idle'] ?? WORK_STATES.idle
+            return (
+              <button
+                key={e.id}
+                className="flex items-center gap-2 rounded-lg border border-white/[0.05] bg-white/[0.02] px-2.5 py-1.5 text-left text-[11.5px] transition-colors hover:border-white/[0.1] hover:bg-white/[0.05]"
+                onClick={() => onEditEntry(e)}
+                title="点击编辑该时段"
+              >
+                <span>{meta.emoji}</span>
+                <span className="w-24 shrink-0 tabular-nums text-slate-500">{clockOf(e.startMin)}–{clockOf(e.endMin)}</span>
+                <span className="min-w-0 flex-1 truncate text-slate-300">{e.title || '（未命名）'}</span>
+                <span className="shrink-0 text-slate-500">{fmtMin(e.endMin - e.startMin)}</span>
+                <span className="shrink-0 text-[10px] text-slate-600">{SOURCE_LABEL[e.source]}</span>
+              </button>
+            )
+          })
+        )}
+      </div>
+      {/* 底部：当日分类占比堆叠条 + 图例（与监控页状态分布堆叠彩条同款式） */}
+      {cats.length > 0 && catTotal > 0 ? (
+        <div className="mt-3 border-t border-white/[0.05] pt-2.5">
+          <div className="mb-1.5 text-[10px] text-slate-500">当日分类占比</div>
+          <div className="flex h-3.5 w-full overflow-hidden rounded-full border border-white/[0.06] bg-white/[0.03]">
+            {cats.map(({ cat, min }) => (
+              <div
+                key={cat}
+                className="h-full transition-all"
+                style={{ width: `${(min / catTotal) * 100}%`, minWidth: 3, background: CATEGORY_META[cat].color, transitionDuration: '300ms' }}
+                title={`${CATEGORY_META[cat].emoji} ${CATEGORY_META[cat].label} · ${fmtMin(min)}（${Math.round((min / catTotal) * 100)}%）`}
+              />
+            ))}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1">
+            {cats.map(({ cat, min }) => (
+              <span key={cat} className="flex items-center gap-1 text-[10.5px] text-slate-400">
+                <span className="inline-block h-2 w-2 rounded-full" style={{ background: CATEGORY_META[cat].color }} />
+                {CATEGORY_META[cat].label}
+                <span className="tabular-nums text-slate-500">{fmtMin(min)}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3 border-t border-white/[0.05] pt-2.5 text-[10.5px] text-slate-600">当日暂无监控轨迹，分类占比将在采集到活动后展示。</div>
+      )}
+    </div>
+  )
+}
+
+/** 月模式主体：AI 周回顾 hero 卡 + GitHub 风格热力月历 + 选中日详情 */
+function MonthBoard({ yearMonth }: { yearMonth: string }) {
+  const today = todayKey()
+  const [days, setDays] = useState<MonthDayStat[] | null>(null)
+  const [selected, setSelected] = useState<string | null>(null)
   const [editor, setEditor] = useState<{ entry: TimeEntry; isNew: boolean } | null>(null)
-  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const [reloadTick, setReloadTick] = useState(0)
+  /** AI 周回顾：本周/上周专注聚合（由现有 getTrail 周数据推导，无新 IPC） */
+  const [weekCtx, setWeekCtx] = useState<{ thisMin: number; lastMin: number; bestLabel: string; bestMin: number; aiMin: number } | null>(null)
+  const [review, setReview] = useState<string | null>(null)
+  const [generating, setGenerating] = useState(false)
 
   const loadMonth = useCallback(async (ym: string) => {
     const [y, m] = ym.split('-').map(Number)
     const dayCount = new Date(y, m, 0).getDate()
-    const stats: { date: string; min: number; topState: WorkState }[] = []
+    const out: MonthDayStat[] = []
     for (let d = 1; d <= dayCount; d++) {
       const date = `${ym}-${String(d).padStart(2, '0')}`
       try {
         const trail = await window.api?.getTrail?.(date)
-        if (!trail) continue
+        if (!trail || trail.totalMin <= 0) continue
         let topState: WorkState = 'idle'
         let topMin = 0
         ;(Object.entries(trail.stateMinutes) as [WorkState, number][]).forEach(([st, min]) => {
           if (min > topMin) { topState = st; topMin = min }
         })
-        if (trail.totalMin > 0) stats.push({ date, min: Math.round(trail.totalMin), topState })
+        out.push({ date, workMin: Math.round(dayWorkMin(trail)), totalMin: Math.round(trail.totalMin), topState })
       } catch { /* ignore */ }
     }
-    setStats((prev) => ({ ...prev, [ym]: stats }))
+    setDays(out)
   }, [])
 
   useEffect(() => {
-    months.forEach((ym) => void loadMonth(ym))
-  }, [months, loadMonth])
+    setSelected(null)
+    setDays(null)
+    void loadMonth(yearMonth)
+  }, [yearMonth, loadMonth])
 
-  // 视口高亮：滚动时取与视口中线最近的月份
+  // 本周/上周专注对比（挂载时聚合一次：各取 7 天 getTrail，专注口径 = WORK_LIKE_STATES）
   useEffect(() => {
-    const onScroll = (): void => {
-      const mid = window.innerHeight * 0.4
-      let best: string | null = null
-      let bestDist = Infinity
-      for (const ym of months) {
-        const el = sectionRefs.current[ym]
-        if (!el) continue
-        const r = el.getBoundingClientRect()
-        const dist = Math.abs(r.top + r.height / 2 - mid)
-        if (dist < bestDist) { bestDist = dist; best = ym }
-      }
-      if (best) setActive(best)
-    }
-    window.addEventListener('scroll', onScroll, { passive: true })
-    onScroll()
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [months])
+    let alive = true
+    const thisWeek = weekDays(todayKey())
+    const lastWeek = weekDays(addDays(todayKey(), -7))
+    Promise.all([...thisWeek, ...lastWeek].map((d) => window.api.getTrail(d).catch(() => null))).then((ts) => {
+      if (!alive) return
+      const week = (ts.slice(0, 7) ?? []) as (MergedTrail | null)[]
+      const last = (ts.slice(7) ?? []) as (MergedTrail | null)[]
+      const thisMin = Math.round(week.reduce((s, t) => s + dayWorkMin(t), 0))
+      const lastMin = Math.round(last.reduce((s, t) => s + dayWorkMin(t), 0))
+      let bestIdx = 0
+      week.forEach((t, i) => { if (dayWorkMin(t) > dayWorkMin(week[bestIdx])) bestIdx = i })
+      const aiMin = Math.round(
+        week.reduce((s, t) => s + (t ? (t.stateMinutes.aidev ?? 0) + (t.stateMinutes.aiqa ?? 0) : 0), 0)
+      )
+      setWeekCtx({ thisMin, lastMin, bestLabel: `周${WEEK_LABELS[bestIdx]}`, bestMin: Math.round(dayWorkMin(week[bestIdx])), aiMin })
+    })
+    return () => { alive = false }
+  }, [])
 
-  const scrollToMonth = (ym: string): void => {
-    sectionRefs.current[ym]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    setActive(ym)
+  const aiPct = weekCtx && weekCtx.thisMin > 0 ? Math.round((weekCtx.aiMin / weekCtx.thisMin) * 100) : 0
+  const deltaPct = !weekCtx ? 0 : weekCtx.lastMin > 0 ? Math.round(((weekCtx.thisMin - weekCtx.lastMin) / weekCtx.lastMin) * 100) : weekCtx.thisMin > 0 ? 100 : 0
+
+  // 生成回顾：纯本地推导（周对比 + 最佳日 + AI 协作占比 + 建议），不新增 IPC
+  const generateReview = () => {
+    if (!weekCtx) return
+    setGenerating(true)
+    window.setTimeout(() => {
+      const { thisMin, lastMin, bestLabel, bestMin, aiMin } = weekCtx
+      const up = deltaPct >= 0
+      const tip = up
+        ? '保持当前节奏：把最好的专注时段留给最难的任务，继续用双屏并行消化碎片事务。'
+        : `专注有所回落，建议先恢复 ${bestLabel} 的黄金专注块（当天曾有 ${fmtMin(bestMin)}），并缩短长摸鱼片段。`
+      setReview(
+        `结论：本周专注 ${fmtMin(thisMin)}，较上周（${fmtMin(lastMin)}）${up ? '提升' : '下降'} ${Math.abs(deltaPct)}%。\n最佳专注日：${bestLabel}（${fmtMin(bestMin)}）· AI 协作 ${fmtMin(aiMin)}，约占专注 ${aiPct}%。\n${tip}`
+      )
+      setGenerating(false)
+    }, 700)
   }
 
-  const monthLabelOf = (ym: string): string => {
-    const [y, m] = ym.split('-').map(Number)
-    return `${y}年${m}月`
+  // 月历几何：周一开头
+  const [yy, mm] = yearMonth.split('-').map(Number)
+  const firstDow = (new Date(yy, mm - 1, 1).getDay() + 6) % 7
+  const dayCount = new Date(yy, mm, 0).getDate()
+  const statMap = useMemo(() => new Map((days ?? []).map((d) => [d.date, d])), [days])
+  const monthMax = Math.max(1, ...(days ?? []).map((d) => d.workMin))
+  const monthWorkTotal = (days ?? []).reduce((s, d) => s + d.workMin, 0)
+  const monthWallTotal = (days ?? []).reduce((s, d) => s + d.totalMin, 0)
+  const tierOf = (min: number): number => {
+    if (min <= 0) return 0
+    const r = min / monthMax
+    return r >= 0.75 ? 4 : r >= 0.5 ? 3 : r >= 0.25 ? 2 : 1
   }
+
+  const openAdd = (date: string) =>
+    setEditor({
+      isNew: true,
+      entry: { id: `new-${date}`, date, startMin: 9 * 60, endMin: 18 * 60, title: '', source: 'manual', ts: Date.now() }
+    })
 
   return (
     <div className="view-enter flex flex-col gap-4">
-      <div className="anim-fade-up flex items-center gap-2">
-        <button className="glass-btn !px-2" onClick={() => scrollToMonth(months[Math.min(months.indexOf(active) + 1, months.length - 1)])}>
-          <Icon name="chevronLeft" size={14} />
-        </button>
-        <button className="glass-btn" onClick={() => scrollToMonth(monthKeyOf(new Date()))}>本月</button>
-        <button className="glass-btn !px-2" onClick={() => scrollToMonth(months[Math.max(0, months.indexOf(active) - 1)])}>
-          <Icon name="chevronRight" size={14} />
-        </button>
-        <span className="ml-1 text-[16px] font-semibold tabular-nums text-slate-100">{monthLabelOf(active)}</span>
-        <span className="ml-2 text-[11px] text-slate-500">滚动页面浏览历史月份 · 点击日期补录</span>
-      </div>
-
-      {months.map((ym) => {
-        const days = stats[ym]
-        const total = (days ?? []).reduce((s, d) => s + d.min, 0)
-        const isActive = active === ym
-        return (
-          <div
-            key={ym}
-            data-month={ym}
-            ref={(el) => { sectionRefs.current[ym] = el }}
-            className="glass-card anim-fade-up"
-            style={{
-              borderColor: isActive ? 'var(--tl-now)' : undefined,
-              boxShadow: isActive ? '0 0 0 1px var(--tl-now), 0 8px 30px rgba(0,0,0,0.25)' : undefined,
-              scrollMarginTop: 16
-            }}
-          >
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className={`text-[15px] font-semibold ${isActive ? 'text-neon-cyan' : 'text-slate-200'}`}>
-                {monthLabelOf(ym)}
-                {ym === monthKeyOf(new Date()) ? <span className="ml-2 text-[10px] text-slate-500">本月</span> : null}
-              </h3>
-              <span className="text-[11px] text-slate-500">
-                {total > 0 ? `合计 ${Math.floor(total / 60)}h ${total % 60}m` : '当月无记录'}
-              </span>
-            </div>
-            {!days ? (
-              <div className="py-4 text-center text-[11px] text-slate-600">加载中…</div>
-            ) : days.length === 0 ? (
-              <div className="py-4 text-center text-[11px] text-slate-600">当月无记录</div>
+      {/* AI 周回顾 hero 卡（aura 渐变 = AI 专属，白字） */}
+      <div className="anim-fade-up relative overflow-hidden rounded-2xl p-5 text-white" style={{ background: 'var(--aura)', boxShadow: 'var(--glow-i)' }}>
+        <span className="pointer-events-none absolute -right-3 -top-7 select-none text-[96px] leading-none text-white/15">✦</span>
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="text-[15px] font-bold tracking-wide">✦ AI 周回顾</div>
+            {weekCtx ? (
+              <>
+                <div className="mt-1.5 text-[13.5px] font-semibold">
+                  本周专注 {fmtMin(weekCtx.thisMin)}，较上周（{fmtMin(weekCtx.lastMin)}）{deltaPct >= 0 ? '提升' : '下降'} {Math.abs(deltaPct)}%
+                  {deltaPct >= 0 ? ' ▲' : ' ▼'}
+                </div>
+                <div className="mt-1 text-[11.5px] text-white/85">
+                  最佳专注日 {weekCtx.bestLabel}（{fmtMin(weekCtx.bestMin)}）· AI 协作约占专注 {aiPct}% · 由最近两周监控轨迹推算
+                </div>
+              </>
             ) : (
-              <div className="grid grid-cols-7 gap-1.5">
-                {days.map((d) => {
-                  const meta = WORK_STATES[d.topState] ?? WORK_STATES.idle
-                  const dayNum = Number(d.date.slice(-2))
-                  return (
-                    <button
-                      key={d.date}
-                      className="rounded-lg border p-2 text-left transition-all hover:border-neon-cyan/40 hover:bg-white/[0.04]"
-                      style={{ borderColor: 'rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)' }}
-                      onClick={() => setEditor({
-                        isNew: true,
-                        entry: {
-                          id: `new-${d.date}`,
-                          date: d.date,
-                          startMin: 9 * 60,
-                          endMin: 18 * 60,
-                          title: '',
-                          source: 'manual',
-                          ts: Date.now()
-                        }
-                      })}
-                      title={`${d.date} · ${meta.label} ${d.min}m · 点击补录`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-[12px] font-semibold text-slate-200">{dayNum}</span>
-                        <span className="h-2 w-2 rounded-full" style={{ background: meta.color, opacity: Math.min(1, 0.3 + d.min / 240) }} />
-                      </div>
-                      <div className="mt-0.5 text-[10px] tabular-nums text-slate-500">{d.min > 0 ? `${Math.floor(d.min / 60)}h ${d.min % 60}m` : '—'}</div>
-                    </button>
-                  )
-                })}
+              <div className="mt-1.5 flex items-center gap-2 text-[12px] text-white/85">
+                <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-white" />
+                正在聚合本周 / 上周专注数据…
               </div>
             )}
+            {review ? (
+              <div className="mt-2.5 whitespace-pre-wrap rounded-xl bg-white/15 p-3 text-[11.5px] leading-relaxed">{review}</div>
+            ) : null}
           </div>
-        )
-      })}
-
-      {editor ? (
-        <EntryEditor
-          entry={editor.entry}
-          isNew={editor.isNew}
-          onClose={() => setEditor(null)}
-          onSaved={() => { setEditor(null); void loadMonth(monthKeyOf(new Date())) }}
-        />
-      ) : null}
-    </div>
-  )
-}
-
-function WeekGrid({ date }: { date: string }) {
-  const [trails, setTrails] = useState<(MergedTrail | null)[]>([])
-  const [dayEntries, setDayEntries] = useState<Record<string, TimeEntry[]>>({})
-  const [editor, setEditor] = useState<{ entry: TimeEntry; isNew: boolean } | null>(null)
-  const [hoverEntry, setHoverEntry] = useState<string | null>(null)
-  const [mouse, setMouse] = useState({ x: 0, y: 0 })
-  const [detailEntry, setDetailEntry] = useState<TimeEntry | null>(null)
-  const [detailPos, setDetailPos] = useState({ x: 0, y: 0 })
-  /** 小时 hover 预览：hour + 色块 rect + 该小时 top5 应用 */
-  const [hourHover, setHourHover] = useState<{ day: string; hour: number; apps: { app: string; min: number }[]; rect: DOMRect } | null>(null)
-  const detailRef = useRef<HTMLDivElement | null>(null)
-  const days = weekDays(date)
-  /** 应用图标/主题色缓存 */
-  const [appVisuals, setAppVisuals] = useState<Record<string, { iconDataUrl: string; themeColor: string }>>({})
-  useEffect(() => {
-    window.api.getAppVisuals?.().then((v) => setAppVisuals((v as Record<string, { iconDataUrl: string; themeColor: string }>) ?? {})).catch(() => undefined)
-  }, [])
-
-  useEffect(() => {
-    Promise.all(days.map((d) => window.api.getTrail(d).catch(() => null))).then((ts) =>
-      setTrails(ts as (MergedTrail | null)[])
-    )
-    Promise.all(
-      days.map((d) =>
-        window.api
-          .listEntries(d)
-          .then((list) => (list as TimeEntry[]) ?? [])
-          .catch(() => [] as TimeEntry[])
-      )
-    ).then((entries) => {
-      const map: Record<string, TimeEntry[]> = {}
-      days.forEach((d, i) => {
-        map[d] = entries[i]
-      })
-      setDayEntries(map)
-    })
-  }, [date]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const refetchDay = async (dayKey: string) => {
-    const entries = ((await window.api.listEntries(dayKey)) as TimeEntry[]) ?? []
-    setDayEntries((prev) => ({ ...prev, [dayKey]: entries }))
-  }
-
-  const getEntrySegment = (entry: TimeEntry, trail: MergedTrail | null) => {
-    if (!trail) return null
-    const dayTs = new Date(`${entry.date}T00:00:00`).getTime()
-    const sTs = dayTs + entry.startMin * 60000
-    const eTs = dayTs + entry.endMin * 60000
-    let best: (typeof trail.segments)[number] | null = null
-    let bestOverlap = 0
-    for (const seg of trail.segments) {
-      const overlap = Math.max(0, Math.min(eTs, seg.endTs) - Math.max(sTs, seg.startTs))
-      if (overlap > bestOverlap) {
-        bestOverlap = overlap
-        best = seg
-      }
-    }
-    return best
-  }
-
-  const handleEntryClick = (entry: TimeEntry, dayKey: string, trailsData: (MergedTrail | null)[]) => {
-    setDetailPos(mouse)
-    setDetailEntry(entry)
-  }
-
-  const handleHourClick = (dayKey: string, hour: number, trail: MergedTrail | null, e: React.MouseEvent) => {
-    if (!trail) {
-      // B19：空白小时也可点击补录（预填该小时时间段）
-      setEditor({
-        isNew: true,
-        entry: {
-          id: `new-${dayKey}-${hour}`,
-          date: dayKey,
-          startMin: hour * 60,
-          endMin: hour * 60 + 60,
-          title: '',
-          source: 'manual',
-          ts: Date.now()
-        }
-      })
-      return
-    }
-    const dayTs = new Date(`${dayKey}T00:00:00`).getTime()
-    const hStart = dayTs + hour * 3600000
-    const hEnd = hStart + 3600000
-    let best: (typeof trail.segments)[number] | null = null
-    let bestOverlap = 0
-    for (const seg of trail.segments) {
-      const overlap = Math.max(0, Math.min(hEnd, seg.endTs) - Math.max(hStart, seg.startTs))
-      if (overlap > bestOverlap) {
-        bestOverlap = overlap
-        best = seg
-      }
-    }
-    if (best && bestOverlap > 0) {
-      const sMin = new Date(best.startTs).getHours() * 60 + new Date(best.startTs).getMinutes()
-      const eMin = new Date(best.endTs).getHours() * 60 + new Date(best.endTs).getMinutes()
-      // 锚点用色块右上角（靠近图标），而非鼠标坐标，卡片贴近色块显示
-      const rect = e.currentTarget.getBoundingClientRect()
-      setDetailPos({ x: rect.right, y: rect.top })
-      setDetailEntry({
-        id: best.id ?? `seg-${best.startTs}`,
-        date: dayKey,
-        startMin: Math.max(sMin, 0),
-        endMin: Math.min(eMin, 1440),
-        title: best.mainApp,
-        state: best.mainState,
-        source: 'monitor',
-        ts: best.startTs
-      })
-    }
-  }
-
-  /** 每小时主导态 */
-  const hourStates = (trail: MergedTrail | null): (WorkState | null)[] => {
-    const result: (WorkState | null)[] = new Array(24).fill(null)
-    if (!trail) return result
-    const acc: Map<WorkState, number>[] = Array.from({ length: 24 }, () => new Map())
-    for (const seg of trail.segments) {
-      let ts = seg.startTs
-      while (ts < seg.endTs) {
-        const h = new Date(ts).getHours()
-        const next = new Date(ts)
-        next.setHours(h + 1, 0, 0, 0)
-        const end = Math.min(seg.endTs, next.getTime())
-        const m = acc[h]
-        m.set(seg.mainState, (m.get(seg.mainState) ?? 0) + (end - ts))
-        ts = end
-      }
-    }
-    for (let h = 0; h < 24; h++) {
-      let best: WorkState | null = null
-      let bestV = 0
-      for (const [s, v] of acc[h]) {
-        if (v > bestV) {
-          bestV = v
-          best = s
-        }
-      }
-      result[h] = best
-    }
-    return result
-  }
-
-  /** 每小时主要应用：按该小时占用时长取 top5（含时长，供 hover 预览） */
-  const hourApps = (trail: MergedTrail | null): ({ app: string; min: number }[] | null)[] => {
-    const result: ({ app: string; min: number }[] | null)[] = new Array(24).fill(null)
-    if (!trail) return result
-    const acc: Map<string, number>[] = Array.from({ length: 24 }, () => new Map())
-    for (const seg of trail.segments) {
-      if (seg.glance || !seg.mainApp) continue
-      let ts = seg.startTs
-      while (ts < seg.endTs) {
-        const h = new Date(ts).getHours()
-        const next = new Date(ts)
-        next.setHours(h + 1, 0, 0, 0)
-        const end = Math.min(seg.endTs, next.getTime())
-        const m = acc[h]
-        m.set(seg.mainApp, (m.get(seg.mainApp) ?? 0) + (end - ts))
-        ts = end
-      }
-    }
-    for (let h = 0; h < 24; h++) {
-      if (!acc[h].size) continue
-      const sorted = [...acc[h].entries()].sort((a, b) => b[1] - a[1])
-      result[h] = sorted.slice(0, 5).map(([app, min]) => ({ app, min: min / 60000 }))
-    }
-    return result
-  }
-
-  const today = todayKey()
-
-  useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setDetailEntry(null)
-    }
-    window.addEventListener('keydown', handleEsc)
-    return () => window.removeEventListener('keydown', handleEsc)
-  }, [])
-
-  return (
-    <div className="anim-fade-up grid grid-cols-7 gap-3" style={{ animationDelay: '120ms' }}>
-      {days.map((d, i) => {
-        const trail = trails[i] ?? null
-        const states: (WorkState | null)[] = trails.length ? hourStates(trail) : new Array(24).fill(null)
-        const dt = new Date(`${d}T00:00:00`)
-        const isToday = d === today
-        const entries = dayEntries[d] ?? []
-        return (
-          <div
-            key={d}
-            className={`glass-card !p-2 rounded-xl bg-white/[0.02] transition-transform hover:-translate-y-0.5 ${isToday ? '!border-neon-cyan/40' : ''}`}
-            style={isToday ? { boxShadow: '0 0 16px rgba(34,211,238,0.15)' } : undefined}
+          <button
+            className="glass-btn ai shrink-0"
+            style={{ border: '1px solid rgba(255,255,255,0.35)' }}
+            disabled={!weekCtx || generating}
+            onClick={generateReview}
+            title="基于本周/上周监控轨迹生成 AI 回顾（本地推导）"
           >
-            <div className="mb-2 flex items-center justify-between">
-              <div>
-                <div className={`text-[11px] ${isToday ? 'font-semibold text-cyan-400' : 'text-slate-400'}`}>
-                  周{WEEK_LABELS[i]} {dt.getMonth() + 1}/{dt.getDate()}
-                </div>
-                <div className="text-[10px] text-slate-500">
-                  {trail && trail.totalMin > 0 ? fmtMin(trail.totalMin) : '—'}
-                </div>
-              </div>
+            <Icon name="sparkles" size={13} /> {generating ? '生成中…' : '生成回顾'}
+          </button>
+        </div>
+      </div>
+
+      {/* 热力月历卡 */}
+      <div className="glass-card hoverable anim-fade-up" style={{ animationDelay: '80ms' }}>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-[15px] font-semibold text-slate-200">
+            <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[9px] bg-[var(--teal-soft)] text-[var(--teal)]">
+              <Icon name="calendar" size={14} />
+            </span>
+            {monthLabelOf(yearMonth)} 专注热力
+          </h2>
+          <span className="text-[11px] text-slate-500">点击日期查看详情 / 补录 · 色阶 = 当日专注时长相对当月峰值</span>
+        </div>
+        {/* 星期表头（周一开头） */}
+        <div className="mb-1.5 grid grid-cols-7 gap-1.5 text-center text-[10px] text-slate-500">
+          {WEEK_LABELS.map((l) => (
+            <span key={l}>{l}</span>
+          ))}
+        </div>
+        {/* GitHub 风格子：5 档 teal 透明度；今天 teal 描边 + 外发光 */}
+        <div className="grid grid-cols-7 gap-1.5">
+          {Array.from({ length: firstDow }, (_, i) => (
+            <div key={`blank-${i}`} />
+          ))}
+          {Array.from({ length: dayCount }, (_, i) => {
+            const date = `${yearMonth}-${String(i + 1).padStart(2, '0')}`
+            const stat = statMap.get(date)
+            const tier = tierOf(stat?.workMin ?? 0)
+            const isToday = date === today
+            const isSel = selected === date
+            return (
               <button
-                className="text-[14px] leading-none text-slate-500 transition-colors hover:text-neon-cyan"
-                title="补录时段"
-                onClick={() =>
-                  setEditor({
-                    isNew: true,
-                    entry: {
-                      id: genId('entry'),
-                      date: d,
-                      startMin: 9 * 60,
-                      endMin: 10 * 60,
-                      title: '',
-                      state: 'focus',
-                      source: 'manual',
-                      ts: Date.now()
-                    }
-                  })
-                }
+                key={date}
+                onClick={() => setSelected(isSel ? null : date)}
+                title={`${date}${isToday ? ' · 今天' : ''} · 专注 ${fmtMin(stat?.workMin ?? 0)} / 墙钟 ${fmtMin(stat?.totalMin ?? 0)}${stat ? ` · 主导 ${WORK_STATES[stat.topState]?.label ?? ''}` : ''} · 点击${isSel ? '取消' : '查看详情'}`}
+                className="rounded-lg border p-1.5 text-left transition-all hover:scale-[1.03]"
+                style={{
+                  background: HEAT_TIERS[tier],
+                  borderColor: isToday ? 'var(--teal)' : isSel ? 'var(--cyan)' : 'rgba(255,255,255,0.06)',
+                  boxShadow: isToday
+                    ? '0 0 0 1px var(--teal), 0 0 14px rgba(15,181,164,0.45)'
+                    : isSel
+                      ? '0 0 0 1px var(--cyan), 0 0 10px rgba(6,182,212,0.35)'
+                      : undefined,
+                  minHeight: 52
+                }}
               >
-                ＋
-              </button>
-            </div>
-            <div className="flex flex-col gap-1">
-              {(() => { const appList = hourApps(trail); return states.map((s, h) => {
-                const apps = appList[h]
-                return (
-                <div
-                  key={h}
-                  title={`${d} ${h}:00${s ? ` · ${WORK_STATES[s].label}` : ''}${apps ? ` · ${apps.map((a) => displayApp(a.app)).join('、')}` : ''}`}
-                  className="w-full cursor-pointer rounded-lg px-2 py-1 text-[10px] transition-colors hover:brightness-110"
-                  style={{
-                    borderLeft: s ? `2px solid ${WORK_STATES[s].color}` : '2px solid transparent',
-                    background: s ? `${WORK_STATES[s].color}14` : 'rgba(255,255,255,0.03)',
-                    color: s ? '#cbd5e1' : '#475569'
-                  }}
-                  onClick={(e) => handleHourClick(d, h, trail, e)}
-                  onMouseEnter={(e) => { if (apps) setHourHover({ day: d, hour: h, apps, rect: e.currentTarget.getBoundingClientRect() }) }}
-                  onMouseLeave={() => setHourHover(null)}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <span className="shrink-0 text-slate-500">{String(h).padStart(2, '0')}:00</span>
-                    {apps ? (
-                      <span className="flex min-w-0 flex-1 items-center gap-1">
-                        {apps.slice(0, 2).map((a) => {
-                          const v = appVisuals[a.app.trim().toLowerCase().replace(/\.exe$/i, '')]
-                          return v ? (
-                            <img key={a.app} src={v.iconDataUrl} alt={displayApp(a.app)} title={displayApp(a.app)} className="h-3.5 w-3.5 shrink-0 rounded-[3px]" style={{ background: 'rgba(255,255,255,0.06)' }} />
-                          ) : (
-                            <span key={a.app} className="truncate text-slate-400" title={displayApp(a.app)}>{displayApp(a.app)}</span>
-                          )
-                        })}
-                      </span>
-                    ) : s ? (
-                      <span className="min-w-0 flex-1 truncate"> {WORK_STATES[s].emoji} {WORK_STATES[s].label}</span>
-                    ) : null}
-                  </span>
+                <div className="flex items-center justify-between">
+                  <span className={`text-[12px] font-semibold tabular-nums ${tier >= 3 ? 'text-white' : 'text-slate-300'}`}>{i + 1}</span>
+                  {isToday ? <span className="h-1.5 w-1.5 rounded-full" style={{ background: tier >= 3 ? '#fff' : 'var(--teal)' }} /> : null}
                 </div>
-                )
-              }) })()}
-            </div>
-            <div className="mt-2 border-t border-white/[0.05] pt-1.5">
-              {entries.length === 0 ? (
-                <div className="text-center text-[10px] text-slate-600">—</div>
-              ) : (
-                [...entries]
-                  .sort((a, b) => a.endMin - b.endMin)
-                  .map((entry) => {
-                    const meta = WORK_STATES[entry.state ?? 'idle'] ?? WORK_STATES.idle
-                    return (
-                       <div
-                        key={entry.id}
-                        className="relative mb-1 cursor-pointer rounded-lg border-l-2 px-2 py-1 text-[10px] transition-all hover:brightness-125"
-                        style={{
-                          borderColor: meta.color,
-                          background: `${meta.color}12`
-                        }}
-                        onClick={() => handleEntryClick(entry, d, trails)}
-                        onMouseEnter={() => setHoverEntry(entry.id)}
-                        onMouseLeave={() => setHoverEntry(null)}
-                        onMouseMove={(e) => setMouse({ x: e.clientX, y: e.clientY })}
-                      >
-                        <div className="flex items-center gap-1">
-                          <span>{meta.emoji}</span>
-                          <span className="truncate">{entry.title || '（未命名）'}</span>
-                        </div>
-                        <div className="mt-0.5 text-[9px] text-slate-500">
-                          {clockOf(entry.startMin)}–{clockOf(entry.endMin)} · {fmtMin(entry.endMin - entry.startMin)}
-                        </div>
-                        {hoverEntry === entry.id && (
-                          (() => {
-                            const seg = getEntrySegment(entry, trail)
-                            const app = seg ? displayApp(seg.mainApp) : (meta.emoji + ' ' + meta.label)
-                            const title = seg?.mainTitle ?? entry.title
-                            const counterpart = seg ? parseCounterpart(seg.mainApp, seg.mainTitle) : undefined
-                            return (
-                              <ActivityHoverCard a={{
-                                app,
-                                title: title || '（未命名）',
-                                state: entry.state ?? 'idle',
-                                startText: clockOf(entry.startMin),
-                                endText: clockOf(entry.endMin),
-                                durationText: fmtMin(entry.endMin - entry.startMin),
-                                source: SOURCE_LABEL[entry.source],
-                                mode: 'fixed',
-                                pos: mouse,
-                                counterpart: seg && /wechat|weixin|wchar|wecom|企业微信/.test(seg.mainApp.toLowerCase()) ? counterpart : undefined,
-                                topic: seg && /chrome|edge|firefox|brave|safari|opera/i.test(seg.mainApp) ? counterpart : undefined,
-                                microActivity: (seg as any)?.microActivity ?? null,
-                              }} />
-                            )
-                          })()
-                        )}
-                      </div>
-                    )
-                  })
-              )}
-            </div>
+                <div className={`mt-0.5 text-[9.5px] tabular-nums ${tier >= 3 ? 'text-white/85' : 'text-slate-500'}`}>
+                  {stat && stat.workMin > 0 ? fmtMin(stat.workMin) : '—'}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+        {/* 底部色阶图例 + 本月累计 */}
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-[10.5px] text-slate-500">
+          <span>专注</span>
+          <span>少</span>
+          <div className="flex items-center gap-1">
+            {HEAT_TIERS.map((bg, i) => (
+              <span key={i} className="h-3 w-3 rounded-[4px] border border-white/[0.06]" style={{ background: bg }} />
+            ))}
           </div>
-        )
-      })}
+          <span>多</span>
+          <span className="ml-auto">
+            本月累计专注 <b className="text-[var(--teal)]">{fmtMin(monthWorkTotal)}</b> · 墙钟 {fmtMin(monthWallTotal)}
+          </span>
+        </div>
+      </div>
+
+      {/* 选中日详情卡 / 提示 */}
+      {selected ? (
+        <DayDetailCard
+          date={selected}
+          reloadKey={reloadTick}
+          onEditEntry={(e) => setEditor({ entry: e, isNew: false })}
+          onAdd={() => openAdd(selected)}
+        />
+      ) : (
+        <div className="text-center text-[11px] text-slate-600">点击月历中的日期格查看当日详情（专注时长 / 分类占比 / 补录编辑）</div>
+      )}
+
       {editor ? (
         <EntryEditor
           entry={editor.entry}
           isNew={editor.isNew}
           onClose={() => setEditor(null)}
           onSaved={() => {
-            void refetchDay(editor.entry.date)
+            setEditor(null)
+            setReloadTick((t) => t + 1)
+            void loadMonth(yearMonth)
           }}
         />
-      ) : null}
-      {detailEntry ? (
-        (() => {
-          const dayTrail = trails[days.indexOf(detailEntry.date)] ?? null
-          const seg = getEntrySegment(detailEntry, dayTrail)
-          const app = seg ? displayApp(seg.mainApp) : displayApp(detailEntry.title)
-          const title = seg?.mainTitle ?? detailEntry.title
-          const cpt = seg ? parseCounterpart(seg.mainApp, seg.mainTitle) : undefined
-          const isWechat = seg && /wechat|weixin|wchar|wecom|企业微信/.test(seg.mainApp.toLowerCase())
-          const isBrowser = seg && /chrome|edge|firefox|brave|safari|opera/i.test(seg.mainApp)
-          return (
-            <ActivityDetailCard
-              entry={detailEntry}
-              pos={detailPos}
-              matchedApp={app}
-              matchedTitle={title}
-              counterpart={isWechat ? cpt : undefined}
-              topic={isBrowser ? cpt : undefined}
-              onEdit={() => { setEditor({ entry: detailEntry, isNew: false }); setDetailEntry(null) }}
-              onClose={() => setDetailEntry(null)}
-            />
-          )
-        })()
-      ) : null}
-      {hourHover ? createPortal(
-        <HourPreviewCard apps={hourHover.apps} rect={hourHover.rect} hour={hourHover.hour} day={hourHover.day} visuals={appVisuals} />,
-        document.body
       ) : null}
     </div>
   )
 }
 
-/** 小时 hover 预览：显示该小时 top5 应用（图标 + 名称 + 时长），贴色块边缘翻转防溢出 */
+/* ── 周视图：七列状态色块概览 + 事儿层 ── */
 function HourPreviewCard({ apps, rect, hour, day, visuals }: {
   apps: { app: string; min: number }[]
   rect: DOMRect
@@ -938,7 +851,6 @@ export default function CalendarView() {
   })()
 
   const MODES: { key: CalMode; label: string }[] = [
-    { key: 'week', label: '周' },
     { key: 'month', label: '月' },
     { key: 'heat', label: '热度' }
   ]
@@ -946,26 +858,11 @@ export default function CalendarView() {
   return (
     <div className="view-enter flex flex-col gap-5">
       {/* 页面标题区 */}
-      <PageHeader icon="calendar" title="时间日历" desc="周视图概览 · 月度热力图 · 点击 ＋ 补录时段" />
+      <PageHeader icon="calendar" title="时间日历" desc="月度专注热力 · AI 周回顾 · 补录与编辑" />
 
       {/* 工具条 */}
       <div className="anim-fade-up flex flex-wrap items-center gap-2" style={{ animationDelay: '60ms' }}>
-        {mode === 'week' ? (
-          <>
-            <button className="glass-btn !px-2" onClick={() => setDate((d) => addDays(d, -7))}>
-              <Icon name="chevronLeft" size={14} />
-            </button>
-            <button className="glass-btn" onClick={() => setDate(todayKey())}>
-              今天
-            </button>
-            <button className="glass-btn !px-2" onClick={() => setDate((d) => addDays(d, 7))}>
-              <Icon name="chevronRight" size={14} />
-            </button>
-            <span className="ml-1 text-[16px] font-semibold tabular-nums text-slate-100">
-              {fmtDateLabel(date)}
-            </span>
-          </>
-        ) : (
+        {(
           <>
             <button className="glass-btn !px-2" onClick={() => navigateMonth(-1)}>
               <Icon name="chevronLeft" size={14} />
@@ -1006,9 +903,7 @@ export default function CalendarView() {
         </div>
       </div>
 
-      {mode === 'week' ? (
-        <WeekGrid date={date} />
-      ) : mode === 'heat' ? (
+      {mode === 'heat' ? (
         <div className="glass-card hoverable anim-fade-up" style={{ animationDelay: '120ms' }}>
           <h2 className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-slate-200">
             <Icon name="flame" size={15} className="text-neon-amber" />
@@ -1017,7 +912,7 @@ export default function CalendarView() {
           <HeatmapView range="month" yearMonth={currentMonth} />
         </div>
       ) : (
-        <MonthStream />
+        <MonthBoard yearMonth={currentMonth} />
       )}
     </div>
   )

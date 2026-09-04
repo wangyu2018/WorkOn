@@ -1,23 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
+  AttentionScore,
   GeneratedEntry,
   GeneratedReport,
   GeneratedSection,
+  MergedTrail,
   ReportEntry,
   ReportTemplate,
   SectionType,
   TemplateSection,
   WeeklyGeneratedReport
 } from '@shared/types'
-import { WORK_STATES } from '@shared/stateMeta'
+import { WORK_LIKE_STATES, WORK_STATES } from '@shared/stateMeta'
 import { displayApp } from '@shared/appDisplayName'
 import { Icon } from '../components/Icon'
 import type { IconName } from '../components/Icon'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { InsightCard } from '../components/ui/InsightCard'
+import { AiThinking } from '../components/ui/AiThinking'
 import { useSettingsStore } from '../stores/settingsStore'
 import { WEEK_LABELS, addDays, clockOf, fmtDateLabel, fmtMin, todayKey } from '../components/utils'
 
 /* ── 常量与小工具 ── */
+
+/** 首页 KPI 跳转透传（ReportHub key 重挂载后内层读取） */
+let lastFocusKpi: string | null = null
 
 const SECTION_TYPE_LABELS: Record<SectionType, string> = {
   time_block: '时间段',
@@ -78,18 +85,49 @@ function SectionTitle({ icon, title, hint }: { icon: IconName; title: string; hi
   )
 }
 
-/** 差值小字：正绿 ↑ / 负红 ↓ / 零灰；invert 用于「越少越好」的指标（摸鱼） */
-function Delta({ v, invert, fmt }: { v: number; invert?: boolean; fmt?: (abs: number) => string }) {
-  const good = invert ? v < 0 : v > 0
-  const bad = invert ? v > 0 : v < 0
-  const cls = good ? 'text-neon-green' : bad ? 'text-neon-red' : 'text-slate-500'
-  const text = fmt ? fmt(Math.abs(v)) : String(Math.abs(v))
-  return (
-    <span className={`text-[10px] font-medium ${cls}`}>
-      {v > 0 ? '↑+' : v < 0 ? '↓-' : ''}
-      {v === 0 ? '—' : text}
-    </span>
-  )
+/* ── KPI 派生工具（InsightCard 用，全部由现有轨迹/评分 IPC 推导，不新增 IPC） ── */
+
+const sumOf = (ns: number[]): number => ns.reduce((a, b) => a + b, 0)
+const avgOf = (ns: number[]): number => (ns.length ? Math.round(sumOf(ns) / ns.length) : 0)
+
+/** 单日轨迹派生指标：切换段数 / 最长专注段 / 摸鱼占比 / 工作占比 */
+interface DayMetrics {
+  switches: number
+  longestFocusMin: number
+  slackPct: number
+  focusPct: number
+}
+
+const EMPTY_DAY_METRICS: DayMetrics = { switches: 0, longestFocusMin: 0, slackPct: 0, focusPct: 0 }
+
+function dayMetricsOf(t: MergedTrail | null): DayMetrics {
+  if (!t || t.totalMin <= 0) return EMPTY_DAY_METRICS
+  const work = WORK_LIKE_STATES.reduce((s, st) => s + (t.stateMinutes[st] ?? 0), 0)
+  const slack = t.stateMinutes.slack ?? 0
+  let switches = 0
+  let longest = 0
+  for (const seg of t.segments) {
+    if (seg.glance) continue
+    switches++
+    if (WORK_LIKE_STATES.includes(seg.mainState) && seg.durationMin > longest) longest = seg.durationMin
+  }
+  return {
+    switches,
+    longestFocusMin: longest,
+    slackPct: Math.round((slack / t.totalMin) * 100),
+    focusPct: Math.round((work / t.totalMin) * 100)
+  }
+}
+
+/** 环比趋势徽章（差值为 0 不展示；invert 用于「越少越好」的指标） */
+function trendOf(
+  delta: number,
+  fmt: (n: number) => string,
+  base = 'vs 昨日',
+  invert = false
+): { dir: 'up' | 'down'; text: string; good?: boolean } | undefined {
+  if (!delta) return undefined
+  return { dir: delta > 0 ? 'up' : 'down', text: `${fmt(Math.abs(delta))} ${base}`, good: invert ? delta < 0 : delta > 0 }
 }
 
 /* ── 导出（v2.9 §4.1：标题行 → 概览 → 各 section → 计划达成 → 模式洞察 → 覆盖率行） ── */
@@ -532,7 +570,8 @@ function ImportTemplateModal({ presets, aiEnabled, onClose, onSelectPreset, onSa
 
 /* ── 智能日报主视图 ── */
 
-function SmartDayReportView({ onSynced }: { onSynced?: () => void }) {
+function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { onSynced?: () => void; onGoWeekly?: () => void; focusKpi?: string | null }) {
+  lastFocusKpi = focusKpiProp ?? null
   const settingsAI = useSettingsStore((s) => s.settings.smartReportAI)
   const aiGloballyEnabled = useSettingsStore((s) => s.settings.aiEnabled)
   const patch = useSettingsStore((s) => s.patch)
@@ -547,6 +586,10 @@ function SmartDayReportView({ onSynced }: { onSynced?: () => void }) {
   const [copied, setCopied] = useState<'text' | 'md' | null>(null)
   const [showImport, setShowImport] = useState(false)
   const [editing, setEditing] = useState<EntryCardProps['editing']>(null)
+  /** AI 日报 hero：本次生成时间 */
+  const [generatedAt, setGeneratedAt] = useState<number | null>(null)
+  /** KPI sparkline/环比：以选中日期收尾的近 7 天轨迹（date-6 .. date） */
+  const [weekTrails, setWeekTrails] = useState<(MergedTrail | null)[]>([])
 
   /* 模板列表 */
   const loadTemplates = useCallback(async () => {
@@ -570,7 +613,7 @@ function SmartDayReportView({ onSynced }: { onSynced?: () => void }) {
     window.api
       .generateReport(date, selectedTemplateId ?? undefined, aiOn)
       .then((r) => {
-        if (alive) { setReport(r as GeneratedReport); onSynced?.() }
+        if (alive) { setReport(r as GeneratedReport); setGeneratedAt(Date.now()); onSynced?.() }
       })
       .catch(() => {
         if (alive) setReport(null)
@@ -582,6 +625,20 @@ function SmartDayReportView({ onSynced }: { onSynced?: () => void }) {
       alive = false
     }
   }, [date, selectedTemplateId, aiOn])
+
+  /* KPI 近 7 天轨迹（仅复用现有 trail:get IPC） */
+  useEffect(() => {
+    let alive = true
+    const keys = Array.from({ length: 7 }, (_, i) => addDays(date, i - 6))
+    Promise.all(keys.map((k) => window.api.getTrail(k).catch(() => null)))
+      .then((ts) => {
+        if (alive) setWeekTrails(ts as (MergedTrail | null)[])
+      })
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [date])
 
   const currentTemplate = templates.find((t) => t.id === (report?.templateId ?? selectedTemplateId))
   const isToday = date === todayKey()
@@ -657,6 +714,33 @@ function SmartDayReportView({ onSynced }: { onSynced?: () => void }) {
   const aiStatusText =
     report?.aiStatus === 'enhanced' ? '已增强' : report?.aiStatus === 'fallback_to_base' ? 'AI 不可用，已用基础数据' : ''
 
+  /* AI 日报 hero 摘要（由现有日报内容拼装） */
+  const heroSummary =
+    report && stats
+      ? [
+          `共识别 ${report.entries.length} 段活动`,
+          `有效工作 ${fmtMin(stats.totalWorkMin)}`,
+          `专注度 ${stats.focusScore}/100`,
+          `摸鱼 ${fmtMin(stats.totalSlackMin)}`,
+          report.patterns?.peakHours[0]?.slot ? `最佳时段 ${report.patterns.peakHours[0].slot}` : '',
+          planRate !== null ? `计划达成 ${planRate}%` : ''
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      : ''
+
+  /* KPI 近 7 天派生指标（0=6 天前 … 6=选中日） */
+  const weekM = weekTrails.map((t) => dayMetricsOf(t))
+  const cur = weekM[6] ?? EMPTY_DAY_METRICS
+  const prev = weekM[5] ?? EMPTY_DAY_METRICS
+  const hasWeekData = weekM.some((m) => m.switches > 0)
+  const kpiSpark = {
+    focus: hasWeekData ? weekM.map((m) => m.focusPct) : undefined,
+    switches: hasWeekData ? weekM.map((m) => m.switches) : undefined,
+    longest: hasWeekData ? weekM.map((m) => m.longestFocusMin) : undefined,
+    slack: hasWeekData ? weekM.map((m) => m.slackPct) : undefined
+  }
+
   const presets = templates.filter((t) => t.source === 'preset')
   const userTemplates = templates.filter((t) => t.source !== 'preset')
 
@@ -668,11 +752,18 @@ function SmartDayReportView({ onSynced }: { onSynced?: () => void }) {
         <button
           className={`flex w-full items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left text-[12px] transition-all ${
             active
-              ? 'border-neon-cyan/40 bg-neon-cyan/10 text-neon-cyan shadow-[0_0_10px_rgba(34,211,238,0.15)]'
+              ? 'border-[rgba(15,181,164,0.45)] bg-[var(--teal-soft)] font-medium text-[var(--teal)]'
               : 'border-transparent text-slate-400 hover:border-white/[0.08] hover:bg-white/[0.03] hover:text-slate-200'
           }`}
           onClick={() => setSelectedTemplateId(t.id)}
         >
+          <span
+            className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md ${
+              active ? 'bg-[rgba(15,181,164,0.18)] text-[var(--teal)]' : 'bg-white/[0.05] text-slate-500'
+            }`}
+          >
+            <Icon name={isUser ? 'edit' : 'sparkles'} size={10} />
+          </span>
           <span className="truncate">{t.name}</span>
           {t.isDefault ? <span className="ml-auto shrink-0 text-[9px] text-slate-500">默认</span> : null}
         </button>
@@ -691,6 +782,50 @@ function SmartDayReportView({ onSynced }: { onSynced?: () => void }) {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* ── AI 日报 hero：aura 渐变专属卡 ── */}
+      <section
+        className="anim-fade-up relative overflow-hidden rounded-2xl p-5 text-white"
+        style={{ background: 'var(--aura)', boxShadow: 'var(--glow-i)' }}
+      >
+        <span className="pointer-events-none absolute -top-9 right-1 select-none text-[130px] leading-none text-white/[0.14]">✦</span>
+        <div className="relative flex flex-wrap items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-white/[0.16] text-[13px]">✦</span>
+          <h3 className="text-[14px] font-bold tracking-wide">AI 日报</h3>
+          <span className="rounded-full bg-white/[0.12] px-2 py-0.5 text-[10px] text-white/85">
+            {fmtDateLabel(date)} {weekLabel(date)}
+          </span>
+          {generatedAt ? <span className="ml-auto text-[10px] text-white/60">生成于 {hhmm(generatedAt)}</span> : null}
+        </div>
+        <div className="relative mt-3 min-h-10">
+          {loading && !report ? (
+            <AiThinking hints={['正在汇总今天的时段…', '正在提炼工作主线…', '日报摘要即将生成…']} />
+          ) : report ? (
+            <p className="max-w-[760px] text-[12.5px] font-medium leading-relaxed text-white/90">{heroSummary}</p>
+          ) : (
+            <p className="text-[12.5px] leading-relaxed text-white/75">
+              这一天还没有足够数据，先去专注工作一会儿，AI 日报会自动汇总在这里。
+            </p>
+          )}
+        </div>
+        <div className="relative mt-4 flex flex-wrap items-center gap-2">
+          {onGoWeekly ? (
+            <button
+              className="rounded-[10px] border border-white/35 bg-white/[0.12] px-3.5 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-white/[0.22]"
+              onClick={onGoWeekly}
+            >
+              ✦ 生成周报
+            </button>
+          ) : null}
+          <button
+            className="rounded-[10px] border border-white/35 bg-white/[0.12] px-3.5 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-white/[0.22] disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!report}
+            onClick={() => copy('md')}
+          >
+            {copied === 'md' ? '已导出 ✓' : '导出 MD'}
+          </button>
+        </div>
+      </section>
+
       {/* ── 顶栏：日期切换 + AI 开关 + 导出 ── */}
       <div className="glass-card hoverable flex flex-wrap items-center gap-2 !p-3">
         <button className="glass-btn !px-1.5 !py-1" title="前一天" onClick={() => setDate(addDays(date, -1))}>
@@ -726,39 +861,46 @@ function SmartDayReportView({ onSynced }: { onSynced?: () => void }) {
         </button>
       </div>
 
-      {/* ── 概览 4 卡 ── */}
+      {/* ── KPI 4 卡（v6 InsightCard：专注 / 切换次数 / 最长专注段 / 摸鱼占比） ── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="glass-card anim-fade-up text-center">
-          <div className="text-[24px] font-extrabold leading-tight tracking-tight text-neon-green">{stats ? fmtMin(stats.totalWorkMin) : '—'}</div>
-          <div className="mt-1 text-[11px] text-slate-500">工作时长</div>
-          <div className="mt-1 flex items-center justify-center gap-1">
-            {vs ? <Delta v={vs.workMinDelta} fmt={fmtMin} /> : null}
-            <span className="text-[10px] text-slate-600">vs 昨日</span>
-          </div>
-        </div>
-        <div className="glass-card anim-fade-up text-center" style={{ animationDelay: '60ms' }}>
-          <div className="text-[24px] font-extrabold leading-tight tracking-tight text-neon-cyan">{stats ? stats.focusScore : '—'}</div>
-          <div className="mt-1 text-[11px] text-slate-500">专注度</div>
-          <div className="mt-1 flex items-center justify-center gap-1">
-            {vs ? <Delta v={vs.focusDelta} /> : null}
-            <span className="text-[10px] text-slate-600">vs 昨日</span>
-          </div>
-        </div>
-        <div className="glass-card anim-fade-up text-center" style={{ animationDelay: '120ms' }}>
-          <div className="text-[24px] font-extrabold leading-tight tracking-tight text-neon-pink">{stats ? fmtMin(stats.totalSlackMin) : '—'}</div>
-          <div className="mt-1 text-[11px] text-slate-500">摸鱼</div>
-          <div className="mt-1 flex items-center justify-center gap-1">
-            {vs ? <Delta v={vs.slackDelta} fmt={fmtMin} invert /> : null}
-            <span className="text-[10px] text-slate-600">vs 昨日</span>
-          </div>
-        </div>
-        <div className="glass-card anim-fade-up text-center" style={{ animationDelay: '180ms' }}>
-          <div className="text-[24px] font-extrabold leading-tight tracking-tight text-slate-100">{planRate !== null ? `${planRate}%` : '—'}</div>
-          <div className="mt-1 text-[11px] text-slate-500">计划达成</div>
-          <div className="mt-1 text-[10px] text-slate-600">
-            {report && report.achievements.length > 0 ? `${report.achievements.length} 项计划` : '暂无计划'}
-          </div>
-        </div>
+        <InsightCard
+          icon={<Icon name="zap" size={14} />}
+          tone="teal"
+          label="专注度"
+          detail={lastFocusKpi === 'focus' ? { title: '近 7 天工作占比', items: weekM.map((m, i) => ({ label: `D-${weekM.length - i}`, value: `${m.focusPct}%` })) } : undefined}
+          big={stats ? stats.focusScore : '—'}
+          trend={vs ? trendOf(vs.focusDelta, (n) => `${n} 分`) : trendOf(cur.focusPct - prev.focusPct, (n) => `${n}%`)}
+          spark={kpiSpark.focus}
+          base={<>近 7 天工作占比均值 {avgOf(weekM.map((m) => m.focusPct))}%</>}
+        />
+        <InsightCard
+          icon={<Icon name="refresh" size={14} />}
+          tone="ai"
+          label="切换次数"
+          big={cur.switches}
+          trend={trendOf(cur.switches - prev.switches, (n) => `${n} 段`)}
+          spark={kpiSpark.switches}
+          base={<>近 7 天日均 {avgOf(weekM.map((m) => m.switches))} 段</>}
+        />
+        <InsightCard
+          icon={<Icon name="clock" size={14} />}
+          tone="cyan"
+          label="最长专注段"
+          big={fmtMin(cur.longestFocusMin)}
+          trend={trendOf(cur.longestFocusMin - prev.longestFocusMin, fmtMin)}
+          spark={kpiSpark.longest}
+          base={<>近 7 天峰值 {fmtMin(Math.max(0, ...weekM.map((m) => m.longestFocusMin)))}</>}
+        />
+        <InsightCard
+          icon={<Icon name="cat" size={14} />}
+          tone="red"
+          label="摸鱼占比"
+          detail={lastFocusKpi === 'slack' ? { title: '近 7 天摸鱼占比', items: weekM.map((m, i) => ({ label: `D-${weekM.length - i}`, value: `${m.slackPct}%` })) } : undefined}
+          big={`${cur.slackPct}%`}
+          trend={trendOf(cur.slackPct - prev.slackPct, (n) => `${n}%`, 'vs 昨日', true)}
+          spark={kpiSpark.slack}
+          base={<>近 7 天均值 {avgOf(weekM.map((m) => m.slackPct))}%</>}
+        />
       </div>
 
       {/* ── 主体：左侧模板栏 + 右侧条目区 ── */}
@@ -812,9 +954,8 @@ function SmartDayReportView({ onSynced }: { onSynced?: () => void }) {
         {/* 右侧条目区 */}
         <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto">
           {loading && !report ? (
-            <div className="glass-card flex items-center justify-center gap-2 py-10 text-[12px] text-slate-500">
-              <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-neon-cyan" />
-              报表生成中…
+            <div className="glass-card flex items-center justify-center py-10">
+              <AiThinking hints={['正在翻阅今天的时段…', '正在匹配报表模板…', '条目即将生成…']} />
             </div>
           ) : !report || report.entries.length === 0 ? (
             <div className="glass-card flex flex-col items-center gap-2 py-10 text-center">
@@ -1088,6 +1229,9 @@ function SmartWeeklyReportView({ onSynced }: { onSynced?: () => void }) {
   const [report, setReport] = useState<WeeklyGeneratedReport | null>(null)
   const [loading, setLoading] = useState(false)
   const [aiOn, setAiOn] = useState(settingsAI)
+  /** KPI：本周 + 上周各 7 天轨迹（0-6 本周，7-13 上周），近 21 天注意力评分（专注度环比用） */
+  const [weekTrails, setWeekTrails] = useState<(MergedTrail | null)[]>([])
+  const [attn, setAttn] = useState<AttentionScore[]>([])
 
   const monday = mondayOf(anchor)
   const isCurrentWeek = monday >= mondayOf(todayKey())
@@ -1112,6 +1256,31 @@ function SmartWeeklyReportView({ onSynced }: { onSynced?: () => void }) {
     }
   }, [monday, aiOn])
 
+  /* KPI 轨迹：本周 + 上周各 7 天（仅复用现有 trail:get IPC） */
+  useEffect(() => {
+    let alive = true
+    const keys = [
+      ...Array.from({ length: 7 }, (_, i) => addDays(monday, i)),
+      ...Array.from({ length: 7 }, (_, i) => addDays(monday, -7 + i))
+    ]
+    Promise.all(keys.map((k) => window.api.getTrail(k).catch(() => null)))
+      .then((ts) => {
+        if (alive) setWeekTrails(ts as (MergedTrail | null)[])
+      })
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [monday])
+
+  /* 注意力评分（近 21 天，专注度周环比用） */
+  useEffect(() => {
+    window.api
+      .rangeAttention(21)
+      .then((a) => setAttn(a as AttentionScore[]))
+      .catch(() => undefined)
+  }, [])
+
   const toggleAI = () => {
     const v = !aiOn
     setAiOn(v)
@@ -1121,6 +1290,26 @@ function SmartWeeklyReportView({ onSynced }: { onSynced?: () => void }) {
   const stats = report?.weekStats
   const aiStatusText =
     report?.aiStatus === 'enhanced' ? '已增强' : report?.aiStatus === 'fallback_to_base' ? 'AI 不可用，已用基础数据' : ''
+
+  /* KPI 周派生指标（weekM=本周 7 天，prevM=上周 7 天） */
+  const weekM = weekTrails.slice(0, 7).map((t) => dayMetricsOf(t))
+  const prevM = weekTrails.slice(7).map((t) => dayMetricsOf(t))
+  const hasWeekData = weekM.some((m) => m.switches > 0)
+  const swSum = sumOf(weekM.map((m) => m.switches))
+  const swPrev = sumOf(prevM.map((m) => m.switches))
+  const longestMax = Math.max(0, ...weekM.map((m) => m.longestFocusMin))
+  const longestPrevMax = Math.max(0, ...prevM.map((m) => m.longestFocusMin))
+  const slackPctW =
+    stats && stats.totalWorkMin + stats.totalSlackMin > 0
+      ? Math.round((stats.totalSlackMin / (stats.totalWorkMin + stats.totalSlackMin)) * 100)
+      : 0
+  /** 注意力评分口径的周均分（0-100，专注度周环比用） */
+  const attnAvgOf = (from: string, to: string): number | null => {
+    const xs = attn.filter((s) => s.date >= from && s.date <= to)
+    return xs.length ? Math.round(sumOf(xs.map((s) => s.finalScore)) / xs.length / 10) : null
+  }
+  const focusNow = attnAvgOf(monday, addDays(monday, 6))
+  const focusPrev = attnAvgOf(addDays(monday, -7), addDays(monday, -1))
 
   return (
     <div className="flex flex-col gap-4">
@@ -1160,35 +1349,50 @@ function SmartWeeklyReportView({ onSynced }: { onSynced?: () => void }) {
         ) : null}
       </div>
 
-      {/* ── 周概览 4 卡 ── */}
+      {/* ── 周 KPI 4 卡（v6 InsightCard：专注 / 切换次数 / 最长专注段 / 摸鱼占比） ── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="glass-card anim-fade-up text-center">
-          <div className="text-[24px] font-extrabold leading-tight tracking-tight text-slate-100">
-            {stats ? fmtMin(stats.totalWorkMin + stats.totalSlackMin) : '—'}
-          </div>
-          <div className="mt-1 text-[11px] text-slate-500">本周总时长</div>
-          <div className="mt-1 text-[10px] text-slate-600">{stats ? `${stats.daysWithData} 天有记录` : ''}</div>
-        </div>
-        <div className="glass-card anim-fade-up text-center" style={{ animationDelay: '60ms' }}>
-          <div className="text-[24px] font-extrabold leading-tight tracking-tight text-neon-green">{stats ? fmtMin(stats.totalWorkMin) : '—'}</div>
-          <div className="mt-1 text-[11px] text-slate-500">工作时长</div>
-        </div>
-        <div className="glass-card anim-fade-up text-center" style={{ animationDelay: '120ms' }}>
-          <div className="text-[24px] font-extrabold leading-tight tracking-tight text-neon-pink">{stats ? fmtMin(stats.totalSlackMin) : '—'}</div>
-          <div className="mt-1 text-[11px] text-slate-500">摸鱼时长</div>
-        </div>
-        <div className="glass-card anim-fade-up text-center" style={{ animationDelay: '180ms' }}>
-          <div className="text-[24px] font-extrabold leading-tight tracking-tight text-neon-cyan">{stats && stats.daysWithData > 0 ? stats.avgFocusScore : '—'}</div>
-          <div className="mt-1 text-[11px] text-slate-500">日均评分</div>
-          <div className="mt-1 text-[10px] text-slate-600">有记录天专注度均值</div>
-        </div>
+        <InsightCard
+          icon={<Icon name="zap" size={14} />}
+          tone="teal"
+          label="专注度（周均）"
+          big={stats ? Math.round(stats.avgFocusScore) : '—'}
+          trend={focusNow !== null && focusPrev !== null ? trendOf(focusNow - focusPrev, (n) => `${n} 分`, 'vs 上周') : undefined}
+          spark={report ? report.days.map((d) => d.stats.focusScore) : undefined}
+          base={<>本周 {stats?.daysWithData ?? 0} 天有记录</>}
+        />
+        <InsightCard
+          icon={<Icon name="refresh" size={14} />}
+          tone="ai"
+          label="切换次数"
+          big={swSum}
+          trend={trendOf(swSum - swPrev, (n) => `${n} 段`, 'vs 上周')}
+          spark={hasWeekData ? weekM.map((m) => m.switches) : undefined}
+          base={<>上周共 {swPrev} 段</>}
+        />
+        <InsightCard
+          icon={<Icon name="clock" size={14} />}
+          tone="cyan"
+          label="最长专注段"
+          big={fmtMin(longestMax)}
+          trend={trendOf(longestMax - longestPrevMax, fmtMin, 'vs 上周')}
+          spark={hasWeekData ? weekM.map((m) => m.longestFocusMin) : undefined}
+          base={<>上周峰值 {fmtMin(longestPrevMax)}</>}
+        />
+        <InsightCard
+          icon={<Icon name="cat" size={14} />}
+          tone="red"
+          label="摸鱼占比"
+          big={`${slackPctW}%`}
+          trend={trendOf(slackPctW - avgOf(prevM.map((m) => m.slackPct)), (n) => `${n}%`, 'vs 上周', true)}
+          spark={hasWeekData ? weekM.map((m) => m.slackPct) : undefined}
+          base={<>上周日均 {avgOf(prevM.map((m) => m.slackPct))}%</>}
+        />
       </div>
 
       {/* ── 按天分组条目 ── */}
       {loading && !report ? (
-        <div className="glass-card flex items-center justify-center gap-2 py-10 text-[12px] text-slate-500">
-          <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-neon-cyan" />
-          周报生成中…
+        <div className="glass-card flex items-center justify-center py-10">
+          <AiThinking hints={['正在聚合本周时段…', '正在统计七天节奏…', '周报即将生成…']} />
         </div>
       ) : !report || report.days.every((d) => d.entries.length === 0) ? (
         <div className="glass-card flex flex-col items-center gap-2 py-10 text-center">
@@ -1223,7 +1427,19 @@ function SmartWeeklyReportView({ onSynced }: { onSynced?: () => void }) {
 
 /* ── 入口：day=智能日报（默认），week=智能周报 ── */
 
-export default function SmartReportView({ mode = 'day', onSynced }: { mode?: 'day' | 'week'; onSynced?: () => void }) {
+export default function SmartReportView({
+  mode = 'day',
+  onSynced,
+  onGoWeekly,
+  focusKpi
+}: {
+  mode?: 'day' | 'week'
+  onSynced?: () => void
+  /** 从首页 KPI 卡跳转而来：展开对应卡的 7 天明细（focus/slack/switches/longest） */
+  focusKpi?: 'focus' | 'slack' | 'switches' | 'longest' | null
+  onGoWeekly?: () => void
+}) {
+  lastFocusKpi = focusKpi ?? null
   if (mode === 'week') return <SmartWeeklyReportView onSynced={onSynced} />
-  return <SmartDayReportView onSynced={onSynced} />
+  return <SmartDayReportView onSynced={onSynced} onGoWeekly={onGoWeekly} focusKpi={focusKpi} />
 }

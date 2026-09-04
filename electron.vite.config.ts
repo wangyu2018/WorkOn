@@ -23,6 +23,8 @@ export default defineConfig({
           motion: resolve(__dirname, 'src/renderer/motion.html'),
           pet: resolve(__dirname, 'src/renderer/pet.html'),
           widget: resolve(__dirname, 'src/renderer/widget.html'),
+          dialog: resolve(__dirname, 'src/renderer/dialog.html'),
+          todoWidget: resolve(__dirname, 'src/renderer/todoWidget.html'),
           vrmPreview: resolve(__dirname, 'src/renderer/vrm-preview.html')
         }
       }

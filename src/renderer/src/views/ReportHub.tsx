@@ -10,6 +10,7 @@ import DailyOverviewCard from '../components/DailyOverviewCard'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState } from '../components/EmptyState'
+import { Seg } from '../components/ui/Seg'
 import AnalysisView from './AnalysisView'
 import SmartReportView from './SmartReportView'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -484,6 +485,19 @@ export default function ReportHub() {
   const [lastSyncAt, setLastSyncAt] = useState<number>(Date.now())
   const [syncing, setSyncing] = useState(false)
   const [tabKey, setTabKey] = useState(0)
+  const [kpi, setKpi] = useState<string | null>(null)
+  // 首页 KPI 卡跳转：切换到对应页签
+  useEffect(() => {
+    const onGoto = (e: Event): void => {
+      const tab = (e as CustomEvent<{ tab: 'smart' | 'smartWeekly' | 'ai' }>).detail?.tab
+      if (!tab) return
+      setTab(tab)
+      setKpi(tab === 'smart' ? ((e as CustomEvent<{ kpi?: string }>).detail?.kpi ?? null) : null)
+      setTabKey((k) => k + 1)
+    }
+    window.addEventListener('workon:goto-report', onGoto)
+    return () => window.removeEventListener('workon:goto-report', onGoto)
+  }, [])
   const pollRef = useRef<number | null>(null)
   const TABS: { key: Tab; label: string; icon: 'chart' | 'calendar' | 'sparkles' | 'brain' }[] = [
     { key: 'smart', label: '智能日报', icon: 'sparkles' },
@@ -529,16 +543,21 @@ export default function ReportHub() {
       {/* 页面标题区 */}
       <PageHeader icon="chart" title="报表中心" desc="日报、周报与 AI 洞察，一眼看懂你的时间去向" />
 
+      {/* 报表入口：分段选择器（v6 Seg，图标化） */}
       <div className="anim-fade-up flex flex-wrap items-center gap-2" style={{ animationDelay: '60ms' }}>
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            className={`glass-btn ${tab === t.key ? 'primary' : ''}`}
-            onClick={() => setTab(t.key)}
-          >
-            <Icon name={t.icon} size={13} /> {t.label}
-          </button>
-        ))}
+        <Seg
+          options={TABS.map((t) => ({
+            value: t.key,
+            label: (
+              <span className="flex items-center gap-1.5">
+                <Icon name={t.icon} size={12} />
+                {t.label}
+              </span>
+            )
+          }))}
+          value={tab}
+          onChange={(v) => setTab(v as Tab)}
+        />
         <div className="flex-1" />
         <span className="text-[11px] text-slate-500">上次同步 {relativeTime(lastSyncAt)}</span>
         <button
@@ -596,7 +615,7 @@ export default function ReportHub() {
       ) : null}
       <div key={`${tab}-${tabKey}`} className="anim-fade-up" style={{ animationDelay: '60ms' }}>
         {tab === 'smart' ? (
-          <SmartReportView mode="day" onSynced={handleSynced} />
+          <SmartReportView mode="day" onSynced={handleSynced} onGoWeekly={() => setTab('smartWeekly')} focusKpi={kpi as never} />
         ) : tab === 'smartWeekly' ? (
           <SmartReportView mode="week" onSynced={handleSynced} />
         ) : (

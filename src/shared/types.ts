@@ -5,6 +5,51 @@
 
 // ───────────────────────── 工作状态 ─────────────────────────
 
+/** 专注链路状态（v2 链路思维，悬浮窗/首页消费） */
+export interface FocusChainState {
+  active: boolean
+  startTs: number
+  sec: number
+  apps: { app: string; sec: number }[]
+  interruptionsToday: number
+  longestChainSecToday: number
+  chainsToday: number
+}
+
+// ───────────────────────── MotionLab 自动化（v7） ─────────────────────────
+
+export interface AutomationAction {
+  kind: 'genReport' | 'petCelebrate' | 'notify' | 'addTodo'
+  /** notify 文案 / addTodo 待办标题 / petCelebrate 台词 */
+  text?: string
+}
+
+export interface AutomationTrigger {
+  kind: 'daily' | 'appSwitch' | 'focusReached'
+  /** daily：HH:MM */
+  time?: string
+  /** appSwitch：目标应用（appName 包含匹配） */
+  app?: string
+  /** focusReached：连续专注小时数阈值 */
+  focusHours?: number
+  /** 仅工作日（周一至五） */
+  workdayOnly?: boolean
+}
+
+export interface AutomationRule {
+  id: string
+  name: string
+  enabled: boolean
+  trigger: AutomationTrigger
+  /** 附加条件：今日专注 ≥Nh（不填不检查） */
+  minFocusHours?: number
+  actions: AutomationAction[]
+  /** 运行态：同触发键冷却 */
+  lastFiredKey?: string
+  lastFiredTs?: number
+}
+
+
 /** 13 种工作态 */
 export type WorkState =
   | 'focus' // 专注
@@ -193,6 +238,7 @@ export interface Project {
   priority: 'low' | 'medium' | 'high'
   goal?: string      // 目标/需求描述
   color?: string
+  deadline?: string  // 上线目标日（YYYY-MM-DD）：「距上线终点」刻度
   createdAt: number
   updatedAt: number
 }
@@ -661,6 +707,8 @@ export interface AppSettings {
   wsPort: number // 默认 18765
   stateSnapshot: boolean // 写 state.json 快照
   meetingMode: 'stealth' | 'quiet' | 'assist' | 'ask' // 会议检测默认行为，默认 ask（每次询问）
+  recordingPaused: boolean // 手动暂停采集（托盘勾选），暂停期间不记录任何活动
+  focusChainV2: boolean // 专注判定 v2（链路思维）：链路内切换计入专注；false 回退 v1 严格口径
   petEnabled: boolean
   petCharacter: string // 默认 'ling'
   petClickThrough: boolean
@@ -672,6 +720,14 @@ export interface AppSettings {
   introPlayed: boolean // 首次启动 CG 是否已播放过
   petRememberPos: boolean // 记住拖拽位置（重启后恢复），默认开
   petReturnMin: number // 闲置自动归位分钟数，默认 30
+  todoWidgetVisible: boolean // 待办树小组件显隐，默认关
+  todoWidgetOnTop: boolean // 待办树小组件顶层（false=底层穿透），默认 true
+  todoWidgetOpacity: number // 待办树小组件不透明度 0.3-1
+  todoWidgetPenetration: boolean // 待办树小组件鼠标穿透
+  widgetOnTop: boolean // 监控悬浮窗顶层
+  petOpacity: number // 桌宠不透明度 0.3-1
+  petCareEnabled: boolean // 桌宠关怀调度（休息提醒/里程碑庆祝/整点问候），默认开
+  petDndUntilTs: number // 桌宠免打扰截止时间戳（右键菜单「免打扰 1 小时」）
   petPosX: number // 上次拖拽放置位置 X（petRememberPos 用）
   petPosY: number // 上次拖拽放置位置 Y
   /** 桌搭互动开关（关闭即注销对应行为，降低开销） */
@@ -765,6 +821,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   wsPort: 18765,
   stateSnapshot: true,
   meetingMode: 'ask',
+  recordingPaused: false,
+  focusChainV2: true,
   petEnabled: true,
   petCharacter: 'ling',
   petClickThrough: true,
@@ -776,6 +834,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
   introPlayed: false,
   petRememberPos: true,
   petReturnMin: 30,
+  todoWidgetVisible: false,
+  todoWidgetOnTop: true,
+  todoWidgetOpacity: 0.95,
+  todoWidgetPenetration: false,
+  widgetOnTop: true,
+  petOpacity: 1,
+  petCareEnabled: true,
+  petDndUntilTs: 0,
   petPosX: -1,
   petPosY: -1,
   petInteractions: { click: true, drag: true, dragPhysics: false, follow: false, costume: false, emotion: false, chat: true },
