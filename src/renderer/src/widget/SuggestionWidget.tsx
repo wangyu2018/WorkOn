@@ -772,6 +772,13 @@ export default function SuggestionWidget() {
             ) : (
               <div className="mt-0.5">{attrBtn}</div>
             )}
+            <button
+              className={`ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-white/10 ${askState !== 'hidden' && askState !== 'answer' ? 'text-slate-500 hover:text-slate-200' : 'text-[var(--violet)]'}`}
+              title="问点什么…"
+              onClick={() => setAskState(askState === 'hidden' || askState === 'answer' ? 'input' : 'hidden')}
+            >
+              <Icon name="message" size={12} />
+            </button>
             {presence && presence.continuousFocusSec > 60 && showFocusMinutes && (
               <div className="mt-0.5 text-[11px]" style={{ color: accent }}>
                 已专注 {Math.round(presence.continuousFocusSec / 60)} 分钟
@@ -804,20 +811,13 @@ export default function SuggestionWidget() {
           </div>
         ) : null}
 
-        {/* 问答：默认按钮，点击展开输入框（full 唯一提问入口） */}
-        <div className="mx-3 mb-3 flex flex-col gap-2">
-          {!askState || askState === 'hidden' ? (
-            <button
-              className="flex items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] py-2 text-[12px] text-slate-400 transition-all hover:border-[rgba(139,92,246,0.5)] hover:text-[var(--violet)]"
-              onClick={() => setAskState('input')}
-            >
-              ✦ 问点什么…
-            </button>
-          ) : (
+        {/* 展开的问答条（收起时入口在状态行右侧小钮）+ 桌宠气泡 */}
+        {askState && askState !== 'hidden' ? (
+          <div className="mx-3 mb-3 flex flex-col gap-2">
             <AskBar askState={askState} askText={askText} setAskText={setAskText} submitAsk={submitAsk} onAskBlur={onAskBlur} onEscape={() => setAskState('hidden')} askAnswer={askAnswer} accent={accent} blurTimer={blurTimer} />
-          )}
-          {petBubble && !widgetCompact && <PetBubbleLine text={petBubble} accent={accent} />}
-        </div>
+          </div>
+        ) : null}
+        {petBubble && !widgetCompact ? <div className="mx-3 mb-2"><PetBubbleLine text={petBubble} accent={accent} /></div> : null}
 
         {/* ── 情境确认（动态流） ── */}
         <div className="mx-3 mb-1 mt-2 flex max-h-[320px] flex-col gap-2 overflow-y-auto">
