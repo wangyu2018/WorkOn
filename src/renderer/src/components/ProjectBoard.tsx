@@ -56,6 +56,55 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
   /** 反显：挂到本项目的每日待办（PlanItem.projectId） */
   const [linkedPlans, setLinkedPlans] = useState<Record<string, { id: string; title: string; status: string }[]>>({})
 
+  /** 属性袋（v7.1）：拖拽中的 key（项目内） */
+  const [attrDrag, setAttrDrag] = useState<{ pid: string; key: string } | null>(null)
+  const [attrAdding, setAttrAdding] = useState<string | null>(null)
+  const [attrNew, setAttrNew] = useState({ key: '', value: '' })
+
+  /** 写属性袋：增/改/删/排序统一入口 */
+  const writeAttrs = async (p: Project, attrs: Record<string, string | number>, order?: string[]): Promise<void> => {
+    await window.api.saveProject({ id: p.id, attrs, attrOrder: order ?? p.attrOrder })
+    await load()
+  }
+
+  const setAttrValue = async (p: Project, key: string, value: string): Promise<void> => {
+    const attrs = { ...(p.attrs ?? {}) }
+    if (!value.trim()) delete attrs[key]
+    else attrs[key] = value.trim()
+    await writeAttrs(p, attrs)
+  }
+
+  const removeAttr = async (p: Project, key: string): Promise<void> => {
+    const attrs = { ...(p.attrs ?? {}) }
+    delete attrs[key]
+    const order = (p.attrOrder ?? Object.keys(attrs)).filter((k) => k !== key)
+    await writeAttrs(p, attrs, order)
+  }
+
+  const addAttr = async (p: Project): Promise<void> => {
+    const k = attrNew.key.trim()
+    if (!k) return
+    const attrs = { ...(p.attrs ?? {}) }
+    attrs[k] = attrNew.value.trim()
+    const order = [...(p.attrOrder ?? Object.keys(p.attrs ?? {})), k]
+    setAttrAdding(null)
+    setAttrNew({ key: '', value: '' })
+    await writeAttrs(p, attrs, order)
+  }
+
+  /** 拖拽排序：dragover 时重排 attrOrder */
+  const reorderAttr = async (p: Project, overKey: string): Promise<void> => {
+    if (!attrDrag || attrDrag.pid !== p.id || attrDrag.key === overKey) return
+    const order = [...(p.attrOrder ?? Object.keys(p.attrs ?? {}))]
+    const from = order.indexOf(attrDrag.key)
+    const to = order.indexOf(overKey)
+    if (from < 0 || to < 0) return
+    order.splice(from, 1)
+    order.splice(to, 0, attrDrag.key)
+    setAttrDrag({ ...attrDrag, key: overKey })
+    await writeAttrs(p, p.attrs ?? {}, order)
+  }
+
   const loadLinked = async (): Promise<void> => {
     try {
       const all = ((await window.api?.listPlans?.()) as { id: string; title: string; status: string; projectId?: string }[]) ?? []
@@ -293,6 +342,68 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                         onKeyDown={(e) => { if (e.key === 'Enter') { void addTask(p.id, (e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = '' } }}
                       />
                     </div>
+                    {/* 属性袋（v7.1）：可拖动小卡，有数据才渲染 */}
+                    {(p.attrOrder ?? Object.keys(p.attrs ?? {})).length ? (
+                      <div className="mb-2 flex flex-wrap gap-1.5">
+                        {(p.attrOrder ?? Object.keys(p.attrs ?? {})).filter((k) => p.attrs?.[k] !== undefined).map((k) => (
+                          <div
+                            key={k}
+                            draggable
+                            onDragStart={() => setAttrDrag({ pid: p.id, key: k })}
+                            onDragOver={(e) => { e.preventDefault(); void reorderAttr(p, k) }}
+                            onDragEnd={() => setAttrDrag(null)}
+                            className="group flex cursor-grab items-center gap-1 rounded-lg border px-2 py-1 text-[11px] active:cursor-grabbing"
+                            style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }}
+                            title="拖动排序"
+                          >
+                            <span className="text-slate-500">⠿</span>
+                            <span className="text-slate-500">{k}</span>
+                            <input
+                              className="w-16 border-none bg-transparent text-right font-semibold text-slate-200 outline-none"
+                              value={String(p.attrs?.[k] ?? '')}
+                              onChange={(e) => void setAttrValue(p, k, e.target.value)}
+                            />
+                            <button
+                              className="hidden text-slate-600 hover:text-red-400 group-hover:inline"
+                              title="删除属性"
+                              onClick={() => void removeAttr(p, k)}
+                            >✕</button>
+                          </div>
+                        ))}
+                        {attrAdding === p.id ? (
+                          <div className="flex items-center gap-1 rounded-lg border px-2 py-1" style={{ borderColor: 'var(--border-active)', background: 'var(--surface-2)' }}>
+                            <input
+                              autoFocus
+                              className="w-16 border-none bg-transparent text-[11px] text-slate-300 outline-none"
+                              placeholder="字段名"
+                              value={attrNew.key}
+                              onChange={(e) => setAttrNew((n) => ({ ...n, key: e.target.value }))}
+                            />
+                            <span className="text-slate-600">:</span>
+                            <input
+                              className="w-16 border-none bg-transparent text-[11px] font-semibold text-slate-200 outline-none"
+                              placeholder="值"
+                              value={attrNew.value}
+                              onChange={(e) => setAttrNew((n) => ({ ...n, value: e.target.value }))}
+                              onKeyDown={(e) => e.key === 'Enter' && void addAttr(p)}
+                            />
+                            <button className="text-slate-500 hover:text-slate-200" onClick={() => void addAttr(p)}>✓</button>
+                          </div>
+                        ) : (
+                          <button
+                            className="rounded-lg border border-dashed px-2 py-1 text-[10.5px] text-slate-500 hover:text-slate-200"
+                            style={{ borderColor: 'var(--line)' }}
+                            onClick={() => { setAttrAdding(p.id); setAttrNew({ key: '', value: '' }) }}
+                          >＋ 属性</button>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        className="mb-2 rounded-lg border border-dashed px-2 py-1 text-[10.5px] text-slate-500 hover:text-slate-200"
+                        style={{ borderColor: 'var(--line)' }}
+                        onClick={() => { setAttrAdding(p.id); setAttrNew({ key: '', value: '' }) }}
+                      >＋ 自定义属性（预算/客户/章节…按你的维度来）</button>
+                    )}
                     {(linkedPlans[p.id]?.length ?? 0) > 0 ? (
                       <div className="mb-2 border-t border-dashed border-[var(--line)] pt-2">
                         <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-600">✦ 关联的每日待办</div>

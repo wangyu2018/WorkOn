@@ -35,6 +35,9 @@ export function buildStatusCard(projectId: string): StatusCard {
     '',
     '## 🎯 目标与预期',
     `- 一句话：${(project as unknown as { goal?: string })?.goal ?? '（待补充：这个项目做成什么样算成功？）'}`,
+    ...Object.entries((project as unknown as { attrs?: Record<string, string | number> })?.attrs ?? {}).map(
+      ([k, v]) => `- ${k}：${v}`
+    ),
     '',
     '## 📍 当前进展',
     `- ✅ 已完成：${done.length ? done.map((p) => p.title).join('、') : '（暂无）'}`,

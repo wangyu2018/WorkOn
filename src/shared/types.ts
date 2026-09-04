@@ -239,6 +239,10 @@ export interface Project {
   goal?: string      // 目标/需求描述
   color?: string
   deadline?: string  // 上线目标日（YYYY-MM-DD）：「距上线终点」刻度
+  /** 属性袋（v7.1）：自由维度，每个项目各长各的样（预算/客户/章节/工序…）。有数据才渲染 */
+  attrs?: Record<string, string | number>
+  /** 属性卡顺序（可拖动小卡排序持久化） */
+  attrOrder?: string[]
   createdAt: number
   updatedAt: number
 }
