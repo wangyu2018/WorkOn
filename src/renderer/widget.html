@@ -4,13 +4,16 @@
     <meta charset="UTF-8" />
     <title>WorkOn Widget</title>
     <style>
-      /* 悬浮窗必须完全透明，透出桌面 */
+      /* 悬浮窗必须完全透明，透出桌面；实色只画在面板上 */
       html,
-      body {
+      body,
+      #root {
         background: transparent !important;
         margin: 0;
         padding: 0;
         overflow: hidden;
+        width: 100%;
+        height: 100%;
       }
     </style>
   </head>

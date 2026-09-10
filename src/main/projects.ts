@@ -7,12 +7,108 @@ import { genId } from '@shared/types'
 import { llmChat, extractJson } from './ai'
 import { getSettings } from './settings'
 import { dateKey } from '@shared/trail'
-import type { Project, ProjectTask, ProjectTimeLink } from '@shared/types'
+import { normText, similarity, fuzzyMatch } from '@shared/fuzzy'
+import type { Project, ProjectTask, ProjectTimeLink, PlanItem } from '@shared/types'
 
 const now = () => Date.now()
 
+type BindingRow = { id: string; projectId: string; apps: string[]; keywords: string[]; dirs: string[]; updatedAt: number }
+
+/** 查重：忽略大小写/空格标点；高相似也算同一项目 */
+export function findDuplicateProject(name: string, excludeId?: string): Project | null {
+  const n = normText(name)
+  if (!n) return null
+  const all = col<Project>('projects').filter((p) => p.id !== excludeId && p.status !== 'archived')
+  const exact = all.find((p) => normText(p.name) === n)
+  if (exact) return exact
+  let best: { p: Project; s: number } | null = null
+  for (const p of all) {
+    const s = similarity(name, p.name)
+    if (s >= 0.86 || fuzzyMatch(name, p.name, 0.82)) {
+      if (!best || s > best.s) best = { p, s: Math.max(s, fuzzyMatch(name, p.name, 0.82) ? 0.82 : s) }
+    }
+  }
+  return best?.p ?? null
+}
+
+/** 把 drop 项目的任务/绑定/计划/时间链并入 keep，再删掉 drop */
+function mergeProjectInto(keepId: string, dropId: string): void {
+  if (keepId === dropId) return
+  for (const t of col<ProjectTask>('projectTasks').filter((x) => x.projectId === dropId)) {
+    updateIn<ProjectTask>('projectTasks', t.id, { projectId: keepId })
+  }
+  for (const l of col<ProjectTimeLink>('projectTimeLinks').filter((x) => x.projectId === dropId)) {
+    updateIn<ProjectTimeLink>('projectTimeLinks', l.id, { projectId: keepId })
+  }
+  for (const p of col<PlanItem>('plans').filter((x) => x.projectId === dropId)) {
+    updateIn<PlanItem>('plans', p.id, { projectId: keepId })
+  }
+  // 绑定：合并 apps/keywords/dirs 到 keep，清掉 drop
+  const bindings = col<BindingRow>('projectBindings')
+  const keepB = bindings.find((b) => b.projectId === keepId)
+  const dropB = bindings.find((b) => b.projectId === dropId)
+  if (dropB) {
+    const merge = (a: string[] = [], b: string[] = []): string[] => [...new Set([...a, ...b].filter(Boolean))]
+    if (keepB) {
+      updateIn<BindingRow>('projectBindings', keepB.id, {
+        apps: merge(keepB.apps, dropB.apps),
+        keywords: merge(keepB.keywords, dropB.keywords),
+        dirs: merge(keepB.dirs, dropB.dirs),
+        updatedAt: now()
+      })
+      removeFrom('projectBindings', dropB.id)
+    } else {
+      updateIn<BindingRow>('projectBindings', dropB.id, { projectId: keepId, updatedAt: now() })
+    }
+  }
+  removeFrom('projects', dropId)
+}
+
+/**
+ * 折叠重复项目：同名（大小写/标点）+ 高相似。
+ * 返回合并掉的数量；listProjects 时惰性执行。
+ */
+export function collapseDuplicateProjects(): number {
+  const active = col<Project>('projects').filter((p) => p.status !== 'archived')
+  let merged = 0
+  // 1) 归一化同名
+  const byKey = new Map<string, Project[]>()
+  for (const p of active) {
+    const k = normText(p.name)
+    if (!k) continue
+    const g = byKey.get(k) ?? []
+    g.push(p)
+    byKey.set(k, g)
+  }
+  for (const g of byKey.values()) {
+    if (g.length < 2) continue
+    g.sort((a, b) => a.createdAt - b.createdAt)
+    const keep = g[0]
+    for (const dup of g.slice(1)) {
+      mergeProjectInto(keep.id, dup.id)
+      merged++
+    }
+  }
+  // 2) 高相似跨名（如 WorkOn / workon开发）
+  const left = col<Project>('projects').filter((p) => p.status !== 'archived').sort((a, b) => a.createdAt - b.createdAt)
+  for (let i = 0; i < left.length; i++) {
+    const a = left[i]
+    if (!col<Project>('projects').some((p) => p.id === a.id)) continue // 已被合掉
+    for (let j = i + 1; j < left.length; j++) {
+      const b = left[j]
+      if (!col<Project>('projects').some((p) => p.id === b.id)) continue
+      if (similarity(a.name, b.name) >= 0.86 || fuzzyMatch(a.name, b.name, 0.82)) {
+        mergeProjectInto(a.id, b.id)
+        merged++
+      }
+    }
+  }
+  return merged
+}
+
 /* ── 项目 CRUD ── */
 export function listProjects(): Project[] {
+  collapseDuplicateProjects()
   return [...col<Project>('projects')].sort((a, b) => a.createdAt - b.createdAt)
 }
 
@@ -20,14 +116,29 @@ export function saveProject(p: Partial<Project> & { id?: string }): Project {
   if (p.id) {
     const ex = col<Project>('projects').find((x) => x.id === p.id)
     if (ex) {
+      if (p.name && p.name !== ex.name) {
+        const dup = findDuplicateProject(p.name, p.id)
+        if (dup) {
+          // 改名撞车：并入已有项目，不再保留旧壳
+          mergeProjectInto(dup.id, p.id)
+          return dup
+        }
+      }
       const updated = { ...ex, ...p, updatedAt: now() }
       updateIn<Project>('projects', p.id, updated)
       return updated
     }
   }
+  const name = (p.name ?? '未命名项目').trim()
+  const dup = findDuplicateProject(name)
+  if (dup) {
+    const updated = { ...dup, ...p, id: dup.id, name: dup.name, updatedAt: now() }
+    updateIn<Project>('projects', dup.id, updated)
+    return updated
+  }
   const proj: Project = {
     id: p.id ?? genId('proj'),
-    name: p.name ?? '未命名项目',
+    name,
     status: p.status ?? 'active',
     priority: p.priority ?? 'medium',
     goal: p.goal,
@@ -106,12 +217,15 @@ export async function aiBreakdown(projectId: string, requirement: string): Promi
     return lines.length ? createTasksBulk(projectId, lines) : []
   }
   const prompt = [
-    `你是软件项目任务拆解助手。请把下面的需求拆解为可执行的开发任务清单。`,
+    `你是软件项目「粗粒度」规划助手。把需求整理成少数几个「今日/本阶段要达成的目的或优化面」，不要拆成细步骤。`,
     `项目：${proj.name}`,
     `需求：${requirement}`,
     ``,
-    `要求：每个任务一句话、具体可执行、粒度适中（不要过于零碎）。只输出 JSON 数组，每个元素是任务的标题字符串，不要任何其他文字或注释。`,
-    `示例输出：["搭建项目脚手架", "实现用户登录接口", "编写单元测试"]`
+    `要求：`,
+    `1) 只输出 2～5 条；每条一句话，说清「达成什么目的」或「优化/改动哪个方面」，不要写实现细节、文件名、接口字段。`,
+    `2) 禁止「打开某某文件→改函数→写测试」这类碎步骤；禁止「且/并/以及」塞多项。`,
+    `3) 只输出 JSON 字符串数组，不要解释。`,
+    `示例：["今日目的：面板深浅可连续调节且文案可读", "优化：待办窗去掉直角高透框", "优化：未完成计划按项目/未分类归档"]`
   ].join('\n')
   try {
     const raw = await llmChat([{ role: 'user', content: prompt }])
@@ -261,13 +375,18 @@ export async function aiReview(projectId: string, trailMinutes: number): Promise
     }
   }
   const prompt = [
-    `你是开发复盘助手。基于以下项目信息生成简短复盘（3-5 条要点，含做了什么、耗时、效率、下一步建议）。`,
+    `你是开发复盘助手。用粗粒度复盘（不要细步骤清单）。`,
     `项目：${proj.name}`,
     `目标：${proj.goal || '（未填写）'}`,
     `累计投入：约 ${Math.round(trailMinutes / 60)}h`,
     `任务（${ts.length} 个）：已完成 ${done.map((t) => t.title).join('、') || '无'}；待办 ${pending.map((t) => t.title).join('、') || '无'}`,
     ``,
-    `用简洁中文，分点输出。`
+    `输出 3～5 条要点，必须覆盖：`,
+    `1) 做到了哪些目的/优化了哪些方面`,
+    `2) 耗时与效率观感（一句话）`,
+    `3) 「未实现/未完成」单独列出来（有则必写，禁止省略）`,
+    `4) 下一步只写 1～2 个粗目标`,
+    `用简洁中文分点输出。`
   ].join('\n')
   try {
     const raw = await llmChat([{ role: 'user', content: prompt }])

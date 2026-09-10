@@ -3,11 +3,11 @@
  * 项目 → 任务 → 状态切换 / AI 拆解 / 开发时间归类
  */
 import { useCallback, useEffect, useState } from 'react'
-import type { Project, ProjectTask } from '@shared/types'
+import type { KnowledgeItem, Project, ProjectTask } from '@shared/types'
 import { fuzzyMatch } from '@shared/fuzzy'
 import { Icon } from '../components/Icon'
 import { displayApp } from '@shared/appDisplayName'
-import { fmtMin } from '../components/utils'
+import { fmtMin, todayKey } from '../components/utils'
 
 const STATUS_LABEL: Record<ProjectTask['status'], string> = {
   todo: '待做', in_progress: '进行中', done: '完成', blocked: '阻塞'
@@ -22,16 +22,35 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
   const [newName, setNewName] = useState('')
   const [adding, setAdding] = useState(false)
   const [breakdown, setBreakdown] = useState<{ projectId: string; open: boolean; req: string; loading: boolean }>({ projectId: '', open: false, req: '', loading: false })
+  /** 进展回传：粘贴开发工具回复 → 整理待办/进度 */
+  const [progressIn, setProgressIn] = useState<{
+    projectId: string
+    open: boolean
+    text: string
+    loading: boolean
+    diff: {
+      completed: string[]
+      added: string[]
+      completedTasks: string[]
+      addedTasks: string[]
+      deferred: string[]
+      progressNote: string
+      summary?: string
+    } | null
+  }>({ projectId: '', open: false, text: '', loading: false, diff: null })
+  const [loopTip, setLoopTip] = useState('')
   const [linkedApps, setLinkedApps] = useState<Record<string, string[]>>({})
   const [activeProject, setActiveProject] = useState<string | null>(null)
   const [manualApp, setManualApp] = useState('')
   const [err, setErr] = useState<string | null>(null)
+  const [dossiers, setDossiers] = useState<Record<string, KnowledgeItem[]>>({})
   /** AI 排期结果 + 加载态 */
   const [schedule, setSchedule] = useState<{ taskId: string; title: string; projectName: string; priority: string; estMin: number; reason: string }[] | null>(null)
   const [scheduleLoading, setScheduleLoading] = useState(false)
   const [scheduleOpen, setScheduleOpen] = useState(false)
   /** AI 复盘：projectId → { loading, text } */
   const [review, setReview] = useState<Record<string, { loading: boolean; text: string }>>({})
+  const [pushing, setPushing] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const ps = (await window.api.listProjects()) as Project[]
@@ -52,6 +71,14 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
   const loadTasks = async (pid: string) => {
     const ts = (await window.api.listProjectTasks(pid)) as ProjectTask[]
     setTasks((prev) => ({ ...prev, [pid]: ts }))
+    try {
+      const list = (await (
+        window.api as { listProcessDossiers?: (id?: string) => Promise<KnowledgeItem[]> }
+      ).listProcessDossiers?.(pid)) as KnowledgeItem[] | undefined
+      setDossiers((prev) => ({ ...prev, [pid]: Array.isArray(list) ? list.slice(0, 8) : [] }))
+    } catch {
+      setDossiers((prev) => ({ ...prev, [pid]: [] }))
+    }
   }
   /** 反显：挂到本项目的每日待办（PlanItem.projectId） */
   const [linkedPlans, setLinkedPlans] = useState<Record<string, { id: string; title: string; status: string }[]>>({})
@@ -177,6 +204,76 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
     }
   }
 
+  const exportProgressCard = async (pid: string): Promise<void> => {
+    try {
+      const card = (await window.api.buildStatusCard(pid)) as { markdown: string; projectName: string }
+      await navigator.clipboard.writeText(card.markdown)
+      setLoopTip(`「${card.projectName}」反哺提示词已复制 · 贴给开发 AI → 把回复贴回「粘贴回传」`)
+      window.setTimeout(() => setLoopTip(''), 3200)
+    } catch (e) {
+      setErr(`导出失败：${(e as Error).message || '未知错误'}`)
+    }
+  }
+
+  const summarizeProgressIn = async (): Promise<void> => {
+    if (!progressIn.projectId || !progressIn.text.trim()) return
+    setProgressIn((s) => ({ ...s, loading: true }))
+    try {
+      const api = window.api as {
+        summarizeStatusCard?: (projectId: string, text: string) => Promise<{
+          completed: string[]
+          added: string[]
+          completedTasks: string[]
+          addedTasks: string[]
+          deferred?: string[]
+          progressNote: string
+          summary?: string
+        }>
+      }
+      const diff = await api.summarizeStatusCard?.(progressIn.projectId, progressIn.text)
+      setProgressIn((s) => ({
+        ...s,
+        loading: false,
+        diff: {
+          completed: diff?.completed ?? [],
+          added: diff?.added ?? [],
+          completedTasks: diff?.completedTasks ?? [],
+          addedTasks: diff?.addedTasks ?? [],
+          deferred: diff?.deferred ?? [],
+          progressNote: diff?.progressNote ?? '',
+          summary: diff?.summary
+        }
+      }))
+    } catch (e) {
+      setErr(`整理失败：${(e as Error).message || '未知错误'}`)
+      setProgressIn((s) => ({ ...s, loading: false }))
+    }
+  }
+
+  const applyProgressIn = async (): Promise<void> => {
+    if (!progressIn.diff || !progressIn.projectId) return
+    try {
+      const r = (await window.api.applyCardDiff({ ...progressIn.diff, projectId: progressIn.projectId })) as {
+        completed?: number
+        added?: number
+        completedTasks?: number
+        addedTasks?: number
+        deferred?: number
+        progressUpdated?: boolean
+      }
+      setLoopTip(
+        `已更新：待办完成 ${r.completed ?? 0} · 新增 ${r.added ?? 0} · 未实现 ${r.deferred ?? 0} · 任务完成 ${r.completedTasks ?? 0} · 新任务 ${r.addedTasks ?? 0}` +
+          (r.progressUpdated ? ' · 进展已写入' : '')
+      )
+      window.setTimeout(() => setLoopTip(''), 3200)
+      setProgressIn({ projectId: '', open: false, text: '', loading: false, diff: null })
+      await load()
+      await loadTasks(progressIn.projectId)
+    } catch (e) {
+      setErr(`应用失败：${(e as Error).message || '未知错误'}`)
+    }
+  }
+
   /** AI 任务排期：生成今日建议安排 */
   const doSchedule = async () => {
     setScheduleLoading(true)
@@ -214,6 +311,49 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
     await load()
   }
 
+  /** 把跨天项目任务排入「今日安排」成一条 PlanItem */
+  const pushTaskToToday = async (opts: {
+    projectId: string
+    projectName: string
+    taskId: string
+    title: string
+    status?: ProjectTask['status']
+  }): Promise<void> => {
+    if (opts.status === 'done') return
+    setPushing(opts.taskId)
+    try {
+      const day = todayKey()
+      const existing = ((await window.api.listPlans?.(day)) as { id: string; title: string; projectTaskId?: string; archived?: boolean }[]) ?? []
+      const hit = existing.find((p) => !p.archived && (p.projectTaskId === opts.taskId || p.title === opts.title))
+      if (hit) {
+        setLoopTip(`「${opts.title}」已在今日安排中`)
+        window.dispatchEvent(new CustomEvent('workon:goto-today'))
+        return
+      }
+      await window.api.savePlan({
+        date: day,
+        title: opts.title,
+        category: 'ai-dev',
+        status: 'planned',
+        source: 'import',
+        planType: 'task',
+        projectId: opts.projectId,
+        projectTaskId: opts.taskId,
+        note: `排自项目「${opts.projectName}」`
+      })
+      setLoopTip(`已排入今日：${opts.title}`)
+      await loadTasks(opts.projectId)
+      const pl = ((await window.api.listPlans?.(day)) as { id: string; title: string; status: string; projectId?: string; archived?: boolean }[]) ?? []
+      const mine = pl.filter((x) => !x.archived && x.projectId === opts.projectId).map((x) => ({ id: x.id, title: x.title, status: x.status }))
+      setLinkedPlans((m) => ({ ...m, [opts.projectId]: mine }))
+      window.dispatchEvent(new CustomEvent('workon:goto-today'))
+    } catch (e) {
+      setErr(`排入今日失败：${(e as Error).message || '未知错误'}`)
+    } finally {
+      setPushing(null)
+    }
+  }
+
   const todayMinFor = (pid: string) => {
     if (!trail) return 0
     const apps = linkedApps[pid] ?? []
@@ -227,16 +367,24 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
   }
 
   return (
-    <section className="glass-card anim-fade-up" style={{ animationDelay: '300ms' }}>
-      <div className="mb-3 flex items-center gap-2.5">
+    <section className="anim-fade-up flex flex-col gap-3">
+      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3.5 py-3">
+        <div className="text-[13px] font-semibold text-slate-100">跨天任务池</div>
+        <div className="mt-0.5 text-[11px] leading-snug text-slate-500">
+          管目标、清单与进展反哺；排入今日后才会出现在「今日安排」。
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02]">
+      <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.05] px-3 py-2.5">
         <span
           className="flex h-6 w-6 items-center justify-center rounded-lg border"
           style={{ background: 'var(--accent-softer)', borderColor: 'var(--border-active)', color: 'var(--accent)' }}
         >
-          <Icon name="target" size={13} />
+          <Icon name="folder" size={13} />
         </span>
-        <h3 className="text-[13px] font-semibold text-slate-200">项目 · AI 开发管理</h3>
-        <span className="text-[11px] text-slate-500">{projects.length} 个项目</span>
+        <h3 className="text-[13px] font-semibold text-slate-200">项目列表</h3>
+        <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] tabular-nums text-slate-400">{projects.length}</span>
         <div className="flex-1" />
         {adding ? (
           <div className="flex items-center gap-1.5">
@@ -260,9 +408,13 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
           <Icon name="sparkles" size={12} className={scheduleLoading ? 'animate-pulse' : ''} /> {scheduleLoading ? '排期中…' : 'AI 排期'}
         </button>
       </div>
+      <div className="p-2">
 
       {err ? (
         <div className="mb-2 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-1.5 text-[11px] text-red-300">{err}</div>
+      ) : null}
+      {loopTip ? (
+        <div className="mb-2 rounded-lg border border-[rgba(15,181,164,0.25)] bg-[rgba(15,181,164,0.08)] px-3 py-1.5 text-[11px] text-[var(--teal-deep)]">{loopTip}</div>
       ) : null}
       {projects.length === 0 ? (
         <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] py-6 text-center">
@@ -328,8 +480,17 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
 
                 {isExpanded ? (
                   <div className="anim-fade-in border-t border-white/[0.05] px-3 py-2">
-                    {/* AI 拆解入口 */}
-                    <div className="mb-2 flex items-center gap-1.5">
+                    <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                      <button className="glass-btn !px-2 !py-1 !text-[11px]" onClick={() => void exportProgressCard(p.id)} title="复制反哺提示词：贴给 Cursor/开发 AI，要进展+下一步计划">
+                        复制反哺提示词
+                      </button>
+                      <button
+                        className="glass-btn !px-2 !py-1 !text-[11px]"
+                        onClick={() => setProgressIn({ projectId: p.id, open: true, text: '', loading: false, diff: null })}
+                        title="把开发 AI 的回复贴回来：写入进展 + 导入下一步待办"
+                      >
+                        粘贴回传
+                      </button>
                       <button className="glass-btn !px-2 !py-1 !text-[11px]" onClick={() => setBreakdown({ projectId: p.id, open: true, req: '', loading: false })}>
                         <Icon name="sparkles" size={11} /> AI 拆解需求
                       </button>
@@ -342,6 +503,57 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                         onKeyDown={(e) => { if (e.key === 'Enter') { void addTask(p.id, (e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = '' } }}
                       />
                     </div>
+                    {p.attrs?.['最近进展'] ? (
+                      <div className="mb-2 whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-white/[0.02] px-2.5 py-1.5 text-[11px] leading-relaxed text-slate-300">
+                        <span className="text-[10px] uppercase tracking-wider text-slate-600">最近进展 · </span>
+                        {String(p.attrs['最近进展'])}
+                      </div>
+                    ) : null}
+                    {(dossiers[p.id] ?? []).length ? (
+                      <div className="mb-2 rounded-lg border border-[var(--line)] bg-white/[0.02] px-2.5 py-1.5">
+                        <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-600">相关过程案卷</div>
+                        <div className="space-y-1">
+                          {(dossiers[p.id] ?? []).map((d) => (
+                            <div key={d.id} className="truncate text-[11px] text-slate-300" title={d.title}>
+                              {d.title}
+                              {d.categoryName ? <span className="ml-1 text-[10px] text-slate-500">· {d.categoryName}</span> : null}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    {progressIn.open && progressIn.projectId === p.id ? (
+                      <div className="mb-2 rounded-lg border border-white/[0.07] bg-white/[0.02] p-2">
+                        <div className="mb-1 text-[10px] text-slate-500">贴回开发 AI 回复 → 写入进展与未实现，并把「今日粗目标」导入待办</div>
+                        <textarea
+                          className="glass-input !py-1 !text-[11px]"
+                          rows={4}
+                          placeholder="把开发工具补完后的内容贴在这里…"
+                          value={progressIn.text}
+                          onChange={(e) => setProgressIn((s) => ({ ...s, text: e.target.value, diff: null }))}
+                        />
+                        {progressIn.diff ? (
+                          <div className="mt-1.5 space-y-0.5 rounded-md border border-[var(--line)] p-2 text-[11px]">
+                            {progressIn.diff.summary ? <div className="text-slate-400">摘要：{progressIn.diff.summary}</div> : null}
+                            {progressIn.diff.progressNote ? <div className="whitespace-pre-wrap text-slate-300">进展：{progressIn.diff.progressNote}</div> : null}
+                            {progressIn.diff.completed.map((t, i) => <div key={`c${i}`} className="text-[var(--teal-deep)]">☑ 待办完成：{t}</div>)}
+                            {progressIn.diff.added.map((t, i) => <div key={`a${i}`} className="text-[#fbbf24]">➕ 今日目标：{t}</div>)}
+                            {progressIn.diff.deferred.map((t, i) => <div key={`d${i}`} className="text-neon-amber/90">⏳ 未实现：{t}</div>)}
+                            {progressIn.diff.completedTasks.map((t, i) => <div key={`ct${i}`} className="text-[var(--teal-deep)]">☑ 任务完成：{t}</div>)}
+                            {progressIn.diff.addedTasks.map((t, i) => <div key={`at${i}`} className="text-[#fbbf24]">➕ 新任务：{t}</div>)}
+                          </div>
+                        ) : null}
+                        <div className="mt-1.5 flex justify-end gap-1.5">
+                          <button className="glass-btn !px-2 !py-1 !text-[10px]" onClick={() => setProgressIn({ projectId: '', open: false, text: '', loading: false, diff: null })}>取消</button>
+                          <button className="glass-btn !px-2 !py-1 !text-[10px]" disabled={progressIn.loading || !progressIn.text.trim()} onClick={() => void summarizeProgressIn()}>
+                            {progressIn.loading ? '整理中…' : 'AI 整理'}
+                          </button>
+                          <button className="glass-btn primary !px-2 !py-1 !text-[10px]" disabled={!progressIn.diff} onClick={() => void applyProgressIn()}>
+                            应用更新
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                     {/* 属性袋（v7.1）：可拖动小卡，有数据才渲染 */}
                     {(p.attrOrder ?? Object.keys(p.attrs ?? {})).length ? (
                       <div className="mb-2 flex flex-wrap gap-1.5">
@@ -406,7 +618,7 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                     )}
                     {(linkedPlans[p.id]?.length ?? 0) > 0 ? (
                       <div className="mb-2 border-t border-dashed border-[var(--line)] pt-2">
-                        <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-600">✦ 关联的每日待办</div>
+                        <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-600">今日安排里已挂本项目</div>
                         {linkedPlans[p.id]!.map((pl) => (
                           <button
                             key={pl.id}
@@ -429,7 +641,7 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                         <textarea
                           className="glass-input !py-1 !text-[11px]"
                           rows={2}
-                          placeholder="描述需求，AI 将拆解为任务列表…"
+                          placeholder="描述今日目的或要优化的方面，AI 会整理成 2～5 条粗目标…"
                           value={breakdown.req}
                           onChange={(e) => setBreakdown((b) => ({ ...b, req: e.target.value }))}
                         />
@@ -459,6 +671,22 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                                 <Icon name="check" size={10} />
                               </button>
                               <span className={`min-w-0 flex-1 truncate text-[12px] ${t.status === 'done' ? 'text-slate-500 line-through' : 'text-slate-300'}`}>{t.title}</span>
+                              {t.status !== 'done' ? (
+                                <button
+                                  className="glass-btn !px-1.5 !py-0.5 !text-[10px]"
+                                  disabled={pushing === t.id}
+                                  title="写入今日安排，带上项目归属"
+                                  onClick={() => void pushTaskToToday({
+                                    projectId: p.id,
+                                    projectName: p.name,
+                                    taskId: t.id,
+                                    title: t.title,
+                                    status: t.status
+                                  })}
+                                >
+                                  {pushing === t.id ? '…' : '排入今日'}
+                                </button>
+                              ) : null}
                               <select
                                 className="glass-input !w-16 !py-0.5 !px-1 !text-[10px]"
                                 value={t.status}
@@ -516,6 +744,7 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
               <div className="flex flex-col gap-2">
                 {schedule.map((s, i) => {
                   const pc = { high: '#EF4444', medium: '#F59E0B', low: '#94a3b8' }[s.priority as 'high' | 'medium' | 'low'] ?? '#F59E0B'
+                  const proj = projects.find((x) => x.name === s.projectName)
                   return (
                     <div key={s.taskId} className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
                       <div className="flex items-center gap-2">
@@ -523,6 +752,20 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                         <span className="min-w-0 flex-1 truncate text-[12px] text-slate-200">{s.title}</span>
                         <span className="chip !py-0 !text-[9px]" style={{ color: pc, borderColor: `${pc}44` }}>{s.priority}</span>
                         <span className="text-[10px] text-slate-500">{s.projectName}</span>
+                        {proj ? (
+                          <button
+                            className="glass-btn primary !px-1.5 !py-0.5 !text-[10px]"
+                            disabled={pushing === s.taskId}
+                            onClick={() => void pushTaskToToday({
+                              projectId: proj.id,
+                              projectName: proj.name,
+                              taskId: s.taskId,
+                              title: s.title
+                            })}
+                          >
+                            排入今日
+                          </button>
+                        ) : null}
                       </div>
                       <div className="mt-1 pl-7 text-[11px] text-slate-500">{s.reason}</div>
                     </div>
@@ -532,12 +775,15 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
             ) : (
               <p className="py-4 text-center text-[12px] text-slate-400">没有待办任务可排期，先去创建或 AI 拆解任务吧。</p>
             )}
-            <div className="mt-4 flex justify-end">
+            <div className="mt-4 flex justify-end gap-2">
+              <button className="glass-btn text-[12px]" onClick={() => { setScheduleOpen(false); window.dispatchEvent(new CustomEvent('workon:goto-today')) }}>去今日安排</button>
               <button className="glass-btn" onClick={() => setScheduleOpen(false)}>关闭</button>
             </div>
           </div>
         </div>
       ) : null}
+      </div>
+      </div>
     </section>
   )
 }

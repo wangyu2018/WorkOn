@@ -16,6 +16,17 @@ import { matchesExcludedApp } from '@shared/stateMeta'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAppStore } from '../stores/appStore'
 import { CATEGORY_META, categoryOfWithOverride, type AppCategory } from '@shared/appCategory'
+import MonitorView, { MONITOR_SECTION_META, type MonitorSectionKey } from './MonitorView'
+import {
+  buildHomeRenderSlots,
+  HOME_BLOCK_META,
+  loadHomeOrder,
+  loadHomeWidgets,
+  metaOf,
+  saveHomeLayout,
+  type HomeBlockKey,
+  type HomeWidgets
+} from '../lib/homeLayout'
 
 type Channel = 'CMD' | '浏览器' | '微信' | 'IDE' | '其他'
 type Column = 'work' | 'life'
@@ -321,15 +332,12 @@ function insight(trail: MergedTrail, recent: MergedTrail[]): DailyInsight {
 }
 
 export default function HomeView() {
-  /** 主页模块显隐（类似小组件管理，localStorage 持久化） */
-  const [widgets, setWidgets] = useState<{ insight: boolean; timeline: boolean; starmap: boolean }>(() => {
-    try {
-      const s = localStorage.getItem('homeWidgets')
-      if (s) return { insight: true, timeline: true, starmap: true, ...JSON.parse(s) }
-    } catch { /* ignore */ }
-    return { insight: true, timeline: true, starmap: true }
-  })
+  /** 主页模块显隐 + 拖拽顺序 */
+  const [widgets, setWidgets] = useState<HomeWidgets>(() => loadHomeWidgets())
+  const [homeOrder, setHomeOrder] = useState<HomeBlockKey[]>(() => loadHomeOrder())
   const [editing, setEditing] = useState(false)
+  const [dragKey, setDragKey] = useState<HomeBlockKey | null>(null)
+  const [dragOverKey, setDragOverKey] = useState<HomeBlockKey | null>(null)
 /** KPI 卡点击 → 跳转报表对应页签 */
 function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'): void {
   window.dispatchEvent(new CustomEvent('workon:goto-report', { detail: { tab, kpi } }))
@@ -338,13 +346,30 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
 
   /** 洞察卡对标基线：yest=昨日同期 week=近7天同期 d30=近30天均值 best=高效日同期 */
   const [baselineKey, setBaselineKey] = useState<BaselineKey>('d30')
-  const setWidget = (k: 'insight' | 'timeline' | 'starmap', v: boolean) => {
-    setWidgets((prev) => {
-      const next = { ...prev, [k]: v }
-      try { localStorage.setItem('homeWidgets', JSON.stringify(next)) } catch { /* ignore */ }
-      return next
-    })
+  const persistLayout = (nextWidgets: HomeWidgets, nextOrder: HomeBlockKey[]) => {
+    setWidgets(nextWidgets)
+    setHomeOrder(nextOrder)
+    saveHomeLayout(nextWidgets, nextOrder)
   }
+  const setWidget = (k: HomeBlockKey, v: boolean) => {
+    persistLayout({ ...widgets, [k]: v }, homeOrder)
+  }
+  const reorderBlock = (from: HomeBlockKey, to: HomeBlockKey) => {
+    if (from === to) return
+    const next = [...homeOrder]
+    const fi = next.indexOf(from)
+    const ti = next.indexOf(to)
+    if (fi < 0 || ti < 0) return
+    next.splice(fi, 1)
+    next.splice(ti, 0, from)
+    persistLayout(widgets, next)
+  }
+  const renderSlots = useMemo(() => buildHomeRenderSlots(homeOrder, widgets), [homeOrder, widgets])
+  const monitorSectionsFor = (keys: MonitorSectionKey[]) =>
+    Object.fromEntries(MONITOR_SECTION_META.map(({ key }) => [key, keys.includes(key)])) as Record<
+      MonitorSectionKey,
+      boolean
+    >
   /** 用户自定义分类覆盖（星图分类层 + 时间轴分类组共用） */
   const override = useSettingsStore((s) => s.settings.appCategoryOverride)
   /** 应用视觉元数据：进程名(小写) → { iconDataUrl, themeColor } */
@@ -791,7 +816,13 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
     setRangeLo(Math.round(lo))
     setRangeHi(Math.round(hi))
   }
-  const onRulerPointerUp = () => { panRef.current = null }
+  const onRulerPointerUp = (e: React.PointerEvent) => {
+    panRef.current = null
+    const el = rangeRef.current
+    try {
+      if (el?.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId)
+    } catch { /* ignore */ }
+  }
 
   // 滚轮缩放：以鼠标位置为中心缩放时间范围
   const onRulerWheel = (e: React.WheelEvent) => {
@@ -994,8 +1025,136 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-auto">
-      {widgets.insight ? (
-      <>
+      {/* 编辑布局：大卡片 + 拖拽排序 */}
+      {editing ? (
+        <div className="glass-card anim-scale-in sticky top-0 z-20 flex flex-col gap-3 !p-4" style={{ boxShadow: 'var(--shadow-md)' }}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] font-semibold text-slate-100">首页布局</span>
+            <span className="text-[11px] text-slate-500">拖拽左侧把手调整顺序 · 点开关显隐 · 自动记住</span>
+            <button className="glass-btn primary ml-auto !px-3 !py-1 !text-[11px]" onClick={() => setEditing(false)}>
+              完成
+            </button>
+          </div>
+          <div className="flex flex-col gap-2">
+            {homeOrder.map((key) => {
+              const meta = metaOf(key)
+              const on = !!widgets[key]
+              const dragging = dragKey === key
+              const over = dragOverKey === key && dragKey && dragKey !== key
+              return (
+                <div
+                  key={key}
+                  draggable
+                  onDragStart={(e) => {
+                    setDragKey(key)
+                    e.dataTransfer.effectAllowed = 'move'
+                    e.dataTransfer.setData('text/home-block', key)
+                  }}
+                  onDragEnd={() => {
+                    setDragKey(null)
+                    setDragOverKey(null)
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                    setDragOverKey(key)
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    const from = (e.dataTransfer.getData('text/home-block') || dragKey) as HomeBlockKey | null
+                    if (from) reorderBlock(from, key)
+                    setDragKey(null)
+                    setDragOverKey(null)
+                  }}
+                  className={`flex items-stretch gap-3 rounded-xl border px-3 py-2.5 transition-all ${
+                    dragging ? 'opacity-40' : over ? 'border-[var(--border-active)] bg-[var(--accent-softer)]' : 'border-[var(--line)] bg-[var(--surface-2)]'
+                  } ${on ? '' : 'opacity-55'}`}
+                >
+                  <div
+                    className="flex cursor-grab items-center px-1 text-slate-500 active:cursor-grabbing"
+                    title="拖动排序"
+                    aria-label="拖动排序"
+                  >
+                    <span className="select-none text-[14px] leading-none tracking-tighter">⠿</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[13px] font-semibold text-slate-100">{meta.label}</span>
+                      <span
+                        className="rounded-md px-1.5 py-0.5 text-[10px] font-bold"
+                        style={{
+                          background: meta.size === '整行' ? 'rgba(15,181,164,0.18)' : 'rgba(139,92,246,0.18)',
+                          color: meta.size === '整行' ? 'var(--teal-deep)' : '#c4b5fd'
+                        }}
+                      >
+                        {meta.size}
+                      </span>
+                      <span className="rounded-md border border-white/[0.08] px-1.5 py-0.5 text-[10px] text-slate-500">
+                        {meta.group}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-[11px] leading-snug text-slate-500">{meta.desc}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className={`shrink-0 self-center rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${
+                      on
+                        ? 'border-[rgba(15,181,164,0.4)] bg-[var(--teal-soft)] text-[var(--teal-deep)]'
+                        : 'border-white/10 text-slate-500'
+                    }`}
+                    onClick={() => setWidget(key, !on)}
+                  >
+                    {on ? '显示中' : '已隐藏'}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+          <div className="flex flex-wrap gap-2 border-t border-white/[0.06] pt-2">
+            <button
+              type="button"
+              className="glass-btn !text-[11px]"
+              onClick={() => {
+                const next = { ...widgets }
+                for (const m of HOME_BLOCK_META) next[m.key] = true
+                persistLayout(next, homeOrder)
+              }}
+            >
+              全部显示
+            </button>
+            <button
+              type="button"
+              className="glass-btn !text-[11px]"
+              onClick={() => {
+                const next = { ...widgets }
+                for (const m of HOME_BLOCK_META) next[m.key] = false
+                persistLayout(next, homeOrder)
+              }}
+            >
+              全部隐藏
+            </button>
+            <button
+              type="button"
+              className="glass-btn !text-[11px]"
+              onClick={() => persistLayout(widgets, [...HOME_BLOCK_META.map((m) => m.key)])}
+            >
+              恢复默认顺序
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {renderSlots.map((slot, si) => {
+        if (slot.kind === 'monitor') {
+          return (
+            <section key={`mon-${si}-${slot.keys.join('-')}`} className="flex flex-col gap-4">
+              <MonitorView embedded sections={monitorSectionsFor(slot.keys)} sectionOrder={slot.keys} />
+            </section>
+          )
+        }
+        if (slot.key === 'insight') {
+          return (
+      <div key="insight">
       {/* 今日洞察 */}
       <section className="glass-card hoverable">
         <div className="mb-2.5 flex items-center gap-2.5">
@@ -1128,11 +1287,12 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
           <p className="text-[13px] text-slate-400 leading-relaxed">加载中...</p>
         )}
       </section>
-      </>
-      ) : null}
-
-      {widgets.timeline ? (
-      <>
+      </div>
+          )
+        }
+        if (slot.key === 'timeline') {
+          return (
+      <div key="timeline">
       {/* 时间轴 — 水平泳道 */}
       <section className="glass-card">
         <div className="mb-3 flex items-center gap-2.5">
@@ -1501,8 +1661,6 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
             </div>
           </div>
       </section>
-      </>
-      ) : null}
 
       {tlHover && createPortal(
         <ActivityHoverCard
@@ -1529,8 +1687,12 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
         document.body
       )}
 
-      {widgets.starmap ? (
-      <>
+      </div>
+          )
+        }
+        if (slot.key === 'starmap') {
+          return (
+      <div key="starmap">
       {/* v6 应用星图：星空画布 + 双星团（左=工作 / 右=摸鱼）+ 切换连线（近 7 天聚合） */}
       <section className="glass-card hoverable">
         <div className="flex items-center justify-between mb-2 px-1">
@@ -1613,42 +1775,23 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
           </span>
         </div>
       </section>
-      </>
-      ) : null}
+      </div>
+          )
+        }
+        return null
+      })}
 
       {/* 底部编辑按钮（小组件管理风格） */}
+      {!editing ? (
       <div className="flex items-center justify-center py-1">
         <button
-          className="glass-btn !px-3 !py-1 !text-[11px]"
-          onClick={() => setEditing((e) => !e)}
-          title="管理首页模块"
+          className="glass-btn !px-3 !py-1.5 !text-[12px]"
+          onClick={() => setEditing(true)}
+          title="拖拽调整首页模块顺序与显隐"
         >
-          <Icon name="sliders" size={12} /> {editing ? '完成' : '编辑'}
+          <Icon name="sliders" size={12} /> 编辑布局
         </button>
       </div>
-      {editing ? (
-        <div className="glass-card anim-scale-in flex items-center gap-2 !p-3">
-          <span className="text-[12px] font-medium text-slate-300">首页模块：</span>
-          <button
-            className={`chip ${widgets.insight ? '!text-neon-green' : 'opacity-50'}`}
-            onClick={() => setWidget('insight', !widgets.insight)}
-          >
-            今日洞察 {widgets.insight ? '✓' : '✕'}
-          </button>
-          <button
-            className={`chip ${widgets.timeline ? '!text-neon-green' : 'opacity-50'}`}
-            onClick={() => setWidget('timeline', !widgets.timeline)}
-          >
-            时间轴 {widgets.timeline ? '✓' : '✕'}
-          </button>
-          <button
-            className={`chip ${widgets.starmap ? '!text-neon-green' : 'opacity-50'}`}
-            onClick={() => setWidget('starmap', !widgets.starmap)}
-          >
-            应用星图 {widgets.starmap ? '✓' : '✕'}
-          </button>
-          <span className="ml-auto text-[10px] text-slate-600">点击切换显隐 · 选择会记住</span>
-        </div>
       ) : null}
 
       {/* 不再记录确认弹窗 */}

@@ -55,14 +55,15 @@ export function SectionDivider({ label }: { label?: string }) {
 /** 萤火虫光晕包裹层：有待确认信息时 violet 缓脉（3s 周期，不刺眼） */
 export function Firefly({ active, children }: { active: boolean; children: React.ReactNode }) {
   if (!active) return <>{children}</>
+  // 不用外扩 box-shadow：Windows 透明窗上阴影的矩形包围盒会变成半透明底框
   return (
-    <div className="wkd-firefly relative w-full">
+    <div className="wkd-firefly relative h-full w-full min-h-0">
       {children}
       <style>{`
-        .wkd-firefly { animation: wkd-fire 3s ease-in-out infinite; border-radius: 999px; }
+        .wkd-firefly { animation: wkd-fire 3s ease-in-out infinite; border-radius: inherit; }
         @keyframes wkd-fire {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,0), 0 0 0 1px rgba(139,92,246,0); }
-          50% { box-shadow: 0 0 14px 2px rgba(139,92,246,0.35), 0 0 0 1px rgba(139,92,246,0.45); }
+          0%, 100% { filter: brightness(1); }
+          50% { filter: brightness(1.08); }
         }
       `}</style>
     </div>

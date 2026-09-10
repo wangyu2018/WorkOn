@@ -5,8 +5,9 @@
  * - 免打扰：petDndUntilTs 期间静默；petCareEnabled 总开关
  */
 import { col } from './db'
-import { getSettings, setSettings } from './settings'
+import { getSettings } from './settings'
 import { bus } from './state'
+import { emitPetIntent } from './petIntent'
 import { pushNotify } from './notify'
 import { dateKey } from '@shared/trail'
 import { getFocusChainState } from './focusChain'
@@ -57,7 +58,9 @@ export function careTick(): void {
   ) {
     lastCareAt = now
     const h = Math.floor(lastContinuousSec / 3600)
-    bus.setPet({ message: `你已经连续坐了 ${h} 小时啦，肩膀是不是有点僵？起来倒杯水、看看窗外～` })
+    emitPetIntent('nudge', {
+      message: `你已经连续坐了 ${h} 小时啦，肩膀是不是有点僵？起来倒杯水、看看窗外～`
+    })
     pushNotify('rest', '连续专注提醒', `你已经专注 ${h} 小时啦，起来接杯水，让眼睛也放个假。`, [
       { label: '开始休息', action: 'dismiss', primary: true },
       { label: '30 分钟后叫我', action: 'snooze' }
@@ -72,10 +75,16 @@ export function careTick(): void {
     const yesterday = doneCount(dateKey(now - 86400_000))
     if (today >= 3 && today > yesterday) {
       lastMilestoneDay = day
-      bus.setPet({ message: `今天已经干完 ${today} 个待办，比昨天多 ${Math.max(1, today - yesterday)} 个，别对自己太狠 🎉` })
-      pushNotify('ai', '里程碑达成', `今日已完成 ${today} 个待办，超过昨天全天。奖励自己休息 5 分钟吧～`, [
-        { label: '太好了', action: 'dismiss', primary: true }
-      ], 30)
+      emitPetIntent('celebrate', {
+        message: `今天已经干完 ${today} 个待办，比昨天多 ${Math.max(1, today - yesterday)} 个，别对自己太狠 🎉`
+      })
+      pushNotify(
+        'ai',
+        '🎉 里程碑达成',
+        `今日已完成 ${today} 个待办，超过昨天全天（昨天 ${yesterday} 个）。奖励自己休息 5 分钟吧～`,
+        [{ label: '太好了', action: 'dismiss', primary: true }],
+        35
+      )
     }
   }
 
@@ -94,7 +103,11 @@ export function careTick(): void {
         21: '再一小时就收拾收工吧 🌙'
       }
       const m = msgs[hour]
-      if (m) bus.setPet({ message: m })
+      if (m) {
+        // 傍晚收工相关带挥手；其余只气泡，避免每两小时都打断姿态
+        if (hour >= 18) emitPetIntent('offwork', { message: m })
+        else bus.setPet({ message: m })
+      }
     }
   }
 }

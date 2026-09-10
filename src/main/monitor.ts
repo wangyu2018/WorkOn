@@ -231,6 +231,14 @@ async function tick(): Promise<void> {
     automationOnFocusTick(presence.getSnapshot().continuousFocusSec ?? 0)
     // 归属引擎 + 目录活动落库（项目循环）；隐私排除应用不参与归属
     attributionTick(excluded ? '' : corrected.app || '', excluded ? '' : safeTitle || '', ts, idleSec, excluded, state)
+    if (!excluded) {
+      try {
+        const { touchProcessDraft } = require('./processDraft') as typeof import('./processDraft')
+        touchProcessDraft(corrected.app || '', safeTitle || '', ts)
+      } catch {
+        /* ignore */
+      }
+    }
     dirWatcherTick()
     dispatchConfirmQueue()
 

@@ -459,6 +459,10 @@ export default function ProfileView() {
   const [exportNote, setExportNote] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [confirmClearLogs, setConfirmClearLogs] = useState(false)
+  /** 左栏：按隐私级折叠的人物层组（收起在底部，点开再展开子项） */
+  const [openNavLevel, setOpenNavLevel] = useState<PrivacyLevel | null>('L0')
+  /** 隐私页：L0–L4 手风琴，默认收起细节，点行展开说明 */
+  const [openPrivacyLevel, setOpenPrivacyLevel] = useState<PrivacyLevel | null>(null)
 
   const reload = useCallback(async () => {
     try {
@@ -483,6 +487,12 @@ export default function ProfileView() {
   useEffect(() => {
     if (persona) setNick(persona.basicInfo.nickname)
   }, [persona])
+
+  // 选中某人物层时，自动展开对应 L 组
+  useEffect(() => {
+    const meta = PERSONA_LAYERS.find((l) => l.key === sel)
+    if (meta) setOpenNavLevel(meta.level)
+  }, [sel])
 
   // ── 集中操作函数（每次变更后重新拉取画像） ──
   const handleUpdate = async (path: string, value: unknown) => {
@@ -1042,11 +1052,17 @@ export default function ProfileView() {
   )
 
   const renderPrivacy = () => {
-    const cards: { level: 'L0' | 'L1' | 'L2' | 'L3'; includes: string; example: string }[] = [
+    const cards: { level: PrivacyLevel; includes: string; example: string; locked?: boolean }[] = [
       { level: 'L0', includes: '包含：昵称、用户类型、时区、使用天数等基础信息', example: '示例：「你是办公族用户，已使用 WorkOn 42 天」' },
       { level: 'L1', includes: '包含：职业、行业、经验等级、工作模式与偏好设定', example: '示例：「作为中级开发者，你偏好番茄钟工作法」（摘要引用）' },
       { level: 'L2', includes: '包含：行为模式、兴趣爱好、能力技能', example: '示例：「你的高效时段是上午 9-11 点」（聚合统计引用）' },
-      { level: 'L3', includes: '包含：心理画像、关系数据', example: '示例：AI 据此调整语气与干预频率，不在回复中提及数值（策略内化）' }
+      { level: 'L3', includes: '包含：心理画像、关系数据', example: '示例：AI 据此调整语气与干预频率，不在回复中提及数值（策略内化）' },
+      {
+        level: 'L4',
+        locked: true,
+        includes: '包含：真实姓名、联系方式等核心身份信息 — WorkOn 不采集此类数据，AI 永久禁止访问。',
+        example: '该层始终锁定，不可开启 AI 访问。'
+      }
     ]
     return (
       <>
@@ -1068,45 +1084,10 @@ export default function ProfileView() {
           </div>
         </div>
         <div className="mb-3 text-[12px] leading-relaxed text-slate-500">
-          逐层控制 AI 对你画像数据的访问。关闭后对应层数据不再进入 AI 上下文（历史访问记录见「AI 访问日志」）。
-        </div>
-        <div className="flex flex-col gap-3">
-          {cards.map(({ level, includes, example }) => {
-            const pm = PRIVACY_LEVEL_META[level]
-            return (
-              <div key={level} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3.5 transition-colors hover:bg-white/[0.04]">
-                <div className="flex items-center gap-2.5">
-                  <span
-                    className="rounded-md border px-1.5 py-0.5 text-[10px] font-medium"
-                    style={{ color: pm.color, borderColor: `${pm.color}44`, background: `${pm.color}14` }}
-                  >
-                    {level} {pm.label}
-                  </span>
-                  <span className="min-w-0 flex-1 text-[11px] text-slate-500">{pm.desc}</span>
-                  <Toggle checked={aiAccess[level]} onChange={(v) => void handlePrivacy({ [level]: v })} />
-                </div>
-                <div className="mt-2 text-[11px] text-slate-500">{includes}</div>
-                <div className="mt-1 text-[11px] text-slate-600">{example}</div>
-              </div>
-            )
-          })}
-          {/* L4 核心隐私：永远锁定 */}
-          <div className="rounded-xl border border-white/[0.05] bg-white/[0.01] p-3.5 opacity-60">
-            <div className="flex items-center gap-2.5">
-              <span
-                className="rounded-md border px-1.5 py-0.5 text-[10px] font-medium"
-                style={{ color: PRIVACY_LEVEL_META.L4.color, borderColor: `${PRIVACY_LEVEL_META.L4.color}44`, background: `${PRIVACY_LEVEL_META.L4.color}14` }}
-              >
-                L4 {PRIVACY_LEVEL_META.L4.label}
-              </span>
-              <span className="min-w-0 flex-1 text-[11px] text-slate-500">{PRIVACY_LEVEL_META.L4.desc}</span>
-              <span className="text-[11px] text-slate-500">🔒 已锁定</span>
-            </div>
-            <div className="mt-2 text-[11px] text-slate-600">包含：真实姓名、联系方式等核心身份信息 — WorkOn 不采集此类数据，AI 永久禁止访问。</div>
-          </div>
+          逐层控制 AI 对你画像数据的访问。关闭后对应层数据不再进入 AI 上下文（历史访问记录见「AI 访问日志」）。点击下方层级可展开说明。
         </div>
 
-        <div className="mt-4 border-t border-white/[0.06] pt-3">
+        <div className="mb-4 border-t border-white/[0.06] pt-3">
           <div className="mb-2 text-[12px] text-slate-500">数据</div>
           <div className="flex flex-col gap-2">
             <button className="glass-btn w-full !py-2 font-medium" onClick={() => void doExport()}>
@@ -1117,6 +1098,78 @@ export default function ProfileView() {
               <Icon name="trash" size={13} /> 清除 AI 访问日志
             </button>
           </div>
+        </div>
+
+        {/* L0–L4：收起在页面底部，点行展开细节 */}
+        <div className="mt-auto flex flex-col gap-1.5 border-t border-white/[0.06] pt-3">
+          <div className="mb-1 text-[11px] text-slate-500">隐私层级 L0–L4 · 点击展开</div>
+          {cards.map(({ level, includes, example, locked }) => {
+            const pm = PRIVACY_LEVEL_META[level]
+            const open = openPrivacyLevel === level
+            return (
+              <div
+                key={level}
+                className={`overflow-hidden rounded-xl border transition-colors ${
+                  locked ? 'border-white/[0.05] bg-white/[0.01] opacity-70' : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04]'
+                } ${open ? 'border-white/10 bg-white/[0.04]' : ''}`}
+              >
+                <div className="flex items-center gap-2 px-3 py-2.5">
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                    onClick={() => setOpenPrivacyLevel((cur) => (cur === level ? null : level))}
+                    aria-expanded={open}
+                  >
+                    <Icon
+                      name="chevronRight"
+                      size={12}
+                      className={`shrink-0 text-slate-500 transition-transform duration-300 ease-out ${open ? 'rotate-90 text-slate-300' : ''}`}
+                    />
+                    <span
+                      className="shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium"
+                      style={{ color: pm.color, borderColor: `${pm.color}44`, background: `${pm.color}14` }}
+                    >
+                      {level} {pm.label}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[11px] text-slate-500">{pm.desc}</span>
+                  </button>
+                  {locked ? (
+                    <span className="shrink-0 text-[11px] text-slate-500">🔒 已锁定</span>
+                  ) : (
+                    <span
+                      className="shrink-0"
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
+                      <Toggle checked={aiAccess[level as 'L0' | 'L1' | 'L2' | 'L3']} onChange={(v) => void handlePrivacy({ [level]: v })} />
+                    </span>
+                  )}
+                </div>
+                <div className={`profile-accord ${open ? 'is-open' : ''}`}>
+                  <div className="profile-accord-inner">
+                    <div className="profile-accord-body border-t border-white/[0.05] px-3 pb-3 pt-2">
+                      <div className="text-[11px] leading-relaxed text-slate-500">{includes}</div>
+                      <div className="mt-1 text-[11px] leading-relaxed text-slate-600">{example}</div>
+                      {level !== 'L4' ? (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {PERSONA_LAYERS.filter((l) => l.level === level).map((l) => (
+                            <button
+                              key={l.key}
+                              type="button"
+                              className="rounded-md border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 text-[10px] text-slate-400 transition-colors hover:border-neon-cyan/40 hover:text-neon-cyan"
+                              onClick={() => setSel(l.key)}
+                            >
+                              {l.emoji} {l.label}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </>
     )
@@ -1236,28 +1289,62 @@ export default function ProfileView() {
 
       {/* 三栏主体 */}
       <div className="flex min-h-0 flex-1 gap-4">
-        {/* 左导航 */}
-        <aside className="glass-card anim-fade-up w-44 shrink-0 overflow-y-auto !p-2" style={{ animationDelay: '60ms' }}>
-          {PERSONA_LAYERS.map((l) => {
-            const active = sel === l.key
-            const pm = PRIVACY_LEVEL_META[l.level]
+        {/* 左导航：人物 L0–L3 可折叠；评分/隐私/日志仍在最下 */}
+        <aside className="glass-card anim-fade-up flex w-44 shrink-0 flex-col overflow-y-auto !p-2" style={{ animationDelay: '60ms' }}>
+          <div className="mb-1 px-2 text-[10px] uppercase tracking-wide text-slate-600">人物层级</div>
+
+          {(['L0', 'L1', 'L2', 'L3'] as const).map((lv) => {
+            const pm = PRIVACY_LEVEL_META[lv]
+            const layers = PERSONA_LAYERS.filter((l) => l.level === lv)
+            const open = openNavLevel === lv
+            const groupActive = layers.some((l) => l.key === sel)
             return (
-              <button
-                key={l.key}
-                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12px] transition-all duration-150 ${
-                  active ? 'bg-neon-cyan/15 text-neon-cyan shadow-glow' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
-                }`}
-                onClick={() => setSel(l.key)}
-              >
-                <span className="text-[13px] leading-none">{l.emoji}</span>
-                <span className="min-w-0 flex-1 truncate">{l.label}</span>
-                <span className="shrink-0 rounded border px-1 py-px text-[9px]" style={{ color: pm.color, borderColor: `${pm.color}44` }}>
-                  {l.level}
-                </span>
-              </button>
+              <div key={lv} className="mb-0.5">
+                <button
+                  type="button"
+                  className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-[11px] transition-colors ${
+                    groupActive || open ? 'bg-white/[0.04] text-slate-200' : 'text-slate-500 hover:bg-white/[0.03] hover:text-slate-300'
+                  }`}
+                  onClick={() => setOpenNavLevel((cur) => (cur === lv ? null : lv))}
+                  aria-expanded={open}
+                >
+                  <Icon
+                    name="chevronRight"
+                    size={11}
+                    className={`shrink-0 transition-transform duration-300 ease-out ${open ? 'rotate-90' : ''}`}
+                  />
+                  <span className="rounded border px-1 py-px text-[9px]" style={{ color: pm.color, borderColor: `${pm.color}44` }}>
+                    {lv}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{pm.label}</span>
+                  <span className="tabular-nums text-[9px] text-slate-600">{layers.length}</span>
+                </button>
+                <div className={`profile-accord ${open ? 'is-open' : ''}`}>
+                  <div className="profile-accord-inner">
+                    <div className="profile-accord-body flex flex-col gap-0.5 pb-1 pl-1 pt-0.5">
+                      {layers.map((l) => {
+                        const active = sel === l.key
+                        return (
+                          <button
+                            key={l.key}
+                            className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] transition-all duration-150 ${
+                              active ? 'bg-neon-cyan/15 text-neon-cyan shadow-glow' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                            }`}
+                            onClick={() => setSel(l.key)}
+                          >
+                            <span className="text-[13px] leading-none">{l.emoji}</span>
+                            <span className="min-w-0 flex-1 truncate">{l.label}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
             )
           })}
-          <div className="my-2 border-t border-white/[0.06]" />
+
+          <div className="my-2 mt-auto border-t border-white/[0.06]" />
           {(
             [
               ['score', '注意力与评分', 'zap'],
@@ -1282,7 +1369,11 @@ export default function ProfileView() {
         </aside>
 
         {/* 中间内容区 */}
-        <main className="glass-card anim-fade-up min-w-0 flex-1 overflow-y-auto" style={{ animationDelay: '120ms' }} key={sel}>
+        <main
+          className={`glass-card anim-fade-up min-w-0 flex-1 overflow-y-auto ${sel === 'privacy' ? 'flex flex-col' : ''}`}
+          style={{ animationDelay: '120ms' }}
+          key={sel}
+        >
           <h2 className="mb-3 flex items-center gap-2 text-[14px] font-semibold text-slate-200">
             {selMeta ? (
               <>
@@ -1302,10 +1393,14 @@ export default function ProfileView() {
               </>
             )}
           </h2>
-          {selMeta ? layerRenderers[selMeta.key]() : sel === 'score' ? renderScore() : sel === 'privacy' ? renderPrivacy() : renderLogs()}
+          {selMeta ? layerRenderers[selMeta.key]() : sel === 'score' ? renderScore() : sel === 'privacy' ? (
+            <div className="flex min-h-0 flex-1 flex-col">{renderPrivacy()}</div>
+          ) : (
+            renderLogs()
+          )}
         </main>
 
-        {/* 右侧 AI 访问概览 */}
+        {/* 右侧 AI 访问概览：L0–L3 可点开看覆盖层 */}
         <aside className="glass-card anim-fade-up hidden w-[240px] shrink-0 overflow-y-auto lg:block" style={{ animationDelay: '180ms' }}>
           <h3 className="mb-2.5 flex items-center gap-2 text-[13px] font-semibold text-slate-200">
             <Icon name="eye" size={13} className="text-neon-cyan" /> AI 访问概览
@@ -1314,16 +1409,54 @@ export default function ProfileView() {
             {(['L0', 'L1', 'L2', 'L3'] as const).map((lv) => {
               const pm = PRIVACY_LEVEL_META[lv]
               const on = aiAccess[lv]
+              const open = openPrivacyLevel === lv
+              const layers = PERSONA_LAYERS.filter((l) => l.level === lv)
               return (
-                <div key={lv} className="flex items-center gap-2 rounded-lg border border-white/[0.05] bg-white/[0.02] px-2.5 py-1.5 text-[11px]">
-                  <span className="rounded border px-1 py-px text-[9px]" style={{ color: pm.color, borderColor: `${pm.color}44` }}>
-                    {lv}
-                  </span>
-                  <span className="min-w-0 flex-1 text-slate-400">{pm.label}</span>
-                  <span className={`inline-flex items-center gap-1 ${on ? 'text-neon-green' : 'text-slate-600'}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${on ? 'bg-neon-green' : 'bg-slate-600'}`} />
-                    {on ? '允许' : '关闭'}
-                  </span>
+                <div
+                  key={lv}
+                  className={`overflow-hidden rounded-lg border transition-colors ${
+                    open ? 'border-white/10 bg-white/[0.04]' : 'border-white/[0.05] bg-white/[0.02]'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[11px]"
+                    onClick={() => setOpenPrivacyLevel((cur) => (cur === lv ? null : lv))}
+                    aria-expanded={open}
+                  >
+                    <Icon
+                      name="chevronRight"
+                      size={10}
+                      className={`shrink-0 text-slate-500 transition-transform duration-300 ease-out ${open ? 'rotate-90' : ''}`}
+                    />
+                    <span className="rounded border px-1 py-px text-[9px]" style={{ color: pm.color, borderColor: `${pm.color}44` }}>
+                      {lv}
+                    </span>
+                    <span className="min-w-0 flex-1 text-slate-400">{pm.label}</span>
+                    <span className={`inline-flex items-center gap-1 ${on ? 'text-neon-green' : 'text-slate-600'}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${on ? 'bg-neon-green' : 'bg-slate-600'}`} />
+                      {on ? '允许' : '关闭'}
+                    </span>
+                  </button>
+                  <div className={`profile-accord ${open ? 'is-open' : ''}`}>
+                    <div className="profile-accord-inner">
+                      <div className="profile-accord-body space-y-1 border-t border-white/[0.05] px-2.5 pb-2 pt-1.5">
+                        <div className="text-[10px] leading-relaxed text-slate-500">{pm.desc}</div>
+                        <div className="flex flex-wrap gap-1">
+                          {layers.map((l) => (
+                            <button
+                              key={l.key}
+                              type="button"
+                              className="rounded border border-white/[0.08] px-1.5 py-0.5 text-[10px] text-slate-400 transition-colors hover:border-neon-cyan/40 hover:text-neon-cyan"
+                              onClick={() => setSel(l.key)}
+                            >
+                              {l.emoji} {l.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )
             })}
@@ -1395,6 +1528,103 @@ export default function ProfileView() {
             {weatherErr}
           </div>
         )}
+      </section>
+
+      {/* 页面最底部：L0–L4 收起条，点选向上展开说明与开关 */}
+      <section className="glass-card shrink-0 !p-2.5">
+        <div className="mb-1.5 flex items-center justify-between px-0.5">
+          <span className="text-[11px] text-slate-500">人物隐私层级 L0–L4</span>
+          <button
+            type="button"
+            className="text-[10px] text-slate-500 transition-colors hover:text-neon-cyan"
+            onClick={() => {
+              setSel('privacy')
+              setOpenPrivacyLevel(null)
+            }}
+          >
+            隐私控制
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {(['L0', 'L1', 'L2', 'L3', 'L4'] as const).map((lv) => {
+            const pm = PRIVACY_LEVEL_META[lv]
+            const open = openPrivacyLevel === lv
+            const locked = lv === 'L4'
+            const on = locked ? false : aiAccess[lv]
+            return (
+              <button
+                key={lv}
+                type="button"
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11px] transition-all duration-200 ${
+                  open
+                    ? 'border-white/20 bg-white/[0.08] text-slate-100'
+                    : 'border-white/[0.06] bg-white/[0.02] text-slate-400 hover:border-white/15 hover:text-slate-200'
+                }`}
+                style={open ? { boxShadow: `0 0 0 1px ${pm.color}33` } : undefined}
+                onClick={() => setOpenPrivacyLevel((cur) => (cur === lv ? null : lv))}
+                aria-expanded={open}
+              >
+                <span className="rounded border px-1 py-px text-[9px]" style={{ color: pm.color, borderColor: `${pm.color}55` }}>
+                  {lv}
+                </span>
+                <span>{pm.label}</span>
+                {locked ? (
+                  <span className="text-[9px] text-slate-600">锁</span>
+                ) : (
+                  <span className={`h-1.5 w-1.5 rounded-full ${on ? 'bg-neon-green' : 'bg-slate-600'}`} />
+                )}
+              </button>
+            )
+          })}
+        </div>
+        <div className={`profile-accord mt-0 ${openPrivacyLevel ? 'is-open' : ''}`}>
+          <div className="profile-accord-inner">
+            <div className="profile-accord-body">
+              {openPrivacyLevel ? (() => {
+                const lv = openPrivacyLevel
+                const pm = PRIVACY_LEVEL_META[lv]
+                const locked = lv === 'L4'
+                const layers = PERSONA_LAYERS.filter((l) => l.level === lv)
+                return (
+                  <div className="mt-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5">
+                    <div className="flex items-start gap-2.5">
+                      <span
+                        className="mt-0.5 shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium"
+                        style={{ color: pm.color, borderColor: `${pm.color}44`, background: `${pm.color}14` }}
+                      >
+                        {lv} {pm.label}
+                      </span>
+                      <div className="min-w-0 flex-1 text-[11px] leading-relaxed text-slate-500">{pm.desc}</div>
+                      {locked ? (
+                        <span className="shrink-0 text-[11px] text-slate-500">🔒 已锁定</span>
+                      ) : (
+                        <Toggle checked={aiAccess[lv]} onChange={(v) => void handlePrivacy({ [lv]: v })} />
+                      )}
+                    </div>
+                    {layers.length > 0 ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {layers.map((l) => (
+                          <button
+                            key={l.key}
+                            type="button"
+                            className="rounded-md border border-white/[0.08] bg-black/20 px-2 py-1 text-[11px] text-slate-300 transition-colors hover:border-neon-cyan/40 hover:text-neon-cyan"
+                            onClick={() => setSel(l.key)}
+                          >
+                            {l.emoji} {l.label}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-[11px] text-slate-600">核心身份信息不采集，AI 永久禁止访问。</div>
+                    )}
+                  </div>
+                )
+              })() : (
+                <div className="h-0" />
+              )}
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* 清除 AI 访问日志确认弹窗 */}

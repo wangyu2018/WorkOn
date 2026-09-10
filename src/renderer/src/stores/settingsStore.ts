@@ -36,7 +36,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     }
   },
   patch: async (p) => {
-    set({ settings: { ...get().settings, ...p } })
+    set({ settings: deepMerge(get().settings, p) })
     await window.api.setSettings(p)
   }
 }))

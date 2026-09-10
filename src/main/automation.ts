@@ -7,7 +7,6 @@
  */
 import { col, insertInto, updateIn, removeFrom, listActivities } from './db'
 import { getSettings } from './settings'
-import { bus } from './state'
 import { pushNotify } from './notify'
 import { dateKey, buildMergedTrail } from '@shared/trail'
 import type { PlanItem, AutomationRule, AutomationAction, AutomationTrigger } from '@shared/types'
@@ -76,7 +75,10 @@ async function runActions(rule: AutomationRule): Promise<void> {
           break
         }
         case 'petCelebrate': {
-          bus.setPet({ message: act.text || `自动化「${rule.name}」完成啦，为你欢呼 🎉` })
+          const { emitPetIntent } = await import('./petIntent')
+          emitPetIntent('celebrate', {
+            message: act.text || `自动化「${rule.name}」完成啦，为你欢呼 🎉`
+          })
           break
         }
         case 'notify': {

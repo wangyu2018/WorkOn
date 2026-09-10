@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, useRef } from 'react'
-import type { PlanForecast, PlanItem, PlanStatus, PlanType, PlanVsActual } from '@shared/types'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
+import type { CustomCategory, PlanForecast, PlanItem, PlanStatus, PlanType, PlanVsActual } from '@shared/types'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState } from '../components/EmptyState'
@@ -9,6 +9,7 @@ import { AiThinking } from '../components/ui/AiThinking'
 import { addDays, clockOf, fmtDateLabel, fmtMin, timeToMin, todayKey } from '../components/utils'
 import { parsePlanText } from '../components/parsePlanText'
 import { ProjectBoard } from '../components/ProjectBoard'
+import { parseBreakdownSteps } from '@shared/parseBreakdown'
 
 const STATUS_LABEL: Record<PlanStatus, string> = {
   planned: '待办',
@@ -24,18 +25,6 @@ const PLAN_TYPE_LABEL: Record<PlanType, string> = {
   phase: '持续工作',
   task: '待办',
   burst: '机动开发'
-}
-
-/** 计划类型图标：reminder ◆紫 / phase ▬绿 / task ☐琥珀 */
-function planTypeIcon(t: PlanType): string {
-  if (t === 'reminder') return '◆'
-  if (t === 'phase') return '▬'
-  return '☐'
-}
-function planTypeColor(t: PlanType): string {
-  if (t === 'reminder') return '#A78BFA'
-  if (t === 'phase') return '#10B981'
-  return '#F59E0B'
 }
 
 /** 状态徽章配色：进行中 teal / 已完成 mint / 部分 amber / 延期 red / 取消 灰 */
@@ -66,12 +55,12 @@ function planBarGradient(p: PlanItem, risky: boolean): string {
   return 'linear-gradient(90deg, var(--line-strong), var(--teal))'
 }
 
-/** 计划来源标记（浏览器确认 🌐 / 手动确认 💬 / 手动创建 ✏️ / 其他同步源） */
+/** 计划来源标记（轻量文案，不抢标题） */
 function SourceMark({ plan }: { plan: PlanItem }) {
-  if (plan.browserDerived) return <span className="chip !py-0" title="浏览器行为确认">🌐 浏览器确认</span>
-  if (plan.confirmedFromQA) return <span className="chip !py-0" title="问答确认">💬 确认记录</span>
-  if (plan.source === 'manual') return <span className="chip !py-0" title="手动创建">✏️ 手动</span>
-  return <span className="chip !py-0">{plan.source}</span>
+  if (plan.browserDerived) return <span title="浏览器行为确认">浏览器确认</span>
+  if (plan.confirmedFromQA) return <span title="问答确认">问答确认</span>
+  if (plan.source === 'manual') return <span title="手动创建">手动</span>
+  return <span>{plan.source}</span>
 }
 
 /* ── 新建 / 编辑弹窗 ── */
@@ -97,8 +86,11 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
   const [projOptions, setProjOptions] = useState<{ id: string; name: string }[]>([])
   const [taskOptions, setTaskOptions] = useState<{ id: string; title: string }[]>([])
   const [taskId, setTaskId] = useState(plan.projectTaskId ?? '')
+  const [category, setCategory] = useState(plan.category || 'other')
+  const [catOptions, setCatOptions] = useState<CustomCategory[]>([])
   useEffect(() => {
     void window.api?.listProjects?.().then((ps) => setProjOptions((ps as { id: string; name: string }[]) ?? [])).catch(() => undefined)
+    void window.api?.listCategories?.().then((cs) => setCatOptions((cs as CustomCategory[]) ?? [])).catch(() => undefined)
   }, [])
   useEffect(() => {
     if (!projId) { setTaskOptions([]); return }
@@ -139,6 +131,7 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
       title: t,
       note: note.trim() || undefined,
       planType,
+      category: category || 'other',
       projectId: projId || undefined,
       projectTaskId: taskId || undefined
     }
@@ -268,10 +261,41 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] text-slate-500">分类（工作 / 生活 / 兴趣…）</span>
+            <div className="flex flex-wrap gap-1">
+              {[
+                { id: 'work-customer', label: '工作' },
+                { id: 'personal', label: '生活' },
+                { id: 'interest', label: '兴趣' },
+                { id: 'ai-dev', label: 'AI 开发' },
+                { id: 'other', label: '未分类' }
+              ].map((b) => (
+                <button
+                  key={b.id}
+                  type="button"
+                  className={`chip !py-0 ${category === b.id ? '!border-neon-cyan/50 !text-neon-cyan' : ''}`}
+                  onClick={() => setCategory(b.id)}
+                >
+                  {b.label}
+                </button>
+              ))}
+            </div>
+            <select className="glass-input !py-1.5 text-[12px]" value={category} onChange={(e) => setCategory(e.target.value)}>
+              {(catOptions.length ? catOptions : [
+                { id: 'work-customer', label: '工作', emoji: '💼' },
+                { id: 'personal', label: '生活', emoji: '🏠' },
+                { id: 'interest', label: '兴趣', emoji: '✨' },
+                { id: 'other', label: '未分类', emoji: '📋' }
+              ]).map((c) => (
+                <option key={c.id} value={c.id}>{c.emoji ? `${c.emoji} ` : ''}{c.label}</option>
+              ))}
+            </select>
+          </div>
           <div className="flex items-center gap-2">
             <label className="shrink-0 text-[11px] text-slate-500">归属项目</label>
             <select className="glass-input !py-1 text-[12px]" value={projId} onChange={(e) => { setProjId(e.target.value); setTaskId('') }}>
-              <option value="">不归属</option>
+              <option value="">不归属（纯计划）</option>
               {projOptions.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
@@ -303,8 +327,14 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
 export default function PlanView() {
   const [date, setDate] = useState(todayKey())
   const [tab, setTab] = useState<'plan' | 'project'>('plan')
+  /** 今日安排内：全部 / 仅项目相关 / 仅日常 */
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'project' | 'daily'>('all')
   const [plans, setPlans] = useState<PlanItem[]>([])
   const [projects, setProjects] = useState<{ id: string; name: string; color?: string }[]>([])
+  const [categories, setCategories] = useState<CustomCategory[]>([])
+  const [catCollapsed, setCatCollapsed] = useState<Record<string, boolean>>({})
+  const [newCatOpen, setNewCatOpen] = useState(false)
+  const [newCatLabel, setNewCatLabel] = useState('')
   const [pva, setPva] = useState<PlanVsActual | null>(null)
   const [trail, setTrail] = useState<{ segments: { mainApp: string; durationMin: number; mainState: string }[] } | null>(null)
   const [forecasts, setForecasts] = useState<Map<string, PlanForecast>>(new Map())
@@ -340,24 +370,26 @@ export default function PlanView() {
   const [importMsg, setImportMsg] = useState('')
   const [scanProgress, setScanProgress] = useState(0)
   const [scanFile, setScanFile] = useState('')
-  /** ✦ AI 拆解结果（按计划 id）：loading 中显示思考态 */
-  const [breakdowns, setBreakdowns] = useState<Record<string, { loading: boolean; text: string }>>({})
+  /** ✦ AI 拆解结果（按计划 id）：loading 中显示思考态；applied = 已写入子待办 */
+  const [breakdowns, setBreakdowns] = useState<Record<string, { loading: boolean; text: string; applied?: boolean }>>({})
   /** 连续达成天数（截至所选日期前一天，逐日用现有 planVsActual 推导） */
   const [streak, setStreak] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     try {
-      const [ps, pv, fc, tr, prjs] = await Promise.all([
+      const [ps, pv, fc, tr, prjs, cats] = await Promise.all([
         window.api.listPlans(date),
         window.api.planVsActual(date),
         window.api.getForecast(date).catch(() => []),
         window.api.getTrail(date).catch(() => null),
-        window.api.listProjects().catch(() => [])
+        window.api.listProjects().catch(() => []),
+        window.api.listCategories().catch(() => [])
       ])
       setPlans(((ps as PlanItem[]) ?? []).filter((p) => !p.archived))
       setPva(pv as PlanVsActual)
       setTrail(tr as { segments: { mainApp: string; durationMin: number; mainState: string }[] } | null)
       setProjects((prjs as { id: string; name: string; color?: string }[]) ?? [])
+      setCategories((cats as CustomCategory[]) ?? [])
       setForecasts(new Map(((fc as PlanForecast[]) ?? []).map((f) => [f.planId, f])))
     } catch {
       setPlans([])
@@ -390,12 +422,38 @@ export default function PlanView() {
     }
   }, [date])
 
-  // 命令面板「打开项目开发」→ 切到项目 Tab
+  // 命令面板 / 项目推进「排入今日」→ 切回今日安排
   useEffect(() => {
-    const onGoto = () => setTab('project')
-    window.addEventListener('workon:goto-projects', onGoto)
-    return () => window.removeEventListener('workon:goto-projects', onGoto)
+    const onGotoProjects = () => setTab('project')
+    const onGotoToday = () => setTab('plan')
+    window.addEventListener('workon:goto-projects', onGotoProjects)
+    window.addEventListener('workon:goto-today', onGotoToday)
+    return () => {
+      window.removeEventListener('workon:goto-projects', onGotoProjects)
+      window.removeEventListener('workon:goto-today', onGotoToday)
+    }
   }, [])
+
+  // 项目推进点「关联的今日安排」→ 切回今日并打开编辑
+  useEffect(() => {
+    const onEdit = (ev: Event) => {
+      const id = (ev as CustomEvent<{ id?: string }>).detail?.id
+      if (!id) return
+      setTab('plan')
+      const hit = plans.find((p) => p.id === id)
+      if (hit) setEditor({ plan: hit, isNew: false })
+      else void load().then(() => {
+        // load 后 plans 状态异步，再读一次 api
+        void window.api.listPlans(date).then((ps) => {
+          const list = ((ps as PlanItem[]) ?? []).filter((p) => !p.archived)
+          const p = list.find((x) => x.id === id)
+          if (p) setEditor({ plan: p, isNew: false })
+        })
+      })
+    }
+    window.addEventListener('workon:edit-plan', onEdit)
+    return () => window.removeEventListener('workon:edit-plan', onEdit)
+  }, [plans, date, load])
 
   // 问答确认创建计划后实时刷新
   useEffect(() => window.api.onPlanUpdated(() => void load()), [load])
@@ -411,22 +469,105 @@ export default function PlanView() {
     void load()
   }
 
-  /** ✦ AI 拆解：把计划拆成可执行步骤（复用问答 IPC，本地模式走规则引擎） */
+  /** ✦ AI 拆解：拆完后自动同步子待办到今日计划（并刷新桌面待办窗） */
   const doBreakdown = async (p: PlanItem) => {
     if (breakdowns[p.id]?.loading) return
     setExpanded(p.id)
-    setBreakdowns((b) => ({ ...b, [p.id]: { loading: true, text: '' } }))
+    setBreakdowns((b) => ({ ...b, [p.id]: { loading: true, text: '', applied: false } }))
     try {
       const ans = await window.api.askQAWithShots(
-        `请把计划「${p.title}」拆解成 3-5 个具体可执行的步骤，每行一条、尽量简短，并在行尾标注预估耗时。`
+        `请把计划「${p.title}」整理成 2～4 条粗目标（不要细步骤）。\n要求：每行一条，格式「1. 今日目的/优化面（约X分钟）」；说清今天要达成什么或优化哪块，不要写文件级操作；不要前言后语。`
       )
       const payload = typeof ans === 'string' ? { content: ans } : ((ans ?? {}) as { content?: string | null })
       const text =
         typeof payload.content === 'string' && payload.content ? payload.content : '（未生成拆解结果，请确认 AI 已配置后重试）'
-      setBreakdowns((b) => ({ ...b, [p.id]: { loading: false, text } }))
+      setBreakdowns((b) => ({ ...b, [p.id]: { loading: false, text, applied: false } }))
+      if (parseBreakdownSteps(text).length) {
+        await syncBreakdownToPlans(p, text)
+      } else {
+        setImportMsg('拆解完成，但未解析到可写入的步骤')
+      }
     } catch {
-      setBreakdowns((b) => ({ ...b, [p.id]: { loading: false, text: '拆解失败，请稍后再试。' } }))
+      setBreakdowns((b) => ({ ...b, [p.id]: { loading: false, text: '拆解失败，请稍后再试。', applied: false } }))
     }
+  }
+
+  /**
+   * 把拆解步骤同步进计划待办：
+   * - 新增缺失子待办
+   * - 已完成的子项保留不改
+   * - 旧的未完成子项若不在新清单里 → 取消（避免堆积过期步骤）
+   * - 父计划标为进行中，并记一条拆解摘要
+   */
+  const syncBreakdownToPlans = async (p: PlanItem, text: string): Promise<void> => {
+    const steps = parseBreakdownSteps(text)
+    if (!steps.length) {
+      setImportMsg('没有解析到可应用的步骤，请重试拆解')
+      return
+    }
+    const children = plans.filter((x) => x.parentPlanId === p.id)
+    const byTitle = new Map(children.map((c) => [c.title.trim().toLowerCase(), c]))
+    const keep = new Set(steps.map((t) => t.toLowerCase()))
+    let added = 0
+    let cancelled = 0
+
+    for (const title of steps) {
+      const key = title.toLowerCase()
+      const hit = byTitle.get(key)
+      if (hit) {
+        // 已取消的同名项 → 重新打开
+        if (hit.status === 'cancelled') {
+          await window.api.setPlanStatus(hit.id, 'planned')
+        }
+        continue
+      }
+      await window.api.savePlan({
+        date: p.date,
+        title,
+        category: p.category || 'other',
+        status: 'planned',
+        source: 'import',
+        planType: 'task',
+        parentPlanId: p.id,
+        projectId: p.projectId,
+        note: `拆自「${p.title}」`
+      })
+      added++
+    }
+
+    for (const c of children) {
+      if (c.status === 'done') continue
+      if (keep.has(c.title.trim().toLowerCase())) continue
+      if (c.status !== 'cancelled') {
+        await window.api.setPlanStatus(c.id, 'cancelled')
+        cancelled++
+      }
+    }
+
+    // 父计划：进入进行中 + 摘要写入 note（保留原 note 前缀）
+    const summary = `AI拆解 ${steps.length} 步 · ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
+    const prevNote = (p.note || '').replace(/\n?AI拆解 \d+ 步 · .+$/m, '').trim()
+    await window.api.savePlan({
+      id: p.id,
+      date: p.date,
+      title: p.title,
+      note: prevNote ? `${prevNote}\n${summary}` : summary,
+      ...(p.status === 'planned' || p.status === 'delayed' ? { status: 'in_progress' as const } : {})
+    })
+
+    setBreakdowns((b) => ({ ...b, [p.id]: { ...(b[p.id] ?? { loading: false, text }), text, applied: true } }))
+    const parts = [
+      added ? `新增 ${added}` : null,
+      cancelled ? `取消过期 ${cancelled}` : null,
+      !added && !cancelled ? '已与现有子待办对齐' : null
+    ].filter(Boolean)
+    setImportMsg(`拆解已自动同步：${parts.join(' · ')}（桌面待办窗可见）`)
+    void load()
+  }
+
+  const applyBreakdown = async (p: PlanItem): Promise<void> => {
+    const text = breakdowns[p.id]?.text ?? ''
+    await syncBreakdownToPlans(p, text)
   }
 
   const [confirmDelId, setConfirmDelId] = useState<string | null>(null)
@@ -438,6 +579,49 @@ export default function PlanView() {
   const setPlanProject = async (planId: string, projectId: string | null) => {
     await window.api.savePlan({ id: planId, projectId })
     void load()
+  }
+
+  const setPlanCategory = async (planId: string, category: string) => {
+    const p = plans.find((x) => x.id === planId)
+    if (!p) return
+    await window.api.savePlan({ id: planId, date: p.date, title: p.title, category })
+    void load()
+  }
+
+  const createCategory = async (): Promise<CustomCategory | null> => {
+    const label = newCatLabel.trim()
+    if (!label) return null
+    const created = (await window.api.createCategory({
+      label,
+      color: '#22D3EE',
+      emoji: '📌'
+    })) as CustomCategory
+    setNewCatLabel('')
+    setNewCatOpen(false)
+    await load()
+    return created
+  }
+
+  const QUICK_BUCKETS = [
+    { id: 'work-customer', label: '工作' },
+    { id: 'personal', label: '生活' },
+    { id: 'interest', label: '兴趣' }
+  ] as const
+
+  const resolveCatId = (p: PlanItem): string => {
+    const id = (p.category || 'other').trim() || 'other'
+    if (id === 'other') return 'other'
+    if (categories.some((c) => c.id === id)) return id
+    return 'other'
+  }
+
+  const catMeta = (id: string): Pick<CustomCategory, 'id' | 'label' | 'color' | 'emoji'> => {
+    const hit = categories.find((c) => c.id === id)
+    if (hit) return hit
+    if (id === 'interest') return { id, label: '兴趣', color: '#EC4899', emoji: '✨' }
+    if (id === 'personal') return { id, label: '生活', color: '#10B981', emoji: '🏠' }
+    if (id === 'work-customer') return { id, label: '工作', color: '#3B82F6', emoji: '💼' }
+    return { id: 'other', label: '未分类', color: '#64748B', emoji: '📋' }
   }
 
   useEffect(() => {
@@ -517,8 +701,87 @@ ${text.slice(0, 3000)}`
   }
 
   const filtered = plans
-    .filter((p) => (statusFilter === 'all' ? true : p.status === statusFilter))
+    .filter((p) => !p.parentPlanId) // 子待办挂在父卡下展示，不单独占一行主卡
+    .filter((p) => {
+      if (statusFilter === 'all') return p.status !== 'done' && p.status !== 'cancelled'
+      return p.status === statusFilter
+    })
+    .filter((p) => {
+      if (scopeFilter === 'project') return !!p.projectId
+      if (scopeFilter === 'daily') return !p.projectId
+      return true
+    })
     .sort((a, b) => (a.startMin ?? 9999) - (b.startMin ?? 9999))
+
+  /** 未完成树：有所属项目 → 按具体项目头分组（默认收起）；无项目按分类，缺省「未分类」 */
+  const useCatTree = statusFilter !== 'done' && statusFilter !== 'cancelled'
+  const categoryGroups = useMemo(() => {
+    if (!useCatTree) {
+      return [{ key: 'flat', meta: null as ReturnType<typeof catMeta> | null, items: filtered, defaultCollapsed: false, kind: 'flat' as const }]
+    }
+    const byProject = new Map<string, PlanItem[]>()
+    const byCat = new Map<string, PlanItem[]>()
+    for (const p of filtered) {
+      if (p.projectId) {
+        if (!byProject.has(p.projectId)) byProject.set(p.projectId, [])
+        byProject.get(p.projectId)!.push(p)
+        continue
+      }
+      const id = resolveCatId(p)
+      if (!byCat.has(id)) byCat.set(id, [])
+      byCat.get(id)!.push(p)
+    }
+    const groups: {
+      key: string
+      meta: ReturnType<typeof catMeta> | null
+      items: PlanItem[]
+      defaultCollapsed: boolean
+      kind: 'project' | 'category' | 'flat'
+    }[] = []
+    // 项目顺序：现有项目列表顺序，再补孤儿 projectId
+    const projOrder = [
+      ...projects.map((pj) => pj.id).filter((id) => byProject.has(id)),
+      ...[...byProject.keys()].filter((id) => !projects.some((pj) => pj.id === id))
+    ]
+    for (const pid of projOrder) {
+      const items = byProject.get(pid) ?? []
+      if (!items.length) continue
+      const pj = projects.find((x) => x.id === pid)
+      groups.push({
+        key: `proj:${pid}`,
+        meta: {
+          id: pid,
+          label: pj?.name ?? '未知项目',
+          color: pj?.color ?? '#22D3EE',
+          emoji: '📁'
+        },
+        items,
+        defaultCollapsed: true,
+        kind: 'project'
+      })
+    }
+    const order = [
+      ...categories.map((c) => c.id).filter((id) => id !== 'other'),
+      ...[...byCat.keys()].filter((k) => k !== 'other' && !categories.some((c) => c.id === k)),
+      'other'
+    ]
+    const keys = order.filter((k, i) => order.indexOf(k) === i && (byCat.get(k)?.length ?? 0) > 0)
+    for (const key of keys) {
+      groups.push({
+        key,
+        meta: catMeta(key),
+        items: byCat.get(key)!,
+        defaultCollapsed: false,
+        kind: 'category'
+      })
+    }
+    return groups
+  }, [filtered, categories, useCatTree, projects])
+
+  const childPlansOf = (parentId: string): PlanItem[] =>
+    plans
+      .filter((c) => c.parentPlanId === parentId)
+      .sort((a, b) => a.ts - b.ts)
 
   const achievement = pva ? Math.min(100, pva.achievement) : 0
   const ringColor = achievement >= 80 ? '#10B981' : achievement >= 50 ? '#F59E0B' : '#EF4444'
@@ -533,45 +796,75 @@ ${text.slice(0, 3000)}`
   const delayedCount = activePlans.filter((p) => p.status === 'delayed').length
 
   return (
-    <div className="view-enter flex flex-col gap-5">
-      {/* 页面标题区 */}
+    <div className="view-enter flex flex-col gap-4">
       <PageHeader
         icon="target"
-        title="每日计划"
-        desc="安排目标 · 跟踪达成率与完成预测"
+        title="计划"
+        desc={tab === 'plan' ? '今天要达成什么 · 按日执行与达成率' : '跨天任务池 · 挑今日要干的排进来'}
         actions={
-          <>
-            <button className="glass-btn text-[12px]" onClick={() => setPasteOpen(true)}>
-              📋 粘贴文本导入
+          tab === 'plan' ? (
+            <>
+              <button className="glass-btn !text-[12px]" onClick={() => setPasteOpen(true)}>
+                粘贴导入
+              </button>
+              <button
+                className="glass-btn !text-[12px]"
+                title="把同日同标题的「机动开发」合并成一条（时长相加）"
+                onClick={() => {
+                  void (async () => {
+                    const r = (await window.api.dedupeBurstPlans?.()) ?? { removed: 0, groups: 0 }
+                    await load()
+                    setImportMsg(
+                      r.removed > 0
+                        ? `已合并 ${r.groups} 组重复机动开发，删除 ${r.removed} 条`
+                        : '没有可合并的重复机动开发'
+                    )
+                    window.setTimeout(() => setImportMsg(''), 4000)
+                  })()
+                }}
+              >
+                合并机动开发
+              </button>
+              <button className="glass-btn primary" onClick={() => setEditor({ plan: { date }, isNew: true })}>
+                <Icon name="plus" size={14} /> 新建安排
+              </button>
+            </>
+          ) : (
+            <button className="glass-btn !text-[12px]" onClick={() => setTab('plan')}>
+              回今日安排
             </button>
-            {importMsg ? <div className="mt-1.5 rounded-lg bg-neon-cyan/10 px-3 py-1.5 text-[11px] text-neon-cyan">{importMsg}</div> : null}
-            <button
-              className="glass-btn text-[12px]"
-              title="在桌面常驻显示项目/待办/生活三区小组件（Ctrl+Alt+T 也可开关）"
-              onClick={() => void window.api?.toggleTodoWidget?.()}
-            >
-              🖥 桌面待办组件
-            </button>
-            <button className="glass-btn primary" onClick={() => setEditor({ plan: { date }, isNew: true })}>
-              <Icon name="plus" size={14} /> 新建计划
-            </button>
-          </>
+          )
         }
       />
 
-      {/* 计划 / 项目 Tab 切换 */}
-      <div className="anim-fade-up flex items-center gap-1 rounded-xl border border-white/[0.06] bg-white/[0.03] p-1" style={{ width: 'fit-content' }}>
-        {([['plan', '每日计划'], ['project', '项目开发']] as const).map(([k, label]) => (
+      {importMsg ? (
+        <div className="rounded-lg border border-neon-cyan/25 bg-neon-cyan/10 px-3 py-2 text-[11px] text-neon-cyan">{importMsg}</div>
+      ) : null}
+
+      <div className="anim-fade-up grid grid-cols-2 gap-2">
+        {([
+          ['plan', '今日安排', '按日执行、达成率、归档'],
+          ['project', '项目推进', '跨天任务、反哺、排入今日']
+        ] as const).map(([k, label, hint]) => (
           <button
             key={k}
-            className={`rounded-lg px-3 py-1 text-[12px] transition-colors ${tab === k ? 'bg-white/[0.08] text-slate-100' : 'text-slate-400 hover:text-slate-200'}`}
+            type="button"
+            className={`rounded-xl border px-3.5 py-2.5 text-left transition-colors ${
+              tab === k
+                ? 'border-[var(--teal)]/35 bg-[var(--teal-soft)]'
+                : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04]'
+            }`}
             onClick={() => setTab(k)}
           >
-            {label}
+            <div className={`text-[13px] font-semibold ${tab === k ? 'text-slate-100' : 'text-slate-300'}`}>{label}</div>
+            <div className={`mt-0.5 text-[11px] leading-snug ${tab === k ? 'text-slate-400' : 'text-slate-600'}`}>{hint}</div>
           </button>
         ))}
       </div>
-      {(
+
+      {tab === 'project' ? (
+        <ProjectBoard trail={trail} />
+      ) : (
       <>
 
       {scanProgress > 0 && (
@@ -584,38 +877,79 @@ ${text.slice(0, 3000)}`
         </div>
       )}
 
-      {/* 日期工具条 */}
-      <div className="anim-fade-up flex items-center gap-2" style={{ animationDelay: '60ms' }}>
-        <div className="flex items-center gap-1 rounded-xl border border-white/[0.06] bg-white/[0.03] p-1">
-          <button className="glass-btn !border-transparent !bg-transparent !px-2" onClick={() => setDate((d) => addDays(d, -1))}>
-            <Icon name="chevronLeft" size={14} />
-          </button>
-          <button className="glass-btn !border-transparent !bg-transparent" onClick={() => setDate(todayKey())}>
-            今天
-          </button>
-          <button className="glass-btn !border-transparent !bg-transparent !px-2" onClick={() => setDate((d) => addDays(d, 1))}>
-            <Icon name="chevronRight" size={14} />
-          </button>
+      {/* 日期 + 筛选控制条 */}
+      <div
+        className="anim-fade-up flex flex-col gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-3"
+        style={{ animationDelay: '60ms' }}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center rounded-lg border border-white/[0.06] bg-black/20 p-0.5">
+            <button className="glass-btn !border-transparent !bg-transparent !px-2 !py-1" onClick={() => setDate((d) => addDays(d, -1))}>
+              <Icon name="chevronLeft" size={14} />
+            </button>
+            <button className="glass-btn !border-transparent !bg-transparent !px-2.5 !py-1 !text-[12px]" onClick={() => setDate(todayKey())}>
+              今天
+            </button>
+            <button className="glass-btn !border-transparent !bg-transparent !px-2 !py-1" onClick={() => setDate((d) => addDays(d, 1))}>
+              <Icon name="chevronRight" size={14} />
+            </button>
+          </div>
+          <div className="flex min-w-0 items-center gap-2">
+            <Icon name="calendar" size={14} className="shrink-0 text-[var(--teal-deep)]" />
+            <span className="truncate text-[14px] font-semibold tracking-wide text-slate-100">{fmtDateLabel(date)}</span>
+          </div>
         </div>
-        <span className="ml-1 flex items-center gap-2 text-[15px] font-semibold text-slate-200">
-          <Icon name="calendar" size={14} className="text-neon-cyan" />
-          {fmtDateLabel(date)}
-        </span>
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-white/[0.05] pt-2.5">
+          <span className="mr-1 text-[10px] font-medium uppercase tracking-wider text-slate-600">状态</span>
+          {(['all', 'planned', 'in_progress', 'done', 'delayed', 'cancelled'] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              className={`rounded-md px-2 py-1 text-[11px] transition-colors ${
+                statusFilter === s
+                  ? 'bg-white/[0.1] font-medium text-neon-cyan'
+                  : 'text-slate-500 hover:bg-white/[0.04] hover:text-slate-300'
+              }`}
+              onClick={() => setStatusFilter(s)}
+            >
+              {s === 'all' ? '未完成' : STATUS_LABEL[s]}
+            </button>
+          ))}
+          <span className="mx-1.5 h-3 w-px bg-white/10" />
+          <span className="mr-1 text-[10px] font-medium uppercase tracking-wider text-slate-600">范围</span>
+          {([
+            ['all', '全部'],
+            ['project', '项目'],
+            ['daily', '日常']
+          ] as const).map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              className={`rounded-md px-2 py-1 text-[11px] transition-colors ${
+                scopeFilter === k
+                  ? 'bg-white/[0.1] font-medium text-neon-cyan'
+                  : 'text-slate-500 hover:bg-white/[0.04] hover:text-slate-300'
+              }`}
+              onClick={() => setScopeFilter(k)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* 顶部统计行：InsightCard 横排（达成率 / 今日计划 / 进行中 / 连续达成） */}
-      <section className="anim-fade-up grid grid-cols-2 gap-3 lg:grid-cols-4" style={{ animationDelay: '120ms' }}>
+      <section className="anim-fade-up grid grid-cols-2 gap-2.5 lg:grid-cols-4" style={{ animationDelay: '100ms' }}>
         <InsightCard
           icon={<Icon name="target" size={14} />}
           tone="teal"
           label="今日达成率"
           big={
             <span className="flex items-center gap-2">
-              <ProgressRing value={achievement} size={34} stroke={4} color={ringColor} />
+              <ProgressRing value={achievement} size={30} stroke={3.5} color={ringColor} />
               {Math.round(achievement)}%
             </span>
           }
-          base={pva ? <>计划 {fmtMin(pva.plannedMin)} · 实际工作 {fmtMin(pva.actualWorkMin)}</> : '今日暂无对照数据'}
+          base={pva ? <>计划 {fmtMin(pva.plannedMin)} · 实际 {fmtMin(pva.actualWorkMin)}</> : '暂无对照'}
         />
         <InsightCard
           icon={<Icon name="calendar" size={14} />}
@@ -627,52 +961,27 @@ ${text.slice(0, 3000)}`
               <span className="text-[15px] font-bold text-slate-500">/{activePlans.length}</span>
             </>
           }
-          base={
-            <>
-              被实际覆盖 {pva ? pva.matchedCount : 0} 项 · 已延期 {delayedCount} 项
-            </>
-          }
+          base={<>覆盖 {pva ? pva.matchedCount : 0} · 延期 {delayedCount}</>}
         />
         <InsightCard
           icon={<Icon name="activity" size={14} />}
           tone="cyan"
           label="进行中"
           big={inProgressCount}
-          base={partialCount > 0 ? <>另有 {partialCount} 项部分完成</> : inProgressCount > 0 ? '正在推进，保持节奏' : '暂无进行中的计划'}
+          base={partialCount > 0 ? `另有 ${partialCount} 项部分完成` : inProgressCount > 0 ? '保持节奏' : '暂无进行中'}
         />
         <InsightCard
           icon={<Icon name="flame" size={14} />}
           tone="amber"
           label="连续达成"
-          big={streak === null ? '…' : `${streak} 天`}
+          big={streak === null ? '…' : `${streak}天`}
           base={
-            <span className="block">
-              按日达成率 ≥50% 连续统计（截至前一天）
-              {avgProb !== null ? (
-                <span className="block">
-                  AI 预测：均值 {avgProb}%{riskCount > 0 ? ` · ${riskCount} 项有风险` : ' · 暂无风险项'}
-                </span>
-              ) : null}
-            </span>
+            avgProb !== null
+              ? `AI 均值 ${avgProb}%${riskCount > 0 ? ` · ${riskCount} 项有风险` : ''}`
+              : '按日达成率 ≥50% 连续计'
           }
         />
       </section>
-
-      {/* 筛选 */}
-      <div className="anim-fade-up flex flex-wrap items-center gap-2" style={{ animationDelay: '180ms' }}>
-        <span className="mr-0.5 flex items-center gap-1 text-[11px] font-medium text-slate-500">
-          <Icon name="sliders" size={12} /> 筛选
-        </span>
-        {(['all', 'planned', 'in_progress', 'done', 'delayed', 'cancelled'] as const).map((s) => (
-          <button
-            key={s}
-            className={`chip ${statusFilter === s ? '!border-neon-cyan/50 !text-neon-cyan' : ''}`}
-            onClick={() => setStatusFilter(s)}
-          >
-            {s === 'all' ? '全部状态' : STATUS_LABEL[s]}
-          </button>
-        ))}
-      </div>
 
       {/* 计划列表 */}
       {filtered.length === 0 ? (
@@ -680,34 +989,154 @@ ${text.slice(0, 3000)}`
           <EmptyState
             emoji="🎯"
             title={plans.length === 0 ? '这一天还没有计划' : '没有符合筛选的计划'}
-            hint={plans.length === 0 ? '点击右上角「新建计划」，或在命令面板（Ctrl+K）里快速录入。' : '换个筛选条件试试。'}
+            hint={plans.length === 0 ? '点击右上角「新建安排」，或在命令面板（Ctrl+K）里快速录入。' : '换个筛选条件试试。'}
           />
         </div>
       ) : (
-        <div className="flex flex-col gap-2.5">
-          {filtered.map((p, idx) => {
+        <div className="flex flex-col gap-4">
+          {categoryGroups.map((group) => {
+            const collapsed =
+              group.key !== 'flat' &&
+              (catCollapsed[group.key] !== undefined ? !!catCollapsed[group.key] : !!group.defaultCollapsed)
+            const isProjectGroup = group.kind === 'project'
+            return (
+              <section
+                key={group.key}
+                className="anim-fade-up overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02]"
+              >
+                {group.meta ? (
+                  <div
+                    className={`flex flex-wrap items-center gap-2 px-3 py-2.5 ${collapsed ? '' : 'border-b border-white/[0.05]'}`}
+                    style={{ borderLeft: `3px solid ${group.meta.color}` }}
+                  >
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      onClick={() => setCatCollapsed((m) => ({ ...m, [group.key]: !collapsed }))}
+                    >
+                      <span className="text-[11px] text-slate-500">{collapsed ? '▸' : '▾'}</span>
+                      {isProjectGroup ? (
+                        <span
+                          className="inline-flex h-2 w-2 shrink-0 rounded-full"
+                          style={{ background: group.meta.color }}
+                        />
+                      ) : (
+                        <span className="text-[14px] leading-none">{group.meta.emoji}</span>
+                      )}
+                      {isProjectGroup ? (
+                        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-slate-500">项目</span>
+                      ) : null}
+                      <span className="min-w-0 truncate text-[13px] font-semibold tracking-wide" style={{ color: group.meta.color }}>
+                        {group.meta.label}
+                      </span>
+                      <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] tabular-nums text-slate-400">
+                        {group.items.length}
+                      </span>
+                      {isProjectGroup && collapsed ? (
+                        <span className="text-[10px] text-slate-600">点击展开</span>
+                      ) : null}
+                    </button>
+                    {group.key === 'other' ? (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {newCatOpen ? (
+                          <>
+                            <input
+                              className="glass-input !w-28 !py-0.5 !text-[11px]"
+                              placeholder="新分类名"
+                              value={newCatLabel}
+                              autoFocus
+                              onChange={(e) => setNewCatLabel(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') void createCategory()
+                                if (e.key === 'Escape') setNewCatOpen(false)
+                              }}
+                            />
+                            <button className="glass-btn primary !px-2 !py-0.5 !text-[10px]" onClick={() => void createCategory()}>创建</button>
+                            <button className="glass-btn !px-2 !py-0.5 !text-[10px]" onClick={() => setNewCatOpen(false)}>取消</button>
+                          </>
+                        ) : (
+                          <button className="glass-btn !px-2 !py-0.5 !text-[10px]" onClick={() => setNewCatOpen(true)}>+ 分类</button>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+                {collapsed ? null : (
+                  <div className="flex flex-col gap-0 divide-y divide-white/[0.04] p-1.5">
+                    {group.items.map((p, idx) => {
             const done = p.status === 'done'
             const cancelled = p.status === 'cancelled'
             const fc = forecasts.get(p.id)
             const risky = !done && !cancelled && !!fc && fc.completionProb < 40
             const ratio = done ? 100 : Math.round((p.completionRatio ?? 0) * 100)
             const isExpanded = expanded === p.id
+            if (done || cancelled) {
+              return (
+                <div
+                  key={p.id}
+                  className="anim-fade-up flex items-center gap-2.5 rounded-xl px-3 py-2"
+                  style={{ animationDelay: `${240 + Math.min(idx * 30, 180)}ms` }}
+                >
+                  <button
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                      done ? 'border-neon-green/60 bg-neon-green/15 text-neon-green' : 'border-white/15 text-slate-500'
+                    }`}
+                    title={done ? '标记为待办' : '标记完成'}
+                    onClick={() => void toggleDone(p)}
+                  >
+                    <Icon name="check" size={10} />
+                  </button>
+                  <div className={`min-w-0 flex-1 truncate text-[12px] ${done ? 'text-slate-400' : 'text-slate-500 line-through'}`}>{p.title}</div>
+                  <span className="shrink-0 text-[10px] text-slate-600">{done ? '已完成' : '已取消'}</span>
+                  <button className="glass-btn !px-1.5 !py-0.5" title="编辑" onClick={() => setEditor({ plan: p, isNew: false })}>
+                    <Icon name="edit" size={12} />
+                  </button>
+                  <button
+                    className="glass-btn danger !px-1.5 !py-0.5"
+                    title={confirmDelId === p.id ? '再点一次确认删除' : '删除'}
+                    onClick={() => {
+                      if (confirmDelId === p.id) {
+                        void remove(p)
+                        setConfirmDelId(null)
+                      } else setConfirmDelId(p.id)
+                    }}
+                  >
+                    <Icon name="trash" size={12} />
+                  </button>
+                </div>
+              )
+            }
+            const proj = !isProjectGroup && p.projectId ? projects.find((x) => x.id === p.projectId) : null
+            const taskName = p.projectTaskId ? taskNames[p.projectTaskId] : undefined
+            const metaBits: string[] = []
+            if ((p.planType ?? 'phase') === 'reminder' && p.startMin !== undefined) metaBits.push(`${clockOf(p.startMin)} 提醒`)
+            else if ((p.planType ?? 'phase') === 'phase') {
+              if (p.startMin !== undefined && p.endMin !== undefined) metaBits.push(`${clockOf(p.startMin)}–${clockOf(p.endMin)}`)
+              if (p.durationMin !== undefined) metaBits.push(fmtMin(p.durationMin))
+            }
+            metaBits.push(PLAN_TYPE_LABEL[p.planType ?? 'phase'])
+            if (taskName) metaBits.push(taskName)
+            if (fc && !done && (p.planType ?? 'phase') === 'phase') {
+              metaBits.push(
+                fc.completionProb > 70 ? `大概率 ${fc.completionProb}%` : fc.completionProb >= 40 ? `有风险 ${fc.completionProb}%` : `可能延期 ${fc.completionProb}%`
+              )
+            }
+            if (p.fired && !done) metaBits.push('已提醒')
             return (
               <div
                 key={p.id}
-                className="glass-card hoverable anim-fade-up !p-3.5"
-                style={{ animationDelay: `${240 + Math.min(idx * 40, 240)}ms`, borderLeftWidth: 3, borderLeftColor: planStatusColor(p, risky) }}
+                className={`anim-fade-up rounded-xl px-3 py-2.5 transition-colors ${
+                  isExpanded ? 'bg-white/[0.04]' : 'hover:bg-white/[0.03]'
+                }`}
+                style={{
+                  animationDelay: `${240 + Math.min(idx * 40, 240)}ms`,
+                  borderLeft: `3px solid ${planStatusColor(p, risky)}`
+                }}
               >
-                <div className="flex items-center gap-3">
-                  <span
-                    title={PLAN_TYPE_LABEL[p.planType ?? 'phase']}
-                    style={{ color: planTypeColor(p.planType ?? 'phase'), fontSize: 13, width: 14, textAlign: 'center', flexShrink: 0 }}
-                  >
-                    {planTypeIcon(p.planType ?? 'phase')}
-                  </span>
+                <div className="flex items-start gap-2.5">
                   <button
-                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all ${
-                      done ? 'border-neon-green bg-neon-green/20 text-neon-green shadow-glow' : 'border-white/20 text-transparent hover:scale-110 hover:border-neon-green/60'
+                    className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all ${
+                      done ? 'border-neon-green bg-neon-green/20 text-neon-green' : 'border-white/20 text-transparent hover:scale-110 hover:border-neon-green/60'
                     }`}
                     style={{ transitionDuration: '150ms' }}
                     title={done ? '标记为待办' : '标记完成'}
@@ -715,45 +1144,136 @@ ${text.slice(0, 3000)}`
                   >
                     <Icon name="check" size={12} />
                   </button>
-                  <button className={`min-w-0 flex-1 text-left ${done || cancelled ? 'opacity-60' : ''}`} onClick={() => setExpanded(isExpanded ? null : p.id)}>
-                    <div className={`flex min-w-0 items-center gap-1.5 text-[13px] font-medium ${done || cancelled ? 'text-slate-500 line-through' : 'text-slate-200'}`}>
-                      <span className="min-w-0 truncate">{p.title}</span>
+                  <button className="min-w-0 flex-1 text-left" onClick={() => setExpanded(isExpanded ? null : p.id)}>
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                      {proj ? (
+                        <span
+                          className="inline-flex max-w-[6.5rem] shrink-0 items-center truncate rounded px-1.5 py-px text-[10px] font-semibold"
+                          style={{
+                            color: proj.color ?? '#22D3EE',
+                            background: `${proj.color ?? '#22D3EE'}18`
+                          }}
+                          title={`所属项目：${proj.name}`}
+                        >
+                          {proj.name}
+                        </span>
+                      ) : null}
+                      <span className="min-w-0 truncate text-[13px] font-medium text-slate-100">{p.title}</span>
                       <span
-                        className="inline-flex shrink-0 items-center rounded-full px-1.5 py-px text-[9px] font-bold leading-[1.6]"
+                        className="inline-flex shrink-0 items-center rounded px-1.5 py-px text-[10px] font-medium"
                         style={{
                           color: STATUS_COLOR[p.status],
-                          background: `${STATUS_COLOR[p.status]}1f`,
-                          border: `1px solid ${STATUS_COLOR[p.status]}55`
+                          background: `${STATUS_COLOR[p.status]}18`
                         }}
                       >
                         {STATUS_LABEL[p.status]}
                       </span>
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                      {(p.planType ?? 'phase') === 'reminder' ? (
-                        p.startMin !== undefined ? (
-                          <span className="flex items-center gap-1" style={{ color: '#A78BFA' }}>
-                            <Icon name="bell" size={11} />
-                            {clockOf(p.startMin)} 提醒
-                          </span>
-                        ) : null
-                      ) : (p.planType ?? 'phase') === 'phase' ? (
-                        <>
-                          {p.startMin !== undefined && p.endMin !== undefined ? (
-                            <span className="flex items-center gap-1">
-                              <Icon name="clock" size={11} />
-                              {clockOf(p.startMin)}–{clockOf(p.endMin)}
-                            </span>
-                          ) : null}
-                          {p.durationMin !== undefined ? <span>{fmtMin(p.durationMin)}</span> : null}
-                        </>
-                      ) : null}
+                    <div className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                      {metaBits.length ? <span>{metaBits.join(' · ')}</span> : null}
+                      {metaBits.length ? <span className="text-slate-700"> · </span> : null}
                       <SourceMark plan={p} />
+                    </div>
+                    {p.note ? <div className="mt-1 truncate text-[11px] text-slate-600">{p.note}</div> : null}
+                    {ratio > 0 ? (
+                      <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{ width: `${ratio}%`, background: planBarGradient(p, risky) }}
+                        />
+                      </div>
+                    ) : null}
+                  </button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {!done && !cancelled ? (
+                      <button
+                        className="glass-btn ai !px-2 !py-1 !text-[11px]"
+                        title="AI 整理今日目的"
+                        onClick={() => void doBreakdown(p)}
+                      >
+                        ✦
+                      </button>
+                    ) : null}
+                    <button className="glass-btn !px-2 !py-1" title="编辑" onClick={() => setEditor({ plan: p, isNew: false })}>
+                      <Icon name="edit" size={13} />
+                    </button>
+                    <button
+                      className="glass-btn danger !px-2 !py-1"
+                      title={confirmDelId === p.id ? '再点一次确认删除' : '删除'}
+                      onClick={() => {
+                        if (confirmDelId === p.id) {
+                          void remove(p)
+                          setConfirmDelId(null)
+                        } else setConfirmDelId(p.id)
+                      }}
+                    >
+                      <Icon name="trash" size={13} />
+                    </button>
+                  </div>
+                </div>
+                {(() => {
+                  const kids = childPlansOf(p.id).filter((c) => c.status !== 'cancelled')
+                  if (!kids.length) return null
+                  return (
+                    <div className="mt-2 space-y-1 border-t border-white/[0.04] pt-2 pl-7">
+                      <div className="text-[10px] text-slate-500">
+                        子目标 · {kids.filter((k) => k.status === 'done').length}/{kids.length}
+                      </div>
+                      {kids.map((c) => (
+                        <div key={c.id} className="flex items-center gap-2">
+                          <button
+                            className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[9px] ${
+                              c.status === 'done' ? 'border-neon-green/50 bg-neon-green/15 text-neon-green' : 'border-white/20 text-transparent hover:border-neon-green/50'
+                            }`}
+                            onClick={() => void toggleDone(c)}
+                          >
+                            <Icon name="check" size={9} />
+                          </button>
+                          <span className={`min-w-0 flex-1 truncate text-[11px] ${c.status === 'done' ? 'text-slate-500 line-through' : 'text-slate-300'}`}>{c.title}</span>
+                          <button className="text-[10px] text-slate-600 hover:text-red-400" title="删除子待办" onClick={() => void remove(c)}>
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+                {isExpanded ? (
+                  <div className="anim-fade-in mt-2.5 space-y-2.5 border-t border-white/[0.05] pt-2.5 pl-7">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-slate-600">
+                        {group.key === 'other' || (!p.projectId && resolveCatId(p) === 'other') ? '归档到' : '归到'}
+                      </span>
+                      {QUICK_BUCKETS.map((b) => (
+                        <button
+                          key={b.id}
+                          type="button"
+                          className={`rounded-md px-2 py-1 text-[11px] transition-colors ${
+                            resolveCatId(p) === b.id
+                              ? 'bg-neon-cyan/15 font-medium text-neon-cyan'
+                              : 'bg-white/[0.04] text-slate-400 hover:text-slate-200'
+                          }`}
+                          onClick={() => void setPlanCategory(p.id, b.id)}
+                        >
+                          {b.label}
+                        </button>
+                      ))}
+                      <select
+                        className="glass-input !w-28 !py-0.5 !px-1 !text-[10px]"
+                        value={categories.some((c) => c.id === p.category) ? p.category : 'other'}
+                        title="选择分类"
+                        onChange={(e) => void setPlanCategory(p.id, e.target.value)}
+                      >
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>
+                        ))}
+                        {!categories.some((c) => c.id === 'other') ? <option value="other">📋 未分类</option> : null}
+                      </select>
                       {projects.length > 0 ? (
                         <select
                           className="glass-input !w-28 !py-0.5 !px-1 !text-[10px]"
                           value={p.projectId ?? ''}
-                          title="归入项目"
+                          title="归属项目"
                           onChange={(e) => void setPlanProject(p.id, e.target.value || null)}
                         >
                           <option value="">无项目</option>
@@ -762,82 +1282,47 @@ ${text.slice(0, 3000)}`
                           ))}
                         </select>
                       ) : null}
-                      {(() => {
-                        const proj = projects.find((x) => x.id === p.projectId)
-                        const taskName = p.projectTaskId ? taskNames[p.projectTaskId] : undefined
-                        return proj ? (
-                          <span className="chip !py-0" style={{ color: proj.color ?? '#22D3EE', borderColor: `${proj.color ?? '#22D3EE'}44` }}>
-                            <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: proj.color ?? '#22D3EE' }} />
-                            {proj.name}
-                            {taskName ? <span className="text-slate-500">· {taskName}</span> : null}
-                            <button className="ml-0.5 text-slate-500 hover:text-red-400" title="移出项目" onClick={() => void setPlanProject(p.id, null)}>✕</button>
-                          </span>
-                        ) : taskName ? (
-                          <span className="chip !py-0" title="已挂任务">{taskName}</span>
-                        ) : null
-                      })()}
-                      {fc && !done && (p.planType ?? 'phase') === 'phase' ? (
-                        <span
-                          className={`chip !py-0 ${
-                            fc.completionProb > 70 ? '!border-neon-green/50 !text-neon-green' : fc.completionProb >= 40 ? '!border-neon-amber/50 !text-neon-amber' : '!border-neon-red/50 !text-neon-red'
-                          }`}
-                        >
-                          {fc.completionProb > 70 ? '大概率完成' : fc.completionProb >= 40 ? '有风险' : '可能延期'} {fc.completionProb}%
-                        </span>
-                      ) : null}
-                      {p.fired && !done ? <span className="text-slate-600">已提醒</span> : null}
-                      {cancelled ? <span className="text-slate-600">已取消</span> : null}
                     </div>
-                    {p.note ? <div className="mt-0.5 truncate text-[11px] text-slate-600">{p.note}</div> : null}
-                  </button>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    {!done && !cancelled ? (
-                      <button
-                        className="glass-btn ai !px-2 !py-1 !text-[11px]"
-                        title="AI 拆解为可执行步骤"
-                        onClick={() => void doBreakdown(p)}
-                      >
-                        ✦ AI 拆解
-                      </button>
-                    ) : null}
-                    <button className="glass-btn !px-2 !py-1" title="编辑" onClick={() => setEditor({ plan: p, isNew: false })}>
-                      <Icon name="edit" size={13} />
-                    </button>
-                    <button className="glass-btn danger !px-2 !py-1" title={confirmDelId === p.id ? "再点一次确认删除" : "删除"} onClick={() => { if (confirmDelId === p.id) { void remove(p); setConfirmDelId(null) } else setConfirmDelId(p.id) }}>
-                      <Icon name="trash" size={13} />
-                    </button>
-                  </div>
-                </div>
-                {/* 进度条：渐变填色 + 圆角（完成比例，已完成满格） */}
-                {ratio > 0 ? (
-                  <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{ width: `${ratio}%`, background: planBarGradient(p, risky) }}
-                    />
-                  </div>
-                ) : null}
-                {/* 展开面板：AI 拆解 + 预测详情 + 完成比例拖动 + 延期 */}
-                {isExpanded ? (
-                  <div className="anim-fade-in mt-3 border-t border-white/[0.06] pt-3">
-                    {/* ✦ AI 拆解结果（AI 场景：aura 底 + 思考态） */}
                     {breakdowns[p.id] ? (
                       breakdowns[p.id].loading ? (
                         <div className="mb-2.5 rounded-xl border border-white/[0.06] p-2.5" style={{ background: 'var(--aura-soft)' }}>
-                          <AiThinking hints={['正在拆解计划为执行步骤…', '正在估算各步耗时…', '整理执行清单中…']} />
+                          <AiThinking hints={['正在整理今日目的…', '正在归纳优化面…', '生成粗目标清单…']} />
                         </div>
                       ) : (
                         <div className="mb-2.5 rounded-xl border border-[rgba(139,92,246,0.28)] p-2.5" style={{ background: 'var(--aura-soft)' }}>
-                          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-[var(--violet)]">
-                            <span
-                              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] text-[9px] leading-none text-white"
-                              style={{ background: 'var(--aura)', boxShadow: 'var(--glow-i)' }}
+                          <div className="mb-1 flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--violet)]">
+                              <span
+                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] text-[9px] leading-none text-white"
+                                style={{ background: 'var(--aura)', boxShadow: 'var(--glow-i)' }}
+                              >
+                                ✦
+                              </span>
+                              AI 粗目标
+                              {breakdowns[p.id].applied ? (
+                                <span className="ml-1.5 text-[10px] font-normal text-[var(--teal-deep)]">已同步</span>
+                              ) : null}
+                            </div>
+                            <button
+                              className="glass-btn !px-2 !py-0.5 !text-[10px]"
+                              disabled={!parseBreakdownSteps(breakdowns[p.id].text).length}
+                              onClick={() => void applyBreakdown(p)}
+                              title="按当前结果再同步一次"
                             >
-                              ✦
-                            </span>
-                            AI 拆解步骤
+                              {breakdowns[p.id].applied ? '重新同步' : `同步（${parseBreakdownSteps(breakdowns[p.id].text).length}）`}
+                            </button>
                           </div>
                           <div className="whitespace-pre-wrap text-[11.5px] leading-relaxed text-slate-300">{breakdowns[p.id].text}</div>
+                          {parseBreakdownSteps(breakdowns[p.id].text).length ? (
+                            <div className="mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
+                              <div className="mb-0.5 text-[10px] text-slate-500">
+                                {breakdowns[p.id].applied ? '已同步' : '将同步'}
+                              </div>
+                              {parseBreakdownSteps(breakdowns[p.id].text).map((s, i) => (
+                                <div key={i} className="text-[11px] text-slate-400">· {s}</div>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
                       )
                     ) : null}
@@ -980,6 +1465,11 @@ ${text.slice(0, 3000)}`
                 ) : null}
               </div>
             )
+                    })}
+                  </div>
+                )}
+              </section>
+            )
           })}
         </div>
       )}
@@ -997,17 +1487,25 @@ ${text.slice(0, 3000)}`
         />
       ) : null}
         {pasteOpen ? (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setPasteOpen(false)}>
+          <div className="anim-fade-in fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setPasteOpen(false)}>
             <div className="glass-card anim-scale-in w-[440px] !p-5" style={{ borderRadius: 'var(--r-xl)', boxShadow: 'var(--shadow-lg)' }} onClick={(e) => e.stopPropagation()}>
-              <div className="mb-2 text-[14px] font-semibold text-slate-100">粘贴文本导入</div>
+              <div className="mb-2 flex items-center gap-2 text-[14px] font-semibold text-slate-100">
+                <span
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border"
+                  style={{ background: 'var(--accent-softer)', borderColor: 'var(--border-active)', color: 'var(--accent)' }}
+                >
+                  <Icon name="scan" size={14} />
+                </span>
+                粘贴文本导入
+              </div>
               <textarea
-                className="min-h-[140px] w-full rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-2.5 text-[12px] leading-relaxed text-slate-200 outline-none focus:border-[var(--border-active)]"
+                className="glass-input min-h-[140px] w-full resize-y !py-2.5 text-[12px] leading-relaxed"
                 placeholder="把会议纪要、聊天记录、需求描述粘进来，AI 会提取可执行的待办…"
                 value={pasteText}
                 onChange={(e) => { setPasteText(e.target.value); setPasteItems([]) }}
               />
               {pasteItems.length ? (
-                <div className="mt-2 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-2.5">
+                <div className="sub-card mt-2 !p-2.5">
                   <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-600">解析出 {pasteItems.length} 项</div>
                   {pasteItems.map((it, i) => (
                     <div key={i} className="py-0.5 text-[12px] text-slate-300">· {it}</div>
@@ -1047,14 +1545,17 @@ ${text.slice(0, 3000)}`
           </div>
         </div>
       )}
-      {/* ── 项目开发（与每日计划同页平铺，经归属引擎与任务双向关联） ── */}
-      <ProjectBoard trail={trail} />
       </>
       )}
 
-      {/* ── 确认归档（第三分区）：已确认项分类展示 / 编辑 / 归档 ── */}
-      {(() => {
-        const confirmed = plans.filter((p) => p.confirmedFromQA || p.source === 'qa-confirm' || p.source === 'session')
+      {/* ── 确认归档（仅每日计划 Tab）：已确认项分类展示 / 编辑 / 归档 ── */}
+      {tab === 'plan' ? (() => {
+        const confirmed = plans.filter(
+          (p) =>
+            (p.confirmedFromQA || p.source === 'qa-confirm') &&
+            p.source !== 'session' &&
+            !p.sessionDerived
+        )
         const daily = confirmed.filter((p) => !p.projectId)
         const projRel = confirmed.filter((p) => p.projectId)
         if (!confirmed.length) return null
@@ -1085,7 +1586,7 @@ ${text.slice(0, 3000)}`
             </div>
           </div>
         )
-      })()}
+      })() : null}
     </div>
   )
 }

@@ -1,7 +1,7 @@
 /**
  * IPC 注册：window.api 的全部通道
  */
-import { ipcMain, dialog, app } from 'electron'
+import { ipcMain, dialog, app, clipboard } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import type {
@@ -13,13 +13,16 @@ import type {
   ActivityCorrection,
   PetState,
   PlanStatus,
-  ReportEntryPatch
+  ReportEntryPatch,
+  KnowledgeItem,
+  KnowledgeLink,
+  MemoRecord
 } from '@shared/types'
 import { genId } from '@shared/types'
 import { dateKey, buildMergedTrail } from '@shared/trail'
 import { planVsActual, forecastPlan, BUILTIN_CATEGORIES } from '@shared/planAnalysis'
 import { getSettings, setSettings } from './settings'
-import { getWeather, getWeatherNextHours } from './weather'
+import { getWeather, getWeatherNextHours, getWeatherBrief } from './weather'
 import { getAllAppVisuals } from './appVisuals'
 import { buildDevDataset, buildDevOcrBatch, buildDevPrompts } from './devOcr'
 import {
@@ -39,8 +42,21 @@ import { listAutomations, saveAutomation, removeAutomation, toggleAutomation, au
 import { starGraphForDays } from './starGraph'
 import { attributionTick, getAttribution, listBindings, bindProject, unbindProject, answerAttribution } from './attributions'
 import { startAllWatchers, getTodayActivity, stalledProjects, dirWatcherTick } from './dirWatcher'
-import { buildStatusCard, parseStatusCard, applyCardDiff } from './statusCard'
+import { buildStatusCard, parseStatusCard, applyCardDiff, summarizeProgressPaste } from './statusCard'
+import { classifyPaste } from '@shared/pasteDetect'
+import { extractAndPolishPasteTodos } from './pasteTodos'
+import { recognizePngBuffer } from './ocrEngine'
+import { dedupeSessionBurstPlans } from './devSession'
+import {
+  getOpenProcessDraft,
+  appendProcessNote,
+  suggestNoteCategory,
+  ensureProjectCategory,
+  buildProcessMergePreview,
+  confirmProcessSediment
+} from './processDraft'
 import { bus } from './state'
+import { emitPetIntent } from './petIntent'
 import {
   analyzeDay, askWithContext, askWithContextStream, recordFeedback, genQuestion,
   generateTodos, generateTips, testAIConnection, petAskShort, petAskShortStream, confirmToPlan, matchBrowserToPlan, deriveHabits,
@@ -65,9 +81,15 @@ import { listAccessLogs, clearAccessLogs } from './desensitize'
 import { ACHIEVEMENT_DEFS } from '@shared/achievements'
 import {
   mainWindow, widgetWindow, petWindow, toggleWidget, togglePet, setWidgetPenetration,
-  setWidgetMode, resizeWidget, resizeWidgetTransient, moveWidgetBy,
-  setPetIgnoreMouse, setPetModal, createMainWindow, createPetWindow, closePetWindow, sendTo, toggleTodoWidget, setTodoWidgetLayer, setTodoWidgetPenetration, setWidgetOnTop, setPetOpacity, todoWidgetWindow } from './windows'
-import type { UserAnalysis, MergedTrail, CustomCategory, UserHabits, Achievement, UserType, ReportTemplate, CategoryInference, SegmentPlanLink } from '@shared/types'
+  setWidgetMode, resizeWidget, resizeWidgetTransient, moveWidgetBy, beginWidgetDrag, endWidgetDrag,
+  setWidgetHit, broadcastWidgetSettings,
+  setPetIgnoreMouse, setPetModal, createMainWindow, createPetWindow, closePetWindow, sendTo,
+  toggleTodoWidget, createTodoWidgetWindow, setTodoWidgetLayer, setTodoWidgetPenetration,
+  setWidgetOnTop, setPetOpacity, todoWidgetWindow,
+  setTodoWidgetCollapsed, applyTodoWidgetGlass, applyTodoWidgetChrome,
+  applyTodoDesktopPin, applyWidgetDesktopPin, applyAppearanceToOverlays
+} from './windows'
+import type { UserAnalysis, MergedTrail, CustomCategory, UserHabits, Achievement, UserType, ReportTemplate, CategoryInference, SegmentPlanLink, Project } from '@shared/types'
 import { generateReport, generateWeeklyReport } from './report/engine'
 import { screenContextForWindow } from './report/ocrCollector'
 import {
@@ -134,6 +156,31 @@ export function registerIpc(): void {
     if (patch.widgetAccent !== undefined) {
       sendTo('widget', 'widget:accent', patch.widgetAccent)
     }
+    if (patch.widgetOnTop !== undefined && widgetWindow && !widgetWindow.isDestroyed() && !next.widgetDesktopPin) {
+      const docked = next.widgetMode === 'mini' && !!next.widgetDockEdge
+      if (!docked) widgetWindow.setAlwaysOnTop(next.widgetOnTop, next.widgetOnTop ? 'screen-saver' : 'floating')
+    }
+    if (patch.widgetDockOnTop !== undefined && widgetWindow && !widgetWindow.isDestroyed() && !next.widgetDesktopPin) {
+      const docked = next.widgetMode === 'mini' && !!next.widgetDockEdge
+      if (docked) widgetWindow.setAlwaysOnTop(next.widgetDockOnTop !== false, next.widgetDockOnTop !== false ? 'screen-saver' : 'floating')
+    }
+    // 浮窗显示项 / 穿透 / 紧凑：热同步到 widget 渲染层
+    if (
+      patch.widgetDisplay !== undefined ||
+      patch.widgetPenetration !== undefined ||
+      patch.widgetCompact !== undefined ||
+      patch.widgetOpacity !== undefined ||
+      patch.widgetDockOnTop !== undefined ||
+      patch.widgetDockEdge !== undefined
+    ) {
+      broadcastWidgetSettings()
+    }
+    if (patch.widgetMode !== undefined) {
+      setWidgetMode(next.widgetMode === 'compact' ? 'full' : next.widgetMode)
+    } else if (patch.widgetDockEdge !== undefined && next.widgetMode === 'mini') {
+      // 仅清吸附 / 改边：重走 setWidgetMode(mini) 应用尺寸
+      setWidgetMode('mini')
+    }
     if (patch.launchAtLogin !== undefined) {
       import('electron').then(({ app }) => app.setLoginItemSettings({ openAtLogin: patch.launchAtLogin! }))
     }
@@ -168,10 +215,35 @@ export function registerIpc(): void {
     }
     // ── 悬浮面运行时属性（透明度/穿透/顶层）：设置驱动统一应用 ──
     if (patch.widgetOpacity !== undefined && widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.setOpacity(next.widgetOpacity)
-    if (patch.widgetOnTop !== undefined && widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.setAlwaysOnTop(next.widgetOnTop, next.widgetOnTop ? 'screen-saver' : 'floating')
-    if (patch.todoWidgetOpacity !== undefined && todoWidgetWindow && !todoWidgetWindow.isDestroyed()) todoWidgetWindow.setOpacity(next.todoWidgetOpacity)
+    // widgetOnTop / widgetDockOnTop 已在上方按是否吸附分支处理
+    if (patch.todoWidgetOpacity !== undefined && todoWidgetWindow && !todoWidgetWindow.isDestroyed()) {
+      todoWidgetWindow.setOpacity(1)
+      sendTo('todoWidget', 'todoWidget:content-opacity', next.todoWidgetOpacity)
+    }
     if (patch.todoWidgetPenetration !== undefined) setTodoWidgetPenetration(next.todoWidgetPenetration)
-    if (patch.todoWidgetOnTop !== undefined) setTodoWidgetLayer(next.todoWidgetOnTop)
+    if (patch.todoWidgetOnTop !== undefined && !next.todoWidgetDesktopPin) setTodoWidgetLayer(next.todoWidgetOnTop)
+    if (patch.todoWidgetVisible !== undefined) {
+      if (next.todoWidgetVisible) {
+        const tw = createTodoWidgetWindow()
+        if (tw && !tw.isDestroyed()) tw.show()
+      } else if (todoWidgetWindow && !todoWidgetWindow.isDestroyed()) {
+        todoWidgetWindow.hide()
+      }
+      refreshTray()
+    }
+    if (patch.todoWidgetCollapsed !== undefined) setTodoWidgetCollapsed(!!next.todoWidgetCollapsed)
+    if (
+      patch.overlayGlass !== undefined ||
+      patch.todoWidgetOpacity !== undefined
+    ) {
+      applyTodoWidgetGlass(!!next.overlayGlass)
+      applyTodoWidgetChrome()
+    }
+    if (patch.todoWidgetDesktopPin !== undefined) applyTodoDesktopPin()
+    if (patch.widgetDesktopPin !== undefined) applyWidgetDesktopPin()
+    if (patch.appearanceMode !== undefined || patch.darkTone !== undefined) {
+      applyAppearanceToOverlays()
+    }
     if (patch.petOpacity !== undefined && petWindow && !petWindow.isDestroyed()) petWindow.setOpacity(next.petOpacity)
     return next
   })
@@ -199,9 +271,57 @@ export function registerIpc(): void {
   ipcMain.handle('statuscard:build', (_e, projectId: string) => buildStatusCard(String(projectId)))
   ipcMain.handle('statuscard:parse', (_e, md: string) => parseStatusCard(String(md)))
   ipcMain.handle('statuscard:apply', (_e, diff) => applyCardDiff(diff))
+  ipcMain.handle('statuscard:summarize', async (_e, projectId: string, text: string) =>
+    summarizeProgressPaste(String(projectId), String(text ?? ''))
+  )
+
+  // ── 粘贴分拣 / OCR ──
+  ipcMain.handle('clipboard:peek', () => {
+    const text = clipboard.readText() ?? ''
+    let hasImage = false
+    let imagePngBase64: string | null = null
+    try {
+      const img = clipboard.readImage()
+      if (img && !img.isEmpty()) {
+        hasImage = true
+        imagePngBase64 = img.toPNG().toString('base64')
+      }
+    } catch { /* ignore */ }
+    const kind = classifyPaste(text, { fromImage: hasImage })
+    return { text, hasImage, imagePngBase64, kind }
+  })
+  ipcMain.handle('ocr:recognizePng', async (_e, b64: string) => {
+    try {
+      const raw = String(b64 ?? '').replace(/^data:image\/\w+;base64,/, '')
+      const buf = Buffer.from(raw, 'base64')
+      if (!buf.length) return { text: '', ok: false, error: '空图片' }
+      const r = await recognizePngBuffer(buf)
+      const text = (r.text ?? '').trim()
+      return {
+        text,
+        ok: !!text,
+        kind: classifyPaste(text, { fromImage: true }),
+        engine: r.engine,
+        error: text ? undefined : (r.error || '未识别到文字')
+      }
+    } catch (e) {
+      return { text: '', ok: false, error: (e as Error).message }
+    }
+  })
+  ipcMain.handle('paste:extractTodos', async (_e, text: string) =>
+    extractAndPolishPasteTodos(String(text ?? ''))
+  )
+  ipcMain.handle('plans:dedupeBurst', () => dedupeSessionBurstPlans())
+
   // ── 待办树小组件 ──
   ipcMain.handle('todoWidget:toggle', () => toggleTodoWidget())
   ipcMain.handle('todoWidget:layer', (_e, onTop: boolean) => setTodoWidgetLayer(!!onTop))
+  ipcMain.handle('todoWidget:setCollapsed', (_e, v: boolean) => {
+    setTodoWidgetCollapsed(!!v)
+    return { ok: true, collapsed: !!v }
+  })
+  ipcMain.handle('todoWidget:applyPin', () => applyTodoDesktopPin())
+  ipcMain.handle('widget:applyPin', () => applyWidgetDesktopPin())
   // ── MotionLab 自动化（v7） ──
   ipcMain.handle('automations:list', () => listAutomations())
   ipcMain.handle('automations:save', (_e, rule) => saveAutomation(rule))
@@ -221,6 +341,29 @@ export function registerIpc(): void {
   // ── 天气（wttr.in，按城市名查询，本地维护城市）──
   ipcMain.handle('weather:get', (_e, city?: string) => getWeather(city))
   ipcMain.handle('weather:next', (_e, hours: number, city?: string) => getWeatherNextHours(city, hours))
+  ipcMain.handle('weather:exportBrief', async (_e, city?: string) => {
+    const target = city || getSettings().city
+    const [now, brief, next] = await Promise.all([
+      getWeather(target),
+      getWeatherBrief(target),
+      getWeatherNextHours(target, 12)
+    ])
+    const payload = {
+      exportedAt: Date.now(),
+      city: target,
+      now,
+      brief,
+      nextHours: next
+    }
+    try {
+      const dir = app.getPath('userData')
+      const file = path.join(dir, 'weather-export.json')
+      fs.writeFileSync(file, JSON.stringify(payload, null, 2), 'utf8')
+      return { ok: true, file, data: payload }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message, data: payload }
+    }
+  })
 
   // ── 轨迹 ──
   ipcMain.handle('trail:get', (_e, date?: string) => {
@@ -454,6 +597,148 @@ export function registerIpc(): void {
   ipcMain.handle('memos:list', () => col('memos'))
   ipcMain.handle('memos:add', (_e, text: string) =>
     insertInto('memos', { id: genId('memo'), text, source: 'manual', ts: Date.now() }))
+
+  // ── 本地知识库 / 过程草稿 ──
+  ipcMain.handle('knowledge:list', () => col<KnowledgeItem>('knowledge'))
+  ipcMain.handle('knowledge:add', (_e, input: Partial<KnowledgeItem>) => {
+    const now = Date.now()
+    const item: KnowledgeItem = {
+      id: genId('kn'),
+      title: String(input.title ?? '未命名').trim() || '未命名',
+      body: String(input.body ?? ''),
+      kind: 'unstructured',
+      source: (input.source as KnowledgeItem['source']) || 'manual',
+      links: Array.isArray(input.links) ? input.links : [],
+      tags: Array.isArray(input.tags) ? input.tags : [],
+      fileName: input.fileName,
+      categoryId: input.categoryId,
+      categoryName: input.categoryName,
+      dossierKind: input.dossierKind,
+      sedimentedAt: input.sedimentedAt ?? now,
+      ts: now
+    }
+    return insertInto('knowledge', item)
+  })
+  ipcMain.handle('knowledge:update', (_e, id: string, patch: Partial<KnowledgeItem>) =>
+    updateIn<KnowledgeItem>('knowledge', String(id), patch)
+  )
+  ipcMain.handle('knowledge:remove', (_e, id: string) => removeFrom('knowledge', String(id)))
+  ipcMain.handle('knowledge:sedimentMemo', (_e, payload: {
+    memoId?: string
+    text?: string
+    title?: string
+    links?: KnowledgeLink[]
+  }) => {
+    const memoId = payload?.memoId ? String(payload.memoId) : ''
+    let memo = memoId ? col<MemoRecord>('memos').find((m) => m.id === memoId) : undefined
+    const text = String(payload?.text ?? memo?.text ?? '').trim()
+    if (!text) return { ok: false, reason: 'empty' }
+    if (memo?.sedimentedAt && memo.knowledgeId) {
+      const existing = col<KnowledgeItem>('knowledge').find((k) => k.id === memo!.knowledgeId)
+      return { ok: true, already: true, item: existing }
+    }
+    const now = Date.now()
+    const item = insertInto<KnowledgeItem>('knowledge', {
+      id: genId('kn'),
+      title: String(payload?.title ?? text.slice(0, 40)).trim() || '备忘',
+      body: text,
+      kind: 'unstructured',
+      source: 'memo',
+      links: Array.isArray(payload?.links) ? payload.links : (memoId ? [{ type: 'memo', id: memoId }] : []),
+      tags: [],
+      sedimentedAt: now,
+      ts: now
+    })
+    if (memoId) {
+      updateIn<MemoRecord>('memos', memoId, { sedimentedAt: now, knowledgeId: item.id })
+    }
+    return { ok: true, item }
+  })
+  ipcMain.handle('knowledge:pickFileContent', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: '文本/文档', extensions: ['txt', 'md', 'markdown', 'json', 'csv', 'log'] },
+        { name: '全部', extensions: ['*'] }
+      ]
+    })
+    if (result.canceled || !result.filePaths.length) return { ok: false, files: [] }
+    const files = result.filePaths.map((fp) => {
+      const fileName = path.basename(fp)
+      let body = ''
+      try {
+        body = fs.readFileSync(fp, 'utf8')
+      } catch {
+        body = ''
+      }
+      return {
+        fileName,
+        title: fileName.replace(/\.[^.]+$/, ''),
+        body: body.slice(0, 200_000)
+      }
+    })
+    return { ok: true, files }
+  })
+  ipcMain.handle('knowledge:importFiles', async (_e, payload?: { links?: KnowledgeLink[] }) => {
+    const picked = await dialog.showOpenDialog({
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: '文本/文档', extensions: ['txt', 'md', 'markdown', 'json', 'csv', 'log'] },
+        { name: '全部', extensions: ['*'] }
+      ]
+    })
+    if (picked.canceled || !picked.filePaths.length) return { ok: false, items: [] }
+    const links = Array.isArray(payload?.links) ? payload!.links! : []
+    const items: KnowledgeItem[] = []
+    const now = Date.now()
+    for (const fp of picked.filePaths) {
+      const fileName = path.basename(fp)
+      let body = ''
+      try { body = fs.readFileSync(fp, 'utf8') } catch { body = '' }
+      items.push(insertInto('knowledge', {
+        id: genId('kn'),
+        title: fileName.replace(/\.[^.]+$/, '') || fileName,
+        body: body.slice(0, 200_000),
+        kind: 'unstructured',
+        source: 'upload',
+        links,
+        tags: [],
+        fileName,
+        sedimentedAt: now,
+        ts: now
+      }))
+    }
+    return { ok: true, items }
+  })
+
+  ipcMain.handle('process:getOpenDraft', () => getOpenProcessDraft())
+  ipcMain.handle('process:appendNote', (_e, input) => {
+    try {
+      const draft = appendProcessNote(input ?? {})
+      return { ok: true, draft }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
+  ipcMain.handle('process:suggestCategory', (_e, text: string, projectId?: string) => {
+    const p = projectId ? col<Project>('projects').find((x) => x.id === projectId) : null
+    return suggestNoteCategory(String(text ?? ''), p?.noteCategories ?? [])
+  })
+  ipcMain.handle('process:ensureCategory', (_e, projectId: string, name: string) =>
+    ensureProjectCategory(String(projectId), String(name))
+  )
+  ipcMain.handle('process:previewMerge', (_e, draftId?: string) => {
+    const r = buildProcessMergePreview(draftId)
+    if ('error' in r) return { error: r.error }
+    return { title: r.title, body: r.body, links: r.links }
+  })
+  ipcMain.handle('process:confirmSediment', (_e, input) => {
+    try {
+      return confirmProcessSediment(input ?? {})
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
+  })
 
   // ── 轻问诊 ──
   ipcMain.handle('feedback:send', (_e, payload: { qid: string; ctx: string; question: string; answer: 'yes' | 'no' }) => {
@@ -764,7 +1049,7 @@ export function registerIpc(): void {
       } else {
         if (petWindow && !petWindow.isDestroyed()) petWindow.show()
         if (widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.show()
-        bus.setPet({ message: '会议结束啦！辛苦辛苦~' })
+        emitPetIntent('celebrate', { message: '会议结束啦！辛苦辛苦~' })
       }
     }
     if (!payload.active && payload.mode === 'assist' && payload.sinceTs) {
@@ -782,7 +1067,9 @@ export function registerIpc(): void {
         source: 'monitor',
         ts: Date.now()
       })
-      bus.setPet({ message: `会议结束，${Math.round((endMin - startMin))} 分钟。需要我整理纪要吗？` })
+      emitPetIntent('celebrate', {
+        message: `会议结束，${Math.round((endMin - startMin))} 分钟。需要我整理纪要吗？`
+      })
     }
     sendTo('pet', 'pet:meeting', payload)
   })
@@ -829,6 +1116,9 @@ export function registerIpc(): void {
   ipcMain.on('widget:drag', (_e, dx: number, dy: number) => {
     moveWidgetBy(dx, dy)
   })
+  ipcMain.on('widget:dragBegin', () => beginWidgetDrag())
+  ipcMain.on('widget:dragEnd', () => endWidgetDrag())
+  ipcMain.on('widget:hit', (_e, over: boolean) => setWidgetHit(!!over))
 
   // ── OCR 资源管理 ──
   ipcMain.handle('ocr:stats', () => getOcrStorageStats())

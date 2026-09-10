@@ -8,18 +8,19 @@
  *
  * 结算产出：
  *   - PlanItem（planType='burst'，source='session'，无时段不占计划泳道）
+ *     **同日同标题合并时长**，避免「机动开发 · xxx」刷屏
  *   - ProjectTimeLink（source='auto'）：时长自动归入匹配的项目
  *   - 积分 = 分钟数；桌宠告知卡（数据已自动落库，确认仅回执）
  *   - 若匹配项目尚无任务清单且 AI 已启用 → 自动跑一次 aiBreakdown 拆解后续任务
  *
  * 隐私：只记录应用名/窗口标题摘要/时长
  */
-import { col, insertInto } from './db'
+import { col, insertInto, updateIn, removeFrom } from './db'
 import { addPoints } from './motions'
 import { bus } from './state'
 import { getSettings } from './settings'
 import { genId } from '@shared/types'
-import type { PlanItem, Project, ProjectTimeLink, WorkState } from '@shared/types'
+import type { PlanItem, Project, ProjectTimeLink } from '@shared/types'
 import { dateKey } from '@shared/trail'
 
 const MIN_SESSION_MS = 10 * 60_000
@@ -78,47 +79,149 @@ function matchProject(sessionApps: Set<string>): Project | null {
   return best
 }
 
-/** 会话结束结算：机动片段落库 + 项目时长关联 + 积分 + 桌宠告知卡 */
+function isSessionBurstPlan(p: PlanItem): boolean {
+  return (
+    p.sessionDerived === true ||
+    p.source === 'session' ||
+    p.planType === 'burst' ||
+    /^机动开发\s*·/.test(p.title || '')
+  )
+}
+
+/**
+ * 合并历史重复「机动开发」：同日同标题合成一条，时长相加。
+ * 启动时跑一次即可。
+ */
+export function dedupeSessionBurstPlans(): { removed: number; groups: number } {
+  const bursts = col<PlanItem>('plans').filter(isSessionBurstPlan)
+  const groups = new Map<string, PlanItem[]>()
+  for (const p of bursts) {
+    const key = `${p.date}\0${(p.title || '').trim()}`
+    const g = groups.get(key) ?? []
+    g.push(p)
+    groups.set(key, g)
+  }
+  let removed = 0
+  let mergedGroups = 0
+  for (const [, g] of groups) {
+    if (g.length < 2) continue
+    mergedGroups++
+    g.sort((a, b) => {
+      const la = a.linkedProjectId || a.projectId ? 0 : 1
+      const lb = b.linkedProjectId || b.projectId ? 0 : 1
+      if (la !== lb) return la - lb
+      return (a.ts || 0) - (b.ts || 0)
+    })
+    const primary = g[0]!
+    const totalMin = g.reduce((s, p) => s + (Number(p.durationMin) || 0), 0)
+    updateIn<PlanItem>('plans', primary.id, {
+      durationMin: totalMin || primary.durationMin || 1,
+      sessionDerived: true,
+      planType: 'burst',
+      source: 'session',
+      status: 'done',
+      completionRatio: 1,
+      note: primary.note || `合并 ${g.length} 次会话冲刺`
+    })
+    for (const p of g.slice(1)) {
+      if (removeFrom('plans', p.id)) removed++
+    }
+  }
+  if (removed > 0) {
+    console.info(`[devSession] 已合并重复机动开发：${mergedGroups} 组，删除 ${removed} 条`)
+  }
+  return { removed, groups: mergedGroups }
+}
+
+/** 会话结束结算：机动片段落库（同日同标题合并）+ 项目时长关联 + 积分 */
 function settle(): void {
-  const minutes = Math.max(1, Math.round((lastActiveTs - sessionStart) / 60000))
+  const elapsed = lastActiveTs - sessionStart
+  if (elapsed < MIN_SESSION_MS) {
+    resetSession()
+    return
+  }
+  const minutes = Math.max(1, Math.round(elapsed / 60000))
   const appsArr = [...apps]
   const main = mainApp || appsArr[0] || '开发'
   const summary = (titles[titles.length - 1] || main).slice(0, 40)
+  const title = `机动开发 · ${summary}`
+  const day = dateKey(Date.now())
 
   const proj = matchProject(apps)
 
-  const plan: PlanItem = {
-    id: genId('plan'),
-    date: dateKey(Date.now()),
-    title: `机动开发 · ${summary}`,
-    category: 'ai-dev',
-    durationMin: minutes,
-    status: 'done',
-    planType: 'burst',
-    source: 'session',
-    sessionDerived: true,
-    completionRatio: 1,
-    linkedProjectId: proj?.id,
-    ts: Date.now()
+  const existing = col<PlanItem>('plans').find(
+    (p) =>
+      !p.archived &&
+      p.date === day &&
+      isSessionBurstPlan(p) &&
+      (p.title || '').trim() === title
+  )
+
+  let plan: PlanItem
+  if (existing) {
+    const nextMin = (Number(existing.durationMin) || 0) + minutes
+    const updated = updateIn<PlanItem>('plans', existing.id, {
+      durationMin: nextMin,
+      ts: Date.now(),
+      status: 'done',
+      completionRatio: 1,
+      sessionDerived: true,
+      planType: 'burst',
+      source: 'session',
+      linkedProjectId: existing.linkedProjectId || proj?.id,
+      projectId: existing.projectId || undefined
+    })
+    plan = updated ?? existing
+  } else {
+    plan = {
+      id: genId('plan'),
+      date: day,
+      title,
+      category: 'ai-dev',
+      durationMin: minutes,
+      status: 'done',
+      planType: 'burst',
+      source: 'session',
+      sessionDerived: true,
+      completionRatio: 1,
+      linkedProjectId: proj?.id,
+      ts: Date.now()
+    }
+    insertInto<PlanItem>('plans', plan)
   }
-  insertInto<PlanItem>('plans', plan)
 
   if (proj) {
-    insertInto<ProjectTimeLink>('projectTimeLinks', {
-      id: genId('ptl'),
-      projectId: proj.id,
-      date: plan.date,
-      app: main,
-      min: minutes,
-      source: 'auto',
-      ts: Date.now()
-    })
+    const linkApp = main.trim().toLowerCase().replace(/\.exe$/i, '')
+    const exLink = col<ProjectTimeLink>('projectTimeLinks').find(
+      (l) => l.projectId === proj.id && l.date === day && l.app === linkApp && l.source === 'auto'
+    )
+    if (exLink) {
+      updateIn<ProjectTimeLink>('projectTimeLinks', exLink.id, {
+        min: (Number(exLink.min) || 0) + minutes,
+        ts: Date.now()
+      })
+    } else {
+      insertInto<ProjectTimeLink>('projectTimeLinks', {
+        id: genId('ptl'),
+        projectId: proj.id,
+        date: day,
+        app: linkApp,
+        min: minutes,
+        source: 'auto',
+        ts: Date.now()
+      })
+    }
   }
 
   const pts = addPoints(minutes * POINTS_PER_MIN, `burst:${plan.title}`).delta
 
-  // 回执走桌宠气泡（低打扰），不占确认通道——数据已自动落库，无需用户确认
-  bus.setPet({ message: `${minutes} 分钟冲刺「${summary}」已记入${proj ? `「${proj.name}」` : ''} +${pts} ⭐` })
+  bus.setPet({
+    message: existing
+      ? `${minutes} 分钟冲刺并入「${summary}」共 ${plan.durationMin}m${proj ? ` · ${proj.name}` : ''} +${pts} ⭐`
+      : `${minutes} 分钟冲刺「${summary}」已记入${proj ? `「${proj.name}」` : ''} +${pts} ⭐`,
+    intent: 'celebrate',
+    intentAt: Date.now()
+  })
 
   resetSession()
 }
@@ -129,7 +232,11 @@ export function devSessionTick(app: string, title: string, ts: number, idleSec: 
   const devHit = isDevApp(app) || isSelfTest(app, title)
 
   if (inSession) {
-    if (devHit || idleSec < 2) {
+    // 先判空档再刷新 lastActive，避免永远合并不了会话
+    if (ts - lastActiveTs > END_GAP_MS) {
+      settle()
+      // 若仍在开发态，下面会开新会话
+    } else if (devHit || idleSec < 2) {
       lastActiveTs = ts
       if (devHit) {
         apps.add(app)
@@ -137,11 +244,11 @@ export function devSessionTick(app: string, title: string, ts: number, idleSec: 
         const t = title.slice(0, 40)
         if (titles[titles.length - 1] !== t) titles.push(t)
       }
-      if (ts - lastActiveTs > END_GAP_MS) settle()
+      return
+    } else {
+      settle()
       return
     }
-    settle()
-    return
   }
 
   if (devHit && idleSec < 5) {

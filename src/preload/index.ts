@@ -34,8 +34,18 @@ const api = {
   buildStatusCard: (projectId: string) => ipcRenderer.invoke('statuscard:build', projectId),
   parseStatusCard: (md: string) => ipcRenderer.invoke('statuscard:parse', md),
   applyCardDiff: (diff: unknown) => ipcRenderer.invoke('statuscard:apply', diff),
+  summarizeStatusCard: (projectId: string, text: string) =>
+    ipcRenderer.invoke('statuscard:summarize', projectId, text),
   toggleTodoWidget: () => ipcRenderer.invoke('todoWidget:toggle'),
   setTodoWidgetLayer: (onTop: boolean) => ipcRenderer.invoke('todoWidget:layer', onTop),
+  setTodoWidgetCollapsed: (v: boolean) => ipcRenderer.invoke('todoWidget:setCollapsed', v),
+  applyTodoDesktopPin: () => ipcRenderer.invoke('todoWidget:applyPin'),
+  applyWidgetDesktopPin: () => ipcRenderer.invoke('widget:applyPin'),
+  onTodoWidgetStyle: on<{ glass: boolean; opacity: number }>('todoWidget:style'),
+  onTodoWidgetContentOpacity: on('todoWidget:content-opacity'),
+  onTodoWidgetCollapsed: on<{ collapsed: boolean }>('todoWidget:collapsed'),
+  onTodoWidgetDesktopPinResult: on<{ ok: boolean; reason?: string; pinned?: boolean }>('todoWidget:desktop-pin-result'),
+  onAppearanceUpdate: on<{ appearanceMode?: 'auto' | 'light' | 'dark'; darkTone?: string }>('appearance:update'),
   // MotionLab 自动化（v7）
   listAutomations: () => ipcRenderer.invoke('automations:list'),
   saveAutomation: (rule: unknown) => ipcRenderer.invoke('automations:save', rule),
@@ -53,6 +63,7 @@ const api = {
   // 天气（wttr.in，按城市名查询）
   getWeather: (city?: string) => ipcRenderer.invoke('weather:get', city),
   getWeatherNext: (hours: number, city?: string) => ipcRenderer.invoke('weather:next', hours, city),
+  exportWeatherBrief: (city?: string) => ipcRenderer.invoke('weather:exportBrief', city),
 
   // 轨迹 / 日历 / 计划
   getTrail: (date?: string) => ipcRenderer.invoke('trail:get', date),
@@ -69,6 +80,29 @@ const api = {
   removePlan: (id: string) => ipcRenderer.invoke('plans:remove', id),
   setPlanStatus: (id: string, status: PlanStatus) => ipcRenderer.invoke('plans:setStatus', id, status),
   planVsActual: (date?: string) => ipcRenderer.invoke('plans:vsActual', date),
+  dedupeBurstPlans: () => ipcRenderer.invoke('plans:dedupeBurst'),
+
+  // 粘贴分拣
+  peekClipboard: () => ipcRenderer.invoke('clipboard:peek'),
+  ocrRecognizePng: (b64: string) => ipcRenderer.invoke('ocr:recognizePng', b64),
+  extractPasteTodos: (text: string) => ipcRenderer.invoke('paste:extractTodos', text),
+
+  // 知识库 / 过程
+  listKnowledge: () => ipcRenderer.invoke('knowledge:list'),
+  addKnowledge: (p: unknown) => ipcRenderer.invoke('knowledge:add', p),
+  updateKnowledge: (id: string, patch: unknown) => ipcRenderer.invoke('knowledge:update', id, patch),
+  removeKnowledge: (id: string) => ipcRenderer.invoke('knowledge:remove', id),
+  sedimentMemoToKnowledge: (p: unknown) => ipcRenderer.invoke('knowledge:sedimentMemo', p),
+  importKnowledgeFiles: (p?: unknown) => ipcRenderer.invoke('knowledge:importFiles', p),
+  pickKnowledgeFileContent: () => ipcRenderer.invoke('knowledge:pickFileContent'),
+  getOpenProcessDraft: () => ipcRenderer.invoke('process:getOpenDraft'),
+  appendProcessNote: (p: unknown) => ipcRenderer.invoke('process:appendNote', p),
+  suggestProcessCategory: (text: string, projectId?: string) =>
+    ipcRenderer.invoke('process:suggestCategory', text, projectId),
+  ensureProcessCategory: (projectId: string, name: string) =>
+    ipcRenderer.invoke('process:ensureCategory', projectId, name),
+  previewProcessMerge: (draftId?: string) => ipcRenderer.invoke('process:previewMerge', draftId),
+  confirmProcessSediment: (p?: unknown) => ipcRenderer.invoke('process:confirmSediment', p),
 
   // 项目 AI 开发管理
   listProjects: () => ipcRenderer.invoke('projects:list'),
@@ -211,6 +245,11 @@ const api = {
   widgetResizeTransient: (w: number, h: number) => ipcRenderer.send('widget:resizeTransient', w, h),
   widgetSetMode: (mode: 'mini' | 'compact' | 'full') => ipcRenderer.send('widget:setMode', mode),
   dragWidget: (dx: number, dy: number) => ipcRenderer.send('widget:drag', dx, dy),
+  beginWidgetDrag: () => ipcRenderer.send('widget:dragBegin'),
+  endWidgetDrag: () => ipcRenderer.send('widget:dragEnd'),
+  widgetHit: (over: boolean) => ipcRenderer.send('widget:hit', over),
+  onWidgetDock: on('widget:dock'),
+  onWidgetSettings: on('settings:update'),
   onWidgetAccent: on('widget:accent'),
   onWelcomeBack: on('welcome-back'),
   onErrorBanner: on('error-banner'),

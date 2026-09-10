@@ -4,12 +4,14 @@
  */
 import { app, BrowserWindow, Notification } from 'electron'
 import { initSettings, getSettings } from './settings'
-import { initDb, flushNow } from './db'
+import { initDb, flushNow, loadActivitiesDeferred } from './db'
 import { createMainWindow, createWidgetWindow, createPetWindow, createSplashWindow, closeSplash, sendTo, widgetWindow, mainWindow, createTodoWidgetWindow } from './windows'
 import { createTray } from './tray'
 import { registerShortcuts, unregisterShortcuts } from './globalShortcut'
 import { registerIpc } from './ipc'
 import { startMonitor } from './monitor'
+import { dedupeSessionBurstPlans } from './devSession'
+import { cleanupJunkFeedbackPlans } from './statusCard'
 import { disposeModelClient } from './recognition/modelClient'
 import { startInputProbe } from './recognition/inputProbe'
 import { addPoints } from './motions'
@@ -18,6 +20,7 @@ import { startIntegration } from './integration'
 import { startOnerAutoSync } from './oner'
 import { autoCleanOcrCache } from './ocr'
 import { bus } from './state'
+import { emitPetIntent } from './petIntent'
 import { startAttentionEngine, setPetNotifier } from './attention'
 import { refreshPersona, getPersona } from './persona'
 import { getWeatherBrief } from './weather'
@@ -75,6 +78,7 @@ function setupBusForwarding(): void {
   bus.on('pet', (pet) => {
     sendTo('main', 'pet:update', pet)
     sendTo('pet', 'pet:update', pet)
+    sendTo('widget', 'pet:update', pet)
   })
   bus.on('question', (q) => {
     sendTo('widget', 'question:update', q)
@@ -226,6 +230,39 @@ function startPeriodicJobs(): void {
       console.warn('[weather-remind] 检查失败', e)
     }
   }, 30 * 1000)
+
+  // ── 过程案卷提醒：工作日下班前后，有未沉淀草稿则弱提示一次 ──
+  let lastProcessRemindDay = ''
+  setInterval(() => {
+    try {
+      const now = new Date()
+      const d = dateKey(now.getTime())
+      if (d === lastProcessRemindDay) return
+      const day = now.getDay()
+      if (day === 0 || day === 6) return
+      const nowMin = now.getHours() * 60 + now.getMinutes()
+      if (nowMin < 17 * 60 || nowMin > 21 * 60) return
+      const { getOpenProcessDraft, buildProcessMergePreview } = require('./processDraft') as typeof import('./processDraft')
+      const draft = getOpenProcessDraft()
+      if (!draft) return
+      const notes = draft.notes?.length ?? 0
+      const ais = draft.aiSnippets?.length ?? 0
+      const apps = draft.apps?.length ?? 0
+      if (notes + ais + apps < 1) return
+      const preview = buildProcessMergePreview(draft.id)
+      if ('error' in preview) return
+      lastProcessRemindDay = d
+      pushNotify(
+        'rest',
+        '过程案卷待沉淀',
+        `今日草稿里有 ${notes} 条旁记、${ais} 段 AI、${apps} 个软件痕迹，可去知识库预览合并入库`,
+        [{ label: '知道了', action: 'dismiss', primary: true }],
+        45
+      )
+    } catch (e) {
+      console.warn('[process-remind] 检查失败', e)
+    }
+  }, 60 * 1000)
 }
 
 /** 解析 "HH:MM" 为分钟数（0-1439），非法返回 null */
@@ -238,61 +275,124 @@ function parseHHMM(s: string): number | null {
   return h * 60 + mm
 }
 
-app.whenReady().then(() => {
-  // 单实例锁：防止多个 WorkOn 同时运行（双桌宠窗会导致气泡/角色重叠）
-  if (!app.requestSingleInstanceLock()) {
-    app.quit()
-    return
-  }
+// 单实例锁必须在 ready 之前申请（官方口径）；放 whenReady 里会导致第二进程/钩子异常时窗口永不出现
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  app.quit()
+} else {
   app.on('second-instance', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       if (!mainWindow.isVisible()) mainWindow.show()
       mainWindow.focus()
     }
   })
+}
+
+app.whenReady().then(() => {
+  if (!gotSingleInstanceLock) return
 
   try {
   initSettings()
+  console.log('[startup] settings ok')
   initDb()
-  registerIpc()
-  setupBusForwarding()
-  autoCleanOcrCache() // 按设置周期清理截屏缓存（0=永不）
+  console.log('[startup] db ok')
 
-  // 硬件分级：首次运行/硬件变化时自动定帧率档位与 VRM 模型版本（PowerShell 异步，不阻塞启动）
-  void detectHardware().catch((e) => console.warn('[hardware] 检测失败:', e))
-  // 行为探针（识别二期）：设置开关控制，聚合键鼠计数供识别特征
-  if (getSettings().inputProbeEnabled) startInputProbe()
-
-  // 开启动画：独立窗口先播 splash（~8s），主窗口后台加载，播完再亮
-  // 设置「欢迎界面」关闭时跳过 splash，直接亮主窗口
+  // 尽早建窗：后续清理/IPC/探针再慢也不挡首屏
   const showSplash = getSettings().showSplash !== false
   const splashAt = Date.now()
-  if (showSplash) createSplashWindow()
-  createMainWindow({ deferShow: showSplash })
+  try {
+    if (showSplash) createSplashWindow()
+    const mw = createMainWindow({ deferShow: showSplash })
+    // 亮窗定时器必须在 IPC/重活之前挂上；用本地引用避免打包后 mainWindow 绑定失效
+    setTimeout(
+      () => {
+        closeSplash()
+        if (mw && !mw.isDestroyed()) {
+          if (mw.isMinimized()) mw.restore()
+          mw.show()
+          mw.focus()
+          try { mw.moveTop() } catch { /* ignore */ }
+          console.log('[startup] main window shown')
+        }
+        if (getSettings().petEnabled) createPetWindow()
+      },
+      showSplash ? Math.max(800, 2000 - (Date.now() - splashAt)) : 0
+    )
+    // 兜底：再过几秒强制亮一次（防 splash/焦点被抢走）
+    setTimeout(() => {
+      if (mw && !mw.isDestroyed() && !mw.isVisible()) {
+        if (mw.isMinimized()) mw.restore()
+        mw.show()
+        mw.focus()
+        console.log('[startup] main window force-show')
+      }
+    }, 5000)
+    console.log('[startup] main window created')
+  } catch (e) {
+    console.error('[startup] 创建窗口失败', e)
+  }
+
+  try {
+    const r = dedupeSessionBurstPlans()
+    if (r.removed > 0) {
+      console.info(`[startup] 机动开发去重：合并 ${r.groups} 组，删除 ${r.removed} 条`)
+    }
+    const junk = cleanupJunkFeedbackPlans()
+    if (junk > 0) console.info(`[startup] 清理误导入章节待办 ${junk} 条`)
+  } catch (e) {
+    console.warn('[startup] 计划清理失败', e)
+  }
+  console.log('[startup] plans cleanup ok')
+
+  try {
+    registerIpc()
+    console.log('[startup] ipc ok')
+  } catch (e) {
+    console.error('[startup] ipc 注册失败', e)
+  }
+  setupBusForwarding()
+  autoCleanOcrCache()
+
+  // 硬件分级：异步，不阻塞亮窗
+  void detectHardware().catch((e) => console.warn('[hardware] 检测失败:', e))
+
   const ww = createWidgetWindow()
   if (ww && !ww.isDestroyed() && getSettings().widgetVisible) ww.show()
-  // v7 待办树小组件（设置开启时创建）
   if (getSettings().todoWidgetVisible) createTodoWidgetWindow()
   createTray()
   registerShortcuts()
+  console.log('[startup] 窗口/托盘已就绪')
 
-  startMonitor()
-  // v2.9 报表 OCR 采集：订阅 ocrWorker 文本产出（deepMode 开启后随 startOcr 生效）
-  startOcrCollector()
-  startFolderWatch()
-  startIntegration()
-  startOnerAutoSync()
-  startPeriodicJobs()
-  // v2.6 注意力评分引擎（桌宠消息经 notifier 注入，避免 attention→state 循环依赖）
-  setPetNotifier((msg) => bus.setPet({ message: msg }))
-  startAttentionEngine()
+  // 延后：先加载活动日志（分块），再启动监控/探针
+  setImmediate(() => {
+    void loadActivitiesDeferred()
+      .then(() => {
+        try {
+          if (getSettings().inputProbeEnabled) startInputProbe()
+          startMonitor()
+          startOcrCollector()
+          startFolderWatch()
+          startIntegration()
+          startOnerAutoSync()
+          startPeriodicJobs()
+          setPetNotifier((msg) => bus.setPet({ message: msg }))
+          startAttentionEngine()
+          // 画像重算会扫全量 activities，放到空闲后再跑，避免堵死主进程 IPC（最小化/点击假死）
+          setTimeout(() => {
+            try {
+              refreshPersona()
+            } catch (e) {
+              console.warn('[persona] 启动刷新失败', e)
+            }
+          }, 2500)
+          console.log('[startup] 监控/探针等后台已启动')
+        } catch (e) {
+          console.warn('[startup] 后台启动失败', e)
+        }
+      })
+      .catch((e) => console.warn('[startup] activities 加载失败', e))
+  })
 
-  // v2.7 用户画像：启动时自动采集刷新一次，之后每 24h 重刷（refreshPersona 幂等）
-  try {
-    refreshPersona()
-  } catch (e) {
-    console.warn('[persona] 启动刷新失败', e)
-  }
   setInterval(
     () => {
       try {
@@ -304,22 +404,9 @@ app.whenReady().then(() => {
     24 * 60 * 60 * 1000
   )
 
-  // splash 播完（≥8s）→ 关启动窗、亮主窗口、再建桌宠窗（避免 CG 被 splash 挡住）
-  setTimeout(
-    () => {
-      closeSplash()
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.show()
-        mainWindow.focus()
-      }
-      if (getSettings().petEnabled) createPetWindow()
-    },
-    showSplash ? Math.max(800, 8300 - (Date.now() - splashAt)) : 0
-  )
-
-  // 欢迎气泡
+  // 欢迎气泡 + 打招呼动作
   setTimeout(() => {
-    bus.setPet({ message: '今天也一起加油吧~', workState: bus.pet.workState })
+    emitPetIntent('chat_open', { message: '今天也一起加油吧~', workState: bus.pet.workState })
     sendTo('pet', 'pet:update', bus.pet)
   }, 3000)
 

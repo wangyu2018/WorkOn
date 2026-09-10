@@ -243,7 +243,63 @@ function SectionTitle({ icon, children, className = 'mb-3' }: { icon: ComponentP
   )
 }
 
-export default function MonitorView() {
+/** 监控可拆分的小组件（首页编辑可单独开关） */
+export type MonitorSectionKey =
+  | 'presence'
+  | 'overview'
+  | 'attention'
+  | 'dist'
+  | 'screens'
+  | 'topApps'
+  | 'trail'
+
+export const MONITOR_SECTION_META: {
+  key: MonitorSectionKey
+  label: string
+  desc: string
+  size: '整行' | '半宽'
+}[] = [
+  { key: 'presence', label: '实时状态', desc: '专注度圆环 · 当前状态与各屏', size: '整行' },
+  { key: 'overview', label: '今日概览', desc: '总时长 / 工作 / 摸鱼 / 计划达成', size: '整行' },
+  { key: 'attention', label: '评分图谱', desc: '今日注意力评分与昨日对比', size: '整行' },
+  { key: 'dist', label: '状态分布', desc: '工作/AI/学习/摸鱼堆叠占比', size: '半宽' },
+  { key: 'screens', label: '双屏并行', desc: '多屏并行占比与焦点屏', size: '半宽' },
+  { key: 'topApps', label: '应用 TOP', desc: '前台应用时长排行', size: '半宽' },
+  { key: 'trail', label: '监控时间轴', desc: '今日状态色条摘要 · 计划进度', size: '整行' }
+]
+
+export const DEFAULT_MONITOR_SECTIONS: Record<MonitorSectionKey, boolean> = {
+  presence: true,
+  overview: true,
+  attention: true,
+  dist: true,
+  screens: true,
+  topApps: true,
+  trail: true
+}
+
+function resolveSections(
+  partial?: Partial<Record<MonitorSectionKey, boolean>>
+): Record<MonitorSectionKey, boolean> {
+  return { ...DEFAULT_MONITOR_SECTIONS, ...partial }
+}
+
+export default function MonitorView({
+  embedded = false,
+  sections: sectionsProp,
+  sectionOrder
+}: {
+  embedded?: boolean
+  /** 嵌入首页时传入；不传则全部显示（独立监控页） */
+  sections?: Partial<Record<MonitorSectionKey, boolean>>
+  /** 区块渲染顺序（首页拖拽排序） */
+  sectionOrder?: MonitorSectionKey[]
+} = {}) {
+  const sections = resolveSections(embedded ? sectionsProp : undefined)
+  const orderKeys: MonitorSectionKey[] = (sectionOrder?.length
+    ? sectionOrder
+    : MONITOR_SECTION_META.map((m) => m.key)
+  ).filter((k) => sections[k])
   const [trail, setTrail] = useState<MergedTrail | null>(null)
   const [pva, setPva] = useState<PlanVsActual | null>(null)
   const [forecasts, setForecasts] = useState<Map<string, PlanForecast>>(new Map())
@@ -374,13 +430,33 @@ export default function MonitorView() {
   // 昨日评分：history 日期升序，取今日之前最后一条
   const yesterdayScore = attention ? (attention.history.filter((h) => h.date < attention.today.date).pop() ?? null) : null
 
+  const multiScreen = !!(trail && Object.keys(trail.screenMinutes).length > 1)
+  const showDist = sections.dist
+  const showScreens = sections.screens && multiScreen
+  const showTop = sections.topApps
+  const anySection = orderKeys.some((k) => {
+    if (k === 'screens') return showScreens
+    if (k === 'dist') return showDist
+    if (k === 'topApps') return showTop
+    return sections[k]
+  })
+  const rankOf = (k: MonitorSectionKey): number => {
+    const i = orderKeys.indexOf(k)
+    return i < 0 ? 999 : i
+  }
+
+  if (embedded && !anySection) return <></>
+
   return (
-    <div className="view-enter flex flex-col gap-5">
-      {/* 页面标题区 */}
-      <PageHeader icon="activity" title="实时监控" desc="活动状态 · 今日时间轴 · 应用明细与状态" />
+    <div className={`${embedded ? '' : 'view-enter '}flex flex-col gap-5`}>
+      {/* 独立监控页才显示总标题；首页嵌入时各块自带标题 */}
+      {!embedded ? (
+        <PageHeader icon="activity" title="实时监控" desc="活动状态 · 今日时间轴 · 应用明细与状态" />
+      ) : null}
 
       {/* 当前实时状态卡：大渐变圆环 + 状态徽章（订阅 onPresence） */}
-      <section className="glass-card anim-fade-up" style={{ animationDelay: '60ms' }}>
+      {sections.presence ? (
+      <section className="glass-card anim-fade-up" style={{ animationDelay: '60ms', order: rankOf('presence') }}>
         {presence && stateMeta ? (
           <div className="flex flex-col items-center gap-6 lg:flex-row">
             {/* 左：渐变描边大圆环（中心专注度大数字）+ 环下状态徽章 pill */}
@@ -466,9 +542,11 @@ export default function MonitorView() {
           </div>
         )}
       </section>
+      ) : null}
 
       {/* 今日概览：v6 KPI 洞察卡（总时长 / 工作 / 摸鱼 / 计划达成，数据来自 trail + pva，无新 IPC） */}
-      <section className="anim-fade-up flex flex-col gap-3" style={{ animationDelay: '90ms' }}>
+      {sections.overview ? (
+      <section className={`anim-fade-up flex flex-col gap-3 ${embedded ? 'glass-card !p-4' : ''}`} style={{ animationDelay: '90ms', order: rankOf('overview') }}>
         <SectionTitle icon="chart">今日概览</SectionTitle>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <InsightCard icon={<Icon name="clock" size={14} />} tone="cyan" label="总时长（墙钟）" big={trail ? fmtMin(trail.totalMin) : '—'} />
@@ -496,10 +574,12 @@ export default function MonitorView() {
           />
         </div>
       </section>
+      ) : null}
 
       {/* 今日评分图谱：复用报表日报的注意力评分卡（todayAttention 数据，组件内部自渲染） */}
-      {!attentionLoaded ? (
-        <section className="glass-card anim-fade-up" style={{ animationDelay: '120ms' }}>
+      {sections.attention ? (
+        !attentionLoaded ? (
+        <section className="glass-card anim-fade-up" style={{ animationDelay: '120ms', order: rankOf('attention') }}>
           <SectionTitle icon="activity">今日评分图谱</SectionTitle>
           <div className="flex items-center gap-2 py-5 text-[12px] text-slate-500">
             <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-neon-cyan" />
@@ -507,19 +587,22 @@ export default function MonitorView() {
           </div>
         </section>
       ) : !attention || (attention.today.finalScore === 0 && (trail?.totalMin ?? 0) < 30) ? (
-        <section className="glass-card anim-fade-up" style={{ animationDelay: '120ms' }}>
+        <section className="glass-card anim-fade-up" style={{ animationDelay: '120ms', order: rankOf('attention') }}>
           <SectionTitle icon="activity">今日评分图谱</SectionTitle>
           <p className="py-4 text-center text-[12px] text-slate-500">今天还没有足够的活动数据，先去专注工作一会儿，评分稍后就会出现在这里。</p>
         </section>
       ) : (
-        <AttentionDailyCard score={attention.today} yesterday={yesterdayScore} />
-      )}
+        <div style={{ order: rankOf('attention') }}>
+          <AttentionDailyCard score={attention.today} yesterday={yesterdayScore} />
+        </div>
+      )
+      ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* 状态分布 → 堆叠彩条（v6）：按分组时长占比分段填色，图例行可下钻 */}
+      {/* 状态分布 → 堆叠彩条（v6）：按分组时长占比分段填色，图例行可下钻 */}
+        {showDist ? (
         <section
-          className={`glass-card hoverable anim-fade-up ${trail && Object.keys(trail.screenMinutes).length > 1 ? '' : 'lg:col-span-2'}`}
-          style={{ animationDelay: '120ms' }}
+          className="glass-card hoverable anim-fade-up"
+          style={{ animationDelay: '120ms', order: rankOf('dist') }}
         >
           <SectionTitle icon="chart">状态分布</SectionTitle>
           {trail ? (
@@ -613,28 +696,29 @@ export default function MonitorView() {
             <EmptyState emoji="📊" title="暂无状态数据" hint="采集到活动后，这里会按 工作/AI 协作/学习/摸鱼/离开 分组展示时长占比。" />
           )}
         </section>
+        ) : null}
 
         {/* 双屏并行（仅多屏时展示）：结构保留，视觉对齐（图标徽标 + 当前焦点标识） */}
-        {trail && Object.keys(trail.screenMinutes).length > 1 ? (
-          <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '180ms' }}>
+        {showScreens ? (
+          <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '180ms', order: rankOf('screens') }}>
             <SectionTitle icon="monitor">双屏并行</SectionTitle>
             <div className="flex flex-col gap-3">
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 transition-colors hover:border-neon-cyan/25">
-                  <div className="text-xl font-bold text-neon-cyan">{Math.round(trail.dualRatio * 100)}%</div>
+                  <div className="text-xl font-bold text-neon-cyan">{Math.round(trail!.dualRatio * 100)}%</div>
                   <div className="mt-0.5 text-[11px] text-slate-500">并行占比</div>
                 </div>
                 <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 transition-colors hover:border-neon-cyan/25">
-                  <div className="text-xl font-bold text-slate-100">{fmtMin(trail.dualMin)}</div>
+                  <div className="text-xl font-bold text-slate-100">{fmtMin(trail!.dualMin)}</div>
                   <div className="mt-0.5 text-[11px] text-slate-500">并行时长</div>
                 </div>
                 <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 transition-colors hover:border-neon-cyan/25">
-                  <div className="text-xl font-bold text-neon-pink">{fmtMin(trail.dualWorkSlackMin)}</div>
+                  <div className="text-xl font-bold text-neon-pink">{fmtMin(trail!.dualWorkSlackMin)}</div>
                   <div className="mt-0.5 text-[11px] text-slate-500">工作+摸鱼并行</div>
                 </div>
               </div>
               <div className="flex flex-col gap-1.5">
-                {(Object.entries(trail.screenMinutes) as [string, number][]).map(([scr, min]) => {
+                {(Object.entries(trail!.screenMinutes) as [string, number][]).map(([scr, min]) => {
                   const idx = Number(scr)
                   const isFocus = presence?.mainScreen === idx
                   return (
@@ -654,7 +738,7 @@ export default function MonitorView() {
                         <div
                           className="h-full rounded-full transition-all"
                           style={{
-                            width: `${Math.min(100, (min / Math.max(1, trail.totalMin)) * 100)}%`,
+                            width: `${Math.min(100, (min / Math.max(1, trail!.totalMin)) * 100)}%`,
                             background: isFocus ? 'linear-gradient(90deg, #0fb5a4, #22d3ee)' : 'rgba(255,255,255,0.28)',
                             transitionDuration: '300ms'
                           }}
@@ -670,10 +754,10 @@ export default function MonitorView() {
                   )
                 })}
               </div>
-              {trail.auxTopState ? (
+              {trail!.auxTopState ? (
                 <div className="text-[11px] text-slate-500">
-                  主屏 {WORK_STATES[trail.mainState].emoji} {WORK_STATES[trail.mainState].label} · 副屏{' '}
-                  {WORK_STATES[trail.auxTopState].emoji} {WORK_STATES[trail.auxTopState].label}
+                  主屏 {WORK_STATES[trail!.mainState].emoji} {WORK_STATES[trail!.mainState].label} · 副屏{' '}
+                  {WORK_STATES[trail!.auxTopState].emoji} {WORK_STATES[trail!.auxTopState].label}
                 </div>
               ) : null}
             </div>
@@ -681,7 +765,8 @@ export default function MonitorView() {
         ) : null}
 
         {/* 应用 TOP 榜（v6）：应用名 + 时长 + 占比横条（渐变填色，前三名权重色 teal/violet/cyan） */}
-        <section className={`glass-card hoverable anim-fade-up ${trail && Object.keys(trail.screenMinutes).length > 1 ? '' : 'lg:col-span-2'}`} style={{ animationDelay: '150ms' }}>
+        {showTop ? (
+        <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '150ms', order: rankOf('topApps') }}>
           <SectionTitle icon="folder">应用 TOP 榜</SectionTitle>
           <p className="mb-3 text-[11px] text-slate-500">今日前台应用按时长排名 · 占比横条为该应用占全部应用活动的比例</p>
           {topApps.length > 0 ? (
@@ -720,10 +805,11 @@ export default function MonitorView() {
             <EmptyState emoji="🏅" title="暂无应用数据" hint="采集到前台活动后，这里会展示应用时长 TOP 榜。" />
           )}
         </section>
-      </div>
+        ) : null}
 
       {/* 今日 24h 时间轴（一行摘要，完整交互在日历页） */}
-      <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '240ms' }}>
+      {sections.trail ? (
+      <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '240ms', order: rankOf('trail') }}>
         <div className="mb-3 flex items-center justify-between">
           <SectionTitle icon="clock" className="">今日时间轴</SectionTitle>
           <div className="flex items-center gap-3 text-[11px] text-slate-500">
@@ -747,6 +833,7 @@ export default function MonitorView() {
           </div>
         ) : null}
       </section>
+      ) : null}
     </div>
   )
 }

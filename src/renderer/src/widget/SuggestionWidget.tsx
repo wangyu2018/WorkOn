@@ -4,7 +4,8 @@
  * 设计：静谧深空 · accent 变量驱动 · 统一头部/告警壳
  */
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import type { SuggestionQuestion, FocusChainState, Project, PlanItem } from '@shared/types'
+import type { SuggestionQuestion, FocusChainState, Project, PlanItem, DockRingContent, WidgetDisplayOptions } from '@shared/types'
+import { DEFAULT_WIDGET_DISPLAY } from '@shared/types'
 
 interface AttributionState {
   projectId: string | null
@@ -48,7 +49,7 @@ function NotificationStack({ list, onDone }: { list: WidgetNotify[]; onDone: (id
       {list.map((n) => {
         const ic = NOTIFY_ICON[n.kind] ?? NOTIFY_ICON.generic
         return (
-          <div key={n.id} className="relative overflow-hidden rounded-xl border border-white/10 p-2.5" style={PANEL_STYLE}>
+          <div key={n.id} className="relative overflow-hidden rounded-xl border border-white/10 p-2.5" style={PANEL_STYLE} data-widget-solid>
             <div className="flex items-start gap-2.5">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm" style={{ background: ic.bg }}>
                 {ic.emoji}
@@ -103,13 +104,90 @@ interface BrowserPlanConfirm {
 type AskState = 'hidden' | 'input' | 'thinking' | 'answer'
 type WidgetMode = 'mini' | 'compact' | 'full'
 const SIZES = {
-  mini:    { w: 210, h: 44 },
+  mini:    { w: 210, h: 52 },
   compact: { w: 300, h: 150 },
   full:    { w: 340, h: 520 },
 } as const
 const MAX_FULL_H = 760
 const APP_DRAG = { WebkitAppRegion: 'drag' } as unknown as CSSProperties
 const APP_NO_DRAG = { WebkitAppRegion: 'no-drag' } as unknown as CSSProperties
+
+/**
+ * mini 胶囊不用 -webkit-app-region:drag（会吞掉 click/dblclick）。
+ * 超过移动阈值才 beginWidgetDrag；未移动则识别双击进 full。
+ */
+function bindMiniCapsulePointer(
+  e: ReactPointerEvent,
+  onDoubleTap: () => void,
+  lastTapRef: { current: number }
+): void {
+  if (e.button !== 0) return
+  const raw = e.target as HTMLElement | null
+  if (raw?.closest?.('button, a, input, textarea, [data-no-capsule-drag]')) return
+  const pointerId = e.pointerId
+  const originX = e.screenX
+  const originY = e.screenY
+  let moved = false
+  let dragStarted = false
+  let cleaned = false
+
+  const detach = (): void => {
+    if (cleaned) return
+    cleaned = true
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+    window.removeEventListener('pointercancel', onCancel)
+    window.removeEventListener('blur', onBlur)
+  }
+
+  const onMove = (ev: PointerEvent): void => {
+    if (ev.pointerId !== pointerId) return
+    if (Math.abs(ev.screenX - originX) + Math.abs(ev.screenY - originY) <= 6) return
+    moved = true
+    if (!dragStarted) {
+      dragStarted = true
+      try { window.api.beginWidgetDrag() } catch { /* ignore */ }
+    }
+  }
+
+  const onUp = (ev: PointerEvent): void => {
+    if (ev.pointerId !== pointerId) return
+    const wasMoved = moved
+    detach()
+    if (dragStarted) {
+      try { window.api.endWidgetDrag() } catch { /* ignore */ }
+    }
+    if (wasMoved) return
+    const now = Date.now()
+    if (now - lastTapRef.current < 380) {
+      lastTapRef.current = 0
+      onDoubleTap()
+    } else {
+      lastTapRef.current = now
+    }
+  }
+
+  const onCancel = (ev: PointerEvent): void => {
+    if (ev.pointerId !== pointerId) return
+    detach()
+    if (dragStarted) {
+      try { window.api.endWidgetDrag() } catch { /* ignore */ }
+    }
+  }
+
+  const onBlur = (): void => {
+    detach()
+    if (dragStarted) {
+      try { window.api.endWidgetDrag() } catch { /* ignore */ }
+    }
+  }
+
+  e.preventDefault()
+  window.addEventListener('pointermove', onMove)
+  window.addEventListener('pointerup', onUp)
+  window.addEventListener('pointercancel', onCancel)
+  window.addEventListener('blur', onBlur)
+}
 
 function hexAlpha(hex: string, a: number): string {
   const n = Math.round(Math.min(1, Math.max(0, a)) * 255).toString(16).padStart(2, '0')
@@ -122,13 +200,11 @@ function restoreWidgetOpacity(): void {
 
 /* ── 共享小件 ── */
 
-/** 浮窗面板容器（三态统一质感） */
+/** 浮窗面板：实色铺满窗口，禁用 backdrop/外阴影（Win 透明窗会画出高透明直角灰框） */
 const PANEL_STYLE: CSSProperties = {
-  background: 'linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0) 30%), rgba(12, 16, 27, 0.84)',
-  border: '1px solid rgba(255, 255, 255, 0.09)',
-  boxShadow: '0 14px 36px rgba(0, 0, 0, 0.48), 0 2px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
-  backdropFilter: 'blur(16px) saturate(1.2)',
-  WebkitBackdropFilter: 'blur(16px) saturate(1.2)'
+  background: '#0C101B',
+  border: '1px solid rgba(255, 255, 255, 0.10)',
+  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.04)'
 }
 
 /** 头部小图标按钮 */
@@ -214,6 +290,187 @@ function FocusRing({ size, focus, color, emoji, icon }: { size: number; focus: n
   )
 }
 
+/** 吸附胶囊单环仪表（左右圆弧内） */
+function IslandGauge({
+  size,
+  value,
+  color,
+  glow,
+  children,
+  title
+}: {
+  size: number
+  value: number
+  color: string
+  glow?: boolean
+  children: ReactNode
+  title?: string
+}) {
+  const R = 18.5
+  const CIRC = 2 * Math.PI * R
+  const v = Math.max(0, Math.min(100, value)) / 100
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }} title={title}>
+      <svg viewBox="0 0 48 48" className="-rotate-90" style={{ width: size, height: size }}>
+        <circle cx="24" cy="24" r={R} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="3" />
+        <circle
+          cx="24" cy="24" r={R} fill="none"
+          stroke={color} strokeWidth="3" strokeLinecap="round"
+          strokeDasharray={CIRC}
+          strokeDashoffset={CIRC * (1 - v)}
+          style={{
+            transition: 'stroke-dashoffset 400ms ease-out',
+            filter: glow ? `drop-shadow(0 0 3px ${color}99)` : undefined
+          }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">{children}</div>
+    </div>
+  )
+}
+
+/** 吸附环内容 → 数值/颜色/中心 */
+function dockRingFace(kind: DockRingContent, ctx: {
+  focus: number
+  focusColor: string
+  appPct: number
+  appColor: string
+  emoji: string
+  icon?: AppCategory
+  chainSec: number
+  projectName: string
+  minutes: number
+}): { value: number; color: string; title: string; center: ReactNode; glow?: boolean } {
+  const iconSize = 11
+  switch (kind) {
+    case 'app':
+      return {
+        value: ctx.appPct,
+        color: ctx.appColor,
+        title: `应用 · ${Math.round(ctx.appPct)}%`,
+        center: ctx.icon ? (
+          <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" style={{ color: ctx.appColor }}>
+            <use href={`#cat-${ctx.icon}`} />
+          </svg>
+        ) : (
+          <span style={{ fontSize: 10, lineHeight: 1 }}>{ctx.emoji}</span>
+        )
+      }
+    case 'focus':
+      return {
+        value: ctx.focus,
+        color: ctx.focusColor,
+        title: `专注 ${Math.round(ctx.focus)}`,
+        glow: true,
+        center: (
+          <span className="text-[8px] font-bold tabular-nums leading-none" style={{ color: ctx.focusColor }}>
+            {Math.round(ctx.focus)}
+          </span>
+        )
+      }
+    case 'chain': {
+      const min = Math.max(0, Math.round(ctx.chainSec / 60))
+      const pct = Math.min(100, Math.round((ctx.chainSec / 2700) * 100))
+      return {
+        value: pct || (ctx.chainSec > 0 ? 12 : 0),
+        color: ctx.focusColor,
+        title: `链路 ${min || 0}m`,
+        glow: ctx.chainSec > 0,
+        center: (
+          <span className="text-[8px] font-bold tabular-nums leading-none" style={{ color: ctx.focusColor }}>
+            {min > 0 ? `${min}m` : '·'}
+          </span>
+        )
+      }
+    }
+    case 'project': {
+      const ch = (ctx.projectName || '·').trim().slice(0, 1) || '·'
+      return {
+        value: ctx.focus || ctx.appPct || 8,
+        color: ctx.focusColor,
+        title: ctx.projectName ? `项目 · ${ctx.projectName}` : '未归属',
+        center: (
+          <span className="text-[10px] font-bold leading-none" style={{ color: ctx.focusColor }}>{ch}</span>
+        )
+      }
+    }
+    case 'minutes': {
+      const m = Math.max(0, Math.round(ctx.minutes))
+      const pct = Math.min(100, Math.round((ctx.minutes / 45) * 100))
+      return {
+        value: pct || (m > 0 ? 10 : 0),
+        color: ctx.focusColor,
+        title: `已专注 ${m} 分钟`,
+        center: (
+          <span className="text-[8px] font-bold tabular-nums leading-none" style={{ color: ctx.focusColor }}>
+            {m > 0 ? `${m}` : '0'}
+          </span>
+        )
+      }
+    }
+  }
+}
+
+/** 吸附黑胶囊：左右环由桌搭 widgetDisplay.dock 配置 */
+function DockCapsuleRings({
+  left,
+  right,
+  focus,
+  focusColor,
+  appPct,
+  appColor,
+  emoji,
+  icon,
+  chainSec,
+  projectName,
+  minutes
+}: {
+  left: DockRingContent
+  right: DockRingContent
+  focus: number
+  focusColor: string
+  appPct: number
+  appColor: string
+  emoji: string
+  icon?: AppCategory
+  chainSec: number
+  projectName: string
+  minutes: number
+}) {
+  const gauge = 26
+  const ctx = { focus, focusColor, appPct, appColor, emoji, icon, chainSec, projectName, minutes }
+  const L = dockRingFace(left, ctx)
+  const R = dockRingFace(right, ctx)
+  return (
+    <div className="flex h-full w-full items-center justify-between gap-1 px-1.5">
+      <IslandGauge size={gauge} value={L.value} color={L.color} glow={L.glow} title={L.title}>{L.center}</IslandGauge>
+      <span className="h-[3px] w-[3px] shrink-0 rounded-full" style={{ background: 'rgba(255,255,255,0.28)' }} />
+      <IslandGauge size={gauge} value={R.value} color={R.color} glow={R.glow} title={R.title}>{R.center}</IslandGauge>
+    </div>
+  )
+}
+
+/** 告警/问答/空态共用内嵌卡壳（full 态视觉统一） */
+function InsetCard({ color, title, children, className = '' }: {
+  color: string
+  title?: string
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <div
+      className={`rounded-xl border p-2.5 ${className}`}
+      style={{ borderColor: hexAlpha(color, 0.25), background: hexAlpha(color, 0.07) }}
+      data-widget-solid
+    >
+      {title ? (
+        <div className="mb-1.5 text-[11px] font-medium" style={{ color }}>{title}</div>
+      ) : null}
+      {children}
+    </div>
+  )
+}
+
 /** 告警卡外壳：统一色调 + 收起/展开（修复原收起后无法展开的死端） */
 function AlertShell({ color, label, collapsed, onToggle, children }: {
   color: string
@@ -226,6 +483,7 @@ function AlertShell({ color, label, collapsed, onToggle, children }: {
     <div
       className="relative rounded-xl border p-2.5"
       style={{ borderColor: hexAlpha(color, 0.25), background: hexAlpha(color, 0.07) }}
+      data-widget-solid
     >
       <button
         className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
@@ -243,7 +501,7 @@ function AlertShell({ color, label, collapsed, onToggle, children }: {
   )
 }
 
-/** 问答条（input / thinking / answer 三态） */
+/** 问答条（input / thinking / answer 三态）— 与情境确认同款圆角输入 */
 function AskBar({ askState, askText, setAskText, submitAsk, onAskBlur, onEscape, askAnswer, accent, blurTimer }: {
   askState: AskState
   askText: string
@@ -261,7 +519,7 @@ function AskBar({ askState, askText, setAskText, submitAsk, onAskBlur, onEscape,
       {askState === 'input' ? (
         <input
           autoFocus
-          className="w-full rounded-full border bg-white/[0.05] px-3 py-1.5 text-xs text-slate-200 outline-none placeholder:text-slate-600"
+          className="w-full rounded-lg border bg-white/[0.05] px-2.5 py-1.5 text-[11.5px] text-slate-200 outline-none placeholder:text-slate-600"
           style={{ borderColor: hexAlpha(accent, 0.3) }}
           placeholder="问点什么…（回车发送）"
           value={askText}
@@ -270,13 +528,13 @@ function AskBar({ askState, askText, setAskText, submitAsk, onAskBlur, onEscape,
           onBlur={onAskBlur}
         />
       ) : askState === 'thinking' ? (
-        <div className="flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs text-slate-400">
+        <div className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[11.5px] text-slate-400">
           <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full" style={{ background: accent }} />思考中…
         </div>
       ) : (
         <div
-          className="max-h-20 overflow-hidden rounded-xl rounded-bl-sm border px-3 py-2 text-xs leading-relaxed"
-          style={{ borderColor: hexAlpha(accent, 0.18), background: hexAlpha(accent, 0.09), color: accent }}
+          className="max-h-24 overflow-y-auto rounded-lg border px-2.5 py-2 text-[11.5px] leading-relaxed text-slate-200"
+          style={{ borderColor: hexAlpha(accent, 0.2), background: hexAlpha(accent, 0.06) }}
         >
           {askAnswer}
         </div>
@@ -301,6 +559,14 @@ export default function SuggestionWidget() {
   const presence = usePresenceStore((s) => s.presence)
   const pet = usePresenceStore((s) => s.pet)
   const aiEnabled = useSettingsStore((s) => s.settings.aiEnabled)
+  const rawDisplay = useSettingsStore((s) => s.settings.widgetDisplay)
+  const settingsCompact = useSettingsStore((s) => s.settings.widgetCompact)
+  const widgetDisplay: WidgetDisplayOptions = {
+    dock: { ...DEFAULT_WIDGET_DISPLAY.dock, ...(rawDisplay?.dock ?? {}) },
+    mini: { ...DEFAULT_WIDGET_DISPLAY.mini, ...(rawDisplay?.mini ?? {}) },
+    full: { ...DEFAULT_WIDGET_DISPLAY.full, ...(rawDisplay?.full ?? {}) },
+    todo: { ...DEFAULT_WIDGET_DISPLAY.todo, ...(rawDisplay?.todo ?? {}) }
+  }
   const [question, setQuestion] = useState<SuggestionQuestion | null>(null)
   const [bpConfirm, setBpConfirm] = useState<BrowserPlanConfirm | null>(null)
   const [meetingDetected, setMeetingDetected] = useState<{ app: string; title: string } | null>(null)
@@ -315,6 +581,9 @@ export default function SuggestionWidget() {
     return () => window.clearInterval(t)
   }, [meetingActive])
   const [widgetMode, setWidgetMode] = useState<WidgetMode>('mini')
+  const miniTapRef = useRef(0)
+  const expandLockRef = useRef(0)
+  const [dockEdge, setDockEdge] = useState<'left' | 'right' | 'top' | 'bottom' | null>(null)
   const [penetration, setPenetration] = useState(false)
   const [accent, setAccent] = useState('#22D3EE')
   const [shimmer, setShimmer] = useState(false)
@@ -337,7 +606,8 @@ export default function SuggestionWidget() {
       if (petBubbleTimer.current) window.clearTimeout(petBubbleTimer.current)
     }
   }, [pet?.message])
-  const [widgetCompact, setWidgetCompact] = useState(false)
+  const [widgetCompact, setWidgetCompact] = useState(!!settingsCompact)
+  useEffect(() => { setWidgetCompact(!!settingsCompact) }, [settingsCompact])
   const [alertCollapsed, setAlertCollapsed] = useState<Record<string, boolean>>({})
   const [showFocusMinutes, setShowFocusMinutes] = useState(false)
   /** 专注链路 v2（悬浮窗只回答「干得怎样」：链路时长取代无口径的专注度数字） */
@@ -374,17 +644,19 @@ export default function SuggestionWidget() {
   )
   /** 未归因卡（compact/full 内嵌） */
   const unattrCard = showUnattrAsk && !attr?.projectId ? (
-    <div className="mx-3 mb-2 rounded-xl border border-[rgba(139,92,246,0.3)] p-2.5" style={PANEL_STYLE}>
-      <UnattrAskCard
-        projects={allProjects}
-        apps={(question as unknown as { apps?: string[] })?.apps}
-        fp={(question?.ctx ?? '').startsWith('attrib:') ? question!.ctx.slice(7) : undefined}
-        date={new Date().toISOString().slice(0, 10)}
-        onDone={() => {
-          setShowUnattrAsk(false)
-          if (question) answer('yes')
-        }}
-      />
+    <div className="mx-3 mb-2">
+      <InsetCard color="#8B5CF6" title="📂 归到哪个项目？">
+        <UnattrAskCard
+          projects={allProjects}
+          apps={(question as unknown as { apps?: string[] })?.apps}
+          fp={(question?.ctx ?? '').startsWith('attrib:') ? question!.ctx.slice(7) : undefined}
+          date={new Date().toISOString().slice(0, 10)}
+          onDone={() => {
+            setShowUnattrAsk(false)
+            if (question) answer('yes')
+          }}
+        />
+      </InsetCard>
     </div>
   ) : null
   /** 萤火虫：有未处理确认问题 或 AI 回答尚未查看 */
@@ -412,8 +684,10 @@ export default function SuggestionWidget() {
   }, [])
 
   const setMode = (mode: WidgetMode) => {
-    setWidgetMode(mode)
-    window.api.widgetSetMode(mode)
+    const next: WidgetMode = mode === 'compact' ? 'full' : mode
+    if (next === 'full') setDockEdge(null)
+    setWidgetMode(next)
+    window.api.widgetSetMode(next)
   }
 
   const togglePenetration = () => {
@@ -429,8 +703,10 @@ export default function SuggestionWidget() {
   useEffect(() => {
     window.api.getSettings().then((s) => {
       const mode = (s as { widgetMode?: WidgetMode }).widgetMode ?? 'mini'
-      setWidgetMode(mode)
-      window.api.widgetSetMode(mode)
+      const edge = (s as { widgetDockEdge?: typeof dockEdge }).widgetDockEdge ?? null
+      setWidgetMode(mode === 'compact' ? 'full' : mode)
+      if (mode === 'mini') setDockEdge(edge)
+      window.api.widgetSetMode(mode === 'compact' ? 'full' : mode)
     }).catch(() => undefined)
 
     window.api.getSettings().then((s) => setWidgetCompact(!!(s as { widgetCompact?: boolean }).widgetCompact)).catch(() => undefined)
@@ -474,6 +750,37 @@ export default function SuggestionWidget() {
     })
     const offNotify = window.api.onNotify((n) => setNotifies((l) => [n as WidgetNotify, ...l].slice(0, 3)))
     const offNotifyExp = window.api.onNotifyExpired((id) => setNotifies((l) => l.filter((x) => x.id !== (id as string))))
+    const offDock = window.api.onWidgetDock?.((p) => {
+      const edge = (p as { edge?: typeof dockEdge })?.edge ?? null
+      setDockEdge(edge)
+    })
+    const offSettings = window.api.onWidgetSettings?.((p) => {
+      const patch = p as {
+        widgetPenetration?: boolean
+        widgetCompact?: boolean
+        widgetAccent?: string
+        widgetDisplay?: WidgetDisplayOptions
+      }
+      if (typeof patch.widgetPenetration === 'boolean') setPenetration(patch.widgetPenetration)
+      if (typeof patch.widgetCompact === 'boolean') setWidgetCompact(patch.widgetCompact)
+      if (typeof patch.widgetAccent === 'string' && patch.widgetAccent) setAccent(patch.widgetAccent)
+      if (patch.widgetDisplay) void useSettingsStore.getState().load()
+    })
+
+    // 挖洞：仅 [data-widget-solid] 收鼠标，空白穿透桌面
+    let lastHit = false
+    const reportHit = (over: boolean): void => {
+      if (over === lastHit) return
+      lastHit = over
+      try { window.api.widgetHit?.(over) } catch { /* ignore */ }
+    }
+    const onPointerMove = (e: PointerEvent): void => {
+      const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null
+      reportHit(!!el?.closest?.('[data-widget-solid]'))
+    }
+    const onPointerLeave = (): void => reportHit(false)
+    window.addEventListener('pointermove', onPointerMove)
+    document.documentElement.addEventListener('mouseleave', onPointerLeave)
 
     return () => {
       cleanup()
@@ -485,6 +792,10 @@ export default function SuggestionWidget() {
       offAccent()
       offNotify()
       offNotifyExp()
+      offDock?.()
+      offSettings?.()
+      window.removeEventListener('pointermove', onPointerMove)
+      document.documentElement.removeEventListener('mouseleave', onPointerLeave)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -505,24 +816,31 @@ export default function SuggestionWidget() {
     const hasAlert = !!(question || bpConfirm || meetingDetected)
     const hasContent = hasAlert || askState !== 'hidden' || petBubble
     if (mode === 'mini') {
-      // 仅「需要用户回应的告警」才展开；闲聊气泡不顶开；穿透态保持不动
-      if (hasAlert && !penetration) setMode('compact')
+      // 吸附态：有告警/通知只亮点，不强制打成 full（避免拆掉胶囊）
+      // 自由 mini：仅「需回应的确认」进 full；普通 notify 用萤火虫提示
+      if (hasAlert && !penetration && !dockEdge) setMode('full')
       return
     }
-    const base = SIZES[mode].h
+    // full：不在此临时撑高（避免窗体抽动）
+    if (mode === 'full') return
+    const base = SIZES.compact.h
     const extra = hasContent ? Math.min(340,
       (question ? 170 : 0) + (bpConfirm ? 150 : 0) + (meetingDetected ? 170 : 0) + (askState !== 'hidden' ? 70 : 0)
     ) : 0
-    const target = Math.min(mode === 'full' ? MAX_FULL_H : base + extra, base + extra)
-    const sz = SIZES[mode]
-    window.api.widgetResizeTransient(sz.w, target)
-  }, [widgetMode, question, bpConfirm, meetingDetected, askState, petBubble, penetration])
+    const target = base + extra
+    window.api.widgetResizeTransient(SIZES.compact.w, target)
+  }, [widgetMode, question, bpConfirm, meetingDetected, askState, petBubble, penetration, dockEdge])
 
-  // 右下角拖拽改大小（pointer capture：鼠标移出窗口仍持续触发，避免缩放中断）
+  // 右下角拖拽改大小（从当前窗尺寸起步，避免跳回默认）
   const onResizePointerDown = (e: ReactPointerEvent) => {
     e.preventDefault(); e.stopPropagation()
     const base = SIZES[widgetMode]
-    resizeRef.current = { x: e.clientX, y: e.clientY, w: base.w, h: base.h }
+    resizeRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      w: window.outerWidth || base.w,
+      h: window.outerHeight || base.h
+    }
     e.currentTarget.setPointerCapture(e.pointerId)
   }
   const onResizePointerMove = (e: ReactPointerEvent) => {
@@ -596,7 +914,14 @@ export default function SuggestionWidget() {
     blurTimer.current = window.setTimeout(() => setAskState('hidden'), 3000)
   }
 
-  const penetrationTitle = penetration ? '穿透中（桌搭页关闭）' : '开启鼠标穿透（穿透后需在桌搭页关闭）'
+  const penetrationTitle = penetration
+    ? '整窗穿透中（空区也不收鼠标；请在设置/桌搭关闭）'
+    : '整窗穿透（开启后需在设置或桌搭关闭；默认已是空区挖洞）'
+  const dm = widgetDisplay.mini
+  const dd = widgetDisplay.dock
+  const df = widgetDisplay.full
+  const fireflyActive = firefly || notifies.length > 0
+  const continuousMin = Math.max(0, Math.round((presence?.continuousFocusSec ?? 0) / 60))
   const liveTitle = presence?.screens?.find((s) => s.screen === presence.mainScreen)?.title
   // 当前活跃应用 → 分类图标（跟随用户手动归类，override 变化即同步）
   const mainApp = presence?.screens?.find((s) => s.screen === presence.mainScreen)?.app
@@ -607,75 +932,135 @@ export default function SuggestionWidget() {
   // ── mini 态：胶囊三形态（归属颗粒 / 未归因轻问 / 萤火虫呼吸） ──
   if (widgetMode === 'mini') {
     const hasAttr = !!(attr?.projectId && attr.projectName)
-    return (
-      <div className="flex h-screen w-screen flex-col items-end justify-end gap-2 p-3">
-        <NotificationStack list={notifies} onDone={(id) => setNotifies((l) => l.filter((x) => x.id !== id))} />
-        {/* 未归因轻问：无归属时展开询问条 */}
-        {showUnattrAsk && !hasAttr ? (
-          <UnattrAskCard
-            onDone={() => {
-              setShowUnattrAsk(false)
-              if (question) answer('yes')
-              if (widgetMode !== 'mini') setMode('mini')
-            }}
-            projects={allProjects}
-            apps={(question as unknown as { apps?: string[] })?.apps}
-            fp={(question?.ctx ?? '').startsWith('attrib:') ? question!.ctx.slice(7) : undefined}
-            date={new Date().toISOString().slice(0, 10)}
-          />
-        ) : null}
-        <Firefly active={firefly}>
+    const hasPopup = !!(question || bpConfirm || meetingDetected || showUnattrAsk)
+    const docked = !!dockEdge
+    const expandMiniToFull = (): void => {
+      const now = Date.now()
+      if (now - expandLockRef.current < 600) return
+      expandLockRef.current = now
+      miniTapRef.current = 0
+      void window.api?.listProjects?.().then((ps) => setAllProjects((ps as Project[]) ?? [])).catch(() => undefined)
+      setMode('full')
+    }
+
+    // 贴边：一条纯黑胶囊（两端半圆），不是双筒望远镜
+    if (docked && dockEdge) {
+      return (
+        <Firefly active={fireflyActive}>
           <div
-            className={`flex h-11 w-full cursor-pointer items-center gap-2 rounded-full px-3 ${shimmer ? 'shimmer-ring' : ''}`}
-            style={PANEL_STYLE}
-            onClick={() => { void window.api?.listProjects?.().then((ps) => setAllProjects((ps as Project[]) ?? [])).catch(() => undefined); setMode('compact') }}
+            data-widget-solid
+            className="drop-in flex h-screen w-screen cursor-grab items-center overflow-hidden active:cursor-grabbing"
+            style={{
+              background: '#000000',
+              borderRadius: 9999,
+              border: fireflyActive
+                ? `1px solid ${hexAlpha(accent, 0.55)}`
+                : '1px solid rgba(255,255,255,0.10)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)'
+            }}
+            title={hasPopup || notifies.length
+              ? '有待办确认/通知 · 双击展开'
+              : `${meta.label} · 拖离边缘恢复 · 双击展开`}
+            onPointerDown={(e) => bindMiniCapsulePointer(e, expandMiniToFull, miniTapRef)}
           >
-            {hasAttr ? (
-              <>
-                <GrainChip projectName={attr!.projectName} taskTitle={attr!.taskTitle} sec={attr!.sec} />
-                {chain?.active ? <ChainChip sec={chain.sec} interruptions={chain.interruptionsToday} /> : null}
-              </>
-            ) : (
-              <>
-                <StateDot color={meta.color} size={11} />
-                <span className="min-w-0 flex-1 truncate text-[11px] text-slate-500">做点什么，然后归到项目</span>
-                <button
-                  className="shrink-0 rounded-full bg-[rgba(139,92,246,0.15)] px-2 py-0.5 text-[9.5px] font-bold text-[var(--violet)]"
-                  onClick={(e) => { e.stopPropagation(); void window.api?.listProjects?.().then((ps) => setAllProjects((ps as Project[]) ?? [])).catch(() => undefined); setShowUnattrAsk(true) }}
-                >
-                  归类
-                </button>
-              </>
-            )}
-            <button
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200"
-              style={{ color: penetration ? accent : undefined }}
-              title={penetrationTitle}
-              onClick={(e) => { e.stopPropagation(); togglePenetration() }}
-            >
-              <Icon name="eyeOff" size={12} />
-            </button>
+            <DockCapsuleRings
+              left={dd.left}
+              right={dd.right}
+              focus={focus}
+              focusColor={meta.color}
+              appPct={Math.max(focus, 8)}
+              appColor={meta.color}
+              emoji={mainCatEmoji || meta.emoji}
+              icon={mainCat ?? undefined}
+              chainSec={chain?.sec ?? 0}
+              projectName={attr?.projectName ?? ''}
+              minutes={continuousMin}
+            />
+            <style>{`
+              .drop-in { animation: dropIn 260ms cubic-bezier(0.22, 1.15, 0.36, 1); }
+              @keyframes dropIn {
+                0% { transform: scaleX(0.88) scaleY(0.92); opacity: 0.6; }
+                100% { transform: scaleX(1) scaleY(1); opacity: 1; }
+              }
+            `}</style>
           </div>
         </Firefly>
+      )
+    }
+
+    // mini 定死尺寸：胶囊铺满窗口，无 padding 透明边
+    return (
+      <Firefly active={fireflyActive}>
+      <div
+        data-widget-solid
+        className={`flex h-screen w-screen cursor-grab items-center gap-2 rounded-xl px-3 active:cursor-grabbing ${shimmer || fireflyActive ? 'shimmer-ring' : ''}`}
+        style={PANEL_STYLE}
+        title={hasPopup || notifies.length ? '有确认/通知 · 双击展开' : '拖近边缘可贴边 · 双击展开面板'}
+        onPointerDown={(e) => bindMiniCapsulePointer(e, expandMiniToFull, miniTapRef)}
+      >
+        {hasAttr && dm.project ? (
+          <>
+            <GrainChip projectName={attr!.projectName} taskTitle={attr!.taskTitle} sec={attr!.sec} />
+            {dm.chain && chain?.active ? <ChainChip sec={chain.sec} interruptions={chain.interruptionsToday} /> : null}
+          </>
+        ) : (
+          <>
+            {dm.focusRing ? <StateDot color={meta.color} size={11} /> : null}
+            {dm.emptyHint ? (
+              <span className="min-w-0 flex-1 truncate text-[11px] text-slate-500">做点什么，然后归到项目</span>
+            ) : <span className="min-w-0 flex-1" />}
+            {dm.classifyBtn ? (
+            <button
+              className="shrink-0 rounded-full bg-[rgba(139,92,246,0.15)] px-2 py-0.5 text-[9.5px] font-bold text-[var(--violet)]"
+              data-no-capsule-drag
+              onClick={(e) => {
+                e.stopPropagation()
+                void window.api?.listProjects?.().then((ps) => setAllProjects((ps as Project[]) ?? [])).catch(() => undefined)
+                setShowUnattrAsk(true)
+                setMode('full')
+              }}
+            >
+              归类
+            </button>
+            ) : null}
+          </>
+        )}
+        {dm.penetrationBtn && !penetration ? (
+        <button
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200"
+          style={{ color: penetration ? accent : undefined }}
+          title={penetrationTitle}
+          data-no-capsule-drag
+          onClick={(e) => { e.stopPropagation(); togglePenetration() }}
+        >
+          <Icon name="eyeOff" size={12} />
+        </button>
+        ) : null}
+        {fireflyActive ? (
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: accent }} title="有通知或待确认" />
+        ) : null}
         <style>{`
           .shimmer-ring { animation: shimmer 2s ease-out; }
           @keyframes shimmer {
-            0% { box-shadow: 0 0 4px ${hexAlpha(accent, 0.5)}, 0 0 12px ${hexAlpha(accent, 0.3)}; }
-            50% { box-shadow: 0 0 8px ${hexAlpha(accent, 0.8)}, 0 0 24px ${hexAlpha(accent, 0.5)}; }
-            100% { box-shadow: 0 0 4px ${hexAlpha(accent, 0.5)}, 0 0 12px ${hexAlpha(accent, 0.3)}; }
+            0% { box-shadow: inset 0 0 0 1px ${hexAlpha(accent, 0.35)}; }
+            50% { box-shadow: inset 0 0 0 1px ${hexAlpha(accent, 0.7)}; }
+            100% { box-shadow: inset 0 0 0 1px ${hexAlpha(accent, 0.35)}; }
           }
         `}</style>
       </div>
+      </Firefly>
     )
   }
 
-  // ── compact 态：状态优先 + 情景流（左缘状态色条 + 实时内容做大 + 问答 FAB） ──
+  // ── compact 态：铺满窗口，无透明外边 ──
   if (widgetMode === 'compact') {
     return (
-      <div className="flex h-screen w-screen flex-col items-end justify-end gap-2 p-3">
-        <NotificationStack list={notifies} onDone={(id) => setNotifies((l) => l.filter((x) => x.id !== id))} />
+      <div
+        data-widget-solid
+        className="relative flex h-screen w-screen flex-col overflow-hidden rounded-xl"
+        style={PANEL_STYLE}
+      >
         {unattrCard}
-        <div className="relative flex w-[300px] flex-col overflow-hidden rounded-2xl" style={{ ...PANEL_STYLE, boxShadow: 'none' }}>
           {/* 左缘状态色条 */}
           <WidgetHeader>
             <HeaderBtn icon="chevronRight" rotate={-90} title="展开" onClick={() => setMode('full')} />
@@ -717,15 +1102,17 @@ export default function SuggestionWidget() {
             {petBubble && !widgetCompact && <PetBubbleLine text={petBubble} accent={accent} />}
           </div>
           <ResizeHandle onDown={onResizePointerDown} onMove={onResizePointerMove} onUp={onResizePointerUp} />
-        </div>
       </div>
     )
   }
 
-  // ── full 态：完整面板 ──
+  // ── full 态：铺满窗口，无透明外边 ──
   return (
-    <div className="flex h-screen w-screen items-end justify-end p-3">
-      <div className="relative flex w-full flex-col overflow-hidden rounded-2xl" style={{ ...PANEL_STYLE, boxShadow: 'none' }}>
+      <div
+        data-widget-solid
+        className="relative flex h-screen w-screen flex-col overflow-hidden rounded-xl"
+        style={PANEL_STYLE}
+      >
         {/* 左缘状态色条 */}
         <WidgetHeader>
           <HeaderBtn icon="eyeOff" title={penetrationTitle} onClick={togglePenetration} active={penetration} accent={accent} />
@@ -733,15 +1120,18 @@ export default function SuggestionWidget() {
           <HeaderBtn icon="x" title="隐藏悬浮窗" onClick={() => window.api.toggleWidget()} />
         </WidgetHeader>
 
+        <div className="mx-3 mt-1">
+          <NotificationStack list={notifies} onDone={(id) => setNotifies((l) => l.filter((x) => x.id !== id))} />
+        </div>
+
         {welcome && !widgetCompact && (
           <div className="anim-fade-in mx-3 mt-2 rounded-lg border border-neon-green/20 bg-neon-green/10 px-3 py-1.5 text-center text-xs text-neon-green">
             欢迎回到正事
           </div>
         )}
 
-        {/* ── 状态 ── */}
-        <>
-        {/* 状态区 */}
+        {/* ── 状态（桌搭 widgetDisplay.full.status）── */}
+        {df.status ? (
         <div
           className="flex items-center gap-3 px-3.5 py-3"
           onMouseEnter={() => setShowFocusMinutes(true)}
@@ -759,11 +1149,11 @@ export default function SuggestionWidget() {
               </span>
             </div>
             {attr?.projectId ? (
-              <div className="mt-0.5 flex min-w-0 items-center gap-1"><GrainChip projectName={attr.projectName} taskTitle={attr.taskTitle} sec={attr.sec} /></div>
+              df.projectChip ? <div className="mt-0.5 flex min-w-0 items-center gap-1"><GrainChip projectName={attr.projectName} taskTitle={attr.taskTitle} sec={attr.sec} /></div> : null
             ) : (
               <div className="mt-0.5">{attrBtn}</div>
             )}
-            {presence && presence.continuousFocusSec > 60 && showFocusMinutes && (
+            {presence && presence.continuousFocusSec > 60 && showFocusMinutes && df.focusMinutes && (
               <div className="mt-0.5 text-[11px]" style={{ color: accent }}>
                 已专注 {Math.round(presence.continuousFocusSec / 60)} 分钟
               </div>
@@ -773,6 +1163,7 @@ export default function SuggestionWidget() {
               className={`ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-white/10 ${askState !== 'hidden' && askState !== 'answer' ? 'text-slate-500 hover:text-slate-200' : 'text-[var(--violet)]'}`}
               title="问点什么…"
               onClick={() => setAskState(askState === 'hidden' || askState === 'answer' ? 'input' : 'hidden')}
+              style={{ display: df.askBtn && aiEnabled ? undefined : 'none' }}
             >
               <span className="relative inline-flex items-center justify-center">
                 <Icon name="message" size={22} />
@@ -780,10 +1171,11 @@ export default function SuggestionWidget() {
               </span>
             </button>
         </div>
+        ) : null}
 
         {unattrCard}
         {/* 归属项目今日待办（颗粒勾选） */}
-        {attrPlans.length ? (
+        {attrPlans.length && df.attrPlans ? (
           <div className="mx-3 mb-2 rounded-xl border border-[var(--line)] bg-white/[0.02] px-2.5 py-2">
             <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-600">{attr?.projectName} · 今日待办</div>
             {attrPlans.map((p) => (
@@ -804,13 +1196,15 @@ export default function SuggestionWidget() {
           </div>
         ) : null}
 
-        {/* 展开的问答条（收起时入口在状态行右侧小钮）+ 桌宠气泡 */}
+        {/* 展开的问答条（与情境确认同壳）+ 桌宠气泡 */}
         {askState && askState !== 'hidden' ? (
-          <div className="mx-3 mb-3 flex flex-col gap-2">
-            <AskBar askState={askState} askText={askText} setAskText={setAskText} submitAsk={submitAsk} onAskBlur={onAskBlur} onEscape={() => setAskState('hidden')} askAnswer={askAnswer} accent={accent} blurTimer={blurTimer} />
+          <div className="mx-3 mb-3">
+            <InsetCard color="#8B5CF6" title="💬 AI 问答">
+              <AskBar askState={askState} askText={askText} setAskText={setAskText} submitAsk={submitAsk} onAskBlur={onAskBlur} onEscape={() => setAskState('hidden')} askAnswer={askAnswer} accent={accent} blurTimer={blurTimer} />
+            </InsetCard>
           </div>
         ) : null}
-        {petBubble && !widgetCompact ? <div className="mx-3 mb-2"><PetBubbleLine text={petBubble} accent={accent} /></div> : null}
+        {petBubble && !widgetCompact && df.petBubble ? <div className="mx-3 mb-2"><PetBubbleLine text={petBubble} accent={accent} /></div> : null}
 
         {/* ── 情境确认（动态流） ── */}
         <div className="mx-3 mb-1 mt-2 flex max-h-[320px] flex-col gap-2 overflow-y-auto">
@@ -893,14 +1287,14 @@ export default function SuggestionWidget() {
           ) : null}
 
           {question && (question.ctx ?? '').startsWith('attrib') ? (
-            <div className="rounded-xl border border-[rgba(139,92,246,0.3)] p-2.5">
+            <InsetCard color="#8B5CF6" title="📂 归到哪个项目？">
               <UnattrAskCard
                 projects={allProjects}
                 apps={(question as unknown as { apps?: string[] })?.apps}
                 fp={(question?.ctx ?? '').startsWith('attrib:') ? question!.ctx.slice(7) : undefined}
                 onDone={() => answer('yes')}
               />
-            </div>
+            </InsetCard>
           ) : question ? (
             <AlertShell color="#8B5CF6" label="📋 轻问诊" collapsed={!!alertCollapsed['q']} onToggle={() => toggleAlert('q')}>
               <div className="mb-2 pr-4 text-xs leading-relaxed text-slate-200">{question.question}</div>
@@ -921,19 +1315,18 @@ export default function SuggestionWidget() {
               </div>
             </AlertShell>
           ) : !bpConfirm ? (
-            widgetCompact ? null : (
-              <div className="rounded-xl border border-white/[0.05] bg-white/[0.03] px-3 py-2 text-center text-[11px] text-slate-500">
-                暂无新的情境确认 · 越用越聪明
-              </div>
+            widgetCompact || !df.idleHint ? null : (
+              <InsetCard color="#94A3B8" title="📋 情境确认">
+                <div className="text-center text-[11px] text-slate-500">
+                  暂无新的情境确认 · 越用越聪明
+                </div>
+              </InsetCard>
             )
           ) : null}
         </div>
 
-        </>
-
         <ResizeHandle onDown={onResizePointerDown} onMove={onResizePointerMove} onUp={onResizePointerUp} />
       </div>
-    </div>
   )
 }
 
@@ -965,8 +1358,7 @@ function UnattrAskCard({ onDone, projects, apps, fp, date }: { onDone: () => voi
     onDone()
   }
   return (
-    <div className="w-full rounded-2xl border border-[rgba(139,92,246,0.3)] p-3" style={PANEL_STYLE}>
-      <div className="mb-2 text-[11.5px] font-medium text-slate-200">现在干的活要归到哪个项目？</div>
+    <div className="w-full">
       <div className="mb-2 flex flex-col gap-1">
         {projects.slice(0, 5).map((p) => (
           <button
@@ -982,7 +1374,7 @@ function UnattrAskCard({ onDone, projects, apps, fp, date }: { onDone: () => voi
         {!projects.length ? <div className="text-[10.5px] text-slate-500">还没有项目</div> : null}
       </div>
       <input
-        className="mb-2 w-full rounded-lg border border-[var(--line)] bg-white/5 px-2 py-1 text-[11px] text-slate-200 outline-none focus:border-[var(--border-active)]"
+        className="mb-2 w-full rounded-lg border border-[var(--line)] bg-white/5 px-2 py-1.5 text-[11px] text-slate-200 outline-none focus:border-[var(--border-active)]"
         placeholder="刚才在干什么？（如：调 DM8 连接）"
         value={doing}
         onChange={(e) => setDoing(e.target.value)}
@@ -990,7 +1382,7 @@ function UnattrAskCard({ onDone, projects, apps, fp, date }: { onDone: () => voi
       {!pick ? (
         <div className="flex items-center gap-1.5">
           <input
-            className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-white/5 px-2 py-1 text-[11px] text-slate-200 outline-none focus:border-[var(--border-active)]"
+            className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-white/5 px-2 py-1.5 text-[11px] text-slate-200 outline-none focus:border-[var(--border-active)]"
             placeholder="或新建项目名…"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}

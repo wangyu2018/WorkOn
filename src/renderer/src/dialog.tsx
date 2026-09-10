@@ -2,7 +2,17 @@ import { Component } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import ReactDOM from 'react-dom/client'
 import DialogApp from './dialog/App'
+import { useSettingsStore } from './stores/settingsStore'
 import './index.css'
+
+document.documentElement.dataset.overlay = '1'
+void useSettingsStore.getState().load().then(() => {
+  const tone = useSettingsStore.getState().settings.darkTone
+  document.documentElement.dataset.tone = tone === 'navy' ? 'navy' : 'void'
+})
+useSettingsStore.subscribe((s) => {
+  document.documentElement.dataset.tone = s.settings.darkTone === 'navy' ? 'navy' : 'void'
+})
 
 class DialogErrorBoundary extends Component<{ children: ReactNode }, { err: Error | null }> {
   state = { err: null as Error | null }

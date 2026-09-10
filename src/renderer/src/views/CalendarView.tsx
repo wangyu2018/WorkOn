@@ -1,13 +1,13 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import type { TimeEntry, WorkState, MergedTrail } from '@shared/types'
+import type { CustomCategory, PlanItem, PlanStatus, TimeEntry, WorkState, MergedTrail } from '@shared/types'
 import { ALL_STATES, WORK_STATES, WORK_LIKE_STATES } from '@shared/stateMeta'
+import { BUILTIN_CATEGORIES } from '@shared/planAnalysis'
 import { genId } from '@shared/types'
 import { displayApp } from '@shared/appDisplayName'
 import { CATEGORY_META, categoryOf, type AppCategory } from '@shared/appCategory'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
-import { ActivityHoverCard } from '../components/ActivityHoverCard'
 import HeatmapView from './HeatmapView'
 import {
   WEEK_LABELS,
@@ -295,6 +295,160 @@ interface MonthDayStat {
 /** 热力 5 档：surface-3 / teal .25 / .5 / .75 / 1 */
 const HEAT_TIERS = ['var(--surface-3)', 'rgba(15,181,164,0.25)', 'rgba(15,181,164,0.5)', 'rgba(15,181,164,0.75)', 'rgba(15,181,164,1)']
 
+const PLAN_STATUS_SHORT: Record<PlanStatus, string> = {
+  planned: '待',
+  in_progress: '中',
+  partial: '部',
+  done: '完',
+  delayed: '延',
+  cancelled: '消'
+}
+
+/** 分类色：自定义覆盖内置 */
+function catColorOf(category: string, cats: CustomCategory[]): string {
+  return cats.find((c) => c.id === category)?.color
+    ?? BUILTIN_CATEGORIES.find((c) => c.id === category)?.color
+    ?? '#64748B'
+}
+
+/** 单日计划进度：完成数 / 有效计划数 + 平均完成比 */
+function dayPlanProgress(plans: PlanItem[]): { done: number; total: number; pct: number } {
+  const active = plans.filter((p) => !p.archived && p.status !== 'cancelled')
+  const total = active.length
+  if (total === 0) return { done: 0, total: 0, pct: 0 }
+  const done = active.filter((p) => p.status === 'done').length
+  const ratioSum = active.reduce((s, p) => {
+    if (p.status === 'done') return s + 1
+    if (typeof p.completionRatio === 'number') return s + Math.max(0, Math.min(1, p.completionRatio))
+    if (p.status === 'partial') return s + 0.5
+    if (p.status === 'in_progress') return s + 0.25
+    return s
+  }, 0)
+  return { done, total, pct: Math.round((ratioSum / total) * 100) }
+}
+
+/** 月历格内计划标签：格内只显示一行截断；悬停用 portal 浮层详情卡（避免穿模） */
+function MonthPlanPill({
+  plan,
+  color,
+  onHover,
+  onLeave
+}: {
+  plan: PlanItem
+  color: string
+  onHover: (plan: PlanItem, pos: { x: number; y: number }) => void
+  onLeave: () => void
+}) {
+  const done = plan.status === 'done'
+  const delayed = plan.status === 'delayed'
+  return (
+    <span
+      className={`month-plan-pill block w-full truncate rounded px-1 py-px text-left text-[9px] font-medium leading-snug${done ? ' is-done' : ''}`}
+      style={{
+        background: `${color}33`,
+        borderLeft: `2px solid ${delayed ? '#EF4444' : color}`,
+        textDecoration: done ? 'line-through' : undefined,
+        opacity: plan.status === 'cancelled' ? 0.45 : 1
+      }}
+      onMouseEnter={(e) => {
+        e.stopPropagation()
+        onHover(plan, { x: e.clientX, y: e.clientY })
+      }}
+      onMouseMove={(e) => {
+        onHover(plan, { x: e.clientX, y: e.clientY })
+      }}
+      onMouseLeave={onLeave}
+    >
+      {plan.title}
+    </span>
+  )
+}
+
+/** 待办悬停详情卡：贴着鼠标右下角弹出，贴边自动翻面 */
+function PlanHoverCard({
+  plan,
+  color,
+  pos,
+  onEnter,
+  onLeave
+}: {
+  plan: PlanItem
+  color: string
+  pos: { x: number; y: number }
+  onEnter: () => void
+  onLeave: () => void
+}) {
+  const W = 260
+  const estH = 128
+  const gap = 12
+  const margin = 8
+  let left = pos.x + gap
+  let top = pos.y + gap
+  if (left + W > window.innerWidth - margin) left = pos.x - W - gap
+  if (top + estH > window.innerHeight - margin) top = pos.y - estH - gap
+  left = Math.max(margin, Math.min(left, window.innerWidth - W - margin))
+  top = Math.max(margin, Math.min(top, window.innerHeight - estH - margin))
+  const ratio =
+    plan.status === 'done'
+      ? 100
+      : typeof plan.completionRatio === 'number'
+        ? Math.round(plan.completionRatio * 100)
+        : plan.status === 'partial'
+          ? 50
+          : plan.status === 'in_progress'
+            ? 25
+            : 0
+  const catLabel =
+    BUILTIN_CATEGORIES.find((c) => c.id === plan.category)?.label ?? plan.category
+
+  return createPortal(
+    <div
+      className="pointer-events-none fixed z-[200] rounded-xl border px-3 py-2.5"
+      style={{
+        width: W,
+        left,
+        top,
+        background: 'var(--pop-bg)',
+        borderColor: 'var(--pop-border)',
+        boxShadow: 'var(--pop-shadow)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        color: 'var(--pop-text)'
+      }}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+    >
+      <div className="flex items-start gap-2">
+        <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
+        <div className="min-w-0 flex-1">
+          <div className="text-[12.5px] font-semibold leading-snug" style={{ color: 'var(--pop-text-strong)' }}>
+            {plan.title}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]" style={{ color: 'var(--pop-text-muted)' }}>
+            <span className="rounded px-1 py-px" style={{ background: `${color}33`, color }}>
+              {catLabel}
+            </span>
+            <span>{PLAN_STATUS_SHORT[plan.status]}</span>
+            <span className="tabular-nums">{ratio}%</span>
+            {plan.startMin != null ? (
+              <span className="tabular-nums">
+                {clockOf(plan.startMin)}
+                {plan.durationMin ? ` · ${fmtMin(plan.durationMin)}` : ''}
+              </span>
+            ) : null}
+          </div>
+          {plan.note ? (
+            <div className="mt-1.5 text-[11px] leading-snug" style={{ color: 'var(--pop-text-muted)' }}>
+              {plan.note}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 /** 单日专注分钟（工作类状态墙钟合计） */
 function dayWorkMin(trail: MergedTrail | null | undefined): number {
   if (!trail) return 0
@@ -306,12 +460,14 @@ function monthLabelOf(ym: string): string {
   return `${y}年${m}月`
 }
 
-/** 选中日详情卡：当日专注/墙钟 + 条目列表（点击编辑）+ 底部分类占比堆叠条（与监控页同款式） */
-function DayDetailCard({ date, reloadKey, onEditEntry, onAdd }: {
+/** 选中日详情卡：当日专注/墙钟 + 计划进度 + 条目列表（点击编辑）+ 底部分类占比堆叠条 */
+function DayDetailCard({ date, reloadKey, onEditEntry, onAdd, dayPlans, categories }: {
   date: string
   reloadKey: number
   onEditEntry: (entry: TimeEntry) => void
   onAdd: () => void
+  dayPlans: PlanItem[]
+  categories: CustomCategory[]
 }) {
   const today = todayKey()
   const [trail, setTrail] = useState<MergedTrail | null>(null)
@@ -320,6 +476,7 @@ function DayDetailCard({ date, reloadKey, onEditEntry, onAdd }: {
   const [projMin, setProjMin] = useState<{ name: string; min: number; progress: number | null }[]>([])
   const [slackMin, setSlackMin] = useState(0)
   const [focusActs, setFocusActs] = useState<{ app: string; title: string; min: number }[]>([])
+  const planProg = dayPlanProgress(dayPlans)
 
   useEffect(() => {
     const tr = trail as MergedTrail | null
@@ -395,11 +552,52 @@ function DayDetailCard({ date, reloadKey, onEditEntry, onAdd }: {
         {date === today ? <span className="chip text-[var(--teal)]">今天</span> : null}
         <span className="chip">专注 {fmtMin(dayWorkMin(trail))}</span>
         {trail && trail.totalMin > 0 ? <span className="chip">墙钟 {fmtMin(trail.totalMin)}</span> : null}
+        {planProg.total > 0 ? (
+          <span className="chip text-[var(--teal)]" title="当日计划完成进度">
+            计划 {planProg.done}/{planProg.total} · {planProg.pct}%
+          </span>
+        ) : null}
         <div className="flex-1" />
         <button className="glass-btn !px-2.5 !py-1 text-[11px]" onClick={onAdd} title="为该日补录时段">
           <Icon name="plus" size={12} /> 补录
         </button>
       </div>
+      {/* 当日计划状态与进度 */}
+      {dayPlans.length > 0 ? (
+        <div className="mt-3">
+          <div className="mb-1.5 flex items-center justify-between">
+            <div className="text-[10px] uppercase tracking-wider text-slate-600">当日计划</div>
+            {planProg.total > 0 ? (
+              <div className="h-1 w-24 overflow-hidden rounded-full bg-white/[0.06]">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{
+                    width: `${planProg.pct}%`,
+                    background: planProg.pct >= 100 ? '#10B981' : 'linear-gradient(90deg, var(--teal), #22D3EE)'
+                  }}
+                />
+              </div>
+            ) : null}
+          </div>
+          <div className="flex flex-col gap-1">
+            {dayPlans.map((p) => {
+              const color = catColorOf(p.category, categories)
+              const ratio = p.status === 'done' ? 1 : typeof p.completionRatio === 'number' ? p.completionRatio : p.status === 'partial' ? 0.5 : p.status === 'in_progress' ? 0.25 : 0
+              return (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-2 rounded-lg border border-white/[0.05] bg-white/[0.02] px-2.5 py-1.5 text-[11.5px]"
+                >
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
+                  <span className={`min-w-0 flex-1 truncate ${p.status === 'done' ? 'text-slate-500 line-through' : 'text-slate-300'}`}>{p.title}</span>
+                  <span className="shrink-0 text-[10px] text-slate-500">{PLAN_STATUS_SHORT[p.status]}</span>
+                  <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-slate-500">{Math.round(ratio * 100)}%</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
       {/* v7 粗颗粒复盘：项目进展 / 摸鱼 / 专注干了哪些活 */}
       <div className="mt-3 flex flex-col gap-2">
         {projMin.length ? (
@@ -487,17 +685,24 @@ function DayDetailCard({ date, reloadKey, onEditEntry, onAdd }: {
   )
 }
 
-/** 月模式主体：AI 周回顾 hero 卡 + GitHub 风格热力月历 + 选中日详情 */
+/** 月模式主体：AI 周回顾 hero 卡 + 计划标签月历；点日期进入日视图 */
 function MonthBoard({ yearMonth }: { yearMonth: string }) {
   const today = todayKey()
   const [days, setDays] = useState<MonthDayStat[] | null>(null)
-  const [selected, setSelected] = useState<string | null>(null)
+  /** 日视图：有值时替换月历，显示当日详情 */
+  const [dayView, setDayView] = useState<string | null>(null)
   const [editor, setEditor] = useState<{ entry: TimeEntry; isNew: boolean } | null>(null)
   const [reloadTick, setReloadTick] = useState(0)
+  /** 当月计划：date → plans（用于格内彩色标签 + 进度） */
+  const [plansByDate, setPlansByDate] = useState<Map<string, PlanItem[]>>(new Map())
+  const [categories, setCategories] = useState<CustomCategory[]>(BUILTIN_CATEGORIES)
   /** AI 周回顾：本周/上周专注聚合（由现有 getTrail 周数据推导，无新 IPC） */
   const [weekCtx, setWeekCtx] = useState<{ thisMin: number; lastMin: number; bestLabel: string; bestMin: number; aiMin: number } | null>(null)
   const [review, setReview] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
+  /** 月格待办悬停详情 */
+  const [planHover, setPlanHover] = useState<{ plan: PlanItem; pos: { x: number; y: number } } | null>(null)
+  const planHoverLeaveTimer = useRef<number | null>(null)
 
   const loadMonth = useCallback(async (ym: string) => {
     const [y, m] = ym.split('-').map(Number)
@@ -519,11 +724,48 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
     setDays(out)
   }, [])
 
+  const loadMonthPlans = useCallback(async (ym: string) => {
+    try {
+      const [all, custom] = await Promise.all([
+        window.api.listPlans() as Promise<PlanItem[]>,
+        window.api.listCategories().catch(() => [] as CustomCategory[])
+      ])
+      const cats = ((custom as CustomCategory[]) ?? [])
+      setCategories(cats.length ? cats : BUILTIN_CATEGORIES)
+      const map = new Map<string, PlanItem[]>()
+      for (const p of (all as PlanItem[]) ?? []) {
+        if (p.archived) continue
+        if (!p.date?.startsWith(ym)) continue
+        const list = map.get(p.date) ?? []
+        list.push(p)
+        map.set(p.date, list)
+      }
+      for (const [d, list] of map) {
+        list.sort((a, b) => (a.startMin ?? 9999) - (b.startMin ?? 9999) || a.ts - b.ts)
+        map.set(d, list)
+      }
+      setPlansByDate(map)
+    } catch {
+      setPlansByDate(new Map())
+    }
+  }, [])
+
   useEffect(() => {
-    setSelected(null)
+    setDayView(null)
+    setPlanHover(null)
     setDays(null)
     void loadMonth(yearMonth)
-  }, [yearMonth, loadMonth])
+    void loadMonthPlans(yearMonth)
+  }, [yearMonth, loadMonth, loadMonthPlans])
+
+  useEffect(() => {
+    void loadMonthPlans(yearMonth)
+  }, [reloadTick, yearMonth, loadMonthPlans])
+
+  useEffect(() => {
+    const off = window.api.onPlanUpdated?.(() => { void loadMonthPlans(yearMonth) })
+    return () => { off?.() }
+  }, [yearMonth, loadMonthPlans])
 
   // 本周/上周专注对比（挂载时聚合一次：各取 7 天 getTrail，专注口径 = WORK_LIKE_STATES）
   useEffect(() => {
@@ -586,6 +828,56 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
       entry: { id: `new-${date}`, date, startMin: 9 * 60, endMin: 18 * 60, title: '', source: 'manual', ts: Date.now() }
     })
 
+  const clearPlanHoverSoon = () => {
+    if (planHoverLeaveTimer.current) window.clearTimeout(planHoverLeaveTimer.current)
+    planHoverLeaveTimer.current = window.setTimeout(() => setPlanHover(null), 180)
+  }
+  const keepPlanHover = () => {
+    if (planHoverLeaveTimer.current) {
+      window.clearTimeout(planHoverLeaveTimer.current)
+      planHoverLeaveTimer.current = null
+    }
+  }
+
+  // 日视图：点开某天后替换月历
+  if (dayView) {
+    return (
+      <div className="view-enter flex flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="glass-btn !px-2.5 !py-1 text-[12px]"
+            onClick={() => setDayView(null)}
+            title="返回月视图"
+          >
+            <Icon name="chevronLeft" size={13} /> 返回月视图
+          </button>
+          <span className="text-[14px] font-semibold text-slate-200">{fmtDateLabel(dayView)}</span>
+          {dayView === today ? <span className="chip text-[var(--teal)]">今天</span> : null}
+        </div>
+        <DayDetailCard
+          date={dayView}
+          reloadKey={reloadTick}
+          dayPlans={plansByDate.get(dayView) ?? []}
+          categories={categories}
+          onEditEntry={(e) => setEditor({ entry: e, isNew: false })}
+          onAdd={() => openAdd(dayView)}
+        />
+        {editor ? (
+          <EntryEditor
+            entry={editor.entry}
+            isNew={editor.isNew}
+            onClose={() => setEditor(null)}
+            onSaved={() => {
+              setEditor(null)
+              setReloadTick((t) => t + 1)
+              void loadMonth(yearMonth)
+            }}
+          />
+        ) : null}
+      </div>
+    )
+  }
+
   return (
     <div className="view-enter flex flex-col gap-4">
       {/* AI 周回顾 hero 卡（aura 渐变 = AI 专属，白字） */}
@@ -626,16 +918,16 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
         </div>
       </div>
 
-      {/* 热力月历卡 */}
+      {/* 计划标签月历：每格 = 日期 + 进度 + 彩色计划 pill（参考时间轴摘要） */}
       <div className="glass-card hoverable anim-fade-up" style={{ animationDelay: '80ms' }}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="flex items-center gap-2 text-[15px] font-semibold text-slate-200">
             <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[9px] bg-[var(--teal-soft)] text-[var(--teal)]">
               <Icon name="calendar" size={14} />
             </span>
-            {monthLabelOf(yearMonth)} 专注热力
+            {monthLabelOf(yearMonth)} 计划月历
           </h2>
-          <span className="text-[11px] text-slate-500">点击日期查看详情 / 补录 · 色阶 = 当日专注时长相对当月峰值</span>
+          <span className="text-[11px] text-slate-500">悬停标签看详情 · 点击日期进入日视图</span>
         </div>
         {/* 星期表头（周一开头） */}
         <div className="mb-1.5 grid grid-cols-7 gap-1.5 text-center text-[10px] text-slate-500">
@@ -643,7 +935,6 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
             <span key={l}>{l}</span>
           ))}
         </div>
-        {/* GitHub 风格子：5 档 teal 透明度；今天 teal 描边 + 外发光 */}
         <div className="grid grid-cols-7 gap-1.5">
           {Array.from({ length: firstDow }, (_, i) => (
             <div key={`blank-${i}`} />
@@ -653,38 +944,89 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
             const stat = statMap.get(date)
             const tier = tierOf(stat?.workMin ?? 0)
             const isToday = date === today
-            const isSel = selected === date
+            const dayPlans = plansByDate.get(date) ?? []
+            const visible = dayPlans.slice(0, 4)
+            const more = dayPlans.length - visible.length
+            const prog = dayPlanProgress(dayPlans)
             return (
               <button
                 key={date}
-                onClick={() => setSelected(isSel ? null : date)}
-                title={`${date}${isToday ? ' · 今天' : ''} · 专注 ${fmtMin(stat?.workMin ?? 0)} / 墙钟 ${fmtMin(stat?.totalMin ?? 0)}${stat ? ` · 主导 ${WORK_STATES[stat.topState]?.label ?? ''}` : ''} · 点击${isSel ? '取消' : '查看详情'}`}
-                className="rounded-lg border p-1.5 text-left transition-all hover:scale-[1.03]"
+                type="button"
+                onClick={() => setDayView(date)}
+                title={`${date}${isToday ? ' · 今天' : ''} · 计划 ${prog.done}/${prog.total}（${prog.pct}%）· 专注 ${fmtMin(stat?.workMin ?? 0)} · 点击进入日视图`}
+                className="flex flex-col overflow-hidden rounded-lg border p-1.5 text-left transition-colors hover:border-[var(--cyan)]"
                 style={{
-                  background: HEAT_TIERS[tier],
-                  borderColor: isToday ? 'var(--teal)' : isSel ? 'var(--cyan)' : 'rgba(255,255,255,0.06)',
+                  background: 'var(--surface-2)',
+                  borderColor: isToday ? 'var(--teal)' : 'var(--line)',
                   boxShadow: isToday
-                    ? '0 0 0 1px var(--teal), 0 0 14px rgba(15,181,164,0.45)'
-                    : isSel
-                      ? '0 0 0 1px var(--cyan), 0 0 10px rgba(6,182,212,0.35)'
-                      : undefined,
-                  minHeight: 52
+                    ? '0 0 0 1px var(--teal), 0 0 14px rgba(15,181,164,0.35)'
+                    : undefined,
+                  minHeight: 108
                 }}
               >
-                <div className="flex items-center justify-between">
-                  <span className={`text-[12px] font-semibold tabular-nums ${tier >= 3 ? 'text-white' : 'text-slate-300'}`}>{i + 1}</span>
-                  {isToday ? <span className="h-1.5 w-1.5 rounded-full" style={{ background: tier >= 3 ? '#fff' : 'var(--teal)' }} /> : null}
+                <div className="flex items-center justify-between gap-1">
+                  <span
+                    className={`flex h-5 w-5 items-center justify-center rounded-md text-[11px] font-semibold tabular-nums ${
+                      isToday ? 'bg-[var(--teal)] text-white' : 'text-slate-300'
+                    }`}
+                  >
+                    {i + 1}
+                  </span>
+                  {prog.total > 0 ? (
+                    <span
+                      className={`text-[9px] tabular-nums ${
+                        prog.pct >= 100 ? 'text-neon-green' : prog.pct > 0 ? 'text-[var(--teal)]' : 'text-slate-500'
+                      }`}
+                    >
+                      {prog.done}/{prog.total}
+                    </span>
+                  ) : null}
                 </div>
-                <div className={`mt-0.5 text-[9.5px] tabular-nums ${tier >= 3 ? 'text-white/85' : 'text-slate-500'}`}>
-                  {stat && stat.workMin > 0 ? fmtMin(stat.workMin) : '—'}
+                {prog.total > 0 ? (
+                  <div className="mt-1 h-0.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${prog.pct}%`,
+                        background: prog.pct >= 100 ? '#10B981' : 'var(--teal)'
+                      }}
+                    />
+                  </div>
+                ) : null}
+                <div className="mt-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
+                  {visible.length === 0 ? (
+                    <span className="text-[9px] text-slate-600">{stat && stat.workMin > 0 ? `专注 ${fmtMin(stat.workMin)}` : '—'}</span>
+                  ) : (
+                    <>
+                      {visible.map((p) => (
+                        <MonthPlanPill
+                          key={p.id}
+                          plan={p}
+                          color={catColorOf(p.category, categories)}
+                          onHover={(pl, pos) => {
+                            keepPlanHover()
+                            setPlanHover({ plan: pl, pos })
+                          }}
+                          onLeave={clearPlanHoverSoon}
+                        />
+                      ))}
+                      {more > 0 ? <span className="text-[8.5px] text-slate-500">+{more}</span> : null}
+                    </>
+                  )}
                 </div>
+                {/* 底边专注热力细条（保留原热力语义，不抢标签） */}
+                <div
+                  className="mt-1 h-1 w-full rounded-full"
+                  style={{ background: HEAT_TIERS[tier] }}
+                  title={stat ? `专注 ${fmtMin(stat.workMin)}` : '无专注数据'}
+                />
               </button>
             )
           })}
         </div>
         {/* 底部色阶图例 + 本月累计 */}
         <div className="mt-3 flex flex-wrap items-center gap-2 text-[10.5px] text-slate-500">
-          <span>专注</span>
+          <span>专注热力</span>
           <span>少</span>
           <div className="flex items-center gap-1">
             {HEAT_TIERS.map((bg, i) => (
@@ -698,17 +1040,17 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
         </div>
       </div>
 
-      {/* 选中日详情卡 / 提示 */}
-      {selected ? (
-        <DayDetailCard
-          date={selected}
-          reloadKey={reloadTick}
-          onEditEntry={(e) => setEditor({ entry: e, isNew: false })}
-          onAdd={() => openAdd(selected)}
+      <div className="text-center text-[11px] text-slate-600">点击日期格进入日视图 · 悬停彩色标签查看待办详情</div>
+
+      {planHover ? (
+        <PlanHoverCard
+          plan={planHover.plan}
+          color={catColorOf(planHover.plan.category, categories)}
+          pos={planHover.pos}
+          onEnter={keepPlanHover}
+          onLeave={clearPlanHoverSoon}
         />
-      ) : (
-        <div className="text-center text-[11px] text-slate-600">点击月历中的日期格查看当日详情（专注时长 / 分类占比 / 补录编辑）</div>
-      )}
+      ) : null}
 
       {editor ? (
         <EntryEditor
@@ -830,7 +1172,6 @@ function DayAppIcons({ trail, visuals }: {
   )
 }
 
-/* ── 日历主视图 ── */
 export default function CalendarView() {
   const [mode, setMode] = useState<CalMode>(savedMode)
   const [date, setDate] = useState(todayKey())
@@ -858,7 +1199,7 @@ export default function CalendarView() {
   return (
     <div className="view-enter flex flex-col gap-5">
       {/* 页面标题区 */}
-      <PageHeader icon="calendar" title="时间日历" desc="月度专注热力 · AI 周回顾 · 补录与编辑" />
+      <PageHeader icon="calendar" title="时间日历" desc="月度计划标签与进度 · 专注热力 · AI 周回顾 · 补录与编辑" />
 
       {/* 工具条 */}
       <div className="anim-fade-up flex flex-wrap items-center gap-2" style={{ animationDelay: '60ms' }}>

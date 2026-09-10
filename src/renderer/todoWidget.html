@@ -1,10 +1,43 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-overlay="1">
   <head>
     <meta charset="UTF-8" />
     <title>WorkOn Todo Widget</title>
     <style>
-      html, body { background: transparent !important; margin: 0; padding: 0; overflow: hidden; }
+      html, body, #root {
+        background: transparent !important;
+        background-color: rgba(0,0,0,0) !important;
+        background-image: none !important;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        height: 100%;
+        box-shadow: none !important;
+      }
+      /* 深色玻璃：提亮灰字 */
+      .todo-glass-legible .text-slate-500 { color: rgb(180 190 205) !important; }
+      .todo-glass-legible .text-slate-600 { color: rgb(148 163 184) !important; }
+      .todo-glass-legible .text-slate-400 { color: rgb(203 213 225) !important; }
+      .todo-glass-legible .text-slate-300 { color: rgb(226 232 240) !important; }
+      .todo-glass-legible .text-slate-100 { color: rgb(248 250 252) !important; }
+      .todo-glass-legible .border-\[var\(--line\)\] { border-color: rgba(255,255,255,0.14) !important; }
+      /* 浅色外观：深色字，避免白底浅字看不清 */
+      .todo-light-legible { color: #1c1c1e; }
+      .todo-light-legible .text-slate-100 { color: #111827 !important; }
+      .todo-light-legible .text-slate-200 { color: #1f2937 !important; }
+      .todo-light-legible .text-slate-300 { color: #374151 !important; }
+      .todo-light-legible .text-slate-400 { color: #4b5563 !important; }
+      .todo-light-legible .text-slate-500 { color: #6b7280 !important; }
+      .todo-light-legible .text-slate-600 { color: #9ca3af !important; }
+      .todo-light-legible .border-white\/10,
+      .todo-light-legible .border-white\/\[0\.06\],
+      .todo-light-legible .border-\[var\(--line\)\] { border-color: rgba(0,0,0,0.1) !important; }
+      .todo-light-legible .bg-white\/\[0\.04\],
+      .todo-light-legible .bg-white\/\[0\.03\],
+      .todo-light-legible .bg-white\/10 { background-color: rgba(0,0,0,0.05) !important; }
+      .todo-light-legible .hover\:text-slate-100:hover { color: #111827 !important; }
+      .todo-light-legible .hover\:text-slate-200:hover { color: #1f2937 !important; }
+      .todo-light-legible .hover\:text-slate-300:hover { color: #374151 !important; }
     </style>
   </head>
   <body>

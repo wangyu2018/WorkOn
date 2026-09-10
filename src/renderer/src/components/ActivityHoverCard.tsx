@@ -43,9 +43,10 @@ const SENSE_META = {
 
 export function ActivityHoverCard({ a, sticky, onMouseEnter, onMouseLeave, onExclude }: ActivityHoverCardProps) {
   const sense = SENSE_META[senseOf(a.state)]
+  const fixed = a.mode === 'fixed' && a.pos
   return (
     <div
-      className={`absolute z-30 rounded-xl px-3 py-2 ${sticky ? '' : 'pointer-events-none'}`}
+      className={`rounded-xl px-3 py-2 ${sticky ? '' : 'pointer-events-none'} ${fixed ? 'fixed z-[200]' : 'absolute z-[200]'}`}
       style={{
         width: 240,
         background: 'var(--pop-bg)',
@@ -54,8 +55,7 @@ export function ActivityHoverCard({ a, sticky, onMouseEnter, onMouseLeave, onExc
         backdropFilter: 'blur(12px)',
         WebkitBackdropFilter: 'blur(12px)',
         color: 'var(--pop-text)',
-        position: a.mode === 'fixed' ? 'fixed' as const : 'absolute' as const,
-        ...(a.mode === 'fixed' && a.pos
+        ...(fixed && a.pos
           ? {
               left: `${a.pos.x}px`,
               top: `${a.pos.y}px`,

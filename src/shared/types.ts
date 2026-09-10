@@ -215,6 +215,8 @@ export interface PlanItem {
   projectId?: string
   /** 关联到项目的具体任务（二级关联） */
   projectTaskId?: string
+  /** AI 拆解生成的子待办：指向父计划 id；桌面待办窗会挂在父项下 */
+  parentPlanId?: string
 }
 
 /** 计划分类（内置不可删 + 用户自定义） */
@@ -246,8 +248,17 @@ export interface Project {
   attrs?: Record<string, string | number>
   /** 属性卡顺序（可拖动小卡排序持久化） */
   attrOrder?: string[]
+  /** 项目内过程笔记分类（手建 + 识别确认后写入） */
+  noteCategories?: ProcessNoteCategory[]
   createdAt: number
   updatedAt: number
+}
+
+/** 项目过程笔记分类 */
+export interface ProcessNoteCategory {
+  id: string
+  name: string
+  createdAt: number
 }
 
 /** 项目下的开发任务（AI 可拆解生成 / 手动创建） */
@@ -437,8 +448,87 @@ export interface CorrectionRule {
 export interface MemoRecord {
   id: string
   text: string
-  source: 'import' | 'manual' | 'pet'
+  source: 'import' | 'manual' | 'pet' | 'ai-tool'
   ts: number
+  /** 已沉淀进本地知识库的时间；有值则 knowledge 页可见对应条目 */
+  sedimentedAt?: number
+  /** 沉淀后对应的 KnowledgeItem.id */
+  knowledgeId?: string
+}
+
+/** 知识库条目与结构化实体的关联（项目 / 计划 / 备忘等） */
+export type KnowledgeLinkType = 'project' | 'plan' | 'memo' | 'task'
+
+export interface KnowledgeLink {
+  type: KnowledgeLinkType
+  id: string
+  title?: string
+}
+
+/**
+ * 本地知识库条目（先落盘，后续再同步外部知识库产品）。
+ * kind 仅内部兼容保留，界面不再区分「结构/非结构」——用户看到的就是一条笔记。
+ */
+export interface KnowledgeItem {
+  id: string
+  title: string
+  body: string
+  /** @deprecated 界面不再展示；入库默认 unstructured */
+  kind: 'unstructured' | 'structured'
+  source: 'manual' | 'memo' | 'import' | 'ai-tool' | 'pet' | 'upload' | 'paste' | 'process'
+  links: KnowledgeLink[]
+  tags: string[]
+  /** 来源文件名（上传/截图时可选） */
+  fileName?: string
+  /** 过程笔记分类（项目内） */
+  categoryId?: string
+  categoryName?: string
+  /** process = 过程案卷（合并沉淀）；普通笔记可不填 */
+  dossierKind?: 'note' | 'process'
+  /** 沉淀时间（从备忘/粘贴进入知识库） */
+  sedimentedAt: number
+  ts: number
+  /** 预留：同步到外部知识库产品的时间 */
+  syncedAt?: number | null
+}
+
+/** 过程草稿中的一条旁记 */
+export interface ProcessDraftNote {
+  id: string
+  text: string
+  categoryId?: string
+  categoryName?: string
+  source: 'manual' | 'paste' | 'ai'
+  ts: number
+}
+
+/** 过程草稿中的 AI 问答片段 */
+export interface ProcessDraftAiSnippet {
+  id: string
+  question: string
+  answer: string
+  ts: number
+}
+
+/**
+ * 当日/当前过程草稿：操作输入 + 旁记 + AI 细节，确认后合并成知识库过程案卷。
+ */
+export interface ProcessDraft {
+  id: string
+  date: string
+  startedAt: number
+  updatedAt: number
+  apps: string[]
+  windowTitles: string[]
+  pathHints: string[]
+  projectId?: string | null
+  projectName?: string
+  planId?: string | null
+  notes: ProcessDraftNote[]
+  aiSnippets: ProcessDraftAiSnippet[]
+  /** 已确认沉淀对应的 KnowledgeItem.id */
+  sedimentedKnowledgeId?: string
+  closedAt?: number
 }
 
 export interface ScreenshotRecord {
@@ -499,6 +589,25 @@ export interface PADEmotion {
   dominance: number // -1..1
 }
 
+/**
+ * 桌宠动作意图（业务发标签，渲染查表播 clip）
+ * WorkState→空间态仍是底噪；intent 为短时打断（庆祝/提醒等）
+ */
+export type PetIntent =
+  | 'idle'
+  | 'focus'
+  | 'slack'
+  | 'rest'
+  | 'away'
+  | 'overworked'
+  | 'celebrate'
+  | 'nudge'
+  | 'chat_open'
+  | 'block'
+  | 'offwork'
+  | 'overtime'
+  | 'meeting'
+
 /** 桌宠状态（WS 协议 / pet 窗口共享） */
 export interface PetState {
   workState: WorkState
@@ -508,6 +617,10 @@ export interface PetState {
   message: string | null // 气泡消息
   characterId: string // 当前角色
   visible: boolean
+  /** 动作意图；配合 intentAt 触发一次性播放 */
+  intent?: PetIntent | null
+  /** 意图发出时间戳；变化时桌宠重播，同 intent 可连发 */
+  intentAt?: number
 }
 
 /** 对外广播的实时桌面状态 */
@@ -659,6 +772,58 @@ export interface ProfileReference { layer: PrivacyLevel; field: string; logId: s
 
 export type WidgetMode = 'mini' | 'compact' | 'full'
 
+/** 吸附态左右圆环可展示的内容 */
+export type DockRingContent = 'app' | 'focus' | 'chain' | 'project' | 'minutes'
+
+/** 桌面叠层各形态显示选项（桌搭页可配） */
+export interface WidgetDisplayOptions {
+  dock: { left: DockRingContent; right: DockRingContent }
+  mini: {
+    focusRing: boolean
+    project: boolean
+    chain: boolean
+    emptyHint: boolean
+    classifyBtn: boolean
+    penetrationBtn: boolean
+  }
+  full: {
+    status: boolean
+    projectChip: boolean
+    focusMinutes: boolean
+    askBtn: boolean
+    attrPlans: boolean
+    petBubble: boolean
+    idleHint: boolean
+  }
+  todo: {
+    projects: boolean
+    todos: boolean
+    life: boolean
+  }
+}
+
+export const DEFAULT_WIDGET_DISPLAY: WidgetDisplayOptions = {
+  dock: { left: 'app', right: 'focus' },
+  mini: {
+    focusRing: true,
+    project: true,
+    chain: true,
+    emptyHint: true,
+    classifyBtn: true,
+    penetrationBtn: true
+  },
+  full: {
+    status: true,
+    projectChip: true,
+    focusMinutes: true,
+    askBtn: true,
+    attrPlans: true,
+    petBubble: true,
+    idleHint: true
+  },
+  todo: { projects: true, todos: true, life: true }
+}
+
 // ───────────────────────── 识别引擎（规则 + 小模型） ─────────────────────────
 
 /** 状态判定来源：correction 用户纠偏 > idle 空闲 > model 小模型 > rule 规则表 > fallback 兜底 */
@@ -687,6 +852,10 @@ export interface RecognitionLogRecord {
 export interface AppSettings {
   theme: 'cyan' | 'violet' | 'green' | 'amber' // 强调色主题，默认 cyan
   appearanceMode: 'light' | 'dark' | 'auto' // 亮暗模式，默认 dark
+  /** 深色底色：void=深邃黑（类灵动岛）；navy=深蓝灰（旧款） */
+  darkTone: 'void' | 'navy'
+  /** 桌面叠层玻璃效果：待办组件 / 状态浮窗半透明毛玻璃（关=实心黑，避 Windows 透框） */
+  overlayGlass: boolean
   monitorInterval: number // 采样间隔 ms，默认 5000
   monitorSmart: boolean // 智能轮询：专注≥80→10s，摸鱼→3s，默认 false
   deepMode: boolean // 深度 OCR，默认 false
@@ -728,10 +897,28 @@ export interface AppSettings {
   petRememberPos: boolean // 记住拖拽位置（重启后恢复），默认开
   petReturnMin: number // 闲置自动归位分钟数，默认 30
   todoWidgetVisible: boolean // 待办树小组件显隐，默认关
-  todoWidgetOnTop: boolean // 待办树小组件顶层（false=底层穿透），默认 true
+  todoWidgetOnTop: boolean // 待办树小组件顶层（false=底层沉底，不自动穿透），默认 true
   todoWidgetOpacity: number // 待办树小组件不透明度 0.3-1
-  todoWidgetPenetration: boolean // 待办树小组件鼠标穿透
-  widgetOnTop: boolean // 监控悬浮窗顶层
+  todoWidgetPenetration: boolean // 待办树小组件鼠标穿透（与顶层独立）
+  todoWidgetPosX?: number
+  todoWidgetPosY?: number
+  /** 展开态记住的宽高（收起胶囊不写入，避免被 100×36 污染） */
+  todoWidgetWidth?: number
+  todoWidgetHeight?: number
+  /** 待办组件是否收起成胶囊（可由状态浮窗一键展开） */
+  todoWidgetCollapsed?: boolean
+  /**
+   * 待办组件钉在桌面层（Win：挂到 WorkerW，「显示桌面」仍可见）。
+   * 与状态浮窗独立；开启后该组件「顶层显示」暂不生效。默认关。
+   */
+  todoWidgetDesktopPin: boolean
+  /**
+   * 状态浮窗钉在桌面层（同上，独立开关）。默认关。
+   */
+  widgetDesktopPin: boolean
+  widgetOnTop: boolean // 监控悬浮窗顶层（迷你/展开态）
+  /** 吸附态（贴边水滴）是否顶层；可与 widgetOnTop 分开，默认 true */
+  widgetDockOnTop: boolean
   petOpacity: number // 桌宠不透明度 0.3-1
   smartDailyMaxPerDay: number // 智能日报每日 AI 生成次数上限（省 token）
   curveRefreshMin: number // 报表头部曲线数据最短刷新间隔（分钟）
@@ -759,9 +946,28 @@ export interface AppSettings {
   widgetOpacity: number // 0.2-1
   widgetPenetration: boolean
   widgetAccent?: string // 悬浮窗强调色（hex，如 #22D3EE）；空 = 默认 cyan
-  widgetPosX?: number // 悬浮窗位置 X（-1 = 未保存）
+  widgetPosX?: number // 悬浮窗位置 X（-1 = 未保存；兼容旧字段，与当前形态同步）
   widgetPosY?: number // 悬浮窗位置 Y
+  /** mini 气泡贴边吸附：left/right/top/bottom；null=自由悬浮 */
+  widgetDockEdge?: 'left' | 'right' | 'top' | 'bottom' | null
   widgetSizes?: Partial<Record<WidgetMode, { w: number; h: number }>> // 每个模式的自定义尺寸
+  /**
+   * 悬浮窗使用习惯：分形态记位置（自由 mini / 吸附 / full），启动时恢复上次形态
+   * lastLayout: mini=自由胶囊 dock=贴边 full=完整面板
+   */
+  widgetHabit?: {
+    lastLayout?: 'mini' | 'dock' | 'full'
+    mini?: { x: number; y: number }
+    full?: { x: number; y: number }
+    dock?: { edge: 'left' | 'right' | 'top' | 'bottom'; x: number; y: number }
+    penetration?: boolean
+    onTop?: boolean
+  }
+  /**
+   * 桌面叠层「显示什么」：吸附双环 / 迷你胶囊 / full 面板 / 待办分区
+   * 在桌搭页配置；情境告警（会议/归属问诊等）始终强制显示
+   */
+  widgetDisplay?: WidgetDisplayOptions
   /** 用户自定义应用分类：进程名 → 业务分类（覆盖默认映射；UI 拖拽归类后持久化） */
   appCategoryOverride?: Record<string, string>
   /** 用户自定义工作/摸鱼归属：进程名 → work | life（星图拖拽调整后持久化） */
@@ -815,6 +1021,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   planForecastEnabled: true,
   theme: 'cyan',
   appearanceMode: 'light',
+  darkTone: 'void',
+  overlayGlass: true,
   aiEnabled: false,
   aiApiKey: '',
   aiBaseUrl: 'https://api.openai.com/v1',
@@ -845,9 +1053,17 @@ export const DEFAULT_SETTINGS: AppSettings = {
   petReturnMin: 30,
   todoWidgetVisible: false,
   todoWidgetOnTop: true,
-  todoWidgetOpacity: 0.95,
+  todoWidgetOpacity: 0.72,
   todoWidgetPenetration: false,
+  todoWidgetPosX: -1,
+  todoWidgetPosY: -1,
+  todoWidgetWidth: 300,
+  todoWidgetHeight: 480,
+  todoWidgetCollapsed: false,
+  todoWidgetDesktopPin: false,
+  widgetDesktopPin: false,
   widgetOnTop: true,
+  widgetDockOnTop: true,
   petOpacity: 1,
   smartDailyMaxPerDay: 2,
   curveRefreshMin: 5,
@@ -863,10 +1079,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   workChains: [],
   widgetVisible: false, // 悬浮卡片默认隐藏（设置里可手动开启），状态由桌宠对话泡泡提供
   widgetMode: 'mini',
-  widgetOpacity: 0.92,
+  widgetOpacity: 1,
   widgetPenetration: false,
   widgetPosX: -1,
   widgetPosY: -1,
+  widgetDockEdge: null,
+  widgetHabit: { lastLayout: 'mini', penetration: false, onTop: true },
+  widgetDisplay: DEFAULT_WIDGET_DISPLAY,
   launchAtLogin: false,
   showSplash: true,
   slackHideSec: 180,
@@ -896,6 +1115,19 @@ export interface SuggestionQuestion {
   ctx: string
   question: string
   ts: number
+  /** confirmQueue 附加：drift / unattributed 等 */
+  kind?: string
+  projectId?: string
+  projectName?: string
+  apps?: string[]
+  windowTitle?: string
+  /** 工作区/路径线索（Cursor 多项目分段用） */
+  pathHint?: string
+  /** 为什么像这个项目 */
+  reason?: string
+  /** 建议项目（未归属时可选） */
+  suggestedProjectId?: string
+  suggestedProjectName?: string
 }
 
 // ───────────────────────── ID 工具 ─────────────────────────

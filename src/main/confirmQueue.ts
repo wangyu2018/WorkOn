@@ -31,18 +31,20 @@ function canInterrupt(): boolean {
   return (snap.focusLevel ?? 0) < 40 && !getFocusChainState().active
 }
 
-/** 入队（指纹去重；已答指纹由调用方过滤） */
-export function enqueueAsk(fp: string, question: string, ctx: Record<string, unknown> = {}): void {
-  if (queue.has(fp)) return
+/** 入队（指纹去重；已答指纹由调用方过滤）。返回是否新入队 */
+export function enqueueAsk(fp: string, question: string, ctx: Record<string, unknown> = {}): boolean {
+  if (queue.has(fp)) return false
   queue.set(fp, { fp, question, ctx, ts: Date.now() })
+  return true
 }
 
-/** 派遣器：monitor tick 调用（内部 30s 节流）；低专注时刻每次放一条最老的 */
+/** 派遣器：monitor tick 调用（内部 45s 节流）；低专注时刻每次放一条最老的；已有未答问题时不再叠 */
 export function dispatchConfirmQueue(): void {
   const now = Date.now()
-  if (now - lastDispatch < 30_000) return
+  if (now - lastDispatch < 45_000) return
   lastDispatch = now
   if (queue.size === 0 || !canInterrupt()) return
+  if (bus.question) return // 上一条还没答，不连环弹
   const oldest = [...queue.values()].sort((a, b) => a.ts - b.ts)[0]
   queue.delete(oldest.fp)
   bus.setQuestion({ id: genId('q'), ctx: `attrib:${oldest.fp}`, question: oldest.question, ts: now, ...oldest.ctx })

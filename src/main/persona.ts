@@ -154,8 +154,9 @@ export function refreshPersona(): UserPersona {
   const today = dateKey(now)
 
   // ── L0 基础信息：活跃天数 / 用户类型（镜像设置，含自动识别结果） ──
-  const acts = listActivitiesRange(0, now)
-  p.basicInfo.daysActive = new Set(acts.map((a) => dateKey(a.ts))).size
+  // 只扫近 120 天，避免全量 10 万+ 条卡死主进程
+  const actsRecent = listActivitiesRange(now - 120 * DAY_MS, now)
+  p.basicInfo.daysActive = new Set(actsRecent.map((a) => dateKey(a.ts))).size
   p.basicInfo.userType = effectiveUserType()
 
   // ── L2 行为模式：近 14 天轨迹 ──

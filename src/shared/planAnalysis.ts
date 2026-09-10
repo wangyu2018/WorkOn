@@ -10,11 +10,13 @@ import { WORK_LIKE_STATES } from './stateMeta'
 /** 内置计划分类（不可删除） */
 export const BUILTIN_CATEGORIES: CustomCategory[] = [
   { id: 'ai-dev', label: 'AI 开发', color: '#8B5CF6', emoji: '🤖', stateHints: ['aidev', 'aiqa', 'coding'], isBuiltIn: true, ts: 0 },
-  { id: 'work-customer', label: '客户工作', color: '#3B82F6', emoji: '💼', stateHints: ['meeting', 'remote', 'writing', 'focus'], isBuiltIn: true, ts: 0 },
+  { id: 'work-customer', label: '工作', color: '#3B82F6', emoji: '💼', stateHints: ['meeting', 'remote', 'writing', 'focus'], isBuiltIn: true, ts: 0 },
   { id: 'leader', label: '管理沟通', color: '#F59E0B', emoji: '👥', stateHints: ['meeting', 'remote'], isBuiltIn: true, ts: 0 },
-  { id: 'personal', label: '个人事务', color: '#10B981', emoji: '🏠', stateHints: ['relax', 'break', 'writing'], isBuiltIn: true, ts: 0 },
-  { id: 'other', label: '其他', color: '#64748B', emoji: '📋', stateHints: [], isBuiltIn: true, ts: 0 }
+  { id: 'personal', label: '生活', color: '#10B981', emoji: '🏠', stateHints: ['relax', 'browse', 'writing'], isBuiltIn: true, ts: 0 },
+  { id: 'interest', label: '兴趣', color: '#EC4899', emoji: '✨', stateHints: ['relax', 'browse'], isBuiltIn: true, ts: 0 },
+  { id: 'other', label: '未分类', color: '#64748B', emoji: '📋', stateHints: [], isBuiltIn: true, ts: 0 }
 ]
+
 
 const CATEGORY_STATE_HINT: Record<string, string[]> = Object.fromEntries(
   BUILTIN_CATEGORIES.map((c) => [c.id, c.stateHints ?? []])

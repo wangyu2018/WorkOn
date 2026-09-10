@@ -1,5 +1,10 @@
 # AGENTS.md
 
+## 个人需求台账
+
+跨对话进度看：`.cursor/task-ledger.md`（最近 10 条需求 + 解决状态）。  
+Agent 规则：`.cursor/rules/task-ledger.mdc`（每轮拆解/交付必须更新）。
+
 ## 启动项目
 
 ```powershell

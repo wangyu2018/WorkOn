@@ -17,7 +17,7 @@ import type {
   Project, ProjectTask, ProjectTimeLink,
   RecognitionLogRecord, OcrShot,
   MotionMeta, PointsEntry, ReportEntryPatch,
-  AutomationRule
+  AutomationRule, KnowledgeItem, ProcessDraft
 } from '@shared/types'
 import type { ProjectBinding } from './attributions'
 import type { DirActivity } from './dirWatcher'
@@ -33,6 +33,7 @@ interface JsonData {
   entries: TimeEntry[]
   screenshots: ScreenshotRecord[]
   memos: MemoRecord[]
+  knowledge: KnowledgeItem[]
   plans: PlanItem[]
   analyses: UserAnalysis[]
   usages: UsageStat[]
@@ -61,14 +62,15 @@ interface JsonData {
   projectBindings: ProjectBinding[] // v7 项目软绑定（工具/关键词/目录）
   confirmMemory: ConfirmMemory[] // v7 确认记忆（指纹去重）
   dirActivity: DirActivity[] // v7 目录活动（按 项目:日期 唯一）
+  processDrafts: ProcessDraft[] // 过程草稿 → 知识库案卷
 }
 
 const EMPTY: JsonData = {
-  entries: [], screenshots: [], memos: [], plans: [], analyses: [],
+  entries: [], screenshots: [], memos: [], knowledge: [], plans: [], analyses: [],
   usages: [], corrections: [], rules: [], feedbacks: [], qa: [], categories: [],
   attentionScores: [], achievements: [], accessLogs: [], personas: [],
   reportTemplates: [], ocrSnapshots: [], chains: [], categoryInferences: [], segmentPlans: [],
-  projects: [], projectTasks: [], projectTimeLinks: [], automations: [], projectBindings: [], confirmMemory: [], dirActivity: []
+  projects: [], projectTasks: [], projectTimeLinks: [], automations: [], projectBindings: [], confirmMemory: [], dirActivity: [], processDrafts: []
 ,
   ocrShots: []
   ,
@@ -113,30 +115,106 @@ export function initDb(): void {
   } catch (e) {
     console.warn('[db] db.json 读取失败，使用空库', e)
   }
+  // 活动 JSONL 可能上十万行：不在此处同步读，避免主进程卡死导致窗口不出现
+  console.log('[db] core ready（activities 延后加载）')
+}
 
-  try {
-    if (fs.existsSync(actFile)) {
+let activitiesLoading = false
+let activitiesReady = false
+
+export function isActivitiesReady(): boolean {
+  return activitiesReady
+}
+
+/**
+ * 分块加载 activities.jsonl，定期把事件循环让给窗口绘制。
+ * 应在主窗口创建之后调用；完成后再 startMonitor。
+ */
+export function loadActivitiesDeferred(): Promise<void> {
+  if (activitiesReady || activitiesLoading) return Promise.resolve()
+  activitiesLoading = true
+  return new Promise((resolve) => {
+    try {
+      if (!fs.existsSync(actFile)) {
+        activitiesReady = true
+        activitiesLoading = false
+        console.log('[db] activities.jsonl: 首次运行，新建活动日志')
+        resolve()
+        return
+      }
       const retainDays = Math.max(7, getSettings().activityRetentionDays || 60)
       const cutoff = Date.now() - retainDays * 86400000
-      const lines = fs.readFileSync(actFile, 'utf-8').split('\n').filter(Boolean)
-      for (const line of lines) {
+      const readline = require('readline') as typeof import('readline')
+      const stream = fs.createReadStream(actFile, { encoding: 'utf-8' })
+      const rl = readline.createInterface({ input: stream, crlfDelay: Infinity })
+      let kept = 0
+      let seen = 0
+      let pruned = false
+      const batch: ActivityRecord[] = []
+
+      const flushBatch = (): void => {
+        if (!batch.length) return
+        for (const r of batch) {
+          activities.push(r)
+          if (r.id && r.id >= actIdSeq) actIdSeq = r.id + 1
+          kept++
+        }
+        batch.length = 0
+      }
+
+      rl.on('line', (line: string) => {
+        if (!line) return
+        seen++
         try {
           const r = JSON.parse(line) as ActivityRecord
-          if (r.ts >= cutoff) {
-            activities.push(r)
-            if (r.id && r.id >= actIdSeq) actIdSeq = r.id + 1
+          if (r.ts >= cutoff) batch.push(r)
+          else pruned = true
+        } catch {
+          /* 跳过坏行 */
+        }
+        if (batch.length >= 1500) {
+          flushBatch()
+          rl.pause()
+          setImmediate(() => rl.resume())
+        } else if (seen % 4000 === 0) {
+          rl.pause()
+          setImmediate(() => rl.resume())
+        }
+      })
+      rl.on('close', () => {
+        flushBatch()
+        activitiesReady = true
+        activitiesLoading = false
+        if (pruned) {
+          try {
+            fs.writeFileSync(
+              actFile,
+              activities.map((r) => JSON.stringify(r)).join('\n') + (activities.length ? '\n' : ''),
+              'utf-8'
+            )
+            console.log(`[db] activities.jsonl: 已加载 ${kept} 条（已裁剪过期，保留 ${retainDays} 天）`)
+          } catch (e) {
+            console.warn('[db] activities 裁剪写回失败', e)
+            console.log(`[db] activities.jsonl: 已加载 ${kept} 条（保留 ${retainDays} 天）`)
           }
-        } catch { /* 跳过坏行 */ }
-      }
-      // 裁剪后重写，防膨胀
-      fs.writeFileSync(actFile, activities.map((r) => JSON.stringify(r)).join('\n') + (activities.length ? '\n' : ''), 'utf-8')
-      console.log(`[db] activities.jsonl: 已加载 ${activities.length} 条（保留 ${retainDays} 天）`)
-    } else {
-      console.log('[db] activities.jsonl: 首次运行，新建活动日志')
+        } else {
+          console.log(`[db] activities.jsonl: 已加载 ${kept} 条（保留 ${retainDays} 天）`)
+        }
+        resolve()
+      })
+      rl.on('error', (e: Error) => {
+        activitiesReady = true
+        activitiesLoading = false
+        console.warn('[db] activities.jsonl 读取失败', e)
+        resolve()
+      })
+    } catch (e) {
+      activitiesReady = true
+      activitiesLoading = false
+      console.warn('[db] activities.jsonl 读取失败', e)
+      resolve()
     }
-  } catch (e) {
-    console.warn('[db] activities.jsonl 读取失败', e)
-  }
+  })
 }
 
 function scheduleFlush(): void {

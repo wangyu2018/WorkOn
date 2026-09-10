@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { usePresenceStore } from '../stores/presenceStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { StateBadge } from '../components/StateBadge'
@@ -9,6 +9,11 @@ import { Toggle } from '../components/Toggle'
 import { MotionLab } from '../components/MotionLab'
 import { AutomationLab } from '../components/AutomationLab'
 import { VrmUploader } from '../components/VrmUploader'
+import {
+  DEFAULT_WIDGET_DISPLAY,
+  type DockRingContent,
+  type WidgetDisplayOptions
+} from '@shared/types'
 
 /** 当前搭子角色（VRM 姵儿，单角色） */
 const CHARACTER = {
@@ -20,6 +25,58 @@ const CHARACTER = {
 } as const
 
 const WIDGET_ACCENTS = ['#22D3EE', '#A78BFA', '#34D399', '#FBBF24', '#F472B6'] as const
+
+const DOCK_RING_OPTS: { id: DockRingContent; label: string }[] = [
+  { id: 'app', label: '应用' },
+  { id: 'focus', label: '专注分' },
+  { id: 'chain', label: '链路' },
+  { id: 'project', label: '项目' },
+  { id: 'minutes', label: '分钟' }
+]
+
+function ChipToggle({
+  on,
+  label,
+  onClick
+}: {
+  on: boolean
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      className={`rounded-full border px-2 py-0.5 text-[10px] font-bold transition-all ${
+        on
+          ? 'border-[rgba(15,181,164,0.5)] bg-[var(--teal-soft)] text-[var(--teal-deep)]'
+          : 'border-[var(--line)] text-slate-500 hover:border-white/20 hover:text-slate-300'
+      }`}
+      onClick={onClick}
+    >
+      {label}{on ? ' ✓' : ''}
+    </button>
+  )
+}
+
+function OptionRow({
+  title,
+  hint,
+  children
+}: {
+  title: string
+  hint?: string
+  children: ReactNode
+}) {
+  return (
+    <div className="-mx-1 rounded-lg px-1 py-2.5">
+      <div className="mb-1.5">
+        <div className="text-[12px] text-slate-300">{title}</div>
+        {hint ? <div className="mt-0.5 text-[10px] text-slate-500">{hint}</div> : null}
+      </div>
+      <div className="flex flex-wrap gap-1.5">{children}</div>
+    </div>
+  )
+}
 
 function PadBar({ label, value, color }: { label: string; value: number; color: string }) {
   // PAD -1..1 → 0..100
@@ -198,13 +255,31 @@ export default function BuddyStage() {
     void patch({ petInteractions: { ...settings.petInteractions, [key]: v } })
   }
 
+  const display: WidgetDisplayOptions = {
+    dock: { ...DEFAULT_WIDGET_DISPLAY.dock, ...(settings.widgetDisplay?.dock ?? {}) },
+    mini: { ...DEFAULT_WIDGET_DISPLAY.mini, ...(settings.widgetDisplay?.mini ?? {}) },
+    full: { ...DEFAULT_WIDGET_DISPLAY.full, ...(settings.widgetDisplay?.full ?? {}) },
+    todo: { ...DEFAULT_WIDGET_DISPLAY.todo, ...(settings.widgetDisplay?.todo ?? {}) }
+  }
+
+  const patchDisplay = (partial: Partial<WidgetDisplayOptions>): void => {
+    void patch({
+      widgetDisplay: {
+        dock: { ...display.dock, ...(partial.dock ?? {}) },
+        mini: { ...display.mini, ...(partial.mini ?? {}) },
+        full: { ...display.full, ...(partial.full ?? {}) },
+        todo: { ...display.todo, ...(partial.todo ?? {}) }
+      }
+    })
+  }
+
   return (
     <div className="view-enter flex flex-col gap-5">
       {/* 页面标题区 */}
       <PageHeader
         icon="cat"
         title="搭子"
-        desc={`${CHARACTER.name} · ${CHARACTER.tagline} — 实时状态、互动控制与养成指南`}
+        desc={`${CHARACTER.name} · ${CHARACTER.tagline} — 桌面叠层管控（角色 / 浮窗 / 待办）与养成`}
         actions={
           <span className="chip" style={{ borderColor: '#F59E0B66' }}>
             {CHARACTER.rarity}
@@ -212,21 +287,133 @@ export default function BuddyStage() {
         }
       />
 
-      {/* 顶部总控：仅两个开关 —— 虚拟角色 / 悬浮窗，下方按开启状态显示对应设置 */}
+      {/* 桌面叠层总控：虚拟角色 / 悬浮窗 / 待办组件 一体管控 */}
       <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '40ms' }}>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3">
-            <span className="text-[13px] font-semibold text-slate-200">虚拟角色</span>
-            <Toggle checked={settings.petEnabled} onChange={(v) => void patch({ petEnabled: v })} />
-          </div>
-          <div className="w-px h-6 bg-white/10" />
-          <div className="flex items-center gap-3">
-            <span className="text-[13px] font-semibold text-slate-200">悬浮窗</span>
-            <Toggle checked={settings.widgetVisible} onChange={(v) => void patch({ widgetVisible: v })} />
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <SectionTitle icon="monitor" title="桌面叠层管控" />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              className="glass-btn !px-2 !py-1 !text-[10px]"
+              title="三层全部置顶"
+              onClick={() =>
+                void patch({
+                  widgetOnTop: true,
+                  widgetDockOnTop: true,
+                  todoWidgetOnTop: true
+                })
+              }
+            >
+              全部顶层
+            </button>
+            <button
+              className="glass-btn !px-2 !py-1 !text-[10px]"
+              title="关闭穿透，恢复可点"
+              onClick={() =>
+                void patch({
+                  widgetPenetration: false,
+                  todoWidgetPenetration: false
+                })
+              }
+            >
+              取消穿透
+            </button>
+            <button
+              className="glass-btn !px-2 !py-1 !text-[10px]"
+              title="收起待办为迷你条"
+              disabled={!settings.todoWidgetVisible}
+              onClick={() => void window.api?.setTodoWidgetCollapsed?.(true)}
+            >
+              收起待办
+            </button>
+            <button
+              className="glass-btn !px-2 !py-1 !text-[10px]"
+              title="展开待办面板"
+              disabled={!settings.todoWidgetVisible}
+              onClick={() => void window.api?.setTodoWidgetCollapsed?.(false)}
+            >
+              展开待办
+            </button>
           </div>
         </div>
-        <div className="mt-2 text-[11px] text-slate-500">
-          开启后下方显示对应设置；两个都开启则全部罗列。
+        <p className="mb-3 text-[11px] leading-relaxed text-slate-500">
+          统一开关桌面三件套。开启后下方展开对应细控；也可从托盘右键菜单快捷切换。
+        </p>
+        <div className="grid gap-2.5 sm:grid-cols-3">
+          {(
+            [
+              {
+                key: 'pet',
+                label: '虚拟角色',
+                desc: 'VRM 桌宠姵儿',
+                on: settings.petEnabled,
+                set: (v: boolean) => void patch({ petEnabled: v }),
+                badges: settings.petEnabled
+                  ? [
+                      pet?.visible === false ? '已隐藏' : '显示中',
+                      `透明 ${Math.round((settings.petOpacity ?? 1) * 100)}%`
+                    ]
+                  : ['已关闭']
+              },
+              {
+                key: 'widget',
+                label: '状态浮窗',
+                desc: '专注环 · 迷你胶囊',
+                on: settings.widgetVisible,
+                set: (v: boolean) => void patch({ widgetVisible: v }),
+                badges: settings.widgetVisible
+                  ? [
+                      settings.widgetPenetration ? '穿透' : '可点',
+                      settings.widgetDesktopPin
+                        ? '桌面钉'
+                        : settings.widgetOnTop !== false
+                          ? '顶层'
+                          : '底层',
+                      `${Math.round((settings.widgetOpacity ?? 1) * 100)}%`
+                    ]
+                  : ['已关闭']
+              },
+              {
+                key: 'todo',
+                label: '待办组件',
+                desc: '桌面待办树',
+                on: !!settings.todoWidgetVisible,
+                set: (v: boolean) => void patch({ todoWidgetVisible: v }),
+                badges: settings.todoWidgetVisible
+                  ? [
+                      settings.todoWidgetPenetration ? '穿透' : '可点',
+                      settings.todoWidgetDesktopPin
+                        ? '桌面钉'
+                        : settings.todoWidgetOnTop !== false
+                          ? '顶层'
+                          : '底层',
+                      `${Math.round((settings.todoWidgetOpacity ?? 1) * 100)}%`
+                    ]
+                  : ['已关闭']
+              }
+            ] as const
+          ).map((card) => (
+            <div
+              key={card.key}
+              className={`rounded-xl border px-3 py-2.5 transition-colors ${
+                card.on ? 'border-neon-cyan/30 bg-neon-cyan/[0.06]' : 'border-white/[0.06] bg-white/[0.02]'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-[13px] font-semibold text-slate-200">{card.label}</div>
+                  <div className="mt-0.5 text-[10px] text-slate-500">{card.desc}</div>
+                </div>
+                <Toggle checked={card.on} onChange={card.set} />
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1">
+                {card.badges.map((b) => (
+                  <span key={b} className="rounded border border-white/[0.08] px-1.5 py-px text-[9px] text-slate-400">
+                    {b}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -456,14 +643,7 @@ export default function BuddyStage() {
           </div>
         </section>
       </div>
-      ) : (
-        <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '60ms' }}>
-          <div className="mb-3"><SectionTitle icon="cat" title="搭子状态" /></div>
-          <div className="text-[12px] leading-relaxed text-slate-500">
-            虚拟角色未启用。在上方总控卡开启「虚拟角色」后，这里会显示其实时状态、情感与行为控制。
-          </div>
-        </section>
-      )}
+      ) : null}
 
       {/* 虚拟人资源占用（调试模式：设置 → 开发者选项 开启后显示） */}
       {settings.devMode && petStats ? (
@@ -574,7 +754,7 @@ export default function BuddyStage() {
             <SectionTitle icon="monitor" title="悬浮窗设置" />
           </div>
           <div className="mb-2 text-[11px] text-slate-500">
-            屏幕右侧半透明悬浮窗，显示今日状态概览与快捷问答。托盘图标是它的"手柄"——左键展开状态浮窗，右键弹出快捷菜单。
+            屏幕侧边半透明浮窗：今日状态、专注环与快捷问答。会分别记住 mini / 吸附 / 展开 的位置，以及穿透与顶层习惯。
           </div>
           <div className="flex flex-col divide-y divide-white/[0.05]">
             <div className="-mx-1 rounded-lg px-1 py-2">
@@ -633,11 +813,244 @@ export default function BuddyStage() {
             </div>
             <div className="-mx-1 flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-white/[0.03]">
               <div className="min-w-0 flex-1">
+                <div className="text-[12px] text-slate-300">顶层显示</div>
+                <div className="mt-0.5 text-[10px] text-slate-500">
+                  {settings.widgetDesktopPin
+                    ? '已钉在桌面层时此项暂不生效'
+                    : '迷你胶囊 / 展开面板始终浮在其他窗口之上'}
+                </div>
+              </div>
+              <Toggle
+                checked={settings.widgetOnTop !== false}
+                onChange={(v) => void patch({ widgetOnTop: v })}
+                disabled={!!settings.widgetDesktopPin}
+              />
+            </div>
+            <div className="-mx-1 flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-white/[0.03]">
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] text-slate-300">吸附态顶层</div>
+                <div className="mt-0.5 text-[10px] text-slate-500">
+                  {settings.widgetDesktopPin
+                    ? '已钉在桌面层时此项暂不生效'
+                    : '贴边水滴单独控制；关则可沉到普通窗口下'}
+                </div>
+              </div>
+              <Toggle
+                checked={settings.widgetDockOnTop !== false}
+                onChange={(v) => void patch({ widgetDockOnTop: v })}
+                disabled={!!settings.widgetDesktopPin}
+              />
+            </div>
+            <div className="-mx-1 flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-white/[0.03]">
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] text-slate-300">钉在桌面层</div>
+                <div className="mt-0.5 text-[10px] text-slate-500">
+                  Windows：仅此浮窗挂到桌面图标同层，「显示桌面」后仍可见
+                </div>
+              </div>
+              <Toggle
+                checked={!!settings.widgetDesktopPin}
+                onChange={(v) => void patch({ widgetDesktopPin: v })}
+              />
+            </div>
+            <div className="-mx-1 flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-white/[0.03]">
+              <div className="min-w-0 flex-1">
                 <div className="text-[12px] text-slate-300">鼠标穿透</div>
-                <div className="mt-0.5 text-[10px] text-slate-500">开启后浮窗不挡桌面操作（关闭需在桌搭页操作）</div>
+                <div className="mt-0.5 text-[10px] text-slate-500">开启后浮窗不挡桌面操作（关闭需在本页操作）</div>
               </div>
               <Toggle checked={settings.widgetPenetration} onChange={(v) => void patch({ widgetPenetration: v })} />
             </div>
+
+            <div className="my-1 border-t border-white/[0.05] pt-2">
+              <div className="mb-1 px-1 text-[10px] uppercase tracking-wide text-slate-600">显示内容</div>
+            </div>
+
+            <OptionRow title="吸附态 · 左环" hint="贴边水滴左侧圆弧里显示什么">
+              {DOCK_RING_OPTS.map((o) => (
+                <ChipToggle
+                  key={`L-${o.id}`}
+                  on={display.dock.left === o.id}
+                  label={o.label}
+                  onClick={() => patchDisplay({ dock: { left: o.id, right: display.dock.right } })}
+                />
+              ))}
+            </OptionRow>
+            <OptionRow title="吸附态 · 右环" hint="贴边水滴右侧圆弧里显示什么">
+              {DOCK_RING_OPTS.map((o) => (
+                <ChipToggle
+                  key={`R-${o.id}`}
+                  on={display.dock.right === o.id}
+                  label={o.label}
+                  onClick={() => patchDisplay({ dock: { left: display.dock.left, right: o.id } })}
+                />
+              ))}
+            </OptionRow>
+            <OptionRow title="迷你态" hint="自由胶囊条上要显示的内容">
+              {(
+                [
+                  ['focusRing', '专注环'],
+                  ['project', '项目归属'],
+                  ['chain', '专注链路'],
+                  ['emptyHint', '空闲提示'],
+                  ['classifyBtn', '归类按钮'],
+                  ['penetrationBtn', '穿透按钮']
+                ] as const
+              ).map(([k, label]) => (
+                <ChipToggle
+                  key={k}
+                  on={!!display.mini[k]}
+                  label={label}
+                  onClick={() => patchDisplay({ mini: { ...display.mini, [k]: !display.mini[k] } })}
+                />
+              ))}
+            </OptionRow>
+            <OptionRow title="展开态 full" hint="完整面板可选区块（会议/归属告警始终显示）">
+              {(
+                [
+                  ['status', '状态区'],
+                  ['projectChip', '项目芯片'],
+                  ['focusMinutes', '专注分钟'],
+                  ['askBtn', 'AI 提问'],
+                  ['attrPlans', '今日待办'],
+                  ['petBubble', '搭子气泡'],
+                  ['idleHint', '空闲占位']
+                ] as const
+              ).map(([k, label]) => (
+                <ChipToggle
+                  key={k}
+                  on={!!display.full[k]}
+                  label={label}
+                  onClick={() => patchDisplay({ full: { ...display.full, [k]: !display.full[k] } })}
+                />
+              ))}
+            </OptionRow>
+          </div>
+        </section>
+      )}
+
+      {/* 待办桌面组件 — 与浮窗同级管控 */}
+      {settings.todoWidgetVisible && (
+        <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '160ms' }}>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <SectionTitle icon="check" title="待办桌面组件" />
+            <div className="flex items-center gap-1.5">
+              <button
+                className="glass-btn !px-2.5 !py-1 !text-[11px]"
+                onClick={() => void window.api?.setTodoWidgetCollapsed?.(true)}
+                title="收成迷你条"
+              >
+                <Icon name="minimize" size={12} /> 收起
+              </button>
+              <button
+                className="glass-btn !px-2.5 !py-1 !text-[11px]"
+                onClick={() => void window.api?.setTodoWidgetCollapsed?.(false)}
+                title="展开完整待办树"
+              >
+                <Icon name="maximize" size={12} /> 展开
+              </button>
+              <button
+                className="glass-btn !px-2.5 !py-1 !text-[11px]"
+                onClick={() => void patch({ todoWidgetVisible: false })}
+                title="从桌面隐藏"
+              >
+                <Icon name="eyeOff" size={12} /> 隐藏
+              </button>
+            </div>
+          </div>
+          <div className="mb-2 text-[11px] leading-relaxed text-slate-500">
+            贴在桌面上的今日待办树：勾选完成、跟计划页同步。可独立设置穿透与顶层，避免挡工作或沉到桌面下找不到。
+          </div>
+          <div className="flex flex-col divide-y divide-white/[0.05]">
+            <div className="-mx-1 rounded-lg px-1 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[12px] text-slate-300">
+                    {settings.overlayGlass ? '面板深浅' : '面板深浅'}
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-slate-500">
+                    左右拖动会连续改变待办面板底色（不是整窗透明）
+                  </div>
+                </div>
+                <span className="text-[11px] tabular-nums text-slate-400">
+                  {Math.round((settings.todoWidgetOpacity ?? 1) * 100)}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0.3}
+                max={1}
+                step={0.05}
+                className="mt-1 w-full"
+                value={settings.todoWidgetOpacity ?? 1}
+                onChange={(e) => void patch({ todoWidgetOpacity: parseFloat(e.target.value) })}
+              />
+            </div>
+            <div className="-mx-1 flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-white/[0.03]">
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] text-slate-300">顶层显示</div>
+                <div className="mt-0.5 text-[10px] text-slate-500">
+                  {settings.todoWidgetDesktopPin
+                    ? '已钉在桌面层时此项暂不生效'
+                    : '关闭后沉到底层，不挡全屏应用'}
+                </div>
+              </div>
+              <Toggle
+                checked={settings.todoWidgetOnTop !== false}
+                onChange={(v) => void patch({ todoWidgetOnTop: v })}
+                disabled={!!settings.todoWidgetDesktopPin}
+              />
+            </div>
+            <div className="-mx-1 flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-white/[0.03]">
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] text-slate-300">钉在桌面层</div>
+                <div className="mt-0.5 text-[10px] text-slate-500">
+                  Windows：仅待办组件挂到桌面图标同层，「显示桌面」后仍可见
+                </div>
+              </div>
+              <Toggle
+                checked={!!settings.todoWidgetDesktopPin}
+                onChange={(v) => void patch({ todoWidgetDesktopPin: v })}
+              />
+            </div>
+            <div className="-mx-1 flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-white/[0.03]">
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] text-slate-300">鼠标穿透</div>
+                <div className="mt-0.5 text-[10px] text-slate-500">穿透后点不到组件，需在本页关闭穿透才能再操作</div>
+              </div>
+              <Toggle
+                checked={!!settings.todoWidgetPenetration}
+                onChange={(v) => void patch({ todoWidgetPenetration: v })}
+              />
+            </div>
+            <div className="-mx-1 flex items-center justify-between gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-white/[0.03]">
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] text-slate-300">玻璃效果</div>
+                <div className="mt-0.5 text-[10px] text-slate-500">待办组件与状态浮窗共用；Win 为磨砂圆角，关则为实心</div>
+              </div>
+              <Toggle
+                checked={!!settings.overlayGlass}
+                onChange={(v) => void patch({ overlayGlass: v })}
+              />
+            </div>
+            <div className="my-1 border-t border-white/[0.05] pt-2">
+              <div className="mb-1 px-1 text-[10px] uppercase tracking-wide text-slate-600">显示分区</div>
+            </div>
+            <OptionRow title="待办组件分区" hint="展开后显示哪些区块（与组件内 ⚙ 同步）">
+              {(
+                [
+                  ['projects', '项目'],
+                  ['todos', '待办'],
+                  ['life', '生活']
+                ] as const
+              ).map(([k, label]) => (
+                <ChipToggle
+                  key={k}
+                  on={!!display.todo[k]}
+                  label={label}
+                  onClick={() => patchDisplay({ todo: { ...display.todo, [k]: !display.todo[k] } })}
+                />
+              ))}
+            </OptionRow>
           </div>
         </section>
       )}

@@ -458,6 +458,10 @@ export default function SettingsView() {
 
       {/* 4. 外观 */}
       <Section title="桌面组件" icon="monitor">
+        <div className="mb-2 rounded-lg border border-white/[0.05] bg-white/[0.02] px-2.5 py-1.5 text-[11px] text-slate-500">
+          完整管控（显隐 / 钉桌面 / 顶层 / 穿透）在「搭子」页；此处为快捷入口。
+          「钉桌面」= 和桌面图标同层（显示桌面后仍在）；「沉底/关顶层」只是普通窗口往后排，不是钉桌面。
+        </div>
         <div className="flex flex-col gap-3 py-1 text-[12px]">
           {/* 监控悬浮窗 */}
           <div className="flex flex-col gap-1.5">
@@ -465,13 +469,30 @@ export default function SettingsView() {
               <span className="font-medium text-slate-300">监控悬浮窗</span>
               <div className="flex items-center gap-3">
                 <label className="flex items-center gap-1.5 text-slate-500">
-                  <input type="checkbox" checked={settings.widgetPenetration ?? false} onChange={(e) => void patch({ widgetPenetration: e.target.checked })} /> 穿透
+                  <input type="checkbox" checked={settings.widgetPenetration ?? false} onChange={(e) => void patch({ widgetPenetration: e.target.checked })} /> 整窗穿透
                 </label>
                 <label className="flex items-center gap-1.5 text-slate-500">
                   <input type="checkbox" checked={settings.widgetOnTop !== false} onChange={(e) => void patch({ widgetOnTop: e.target.checked })} /> 顶层
                 </label>
                 <input type="range" min={0.3} max={1} step={0.05} value={settings.widgetOpacity ?? 1} className="w-20" onChange={(e) => void patch({ widgetOpacity: Number(e.target.value) })} title="透明度" />
               </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                className="glass-btn !px-2 !py-0.5 text-[10px]"
+                onClick={() => void patch({ widgetMode: 'mini', widgetDockEdge: null })}
+              >
+                收起到 mini
+              </button>
+              <button
+                type="button"
+                className="glass-btn !px-2 !py-0.5 text-[10px]"
+                onClick={() => void patch({ widgetDockEdge: null })}
+              >
+                清除贴边吸附
+              </button>
+              <span className="text-[10px] text-slate-600">空区挖洞默认开；整窗穿透后需在此关闭</span>
             </div>
           </div>
           {/* 待办树小组件 */}
@@ -485,8 +506,20 @@ export default function SettingsView() {
                 <label className="flex items-center gap-1.5 text-slate-500">
                   <input type="checkbox" checked={settings.todoWidgetPenetration ?? false} onChange={(e) => void patch({ todoWidgetPenetration: e.target.checked })} /> 穿透
                 </label>
-                <label className="flex items-center gap-1.5 text-slate-500">
-                  <input type="checkbox" checked={settings.todoWidgetOnTop !== false} onChange={(e) => void patch({ todoWidgetOnTop: e.target.checked })} /> 顶层
+                <label className="flex items-center gap-1.5 text-slate-500" title="钉到桌面图标同层；「显示桌面」后仍可见。与「沉底」不同。">
+                  <input
+                    type="checkbox"
+                    checked={!!settings.todoWidgetDesktopPin}
+                    onChange={(e) => void patch({ todoWidgetDesktopPin: e.target.checked })}
+                  /> 钉桌面
+                </label>
+                <label className={`flex items-center gap-1.5 ${settings.todoWidgetDesktopPin ? 'text-slate-600' : 'text-slate-500'}`} title={settings.todoWidgetDesktopPin ? '已钉桌面时顶层/沉底不生效' : '关闭=沉到底层（仍是普通窗，不是桌面层）'}>
+                  <input
+                    type="checkbox"
+                    checked={settings.todoWidgetOnTop !== false}
+                    disabled={!!settings.todoWidgetDesktopPin}
+                    onChange={(e) => void patch({ todoWidgetOnTop: e.target.checked })}
+                  /> 顶层
                 </label>
                 <input type="range" min={0.3} max={1} step={0.05} value={settings.todoWidgetOpacity ?? 0.95} className="w-20" onChange={(e) => void patch({ todoWidgetOpacity: Number(e.target.value) })} title="透明度" />
               </div>
@@ -580,6 +613,40 @@ export default function SettingsView() {
             )
           })}
         </div>
+        <Row label="深色底色" desc={settings.appearanceMode === 'light' ? '当前是浅色外观，此项不可用；切到深色后再选底色' : '仅深色（或跟随系统为深）时生效：主窗口 / 侧栏 / 页面底'}>
+          <div className={`flex gap-2 ${settings.appearanceMode === 'light' ? 'pointer-events-none opacity-40' : ''}`}>
+            {(
+              [
+                ['void', '深邃黑', '#050505', '#111'],
+                ['navy', '深蓝灰', '#0B101B', '#151c24']
+              ] as const
+            ).map(([id, label, c1, c2]) => {
+              const active = (settings.darkTone ?? 'void') === id && settings.appearanceMode !== 'light'
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  disabled={settings.appearanceMode === 'light'}
+                  className="flex items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-all disabled:cursor-not-allowed"
+                  style={{
+                    border: `2px solid ${active ? 'var(--teal)' : 'var(--line)'}`,
+                    background: active ? 'var(--surface-2)' : 'transparent'
+                  }}
+                  onClick={() => {
+                    if (settings.appearanceMode === 'light') return
+                    void p({ darkTone: id })
+                  }}
+                >
+                  <span
+                    className="h-8 w-8 shrink-0 overflow-hidden rounded-lg border border-white/10"
+                    style={{ background: `linear-gradient(145deg, ${c1}, ${c2})` }}
+                  />
+                  <span className={`text-[12px] ${active ? 'text-slate-100' : 'text-slate-400'}`}>{label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </Row>
       </Section>
 
       {/* Oner 数据同步（能力 + 开关 + 折叠详情） */}

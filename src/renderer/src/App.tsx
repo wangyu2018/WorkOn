@@ -2,7 +2,7 @@
  * 主窗口壳：左侧分组导航 + 内容区
  * 设计：静谧深空 · accent 变量驱动的选中态（换主题自动联动）
  */
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useAppStore, type ViewKey } from './stores/appStore'
 import { usePresenceStore } from './stores/presenceStore'
 import { useSettingsStore } from './stores/settingsStore'
@@ -14,6 +14,7 @@ import { displayApp } from '@shared/appDisplayName'
 import workonLogo from './assets/workon-logo.png'
 import HomeView from './views/HomeView'
 import MonitorView from './views/MonitorView'
+import KnowledgeView from './views/KnowledgeView'
 import CalendarView from './views/CalendarView'
 import PlanView from './views/PlanView'
 import ReportHub from './views/ReportHub'
@@ -22,6 +23,7 @@ import QAReview from './views/QAReview'
 import ProfileView from './views/ProfileView'
 import PrivacyView from './views/PrivacyView'
 import SettingsView from './views/SettingsView'
+import { PasteInboxModal } from './components/PasteInboxModal'
 
 interface NavItem {
   key: ViewKey
@@ -42,7 +44,7 @@ const NAV_GROUPS: NavGroup[] = [
       { key: 'calendar', label: '日历', icon: 'calendar' },
       { key: 'plan', label: '计划', icon: 'target' },
       { key: 'report', label: '报表', icon: 'chart' },
-      { key: 'monitor', label: '监控', icon: 'activity' },
+      { key: 'knowledge', label: '知识库', icon: 'book' },
       { key: 'buddy', label: '桌搭', icon: 'cat' }
     ]
   },
@@ -59,6 +61,7 @@ const NAV_GROUPS: NavGroup[] = [
 const VIEW_TITLES: Record<ViewKey, string> = {
   home: '首页',
   monitor: '监控',
+  knowledge: '知识库',
   calendar: '日历',
   plan: '计划',
   report: '报表',
@@ -72,6 +75,7 @@ const VIEW_TITLES: Record<ViewKey, string> = {
 const VIEWS: Record<ViewKey, () => JSX.Element> = {
   home: HomeView,
   monitor: MonitorView,
+  knowledge: KnowledgeView,
   calendar: CalendarView,
   plan: PlanView,
   report: ReportHub,
@@ -114,6 +118,7 @@ export default function App() {
   const settings = useSettingsStore((s) => s.settings)
   const theme = useSettingsStore((s) => s.settings.theme)
   const appearanceMode = useSettingsStore((s) => s.settings.appearanceMode)
+  const darkTone = useSettingsStore((s) => s.settings.darkTone)
   // 当前活跃应用 → 分类图标（跟随用户手动归类，override 变化即同步）
   const appCategoryOverride = useSettingsStore((s) => s.settings.appCategoryOverride)
   const mainScreen = presence?.screens?.find((s) => s.screen === presence.mainScreen)
@@ -126,6 +131,15 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme
   }, [theme])
+  useEffect(() => {
+    document.documentElement.dataset.tone = darkTone === 'navy' ? 'navy' : 'void'
+    // 浅色外观不套用深色底色，避免黑底渗进浅色界面
+    if (appearanceMode === 'light') {
+      document.documentElement.dataset.toneActive = '0'
+    } else {
+      document.documentElement.dataset.toneActive = '1'
+    }
+  }, [darkTone, appearanceMode])
   // 动效开关：关闭时给根节点加 data-anim=off（CSS 禁用动画/过渡）
   useEffect(() => {
     document.documentElement.dataset.anim = settings.animationsEnabled ? 'on' : 'off'
@@ -176,17 +190,46 @@ export default function App() {
   // 托盘快速问答等外部跳转请求
   useEffect(() => {
     const off = window.api.onNavView?.((v) => {
-      if (typeof v === 'string') useAppStore.getState().setView(v as never)
+      if (typeof v !== 'string') return
+      // 监控已迁入首页模块；旧入口落到首页
+      useAppStore.getState().setView(v === 'monitor' ? 'home' : (v as never))
     })
     return off
+  }, [])
+
+  // 主窗口 Ctrl+V：非输入框时弹出粘贴识别预览（进展 / 待办 / 备忘）
+  const [pasteInboxOpen, setPasteInboxOpen] = useState(false)
+  useEffect(() => {
+    const isEditable = (el: EventTarget | null): boolean => {
+      const n = el as HTMLElement | null
+      if (!n) return false
+      if (n.closest?.('[data-paste-inbox]')) return true
+      const tag = n.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+      if ((n as HTMLElement).isContentEditable) return true
+      return !!n.closest?.('input, textarea, select, [contenteditable="true"]')
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'v') return
+      if (isEditable(e.target)) return
+      e.preventDefault()
+      e.stopPropagation()
+      setPasteInboxOpen(true)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [])
 
   // memo 化当前视图：presence 每 2s 更新时不再整页重渲染（修复时间轴/星图卡顿）
   const ActiveView = useMemo(() => memo(VIEWS[view]), [view])
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-ink-900 text-slate-200">
-      <aside className="flex w-[212px] shrink-0 flex-col border-r border-white/[0.06] bg-ink-950/50 px-3 pb-3 pt-3">
+    <div className="flex h-screen w-screen overflow-hidden text-slate-200" style={{ background: 'var(--bg-deep)' }}>
+      <PasteInboxModal open={pasteInboxOpen} onClose={() => setPasteInboxOpen(false)} />
+      <aside
+        className="flex w-[212px] shrink-0 flex-col border-r border-white/[0.06] px-3 pb-3 pt-3"
+        style={{ background: 'color-mix(in srgb, var(--bg-surface) 72%, transparent)' }}
+      >
         {/* 品牌区 */}
         <div className="mb-5 flex items-center gap-2.5 px-1.5 pt-1">
           <img
@@ -223,32 +266,53 @@ export default function App() {
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="app-drag flex h-11 shrink-0 items-center justify-between border-b border-white/[0.06] px-4">
-          <div className="flex items-baseline gap-2 pl-1">
-            <span className="text-[13px] font-semibold text-slate-200">{VIEW_TITLES[view]}</span>
+        <header className="flex h-11 shrink-0 items-center justify-between border-b border-white/[0.06] px-4">
+          <div className="app-drag flex min-w-0 flex-1 items-baseline gap-2 self-stretch pl-1">
+            <span className="self-center text-[13px] font-semibold text-slate-200">{VIEW_TITLES[view]}</span>
           </div>
-          <div className="app-no-drag flex items-center gap-2">
+          <div
+            className="app-no-drag flex shrink-0 items-center gap-2"
+            style={{ WebkitAppRegion: 'no-drag' } as CSSProperties}
+          >
             {/* 天气卡（现在 / 未来几小时 / 未来几天） */}
             <WeatherCard />
             {/* 窗口控制（独立，与状态胶囊分开） */}
             <button
+              type="button"
               className="flex h-7 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.08] hover:text-slate-200"
+              style={{ WebkitAppRegion: 'no-drag' } as CSSProperties}
               title="最小化"
-              onClick={() => window.api.minimize()}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                window.api?.minimize?.()
+              }}
             >
               <span className="mb-0.5 text-sm">–</span>
             </button>
             <button
+              type="button"
               className="flex h-7 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.08] hover:text-slate-200"
+              style={{ WebkitAppRegion: 'no-drag' } as CSSProperties}
               title="最大化/还原"
-              onClick={() => window.api.maximize()}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                window.api?.maximize?.()
+              }}
             >
               <span className="text-[11px]">▢</span>
             </button>
             <button
+              type="button"
               className="flex h-7 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-red-500/80 hover:text-white"
+              style={{ WebkitAppRegion: 'no-drag' } as CSSProperties}
               title="关闭（最小化到托盘）"
-              onClick={() => window.api.closeWindow()}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                window.api?.closeWindow?.()
+              }}
             >
               <span className="text-[11px]">✕</span>
             </button>

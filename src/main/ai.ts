@@ -960,13 +960,20 @@ export async function petAskShort(question: string, habits?: UserHabits | null):
   )
   // 注意：petAskShort 不使用 complexity 参数因为 chatWithToolLoop 内部使用标准模型
   // 如需使用快速模型，可在 chatWithToolLoop 增加 complexity 参数
+  const finalAns = answer ?? '嗯…让我想想，稍后再问我吧~'
   insertInto('qa', {
     id: genId('qa'),
     role: 'assistant',
-    content: answer ?? '嗯…让我想想，稍后再问我吧~',
+    content: finalAns,
     ts: Date.now()
   })
-  return answer ?? '嗯…我想不出来呢，稍后再问我吧~'
+  try {
+    const { appendProcessAi } = require('./processDraft') as typeof import('./processDraft')
+    appendProcessAi(question, finalAns)
+  } catch {
+    /* ignore */
+  }
+  return finalAns === '嗯…让我想想，稍后再问我吧~' ? '嗯…我想不出来呢，稍后再问我吧~' : finalAns
 }
 
 /** 桌宠短回复问答（流式版本） — 逐字输出到回调 */
@@ -1010,6 +1017,12 @@ export async function petAskShortStream(
     content: answer ?? '嗯…让我想想，稍后再问我吧~',
     ts: Date.now()
   })
+  try {
+    const { appendProcessAi } = require('./processDraft') as typeof import('./processDraft')
+    appendProcessAi(question, answer ?? '')
+  } catch {
+    /* ignore */
+  }
   return answer ?? '嗯…我想不出来呢，稍后再问我吧~'
 }
 
@@ -1086,11 +1099,13 @@ function parseContextToPlan(
 ): { title: string; category: string } | null {
   if (browserInfo) {
     const t = browserInfo.title
+    if (/抖音|douyin|tiktok|bilibili|哔哩|youtube|优酷|爱奇艺|腾讯视频|网易云|spotify|twitch/i.test(t)) return null
     if (/deploy|部署|发布|jenkins/i.test(t)) return { title: '部署工作', category: 'ai-dev' }
     if (/jira|ticket|bug|工单/i.test(t)) return { title: '问题处理', category: 'work-customer' }
     if (/doc|文档|wiki|confluence|notion/i.test(t)) return { title: '文档编写', category: 'work-customer' }
     if (/会议|meeting|zoom|teams/i.test(t)) return { title: '会议', category: 'leader' }
-    return { title: `浏览器工作: ${t.slice(0, 24)}`, category: 'other' }
+    // 无明确工作语义时不瞎建「浏览器工作」
+    return null
   }
   if (ctx.includes('aidev')) return { title: 'AI 开发', category: 'ai-dev' }
   if (ctx.includes('coding')) return { title: '编程开发', category: 'ai-dev' }

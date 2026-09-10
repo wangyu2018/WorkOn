@@ -2,7 +2,45 @@ import { Component } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import ReactDOM from 'react-dom/client'
 import SuggestionWidget from './widget/SuggestionWidget'
+import { useSettingsStore } from './stores/settingsStore'
 import './index.css'
+
+document.documentElement.dataset.overlay = '1'
+void useSettingsStore.getState().load().then(() => {
+  const s = useSettingsStore.getState().settings
+  document.documentElement.dataset.tone = s.darkTone === 'navy' ? 'navy' : 'void'
+  const mode =
+    s.appearanceMode === 'auto'
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light'
+      : s.appearanceMode || 'dark'
+  document.documentElement.dataset.mode = mode
+})
+useSettingsStore.subscribe((st) => {
+  const s = st.settings
+  document.documentElement.dataset.tone = s.darkTone === 'navy' ? 'navy' : 'void'
+  const mode =
+    s.appearanceMode === 'auto'
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light'
+      : s.appearanceMode || 'dark'
+  document.documentElement.dataset.mode = mode
+})
+window.api?.onAppearanceUpdate?.((p) => {
+  const mode =
+    p.appearanceMode === 'auto'
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light'
+      : p.appearanceMode || 'dark'
+  document.documentElement.dataset.mode = mode
+  if (p.darkTone === 'navy' || p.darkTone === 'void') {
+    document.documentElement.dataset.tone = p.darkTone
+  }
+  void useSettingsStore.getState().load()
+})
 
 class WidgetErrorBoundary extends Component<{ children: ReactNode }, { err: Error | null }> {
   state = { err: null as Error | null }

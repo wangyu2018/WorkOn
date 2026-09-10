@@ -108,22 +108,33 @@ export async function ocrScreen(): Promise<string[]> {
       if (removed > 0 && !fs.existsSync(file)) lastShotFile = null
     } catch { /* 落盘失败不影响 OCR */ }
 
-    // 缩小 + 灰度化（OCR 更快更准）
+    // 缩小策略：RapidOCR 需要足够分辨率才能认中文 UI；旧 800×450 会直接把字压糊
     const engine = getActiveEngine()
     let text: string
 
     if (engine === 'rapidocr') {
-      // RapidOCR: 保留彩色（它有自己的预处理），只 resize
-      const processed = await sharp(png)
-        .resize(800, 450, { fit: 'inside' })
-        .toBuffer()
+      const meta = await sharp(png).metadata()
+      const w = meta.width ?? 0
+      const h = meta.height ?? 0
+      const long = Math.max(w, h)
+      let pipeline = sharp(png, { failOn: 'none' }).rotate()
+      // 长边压到约 1600（速度/精度折中）；过小则交给 recognizeWithRapidOCR 内预处理放大
+      if (long > 1800) {
+        pipeline = pipeline.resize({
+          width: w >= h ? 1600 : undefined,
+          height: h > w ? 1600 : undefined,
+          fit: 'inside',
+          withoutEnlargement: true
+        })
+      }
+      const processed = await pipeline.png({ compressionLevel: 1 }).toBuffer()
       const result = await recognizeWithRapidOCR(processed)
       text = result.text
     } else {
-      // Tesseract.js: 灰度化 + 归一化
+      // Tesseract.js: 灰度化 + 归一化（算力有限，仍用较小边）
       const recognize = await ensureRecognize()
       const processed = await sharp(png)
-        .resize(800, 450, { fit: 'inside' })
+        .resize(1200, 800, { fit: 'inside' })
         .grayscale()
         .normalize()
         .toBuffer()

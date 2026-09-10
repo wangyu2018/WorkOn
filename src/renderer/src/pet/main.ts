@@ -175,7 +175,7 @@ async function boot(): Promise<void> {
   const drag = new DragPhysics(char, anim, micro, spatial)
   drag.onCursor = (c) => hit.setCursorState(c)
   // 主进程状态桥接（点击回复语需要读亲密度）
-  const bridge = new Bridge({ spatial, lighting, anim, micro, particles, bubble: bubble })
+  const bridge = new Bridge({ spatial, lighting, anim, animMgr, micro, particles, bubble: bubble })
 
   // 互动开关（默认：点击/拖拽/右键聊天开，物理/页面跟随/换装/表情关；游荡走 petRoam）
   const interactions: Interactions = { click: true, drag: true, dragPhysics: false, follow: false, costume: false, emotion: false, chat: true }
@@ -555,6 +555,8 @@ async function boot(): Promise<void> {
     })
     sayInput.value = ''
     window.api?.petModal?.(true)
+    // 打开对话 → 打招呼意图（挥手）
+    void window.api?.setPet?.({ intent: 'chat_open', intentAt: Date.now() })
     window.setTimeout(() => sayInput.focus(), 60)
   })
   sayInput.addEventListener('keydown', (e) => {

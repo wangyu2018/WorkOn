@@ -2,12 +2,15 @@
  * bridge：window.api 接线
  * - onPresence → WorkState→空间态映射（任务书 §空间行为系统）
  * - onPet → PAD 情感→表情/灯光/粒子；energy<0.3 → overworked；message → 气泡
+ * - onPet.intent → INTENT_FEEDBACK 查表播 clip（短时打断空间态底噪）
  */
 import type { PetState, PresenceSnapshot, WorkState } from '@shared/types'
+import { INTENT_FEEDBACK } from '@shared/petIntent'
 import type { SpatialController } from './spatial/SpatialController'
 import { SPATIAL_STATE_TABLE, type SpatialStateName } from './spatial/stateTable'
 import type { Lighting, StatusMood } from './scene/Lighting'
 import type { Animator } from './anim/Animator'
+import type { AnimationManager } from './anim/AnimationManager'
 import type { MicroBehaviors } from './anim/microBehaviors'
 import type { ParticleSystem } from './fx/particles'
 import type { Bubble } from './fx/bubble'
@@ -17,6 +20,7 @@ interface BridgeDeps {
   spatial: SpatialController
   lighting: Lighting
   anim: Animator
+  animMgr: AnimationManager
   micro: MicroBehaviors
   particles: ParticleSystem
   bubble: Bubble
@@ -176,6 +180,19 @@ export class Bridge {
     // 消息气泡（3-6s）
     if (pet.message && pet.message !== prev?.message) {
       this.deps.bubble.show(pet.message, undefined, 'character')
+    }
+
+    // 意图 → clip（intentAt 变化才播，同意图可连发）
+    if (pet.intent && pet.intentAt && pet.intentAt !== prev?.intentAt) {
+      const fb = INTENT_FEEDBACK[pet.intent]
+      if (fb) {
+        const ok = this.deps.animMgr.playClip(fb.clip, {
+          loop: fb.loop,
+          fade: 0.25,
+          restart: true
+        })
+        if (ok) console.info(`[pet] intent ${pet.intent} → ${fb.clip}`)
+      }
     }
   }
 }
