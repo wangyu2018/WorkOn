@@ -4,6 +4,7 @@
  */
 import { useEffect, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
+import { useSettingsStore } from '../stores/settingsStore'
 import { ProjectModal } from '../components/ProjectModal'
 import type { MergedTrail, Project, ProjectTask } from '@shared/types'
 
@@ -35,6 +36,8 @@ export default function MainlineView() {
   const [attrProjectId, setAttrProjectId] = useState<string | null>(null)
   const [attrTask, setAttrTask] = useState('')
   const [reloadTick, setReloadTick] = useState(0)
+  /** 墨与琥珀主题：主线行切换为「发丝线+衬线数字」排版 */
+  const isInk = useSettingsStore((s) => s.settings.theme) === 'ink'
   /** 里程碑编辑器 + 项目弹窗 */
   const [msEdit, setMsEdit] = useState<{ pid: string; items: string[]; msIds: string[] } | null>(null)
   const [modalProj, setModalProj] = useState<Project | null>(null)
@@ -126,8 +129,8 @@ export default function MainlineView() {
             return (
               <div
                 key={r.project.id}
-                className={`rounded-xl border px-3.5 py-3 ${active ? 'border-[rgba(15,181,164,0.45)]' : 'border-[var(--line)]'}`}
-                style={{ background: active ? 'var(--teal-soft)' : 'var(--surface-2)' }}
+                className={`px-3.5 py-3 ${isInk ? 'border-t border-[var(--line)] first:border-t-0' : `rounded-xl border ${active ? 'border-[rgba(15,181,164,0.45)]' : 'border-[var(--line)]'}`}`}
+                style={isInk ? { background: 'var(--teal-soft)' } : { background: active ? 'var(--teal-soft)' : 'var(--surface-2)' }}
               >
                 {/* 行1：名称 + 正在干 + 上线刻度 */}
                 <div className="flex items-center gap-2">
@@ -207,6 +210,7 @@ export default function MainlineView() {
                 ) : null}
                 {/* 行3：期待结果 + 目录活动 + 上次处理 */}
                 <div className="mt-1.5 flex items-center gap-2 text-[10.5px] text-slate-500">
+                  {isInk ? <span className="serif-num mr-1 shrink-0 text-[19px] font-bold leading-none text-[var(--amber)]">{fmtDur(r.todayMin)}</span> : null}
                   {goal ? <span className="min-w-0 flex-1 truncate" title={r.project.goal}>◇ {goal}</span> : <span className="flex-1" />}
                   <span className="shrink-0">
                     {dirInfo
