@@ -86,7 +86,8 @@ export function ProjectModal({ project, onClose, onSaved }: {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          {tab === 'view' ? (
+          {/* ── 查看 ── */}
+          {tab === 'view' && (
             <div className="flex flex-col gap-3">
               {pct !== null ? (
                 <div>
@@ -141,7 +142,10 @@ export function ProjectModal({ project, onClose, onSaved }: {
               ) : null}
               {!project.goal && !tasks.length ? <p className="text-center text-[11.5px] text-slate-600">切到「管理」填写目标与任务</p> : null}
             </div>
-          ) : (
+          )}
+
+          {/* ── 管理 ── */}
+          {tab === 'manage' && (
             <div className="flex flex-col gap-3">
               <label className="flex flex-col gap-1">
                 <span className="text-[10px] uppercase tracking-wider text-slate-500">名称</span>
@@ -230,7 +234,7 @@ export function ProjectModal({ project, onClose, onSaved }: {
                 </div>
               </div>
             </div>
-          ) : null}
+          )}
         </div>
       </div>
     </div>
