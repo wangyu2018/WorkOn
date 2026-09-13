@@ -672,7 +672,8 @@ export default function SettingsView() {
                 ['cyan', '#22D3EE', '青'],
                 ['violet', '#A78BFA', '紫'],
                 ['green', '#34D399', '绿'],
-                ['amber', '#FBBF24', '琥珀']
+                ['amber', '#FBBF24', '琥珀'],
+                ['ink', '#C2410C', '墨']
               ] as const
             ).map(([id, color, label]) => (
               <button

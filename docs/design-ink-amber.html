@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>WorkOn · 墨与琥珀 —— 我的设计提案</title>
+<style>
+/* ═══════════ 设计提案：墨与琥珀（Ink & Amber） ═══════════
+   理念：WorkOn 是环境式陪伴，不是仪表盘软件。
+   - 色彩：暖纸白/真墨黑 双基底，色彩只作为「信号」——琥珀=注意，青瓷=专注，紫雾=AI
+   - 字体：大数字用衬线（宋），正文用黑体——纸感与器物感来自字排，不来自卡片
+   - 无卡片：发丝线分隔，信息靠留白与字重，桌面悬浮件近乎裸文字
+*/
+:root {
+  --paper: #F7F4EE;      /* 暖纸白 */
+  --paper-2: #EFEBE2;
+  --ink: #1A1814;        /* 真墨 */
+  --ink-2: #57503F;
+  --ink-3: #8A8270;
+  --line: rgba(26,24,20,.12);
+  --amber: #C2410C;      /* 琥珀=注意/截止 */
+  --amber-soft: rgba(194,65,12,.08);
+  --celadon: #0D7377;    /* 青瓷=专注/数据 */
+  --celadon-soft: rgba(13,115,119,.08);
+  --violet: #6D5BD0;     /* 紫雾=AI 专属 */
+  --violet-soft: rgba(109,91,208,.07);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background: var(--paper); color: var(--ink);
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 13px; padding: 40px 48px 80px;
+}
+.serif { font-family: "Noto Serif SC", "Songti SC", "SimSun", serif; }
+.mono { font-family: ui-monospace, "JetBrains Mono", monospace; }
+h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+h1 em { font-style: normal; color: var(--amber); }
+.sub { color: var(--ink-3); font-size: 12.5px; line-height: 1.9; margin-bottom: 36px; }
+.sec { margin-bottom: 44px; }
+.sec > h2 { font-size: 12px; letter-spacing: 3px; color: var(--ink-3); font-weight: 600; margin-bottom: 14px; }
+.sec > h2 b { color: var(--amber); margin-right: 8px; }
+.hairline { border:none; border-top:1px solid var(--line); margin: 10px 0; }
+
+/* ── 主线行：无卡片，纯排版 ── */
+.line { padding: 18px 4px 16px; border-top: 1px solid var(--line); display:flex; gap:20px; align-items:baseline; }
+.line:first-of-type { border-top:none; }
+.line .name { width: 180px; flex-shrink:0; }
+.line .name b { font-size:15px; font-weight:700; display:block; }
+.line .name .goal { font-size:11px; color:var(--ink-3); margin-top:3px; }
+.rail-wrap { flex:1; min-width:0; padding-top:8px; }
+.rail { position:relative; height:3px; background:var(--line); border-radius:2px; }
+.rail .fill { position:absolute; inset:0 auto 0 0; width:62%; background:var(--ink); border-radius:2px; }
+.node { position:absolute; top:50%; width:11px; height:11px; border-radius:50%;
+  background:var(--paper); border:2px solid var(--ink-3); transform:translate(-50%,-50%); }
+.node.done { background:var(--ink); border-color:var(--ink); }
+.node.ms { width:12px; height:12px; border-radius:2px; transform:translate(-50%,-50%) rotate(45deg);
+  border-color:var(--amber); background:var(--paper); }
+.node.ms.done { background:var(--amber); border-color:var(--amber); }
+.node.now { border-color:var(--amber); box-shadow:0 0 0 4px var(--amber-soft); animation:pulse 2s infinite; }
+@keyframes pulse { 50% { box-shadow:0 0 0 8px transparent; } }
+.metrics { width:150px; flex-shrink:0; text-align:right; }
+.metrics .big { font-size:26px; font-weight:800; }
+.metrics .small { font-size:11px; color:var(--ink-3); }
+.kids { flex-basis:100%; display:none; padding:10px 0 4px 200px; gap:14px; font-size:12px; color:var(--ink-2); }
+.line:hover .kids { display:flex; }
+.kids span b { color:var(--ink); }
+
+/* ── 今日：计划 ── */
+.todo-row { display:flex; align-items:baseline; gap:12px; padding:9px 4px; border-top:1px dashed var(--line); font-size:13.5px; }
+.todo-row .tick { color:var(--ink-3); }
+.todo-row.done { color:var(--ink-3); text-decoration:line-through; }
+.todo-row .due { margin-left:auto; font-size:11px; color:var(--amber); }
+.zone { font-size:10px; letter-spacing:3px; color:var(--ink-3); margin:20px 0 4px; }
+
+/* ── 悬浮件 ── */
+.pill { display:inline-flex; align-items:baseline; gap:10px; padding:8px 16px;
+  background:var(--ink); color:var(--paper); border-radius:999px; font-size:12.5px; }
+.pill .dot { width:7px; height:7px; border-radius:50%; background:#7CE3B1; }
+.pill .chain { color:#7CE3B1; }
+.pill .grain { opacity:.85; }
+
+/* ── 盘点：我的取色对照 ── */
+.swatches { display:flex; gap:2px; margin:14px 0 6px; }
+.sw { width:64px; height:40px; display:flex; align-items:flex-end; padding:4px 6px;
+  font-size:9px; font-family:ui-monospace,monospace; color:#fff; }
+table { width:100%; border-collapse:collapse; font-size:12px; margin-top:10px; }
+th { text-align:left; color:var(--ink-3); font-weight:600; padding:6px 10px; border-bottom:1px solid var(--line); }
+td { padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+td .sw2 { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; vertical-align:-1px; }
+.note { background:var(--amber-soft); border-left:3px solid var(--amber); padding:12px 16px; font-size:12.5px; line-height:2; margin-top:14px; }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.mini { border:1px solid var(--line); border-radius:14px; padding:18px; background:var(--paper-2); }
+.mini h3 { font-size:13px; margin-bottom:10px; }
+.mini .serif-num { font-size:34px; font-weight:900; letter-spacing:-1px; }
+.mini .cap { font-size:10px; letter-spacing:2px; color:var(--ink-3); }
+</style>
+</head>
+<body>
+
+<h1>WorkOn · <em>墨与琥珀</em></h1>
+<p class="sub">
+  我的提案：<b>放弃「深色 SaaS 仪表盘」这条赛道</b>——那是 Notion/Linear 的领地，做不过也不该做。<br>
+  WorkOn 活在桌面上，是<b>器物不是软件</b>。所以：暖纸白与真墨黑打底，衬线大数字做主角，
+  色彩降级为「信号」——琥珀只用于注意，青瓷只用于专注，紫雾只在 AI 出现时浮现。<br>
+  以下全部用 WorkOn 真实数据结构画出。
+</p>
+
+<!-- ═══ 01 主线 ═══ -->
+<div class="sec">
+  <h2><b>01</b>主线 · 长命层 <span style="font-weight:400">—— 无卡片，纯排版；数字是主角</span></h2>
+  <div class="line">
+    <div class="name"><b>WorkOn 开发</b><div class="goal">◇ 本周可发布内测</div></div>
+    <div class="rail-wrap">
+      <div class="rail">
+        <div class="fill" style="width:62%"></div>
+        <span class="node done"></span><span class="node done"></span><span class="node done"></span>
+        <span class="node done ms" title="里程碑：内测发布"></span>
+        <span class="node now"></span>
+        <span class="node"></span>
+        <span class="node ms"></span>
+      </div>
+      <div class="kids"><span>◆ 内测发布 · 已达成</span><span>● 后端迁移 · 进行中</span><span>○ 验收材料 · 待启动</span></div>
+    </div>
+    <div class="metrics">
+      <div class="big serif">2<span style="font-size:14px">h</span>18<span style="font-size:14px">m</span></div>
+      <div class="small">今日 · ↦12 天上线</div>
+    </div>
+  </div>
+  <div class="line">
+    <div class="name"><b>内容专栏</b><div class="goal">◇ 每周二、五更新</div></div>
+    <div class="rail-wrap">
+      <div class="rail"><div class="fill" style="width:35%"></div>
+        <span class="node done ms"></span><span class="node"></span><span class="node ms" style="border-color:var(--ink-3)"></span>
+      </div>
+      <div class="kids"><span>◆ 首发上线 · 已达成</span><span>◇ 连续 4 期 · 2/4</span><span>📅 周四自动建「本期更新」</span></div>
+    </div>
+    <div class="metrics">
+      <div class="big serif">0<span style="font-size:14px">h</span>52<span style="font-size:14px">m</span></div>
+      <div class="small">今日 · 上次处理 昨天</div>
+    </div>
+  </div>
+  <div class="line" style="opacity:.55">
+    <div class="name"><b>装修跟进</b><div class="goal">◇ 暂停 · 秋季重启</div></div>
+    <div class="rail-wrap"><div class="rail"><div class="fill" style="width:18%;background:var(--ink-3)"></div></div></div>
+    <div class="metrics"><div class="small">⏸ 暂停 · 归档可查</div></div>
+  </div>
+  <p style="font-size:11.5px;color:var(--ink-3);margin-top:8px">暂停的主线自动降透明——它还在，但不催你。</p>
+</div>
+
+<!-- ═══ 02 今日 ═══ -->
+<div class="sec">
+  <h2><b>02</b>计划 · 中命层 <span style="font-weight:400">—— 快进快出，回车即入账</span></h2>
+  <div class="pill" style="margin-bottom:4px"><span class="dot"></span>AI 开发 <span class="grain">ZCode · 后端迁移</span> <span class="chain">⚡ 链路 41m</span></div>
+  <div style="height:14px"></div>
+  <div class="zone">今日安排 · 4/6</div>
+  <div class="todo-row done"><span class="tick">●</span>存储过程改写 ×2<span class="due">✓ 11:20</span></div>
+  <div class="todo-row"><span class="tick">○</span>DM8 连接配置测试<span class="due">进行中 · 41m</span></div>
+  <div class="todo-row"><span class="tick">○</span>验收材料「功能介绍」章节<span class="due">预计 1h</span></div>
+  <div class="zone">生活</div>
+  <div class="todo-row"><span class="tick">○</span>交房租<span class="due">本周</span></div>
+  <hr class="hairline">
+  <p style="font-size:11.5px;color:var(--ink-3)">快速添加：<span style="border-bottom:1px solid var(--ink-3);padding:0 24px 1px;">明天下午 3 点评审 PPT</span> <span style="color:var(--amber)">↵</span>　自然语言解析时间，回车即入账。</p>
+</div>
+
+<!-- ═══ 03 悬浮件 ═══ -->
+<div class="sec">
+  <h2><b>03</b>桌面悬浮件 · 实时层 <span style="font-weight:400">—— 一枚墨点，悬停才展开</span></h2>
+  <div style="display:flex;gap:40px;align-items:flex-start">
+    <div>
+      <div class="cap" style="margin-bottom:8px">默认 · 一枚墨点（8px，随状态变色）</div>
+      <div style="width:8px;height:8px;border-radius:50%;background:var(--celadon);box-shadow:0 0 0 3px var(--celadon-soft)"></div>
+    </div>
+    <div>
+      <div class="cap" style="margin-bottom:8px">悬停 · 浮出胶囊</div>
+      <div class="pill"><span class="dot" style="background:var(--celadon)"></span>AI 开发 · 后端迁移 <span class="chain">⚡41m</span></div>
+    </div>
+  </div>
+  <p style="font-size:11.5px;color:var(--ink-3);margin-top:12px">墨点常暗，AI 完成时闪一下琥珀色。穿透时连墨点都淡到 20% 透明——桌面上它几乎不存在。</p>
+</div>
+
+<!-- ═══ 04 取色 ═══ -->
+<div class="sec">
+  <h2><b>04</b>取色 · 只当信号用</h2>
+  <div class="swatches">
+    <div class="sw" style="background:#F7F4EE;color:var(--ink)">纸</div>
+    <div class="sw" style="background:#0E0D0B">墨</div>
+    <div class="sw" style="background:#C2410C">注意</div>
+    <div class="sw" style="background:#0D7377">专注</div>
+    <div class="sw" style="background:#6D5BD0">AI</div>
+  </div>
+  <table>
+    <tr><th>色彩</th><th>语义</th><th>规则</th></tr>
+    <tr><td><span class="sw2" style="background:var(--amber)"></span>琥珀</td><td>注意 / 截止 / 里程碑</td><td>只有需要你「看一眼」的东西才许用；桌面同时最多一处琥珀</td></tr>
+    <tr><td><span class="sw2" style="background:var(--celadon)"></span>青瓷</td><td>专注 / 数据 / 进度</td><td>数字与进度条的主色；AI 永远不用它</td></tr>
+    <tr><td><span class="sw2" style="background:var(--violet)"></span>紫雾</td><td>AI 专属</td><td>✦ 图标、AI 气泡、AI 完成闪点；其余元素禁紫</td></tr>
+    <tr><td><span class="sw2" style="background:var(--ink)"></span>墨</td><td>结构与正文</td><td>大数字、标题、完成态</td></tr>
+  </table>
+  <div class="note">
+    <b>核心立场</b>：这个产品的对手不是 Notion，是「注意力」本身。所以界面越安静，
+    AI 的每一次开口越有分量——<b>色彩是预算，不是装饰</b>。深色模式同理：暖黑 #0E0D0B 打底，
+    文字用米白而非纯白（纯白在暗处刺眼），其余规则不变。
+  </div>
+</div>
+
+</body>
+</html>

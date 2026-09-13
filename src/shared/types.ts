@@ -853,7 +853,7 @@ export interface RecognitionLogRecord {
 }
 
 export interface AppSettings {
-  theme: 'cyan' | 'violet' | 'green' | 'amber' // 强调色主题，默认 cyan
+  theme: 'cyan' | 'violet' | 'green' | 'amber' | 'ink' // 强调色主题；ink=墨与琥珀（暖纸/真墨），默认 cyan
   appearanceMode: 'light' | 'dark' | 'auto' // 亮暗模式，默认 dark
   /** 深色底色：void=深邃黑（类灵动岛）；navy=深蓝灰（旧款） */
   darkTone: 'void' | 'navy'

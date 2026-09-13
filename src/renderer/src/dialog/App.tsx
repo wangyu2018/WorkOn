@@ -200,10 +200,10 @@ export default function DialogApp() {
 
   return (
     <div
-      className="flex h-screen w-screen flex-col overflow-hidden bg-black"
-      style={{ background: '#000000', boxShadow: 'none' }}
+      className="dialog-ink flex h-screen w-screen flex-col overflow-hidden"
     >
-        <div className="flex items-center gap-1 border-b border-[var(--line)] px-3 py-2">
+        <div className="flex items-center gap-2 border-b border-[var(--line)] px-4 pt-3 pb-0">
+        <style>{`.serif-tab{font-family:'Noto Serif SC','Songti SC',serif}.serif-tab.on{box-shadow:inset 0 -2px 0 var(--amber)}`}</style>
           {(
             [
               ['chat', '对话'],
@@ -213,9 +213,12 @@ export default function DialogApp() {
           ).map(([k, label]) => (
             <button
               key={k}
-              className={`rounded-lg px-2.5 py-1 text-[11px] transition-colors ${
-                mode === k ? 'bg-[var(--surface-3)] text-[var(--teal-deep)]' : 'text-slate-500 hover:text-slate-200'
+              className={`serif-tab px-2.5 py-1.5 text-[12px] transition-all ${
+                mode === k
+                  ? 'text-[var(--text-1)] font-semibold'
+                  : 'text-slate-500 hover:text-slate-300'
               }`}
+              style={mode === k ? { boxShadow: 'inset 0 -2px 0 var(--amber)' } : undefined}
               onClick={() => setMode(k)}
             >
               {label}
