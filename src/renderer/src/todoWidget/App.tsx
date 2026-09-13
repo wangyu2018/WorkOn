@@ -468,72 +468,36 @@ export default function TodoWidgetApp() {
   }
 
   return (
-    // 整窗实色铺满 + 系统圆角；无透明外圈 = 无直角高透框
-    <div
-      className="flex h-screen w-screen flex-col overflow-hidden p-0"
-      style={{ background: todoWindowChromeColor(glass, panelOpacity, lightMode) }}
-    >
+    // 桌面原生：无底色无边框，纯排版融入桌面
+    <div className="flex h-screen w-screen flex-col overflow-hidden" style={{ background: 'transparent' }}>
       <div
-        className={`flex min-h-0 flex-1 flex-col overflow-hidden p-3.5 ${lightMode ? 'todo-light-legible' : glass ? 'todo-glass-legible' : ''}`}
-        style={todoPanelStyle(glass, panelOpacity, lightMode)}
+        className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-3"
+        style={{
+          background: 'rgba(14,13,11,0.35)',
+          backdropFilter: 'blur(32px) saturate(1.4)',
+          WebkitBackdropFilter: 'blur(32px) saturate(1.4)',
+          borderRadius: 16,
+          margin: 4,
+        }}
       >
-        <div className="mb-1.5 flex cursor-move items-center gap-1" style={APP_DRAG}>
+        <div className="flex cursor-move items-center justify-end gap-1.5 pb-1" style={APP_NO_DRAG}>
           <button
             type="button"
-            className="rounded-md border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[10px] font-medium text-slate-300 transition-colors hover:border-white/20 hover:text-slate-100"
-            style={APP_NO_DRAG}
-            onClick={() => setCollapsed(true)}
-            title="收起成角落小按钮"
+            className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+              editMode
+                ? 'bg-[var(--teal-soft)] text-[var(--teal-deep)]'
+                : 'text-slate-500 hover:text-slate-200'
+            }`}
+            onClick={() => setEditMode((m) => !m)}
           >
-            收起
+            {editMode ? '完成' : '⚙ 分区'}
           </button>
-          <div className="ml-auto flex items-center gap-1" style={APP_NO_DRAG}>
-            <button
-              type="button"
-              className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
-                desktopPin
-                  ? 'border-[rgba(15,181,164,0.45)] bg-[var(--teal-soft)] text-[var(--teal-deep)]'
-                  : 'border-white/10 bg-white/[0.04] text-slate-400 hover:text-slate-200'
-              }`}
-              onClick={() => void toggleDesktopPin()}
-              title={desktopPin ? '已钉在桌面层（显示桌面后仍可见）· 再点取消' : '钉到桌面图标同层·显示桌面后仍可见'}
-            >
-              {desktopPin ? '已钉桌面' : '钉桌面'}
-            </button>
-            <button
-              type="button"
-              className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
-                desktopPin
-                  ? 'border-white/10 bg-white/[0.02] text-slate-600'
-                  : onTop
-                    ? 'border-[rgba(15,181,164,0.45)] bg-[var(--teal-soft)] text-[var(--teal-deep)]'
-                    : 'border-white/10 bg-white/[0.04] text-slate-400 hover:text-slate-200'
-              }`}
-              onClick={() => void toggleLayer()}
-              disabled={desktopPin}
-              title={
-                desktopPin
-                  ? '已钉桌面时顶层/沉底不生效'
-                  : onTop
-                    ? '当前置顶：点一下沉到底层（仍是普通窗，不是桌面层）'
-                    : '当前沉底：点一下重新置顶'
-              }
-            >
-              {desktopPin ? '层级锁定' : onTop ? '置顶中' : '已沉底'}
-            </button>
-            <button
-              type="button"
-              className={`rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
-                editMode
-                  ? 'border-[rgba(15,181,164,0.45)] bg-[var(--teal-soft)] text-[var(--teal-deep)]'
-                  : 'border-white/10 bg-white/[0.04] text-slate-300 hover:text-slate-100'
-              }`}
-              onClick={() => setEditMode((m) => !m)}
-              title="选择显示：项目 / 待办 / 生活"
-            >
-              {editMode ? '完成' : '分区'}
-            </button>
-          </div>
+          <button
+            type="button"
+            className="text-[11px] text-slate-500 transition-colors hover:text-slate-200"
+            onClick={() => setCollapsed(true)}
+            title="收起"
+          >−</button>
         </div>
         {aiAssistEnabled && aiAssistItems.length ? (
           <div className="mb-1.5" style={APP_NO_DRAG}>

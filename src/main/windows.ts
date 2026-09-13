@@ -914,6 +914,22 @@ export function setPetOpacity(v: number): void {
 /** 待办组件收起/展开（设置 + 通知渲染层） */
 export function setTodoWidgetCollapsed(v: boolean): void {
   setSettings({ todoWidgetCollapsed: !!v })
+  // 收起 → 窗口缩成小胶囊；展开 → 恢复完整尺寸
+  if (todoWidgetWindow && !todoWidgetWindow.isDestroyed()) {
+    if (v) {
+      const [x, y] = todoWidgetWindow.getPosition()
+      todoWidgetWindow.setSize(80, 32)
+      // 防止缩完后超出屏幕
+      const display = screen.getPrimaryDisplay()
+      const wa = display.workArea
+      todoWidgetWindow.setPosition(
+        Math.min(x, wa.x + wa.width - 88),
+        Math.min(y, wa.y + wa.height - 40)
+      )
+    } else {
+      todoWidgetWindow.setSize(300, 560)
+    }
+  }
   sendTo('todoWidget', 'todoWidget:collapsed', { collapsed: !!v })
 }
 
