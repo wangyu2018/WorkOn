@@ -423,7 +423,6 @@ export function createWidgetWindow(): BrowserWindow {
   widgetWindow = new BrowserWindow({
     width: w,
     height: h,
-    backgroundMaterial: 'acrylic',
     x,
     y,
     frame: false,
@@ -837,7 +836,6 @@ export function createTodoWidgetWindow(): BrowserWindow {
     hasShadow: false,
     backgroundColor: '#00000000',
     // Windows 11+ 原生磨砂玻璃（不支持的系统自动降级为普通透明）
-    backgroundMaterial: 'acrylic',
     show: !!s.todoWidgetVisible,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
