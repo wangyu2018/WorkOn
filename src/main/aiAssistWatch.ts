@@ -228,5 +228,6 @@ export async function aiAssistWatchTick(ts = Date.now()): Promise<void> {
       doneUntil: status === 'done' ? tr?.doneUntil : undefined
     }
   })
+  sampling = false
   broadcast(items)
 }

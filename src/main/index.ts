@@ -10,6 +10,7 @@ import { createTray } from './tray'
 import { registerShortcuts, unregisterShortcuts } from './globalShortcut'
 import { registerIpc } from './ipc'
 import { startMonitor } from './monitor'
+import { startAllWatchers } from './dirWatcher'
 import { dedupeSessionBurstPlans } from './devSession'
 import { cleanupJunkFeedbackPlans } from './statusCard'
 import { disposeModelClient } from './recognition/modelClient'
@@ -371,6 +372,7 @@ app.whenReady().then(() => {
         try {
           if (getSettings().inputProbeEnabled) startInputProbe()
           startMonitor()
+  startAllWatchers()
           startOcrCollector()
           startFolderWatch()
           startAgentHookServer()

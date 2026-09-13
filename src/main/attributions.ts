@@ -10,6 +10,7 @@ import { genId } from '@shared/types'
 import { fuzzyMatch } from '@shared/fuzzy'
 import { categoryOfWithOverride } from '@shared/appCategory'
 import { enqueueAsk } from './confirmQueue'
+import { dateKey } from '@shared/trail'
 import { findDuplicateProject } from './projects'
 import { extractPathHint, isIdeApp } from './pathHint'
 import type { Project, ProjectTask } from '@shared/types'
@@ -132,7 +133,7 @@ function pathKeyOf(hint: string | null | undefined): string {
 
 function quotaLeft(): boolean {
   const s = getSettings()
-  const day = new Date().toISOString().slice(0, 10)
+  const day = dateKey(Date.now())
   const cur = (s as { confirmDay?: { day: string; count: number } }).confirmDay
   if (!cur || cur.day !== day) return true
   return cur.count < DAILY_QUOTA

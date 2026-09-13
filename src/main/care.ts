@@ -92,7 +92,7 @@ export function careTick(): void {
   const hour = new Date().getHours()
   if (hour !== lastHour) {
     lastHour = hour
-    if (hour >= 10 && hour <= 21 && hour % 2 === 0) {
+    if (hour >= 10 && hour <= 21 && (hour % 2 === 0 || hour === 21)) {
       const msgs: Record<number, string> = {
         10: '上午好，状态不错的话把硬任务放这段～',
         12: '午休时间到，吃饭要专心吃 🍚',

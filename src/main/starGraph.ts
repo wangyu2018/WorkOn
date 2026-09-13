@@ -9,6 +9,7 @@ import { buildMergedTrail } from '@shared/trail'
 import { dateKey } from '@shared/trail'
 import { categoryOfWithOverride } from '@shared/appCategory'
 import { getSettings } from './settings'
+import { matchesExcludedApp } from '@shared/stateMeta'
 
 export interface StarNode {
   app: string
@@ -69,6 +70,7 @@ export function starGraphForDays(days = 7): StarGraph {
   const clusterOf = new Map<string, 'work' | 'play'>()
   for (const [app, sec] of nodeSec) {
     const cat = categoryOfWithOverride(app, override)
+    if ((getSettings().privacyExcludedApps ?? []).some((e) => matchesExcludedApp(app, [e]))) continue
     const cluster: 'work' | 'play' = PLAY_CATEGORIES.has(cat) ? 'play' : 'work'
     clusterOf.set(app, cluster)
     clusterSec.set(app, sec)

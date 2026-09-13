@@ -81,7 +81,10 @@ function closeChain(rt: ChainRuntime, endTs: number): void {
 export function focusChainTick(ts: number, app: string, state: WorkState, idleSec: number, enabled: boolean): void {
   const day = dateKey(ts)
   if (day !== rt.day) rt = freshDay(day)
-  if (!enabled) return
+  if (!enabled) {
+    if (rt.startTs != null) closeChain(rt, ts)
+    return
+  }
 
   const noWork = !app || state === 'idle'
   // AI 生成时人在盯流式输出：idle 容忍与状态软化同口径（aidev/aiqa 180s 才算离开）

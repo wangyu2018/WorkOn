@@ -9,6 +9,7 @@ import { col, insertInto, updateIn, removeFrom, listActivities } from './db'
 import { getSettings } from './settings'
 import { pushNotify } from './notify'
 import { dateKey, buildMergedTrail } from '@shared/trail'
+import { genId } from '@shared/types'
 import type { PlanItem, AutomationRule, AutomationAction, AutomationTrigger } from '@shared/types'
 
 export type { AutomationAction, AutomationTrigger, AutomationRule }
@@ -22,7 +23,7 @@ export function listAutomations(): AutomationRule[] {
 
 export function saveAutomation(rule: Partial<AutomationRule> & { name: string; trigger: AutomationTrigger; actions: AutomationAction[] }): AutomationRule {
   const saved = insertInto<AutomationRule>('automations', {
-    id: rule.id ?? '',
+    id: rule.id || genId('auto'),
     name: rule.name,
     enabled: rule.enabled ?? true,
     trigger: rule.trigger,

@@ -616,6 +616,7 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
      AI 每日限次（smartDailyMaxPerDay，超限本地口径重算不耗 token）；手动刷新可强制 */
   const [manualKey, setManualKey] = useState(0)
   const gen = (key: string, useAI: boolean): void => {
+    let alive = true
     setLoading(true)
     window.api
       .generateReport(date, selectedTemplateId ?? undefined, useAI)
