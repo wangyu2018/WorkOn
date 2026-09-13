@@ -4,16 +4,23 @@
  */
 import { useEffect, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
-import { ProjectBoard } from '../components/ProjectBoard'
+import { ProjectModal } from '../components/ProjectModal'
 import type { MergedTrail, Project, ProjectTask } from '@shared/types'
+
+interface RailNode {
+  id: string
+  title: string
+  done: boolean
+  kind: 'ms' | 'task' | 'plan'
+}
 
 interface TodayRow {
   project: Project
   todayMin: number
   progress: number | null
   tasksLeft: number
-  /** 任务节点（进度轨上一个个节点） */
-  tasks: { id: string; title: string; done: boolean; ms?: boolean }[]
+  /** 单轴多节点：里程碑◆ / 任务● / 关联计划○ 混排在同一根轴上 */
+  nodes: RailNode[]
   /** 最近一次处理的时刻（今天有活动则=今天最后一次，否则=上次） */
   lastTouch: number | null
 }
@@ -26,6 +33,9 @@ export default function MainlineView() {
   const [attrProjectId, setAttrProjectId] = useState<string | null>(null)
   const [attrTask, setAttrTask] = useState('')
   const [reloadTick, setReloadTick] = useState(0)
+  /** 里程碑编辑器 + 项目弹窗 */
+  const [msEdit, setMsEdit] = useState<{ pid: string; items: string[]; msIds: string[] } | null>(null)
+  const [modalProj, setModalProj] = useState<Project | null>(null)
 
   useEffect(() => {
     void window.api?.getTrail?.().then((t) => setTrail((t as MergedTrail) ?? null)).catch(() => undefined)
@@ -67,12 +77,18 @@ export default function MainlineView() {
             }
           }
         } catch { /* ignore */ }
+        const plans = ((await window.api?.listPlans?.()) as { id: string; title: string; status: string; projectId?: string }[]) ?? []
+        const linkedPlans = plans.filter((x) => x.projectId === p.id)
+        const nodes: RailNode[] = [
+          ...tasks.map((x) => ({ id: x.id, title: x.title, done: x.status === 'done', ms: !!x.isMilestone, kind: (x.isMilestone ? 'ms' : 'task') as RailNode['kind'] })),
+          ...linkedPlans.map((x) => ({ id: x.id, title: x.title, done: x.status === 'done', ms: false, kind: 'plan' as RailNode['kind'] }))
+        ]
         rows.push({
           project: p,
           todayMin: min,
           progress: tasks.length ? Math.round((done / tasks.length) * 100) : null,
           tasksLeft: tasks.filter((x) => x.status !== 'done').length,
-          tasks: tasks.map((x) => ({ id: x.id, title: x.title, done: x.status === 'done', ms: x.isMilestone })),
+          nodes,
           lastTouch
         })
       }
@@ -94,7 +110,7 @@ export default function MainlineView() {
           {rows.map((r) => {
             const active = attrProjectId === r.project.id
             const goal = (r.project.goal ?? '').split('\n')[0]
-            const nodes = r.tasks.slice(0, 8)
+            const nodes = r.nodes.slice(0, 14)
             const lastTouchStr = r.lastTouch
               ? new Date(r.lastTouch).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
               : null
@@ -107,6 +123,11 @@ export default function MainlineView() {
                 {/* 行1：名称 + 正在干 + 上线刻度 */}
                 <div className="flex items-center gap-2">
                   <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-100">{r.project.name}</span>
+                  {r.project.status !== 'active' ? (
+                    <span className="shrink-0 rounded-full bg-white/5 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">
+                      {r.project.status === 'paused' ? '⏸ 暂停' : r.project.status === 'done' ? '✓ 已完成' : '已归档'}
+                    </span>
+                  ) : null}
                   {r.project.deadline ? (
                     (() => {
                       const days = Math.ceil((new Date(`${r.project.deadline}T23:59:59`).getTime() - Date.now()) / 86400000)
@@ -137,22 +158,25 @@ export default function MainlineView() {
                             style={{ background: 'var(--bg-surface)', boxShadow: 'var(--shadow-lg)' }}
                           >
                             <div className="flex items-center gap-1.5">
-                              {nt.ms ? <span className="text-[10px] text-[var(--violet)]">◆</span> : null}
+                              {nt.kind === 'ms' ? <span className="text-[10px] text-[var(--violet)]">◆</span> : null}
                               <b className="min-w-0 flex-1 truncate text-[11.5px] text-slate-100">{nt.title}</b>
                             </div>
                             <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-500">
                               <span className={nt.done ? 'text-[var(--teal-deep)]' : 'text-slate-400'}>
-                                {nt.done ? '✓ 已完成' : nt.ms ? '◇ 里程碑 · 待达成' : '○ 待办'}
+                                {nt.done ? '✓ 已完成' : nt.kind === 'plan' ? '○ 计划 · 待办' : nt.kind === 'ms' ? '◇ 里程碑 · 待达成' : '○ 任务'}
                               </span>
-                              {nt.ms ? <span className="rounded bg-[var(--teal-soft)] px-1 text-[9px] font-bold text-[var(--teal-deep)]">里程碑</span> : null}
+                              {nt.kind === 'plan' ? <span className="rounded bg-[rgba(245,158,11,0.12)] px-1 text-[9px] font-bold text-[#fbbf24]">计划</span> : null}
+                              {nt.kind === 'ms' ? <span className="rounded bg-[var(--teal-soft)] px-1 text-[9px] font-bold text-[var(--teal-deep)]">里程碑</span> : null}
                             </div>
                           </div>
                           <span
                             title={`${nt.title}${nt.done ? ' · 已完成' : ''}`}
                             className={`block cursor-default transition-transform group-hover/node:scale-125 ${
-                              nt.ms
+                              nt.kind === 'ms'
                                 ? `h-2.5 w-2.5 rotate-45 rounded-[2px] border ${nt.done ? 'border-[var(--violet)] bg-[var(--violet)]' : 'border-[var(--violet)] bg-[var(--bg-surface)]'}`
-                                : `h-2.5 w-2.5 rounded-full border-2 ${nt.done ? 'border-[var(--teal-deep)] bg-[var(--teal)]' : 'border-[var(--line-strong)] bg-[var(--bg-surface)]'}`
+                                : nt.kind === 'plan'
+                                  ? `h-2.5 w-3.5 rounded-full border ${nt.done ? 'border-[#fbbf24] bg-[#fbbf24]' : 'border-[#fbbf24] bg-[var(--bg-surface)]'}`
+                                  : `h-2.5 w-2.5 rounded-full border-2 ${nt.done ? 'border-[var(--teal-deep)] bg-[var(--teal)]' : 'border-[var(--line-strong)] bg-[var(--bg-surface)]'}`
                             }`}
                           />
                         </div>
@@ -172,6 +196,64 @@ export default function MainlineView() {
                         : '今日未动'}
                   </span>
                 </div>
+                {/* 里程碑 chips + 编辑入口 */}
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] uppercase tracking-wider text-slate-600">◆ 里程碑</span>
+                  {r.nodes.filter((x) => x.kind === 'ms').map((x) => (
+                    <span key={x.id} className={`rounded px-1.5 py-0.5 text-[9.5px] font-bold ${x.done ? 'bg-[var(--teal-soft)] text-[var(--teal-deep)]' : 'bg-[rgba(139,92,246,0.12)] text-[var(--violet)]'}`}>{x.title}</span>
+                  ))}
+                  <button
+                    className="ml-auto rounded-full border border-dashed px-2 py-0.5 text-[10px] text-slate-500 hover:text-slate-200"
+                    onClick={() => setMsEdit({ pid: r.project.id, items: r.nodes.filter((x) => x.kind === 'ms').map((x) => x.title), msIds: r.nodes.filter((x) => x.kind === 'ms').map((x) => x.id) })}
+                  >
+                    编辑 / ✦ AI
+                  </button>
+                </div>
+                {/* 查看/管理 */}
+                <div className="mt-1.5 flex gap-1.5">
+                  <button
+                    className="glass-btn !px-2 !py-0.5 !text-[10px]"
+                    onClick={() => setModalProj(r.project)}
+                  >👁 查看详情</button>
+                  <button
+                    className="glass-btn !px-2 !py-0.5 !text-[10px]"
+                    onClick={() => setModalProj(r.project)}
+                  >⚙ 管理</button>
+                </div>
+                {msEdit?.pid === r.project.id ? (
+                  <div className="mt-1.5 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-2">
+                    {msEdit.items.map((it, i) => (
+                      <div key={i} className="mb-1 flex items-center gap-1.5">
+                        <span className="text-[10px] text-[var(--violet)]">◆</span>
+                        <input
+                          className="min-w-0 flex-1 rounded border border-[var(--line)] bg-transparent px-1.5 py-0.5 text-[11px] text-slate-200 outline-none focus:border-[var(--border-active)]"
+                          value={it}
+                          onChange={(e) => setMsEdit((s) => (s ? { ...s, items: s.items.map((x, j) => (j === i ? e.target.value : x)) } : s))}
+                        />
+                        <button className="text-slate-600 hover:text-red-400" onClick={() => setMsEdit((s) => (s ? { ...s, items: s.items.filter((_, j) => j !== i) } : s))}>✕</button>
+                      </div>
+                    ))}
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <button className="rounded-full border border-dashed px-2 py-0.5 text-[10px] text-slate-500 hover:text-slate-200" onClick={() => setMsEdit((s) => (s ? { ...s, items: [...s.items, ''] } : s))}>＋ 节点</button>
+                    </div>
+                    <div className="mt-1.5 flex justify-end gap-1.5">
+                      <button className="glass-btn !px-2 !py-0.5 !text-[10px]" onClick={() => setMsEdit(null)}>取消</button>
+                      <button
+                        className="glass-btn primary !px-2 !py-0.5 !text-[10px]"
+                        onClick={() => {
+                          void (async () => {
+                            for (const id of msEdit.msIds) await window.api.removeProjectTask?.(id)
+                            for (const title of msEdit.items.filter((x) => x.trim())) {
+                              await window.api.saveProjectTask({ projectId: r.project.id, title: title.slice(0, 80), status: 'todo', priority: 'high', isMilestone: true })
+                            }
+                            setMsEdit(null)
+                            setReloadTick((n) => n + 1)
+                          })()
+                        }}
+                      >确认保存</button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )
           })}
@@ -182,8 +264,9 @@ export default function MainlineView() {
         </div>
       )}
 
-      {/* ── 主线看板（属性袋/任务树/距上线/AI 按钮，全套） ── */}
-      <ProjectBoard trail={trail} />
+      {modalProj ? (
+        <ProjectModal project={modalProj} onClose={() => setModalProj(null)} onSaved={() => setReloadTick((n) => n + 1)} />
+      ) : null}
     </div>
   )
 }
