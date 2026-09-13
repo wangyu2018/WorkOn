@@ -326,6 +326,7 @@ let stopped = false
 let buffer = ''
 let fgCache: ForegroundWindowInfo | null = null
 let pointerCache: ForegroundWindowInfo | null = null
+let pointerCacheAt = 0
 let topsCache: ForegroundWindowInfo[] = []
 const MAX_SERVER_FAILURES = 5
 const RESTART_COOLDOWN_MS = 5000
@@ -340,6 +341,7 @@ function applyPayload(parsed: Record<string, unknown>): void {
     if (fg) fgCache = fg
     const pointer = parseWindow(parsed.pointer as Record<string, unknown> | null)
     pointerCache = pointer
+    pointerCacheAt = Date.now()
     const topsRaw = Array.isArray(parsed.tops) ? (parsed.tops as Record<string, unknown>[]) : []
     const mapped = topsRaw.map((t) => parseWindow(t)).filter((x): x is ForegroundWindowInfo => !!x)
     const byScr = new Map<number, ForegroundWindowInfo>()
@@ -474,6 +476,8 @@ export async function getAttentionWindow(): Promise<{
 }> {
   const fg = await getForegroundWindow()
   const tops = await getDisplayTopWindows()
+  // 保鲜：缓存超过 10s 视为过期（PS 静默失败时不拿旧窗口充数）
+  if (pointerCache && Date.now() - pointerCacheAt > 10_000) pointerCache = null
   let attention = pointerCache
   if (attention && isSelfOverlayApp(attention.app)) {
     const alt = tops.find((t) => t.screen === attention!.screen && !isSelfOverlayApp(t.app))

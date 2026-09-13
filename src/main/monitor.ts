@@ -58,7 +58,7 @@ let lastTickAt = 0
 /** 后台 AI（副屏/旁路）：不因无键鼠立刻打成 idle——生成时常人在看别的屏 */
 function softenAuxState(state: WorkState, idleSec: number): WorkState {
   if (state === 'aidev' || state === 'aiqa') {
-    if (idleSec > 15 * 60) return 'idle'
+    if (idleSec > 8 * 60) return 'idle'
     return state
   }
   if (idleSec > 60 && INPUT_REQUIRED_STATES.includes(state)) return 'idle'

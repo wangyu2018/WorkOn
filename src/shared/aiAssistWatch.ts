@@ -52,5 +52,7 @@ export function labelOfAssist(key: string): string {
 export function isAssistBusyTitle(title?: string): boolean {
   const t = (title || '').trim()
   if (!t) return false
-  return AI_ASSIST_BUSY_TITLE.test(t)
+  // 先剥离文件名样 token（agent.md / main.py 等），避免打开同名文件被误判 busy
+  const cleaned = t.replace(/\S+\.(md|txt|json|tsx?|jsx?|py|log|docx?|xlsx?|pdf|csv)/gi, ' ')
+  return AI_ASSIST_BUSY_TITLE.test(cleaned)
 }
