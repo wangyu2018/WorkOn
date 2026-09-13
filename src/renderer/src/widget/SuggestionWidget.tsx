@@ -19,7 +19,7 @@ import { WORK_STATES } from '@shared/stateMeta'
 import { usePresenceStore } from '../stores/presenceStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { Icon, type IconName } from '../components/Icon'
-import { AiAssistStrip } from '../components/AiAssistStrip'
+import { AiAssistStrip, AiAssistRing } from '../components/AiAssistStrip'
 import { CATEGORY_META, categoryOfWithOverride, type AppCategory } from '@shared/appCategory'
 import { StateDot, ChainChip, GrainChip, Firefly } from '../components/widgetKit'
 import type { AiAssistItem } from '@shared/aiAssistWatch'
@@ -1012,6 +1012,14 @@ export default function SuggestionWidget() {
         {hasAttr && dm.project ? (
           <>
             <GrainChip projectName={attr!.projectName} taskTitle={attr!.taskTitle} sec={attr!.sec} />
+            {aiAssistEnabled ? aiAssistItems.filter((i) => i.status === 'busy' || i.status === 'done').slice(0, 2).map((i) => (
+              <span
+                key={i.key}
+                data-no-capsule-drag
+                className={`inline-block h-2 w-2 shrink-0 rounded-full ${i.status === 'busy' ? 'bg-[#10B981] ring-breathe-green' : 'bg-[#EF4444]'}`}
+                title={`${i.label} · ${i.status === 'busy' ? '处理中' : '刚停止回复'}`}
+              />
+            )) : null}
             {dm.chain && chain?.active ? <ChainChip sec={chain.sec} interruptions={chain.interruptionsToday} /> : null}
           </>
         ) : (
@@ -1164,7 +1172,16 @@ export default function SuggestionWidget() {
               </span>
             </div>
             {attr?.projectId ? (
-              df.projectChip ? <div className="mt-0.5 flex min-w-0 items-center gap-1"><GrainChip projectName={attr.projectName} taskTitle={attr.taskTitle} sec={attr.sec} /></div> : null
+              <>
+                {df.projectChip ? <div className="mt-0.5 flex min-w-0 items-center gap-1"><GrainChip projectName={attr.projectName} taskTitle={attr.taskTitle} sec={attr.sec} /></div> : null}
+                {aiAssistEnabled && aiAssistItems.length ? (
+                  <div className="mt-1 flex items-center gap-2.5">
+                    {aiAssistItems.slice(0, 6).map((i) => (
+                      <AiAssistRing key={i.key} item={i} />
+                    ))}
+                  </div>
+                ) : null}
+              </>
             ) : (
               <div className="mt-0.5">{attrBtn}</div>
             )}
