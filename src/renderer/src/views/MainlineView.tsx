@@ -13,7 +13,7 @@ interface TodayRow {
   progress: number | null
   tasksLeft: number
   /** 任务节点（进度轨上一个个节点） */
-  tasks: { id: string; title: string; done: boolean }[]
+  tasks: { id: string; title: string; done: boolean; ms?: boolean }[]
   /** 最近一次处理的时刻（今天有活动则=今天最后一次，否则=上次） */
   lastTouch: number | null
 }
@@ -72,7 +72,7 @@ export default function MainlineView() {
           todayMin: min,
           progress: tasks.length ? Math.round((done / tasks.length) * 100) : null,
           tasksLeft: tasks.filter((x) => x.status !== 'done').length,
-          tasks: tasks.map((x) => ({ id: x.id, title: x.title, done: x.status === 'done' })),
+          tasks: tasks.map((x) => ({ id: x.id, title: x.title, done: x.status === 'done', ms: x.isMilestone })),
           lastTouch
         })
       }
@@ -130,14 +130,32 @@ export default function MainlineView() {
                         style={{ width: `${r.progress ?? 0}%`, boxShadow: '0 0 8px rgba(15,181,164,0.4)' }}
                       />
                       {nodes.map((nt, i) => (
-                        <span
-                          key={nt.id}
-                          title={`${nt.title}${nt.done ? ' · 已完成' : ''}`}
-                          className={`absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 ${
-                            nt.done ? 'border-[var(--teal-deep)] bg-[var(--teal)]' : 'border-[var(--line-strong)] bg-[var(--bg-surface)]'
-                          }`}
-                          style={{ left: `${((i + 1) / nodes.length) * 100}%` }}
-                        />
+                        <div key={nt.id} className="group/node absolute top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ left: `${((i + 1) / nodes.length) * 100}%` }}>
+                          {/* hover 里程碑卡 */}
+                          <div
+                            className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 hidden w-44 -translate-x-1/2 rounded-xl border border-[var(--line)] p-2.5 text-left group-hover/node:block"
+                            style={{ background: 'var(--bg-surface)', boxShadow: 'var(--shadow-lg)' }}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              {nt.ms ? <span className="text-[10px] text-[var(--violet)]">◆</span> : null}
+                              <b className="min-w-0 flex-1 truncate text-[11.5px] text-slate-100">{nt.title}</b>
+                            </div>
+                            <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-500">
+                              <span className={nt.done ? 'text-[var(--teal-deep)]' : 'text-slate-400'}>
+                                {nt.done ? '✓ 已完成' : nt.ms ? '◇ 里程碑 · 待达成' : '○ 待办'}
+                              </span>
+                              {nt.ms ? <span className="rounded bg-[var(--teal-soft)] px-1 text-[9px] font-bold text-[var(--teal-deep)]">里程碑</span> : null}
+                            </div>
+                          </div>
+                          <span
+                            title={`${nt.title}${nt.done ? ' · 已完成' : ''}`}
+                            className={`block cursor-default transition-transform group-hover/node:scale-125 ${
+                              nt.ms
+                                ? `h-2.5 w-2.5 rotate-45 rounded-[2px] border ${nt.done ? 'border-[var(--violet)] bg-[var(--violet)]' : 'border-[var(--violet)] bg-[var(--bg-surface)]'}`
+                                : `h-2.5 w-2.5 rounded-full border-2 ${nt.done ? 'border-[var(--teal-deep)] bg-[var(--teal)]' : 'border-[var(--line-strong)] bg-[var(--bg-surface)]'}`
+                            }`}
+                          />
+                        </div>
                       ))}
                     </div>
                     <span className="shrink-0 text-[11px] font-bold tabular-nums text-slate-400">{r.progress ?? 0}%</span>
