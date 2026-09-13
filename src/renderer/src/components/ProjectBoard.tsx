@@ -83,6 +83,36 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
   /** 反显：挂到本项目的每日待办（PlanItem.projectId） */
   const [linkedPlans, setLinkedPlans] = useState<Record<string, { id: string; title: string; status: string }[]>>({})
 
+  /** 里程碑模板：按项目类型给粗颗粒节点（不搞详细设计那套官僚货） */
+  const MILESTONE_TEMPLATES: Record<string, { label: string; items: string[]; weekly?: string }> = {
+    vibecoding: { label: 'VibeCoding', items: ['原型可玩', '核心功能齐', '自用打磨完', '发布上线'] },
+    content: { label: '内容创作', items: ['首发上线', '连续 4 期', '稳定更新 3 个月'], weekly: '本周更新' },
+    generic: { label: '通用三段', items: ['启动', '过半', '收尾完成'] }
+  }
+
+  const hasMilestone = (pid: string): boolean => (tasks[pid] ?? []).some((x) => x.isMilestone)
+
+  const genMilestones = async (pid: string, typeName: string): Promise<void> => {
+    const tpl = MILESTONE_TEMPLATES[typeName]
+    if (!tpl) return
+    for (const title of tpl.items) {
+      await window.api.saveProjectTask({ projectId: pid, title, status: 'todo', priority: 'high', isMilestone: true })
+    }
+    if (tpl.weekly) {
+      // 重复里程碑：挂到自动化引擎（每周一 09:00 自动建「本周更新」待办）
+      try {
+        await window.api.saveAutomation?.({
+          name: `${tpl.weekly}（自动）`,
+          enabled: true,
+          trigger: { kind: 'weekly', weekday: 1 },
+          actions: [{ kind: 'addTodo', text: tpl.weekly }]
+        })
+      } catch { /* 引擎不可用则跳过 */ }
+    }
+    await loadTasks(pid)
+    await load()
+  }
+
   /** 属性袋（v7.1）：拖拽中的 key（项目内） */
   const [attrDrag, setAttrDrag] = useState<{ pid: string; key: string } | null>(null)
   const [attrAdding, setAttrAdding] = useState<string | null>(null)
@@ -615,6 +645,29 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                         style={{ borderColor: 'var(--line)' }}
                         onClick={() => { setAttrAdding(p.id); setAttrNew({ key: '', value: '' }) }}
                       >＋ 自定义属性（预算/客户/章节…按你的维度来）</button>
+                    )}
+                    {/* 里程碑：按类型模板生成粗颗粒节点 */}
+                    {!hasMilestone(p.id) ? (
+                      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                        <span className="text-[10px] uppercase tracking-wider text-slate-600">里程碑</span>
+                        {Object.entries(MILESTONE_TEMPLATES).map(([k, tpl]) => (
+                          <button
+                            key={k}
+                            className="rounded-full border border-dashed px-2 py-0.5 text-[10px] font-bold text-slate-500 transition-colors hover:border-[rgba(15,181,164,0.5)] hover:text-[var(--teal-deep)]"
+                            onClick={() => void genMilestones(p.id, k)}
+                          >
+                            {tpl.label}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                        {(tasks[p.id] ?? []).filter((x) => x.isMilestone).map((x) => (
+                          <span key={x.id} className="flex items-center gap-1 rounded bg-[var(--teal-soft)] px-1.5 py-0.5 text-[9px] font-bold text-[var(--teal-deep)]">
+                            ◆ {x.title}{x.status === 'done' ? ' ✓' : ''}
+                          </span>
+                        ))}
+                      </div>
                     )}
                     {(linkedPlans[p.id]?.length ?? 0) > 0 ? (
                       <div className="mb-2 border-t border-dashed border-[var(--line)] pt-2">

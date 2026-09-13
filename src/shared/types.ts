@@ -25,11 +25,13 @@ export interface AutomationAction {
 }
 
 export interface AutomationTrigger {
-  kind: 'daily' | 'appSwitch' | 'focusReached'
+  kind: 'daily' | 'appSwitch' | 'focusReached' | 'weekly'
   /** daily：HH:MM */
   time?: string
   /** appSwitch：目标应用（appName 包含匹配） */
   app?: string
+  /** weekly：每周几触发（1=周一） */
+  weekday?: number
   /** focusReached：连续专注小时数阈值 */
   focusHours?: number
   /** 仅工作日（周一至五） */
@@ -271,6 +273,7 @@ export interface ProjectTask {
   estMin?: number     // 预估工时（分钟）
   actualMin?: number  // 实际投入（分钟，自动累计）
   tags?: string[]     // 关联标签/技术栈
+  isMilestone?: boolean // 里程碑：粗颗粒节点（按项目类型模板生成），进度轨上以菱形呈现
   note?: string
   aiGenerated?: boolean
   sort: number

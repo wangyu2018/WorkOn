@@ -12,7 +12,8 @@ type ActionKind = AutomationRule['actions'][number]['kind']
 const TRIGGER_LABEL: Record<TriggerKind, string> = {
   daily: '⏰ 每天定时',
   appSwitch: '🖥 应用切换',
-  focusReached: '📊 专注满 N 小时'
+  focusReached: '📊 专注满 N 小时',
+  weekly: '📅 每周定时'
 }
 const ACTION_LABEL: Record<ActionKind, string> = {
   genReport: '📝 生成日报',

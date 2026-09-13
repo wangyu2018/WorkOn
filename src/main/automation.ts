@@ -137,9 +137,21 @@ export function automationMinuteTick(): void {
   const hhmm = `${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`
   const fireKey = `${dateKey(now)} ${hhmm}`
   for (const rule of listAutomations()) {
-    if (!rule.enabled || rule.trigger.kind !== 'daily' || !rule.trigger.time) continue
-    if (rule.trigger.workdayOnly && !workdayToday()) continue
-    if (rule.trigger.time === hhmm) void fire(rule, fireKey)
+    if (!rule.enabled) continue
+    if (rule.trigger.kind === 'daily' && rule.trigger.time === hhmm) {
+      if (rule.trigger.workdayOnly && !workdayToday()) continue
+      void fire(rule, fireKey)
+    } else if (rule.trigger.kind === 'weekly') {
+      // 每周一次：周一（或指定 weekday）当天触发，本周内只发一次
+      const now2 = new Date()
+      const target = rule.trigger.weekday ?? 1
+      if (now2.getDay() !== target) continue
+      const weekKey = `${dateKey(now2.getTime())}-w${target}`
+      if (rule.lastFiredKey === weekKey) continue
+      rule.lastFiredKey = weekKey
+      updateIn<AutomationRule>('automations', rule.id, { lastFiredKey: weekKey })
+      void fire(rule, weekKey)
+    }
   }
 }
 
