@@ -33,3 +33,31 @@
 - 天气卡城市切换（设置里已有 city 则下拉）
 - 首页小组件手动锁位置
 - 星图拖拽：不做；桌宠穿透：不做
+
+
+---
+
+# 四代理全项目审查（2026-09-03 第二批）——已修 + 待修清单
+
+## 已修（12314f3 及之前）
+- aiAssistWatch sampling 永不复位（监控一次后坏死）✅
+- startAllWatchers 启动未调用（重启后目录监控全灭）✅
+- focusChain disabled 不关链路（队列永久卡死）✅
+- attributions UTC日配额→本地日 dateKey ✅
+- care 21点死分支 ✅ / 托盘待办勾选不刷新 ✅ / 星图隐私过滤 ✅ / __woGen 写入（节流生效）✅
+- automation 空 id 双连（genId）✅
+
+## 待修（下会话按序）
+1. plans:setStatus 回写 projectTaskId 状态（主线勾完成 → ProjectBoard 同步）
+2. removeProject 级联不全（plans 解链 + projectBindings/dirActivity 清理）
+3. 配额改在派遣时消耗（attributions.askConfirm 去掉 consumeQuota → confirmQueue 派发时调）
+4. bus.question 加 TTL（10min 未答自动 ignore 结案，防确认队列饿死）
+5. aiAssistWatch dirBusy 融合兼顾 keywords/dirs 绑定（现只查 apps，IDE 绑定不生效）
+6. focusChain slack 段不计入 apps 时长（摸鱼稀释应用时长）
+7. 副屏软化8min 与 presence idle 口径统一（presence 无 AI 豁免）
+8. Smart 日报 vsYesterday 今日半天vs昨日全天不对齐（等长窗口）
+9. 摸鱼口径四处不一（Smart 日卡/周卡/Hub/日历）——统一 MOOD_SLACK_STATES
+10. 首页 KPI windowStateMin 与 durationMin 口径分裂（>1h 连续使用虚高3倍）
+11. 30天 trail 循环串行 await → Promise.all + trailCache 调大
+12. listProjects 读路径 O(n²) 折叠 → 移到写路径/启动
+13. AutomationLab weekly 触发器 UI（引擎已支持，UI 未出）
