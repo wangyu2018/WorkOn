@@ -84,6 +84,9 @@ export function focusChainTick(ts: number, app: string, state: WorkState, idleSe
   if (!enabled) return
 
   const noWork = !app || state === 'idle'
+  // AI 生成时人在盯流式输出：idle 容忍与状态软化同口径（aidev/aiqa 180s 才算离开）
+  const effectiveIdle = state === 'aidev' || state === 'aiqa' ? Math.max(0, idleSec - 60) : idleSec
+  idleSec = effectiveIdle
 
   if (noWork || SLACK_STATES.has(state)) {
     const since = rt.slackSince ?? ts
