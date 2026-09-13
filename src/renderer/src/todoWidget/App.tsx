@@ -133,6 +133,8 @@ export default function TodoWidgetApp() {
   const [onTop, setOnTop] = useState(true)
   const [desktopPin, setDesktopPin] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
+  /** 穿透模式（透过点击，仅查看） */
+  const [penetrated, setPenetrated] = useState(false)
   const [loadErr, setLoadErr] = useState<string | null>(null)
   const [glass, setGlass] = useState(false)
   const [lightMode, setLightMode] = useState(false)
@@ -492,6 +494,16 @@ export default function TodoWidgetApp() {
           >
             {editMode ? '完成' : '⚙ 分区'}
           </button>
+          <button
+            type="button"
+            className={`text-[11px] transition-colors ${penetrated ? 'text-[#fbbf24]' : 'text-slate-500 hover:text-slate-200'}`}
+            title={penetrated ? '关闭穿透（恢复交互）' : '开启穿透（纯查看，不挡操作）'}
+            onClick={() => {
+              const next = !penetrated
+              setPenetrated(next)
+              void window.api?.setSettings?.({ todoWidgetPenetration: next } as never)
+            }}
+          >👁</button>
           <button
             type="button"
             className="text-[11px] text-slate-500 transition-colors hover:text-slate-200"
