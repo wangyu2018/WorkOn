@@ -162,9 +162,13 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
 
   return (
     <div className="anim-fade-in fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="glass-card anim-scale-in w-[400px]" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="glass-card anim-scale-in w-[400px]"
+        style={{ borderRadius: 'var(--r-xl)', boxShadow: 'var(--shadow-lg)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <h3 className="mb-4 flex items-center gap-2.5 text-[15px] font-semibold text-slate-100">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/[0.08] bg-neon-cyan/10 text-neon-cyan">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--teal-soft)] text-[var(--teal-deep)]">
             <Icon name={isNew ? 'plus' : 'edit'} size={14} />
           </span>
           {isNew ? '新建计划' : '编辑计划'}
