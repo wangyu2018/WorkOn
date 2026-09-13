@@ -340,6 +340,10 @@ export default function PlanView() {
   const [forecasts, setForecasts] = useState<Map<string, PlanForecast>>(new Map())
   const [statusFilter, setStatusFilter] = useState<'all' | PlanStatus>('all')
   const [editor, setEditor] = useState<{ plan: Partial<PlanItem> & { date: string }; isNew: boolean } | null>(null)
+  /** 快速添加（v7.1）：回车即入库，自然语言时间解析，不开编辑器 */
+  const [quickText, setQuickText] = useState('')
+  const [quickProj, setQuickProj] = useState('')
+  const quickRef = useRef<HTMLInputElement>(null)
   /** 关联任务名映射（行内 chip 显示） */
   const [taskNames, setTaskNames] = useState<Record<string, string>>({})
   useEffect(() => {
@@ -670,6 +674,29 @@ ${text.slice(0, 3000)}`
     void load()
   }
 
+  const quickAdd = async (): Promise<void> => {
+    const text = quickText.trim()
+    if (!text) return
+    const r = parsePlanText(text)
+    const title = (r.matched.length ? r.title : text).slice(0, 100)
+    const targetDate = r.date ?? date
+    const hasTime = r.startMin !== undefined
+    await window.api.savePlan({
+      date: targetDate,
+      title,
+      category: 'other',
+      status: 'planned',
+      source: 'manual',
+      planType: hasTime ? 'reminder' : 'task',
+      startMin: r.startMin,
+      endMin: r.endMin,
+      durationMin: r.durationMin,
+      projectId: quickProj || undefined
+    })
+    setQuickText('')
+    void load()
+  }
+
   const importFromMeeting = async () => {
     if (folderDirs.length === 0) { setFolderModal(true); return }
     setScanProgress(0); setScanFile('正在扫描...')
@@ -982,6 +1009,33 @@ ${text.slice(0, 3000)}`
           }
         />
       </section>
+
+      {/* 快速添加：回车即入库 */}
+      <div className="anim-fade-up flex items-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2" style={{ animationDelay: '120ms' }}>
+        <span className="text-[13px]" style={{ color: 'var(--teal)' }}>＋</span>
+        <input
+          ref={quickRef}
+          className="min-w-0 flex-1 bg-transparent text-[13px] text-slate-200 outline-none placeholder:text-slate-600"
+          placeholder="今天要做什么？回车添加 · 支持「明天下午3点开会」"
+          value={quickText}
+          onChange={(e) => setQuickText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && void quickAdd()}
+        />
+        <select
+          className="glass-input !w-28 !py-1 !text-[11px]"
+          value={quickProj}
+          onChange={(e) => setQuickProj(e.target.value)}
+          title="归属项目（可选）"
+        >
+          <option value="">不归属</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+        <button className="glass-btn ai !px-3 !py-1 text-[11px]" disabled={!quickText.trim()} onClick={() => void quickAdd()}>
+          添加
+        </button>
+      </div>
 
       {/* 计划列表 */}
       {filtered.length === 0 ? (
