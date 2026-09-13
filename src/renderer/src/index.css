@@ -708,6 +708,18 @@ textarea {
 [data-theme='ink'] {
   font-feature-settings: 'ss01';
 }
+/* 墨主题：全局悬浮面磨砂变量（监控窗/待办树/对话框共用） */
+[data-theme='ink'] {
+  --float-bg: rgba(22, 20, 15, 0.35);
+  --float-blur: blur(40px) saturate(1.6);
+  --float-border: rgba(194, 65, 12, 0.12);
+  --float-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+[data-theme='ink'][data-mode='light'] {
+  --float-bg: rgba(247, 244, 238, 0.45);
+  --float-border: rgba(194, 65, 12, 0.1);
+}
+
 [data-theme='ink'] .serif-num {
   font-family: 'Noto Serif SC', 'Songti SC', serif;
 }

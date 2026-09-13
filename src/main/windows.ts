@@ -423,6 +423,7 @@ export function createWidgetWindow(): BrowserWindow {
   widgetWindow = new BrowserWindow({
     width: w,
     height: h,
+    backgroundMaterial: 'acrylic',
     x,
     y,
     frame: false,

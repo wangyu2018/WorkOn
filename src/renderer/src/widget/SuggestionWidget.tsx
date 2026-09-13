@@ -204,10 +204,12 @@ function restoreWidgetOpacity(): void {
 
 /** 浮窗面板：实色铺满窗口，禁用 backdrop/外阴影（Win 透明窗会画出高透明直角灰框） */
 const PANEL_STYLE: CSSProperties = {
-  background: 'var(--bg-surface)',
-  border: '1px solid var(--line)',
+  background: 'var(--float-bg, var(--bg-surface))',
+  border: '1px solid var(--float-border, var(--line))',
   color: 'var(--text-1)',
-  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.04)'
+  boxShadow: 'var(--float-shadow, var(--shadow-md))',
+  backdropFilter: 'var(--float-blur, blur(16px) saturate(1.1))',
+  WebkitBackdropFilter: 'var(--float-blur, blur(16px) saturate(1.1))'
 }
 
 /** 头部小图标按钮 */
