@@ -215,7 +215,7 @@ export interface PlanItem {
   projectId?: string
   /** 关联到项目的具体任务（二级关联） */
   projectTaskId?: string
-  /** AI 拆解生成的子待办：指向父计划 id；桌面待办窗会挂在父项下 */
+  /** 子待办父级（粘贴分拣 / AI 拆解生成子待办）；桌面待办窗会挂在父项下 */
   parentPlanId?: string
 }
 
