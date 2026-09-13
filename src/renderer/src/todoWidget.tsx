@@ -54,6 +54,14 @@ class TodoWidgetErrorBoundary extends Component<{ children: ReactNode }, { err: 
   }
 }
 
+void window.api?.getSettings?.().then((s) => {
+  const root = document.documentElement
+  root.dataset.theme = s.theme ?? 'cyan'
+  const am = s.appearanceMode ?? 'auto'
+  const preferLight = am === 'light' || (am === 'auto' && window.matchMedia('(prefers-color-scheme: light)').matches)
+  root.dataset.mode = preferLight ? 'light' : 'dark'
+}).catch(() => undefined)
+
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <TodoWidgetErrorBoundary><TodoWidgetApp /></TodoWidgetErrorBoundary>
 )

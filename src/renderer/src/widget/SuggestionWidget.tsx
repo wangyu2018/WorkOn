@@ -51,28 +51,28 @@ function NotificationStack({ list, onDone }: { list: WidgetNotify[]; onDone: (id
       {list.map((n) => {
         const ic = NOTIFY_ICON[n.kind] ?? NOTIFY_ICON.generic
         return (
-          <div key={n.id} className="relative overflow-hidden rounded-xl border border-white/10 p-2.5" style={PANEL_STYLE} data-widget-solid>
+          <div key={n.id} className="relative overflow-hidden rounded-xl border border-[var(--line)] p-2.5" style={PANEL_STYLE} data-widget-solid>
             <div className="flex items-start gap-2.5">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm" style={{ background: ic.bg }}>
                 {ic.emoji}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <b className="text-[11.5px] text-slate-100">{n.title}</b>
-                  <span className="text-[9px] text-slate-500">刚刚</span>
+                  <b className="text-[11.5px] text-[var(--text-1)]">{n.title}</b>
+                  <span className="text-[9px] text-[var(--text-3)]">刚刚</span>
                   <button
-                    className="ml-auto text-slate-500 transition-colors hover:text-slate-200"
+                    className="ml-auto text-[var(--text-3)] transition-colors hover:text-[var(--text-1)]"
                     onClick={() => { onDone(n.id); void window.api.notifyAction(n.id, 'dismiss') }}
                   >✕</button>
                 </div>
-                <div className="mt-0.5 text-[10.5px] leading-relaxed text-slate-400">{n.body}</div>
+                <div className="mt-0.5 text-[10.5px] leading-relaxed text-[var(--text-3)]">{n.body}</div>
                 {n.actions.length ? (
                   <div className="mt-1.5 flex gap-1.5">
                     {n.actions.map((a) => (
                       <button
                         key={a.action}
                         className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition-all hover:-translate-y-px ${
-                          a.primary ? 'bg-[var(--teal)] text-white' : 'border border-white/15 text-slate-300 hover:bg-white/10'
+                          a.primary ? 'bg-[var(--teal)] text-white' : 'border border-[var(--line-strong)] text-[var(--text-2)] hover:bg-[var(--surface-3)]'
                         }`}
                         onClick={() => { onDone(n.id); void window.api.notifyAction(n.id, a.action) }}
                       >
@@ -204,8 +204,9 @@ function restoreWidgetOpacity(): void {
 
 /** 浮窗面板：实色铺满窗口，禁用 backdrop/外阴影（Win 透明窗会画出高透明直角灰框） */
 const PANEL_STYLE: CSSProperties = {
-  background: '#0C101B',
-  border: '1px solid rgba(255, 255, 255, 0.10)',
+  background: 'var(--bg-surface)',
+  border: '1px solid var(--line)',
+  color: 'var(--text-1)',
   boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.04)'
 }
 
@@ -220,7 +221,7 @@ function HeaderBtn({ icon, rotate, title, onClick, active, accent }: {
 }) {
   return (
     <button
-      className="flex h-6 w-6 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200"
+      className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--text-3)] transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--text-1)]"
       style={{ ...APP_NO_DRAG, color: active ? accent : undefined }}
       title={title}
       onClick={onClick}
@@ -234,7 +235,7 @@ function HeaderBtn({ icon, rotate, title, onClick, active, accent }: {
 function WidgetHeader({ children }: { children: ReactNode }) {
   return (
     <div
-      className="flex h-7 shrink-0 cursor-move select-none items-center justify-end border-b border-white/[0.06] px-2.5"
+      className="flex h-7 shrink-0 cursor-move select-none items-center justify-end border-b border-[var(--line)] px-2.5"
       style={APP_DRAG}
     >
       <div className="flex items-center gap-0.5">{children}</div>
@@ -250,7 +251,7 @@ function ResizeHandle({ onDown, onMove, onUp }: {
 }) {
   return (
     <div
-      className="absolute bottom-0 right-0 z-20 flex h-5 w-5 cursor-nwse-resize items-end justify-end rounded-bl-lg p-[3px] text-slate-600 transition-colors hover:text-slate-300"
+      className="absolute bottom-0 right-0 z-20 flex h-5 w-5 cursor-nwse-resize items-end justify-end rounded-bl-lg p-[3px] text-[var(--text-3)] transition-colors hover:text-[var(--text-2)]"
       onPointerDown={onDown}
       onPointerMove={onMove}
       onPointerUp={onUp}
@@ -488,7 +489,7 @@ function AlertShell({ color, label, collapsed, onToggle, children }: {
       data-widget-solid
     >
       <button
-        className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-300"
+        className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded text-[var(--text-3)] transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--text-2)]"
         onClick={onToggle}
         title={collapsed ? '展开' : '收起'}
       >
@@ -521,7 +522,7 @@ function AskBar({ askState, askText, setAskText, submitAsk, onAskBlur, onEscape,
       {askState === 'input' ? (
         <input
           autoFocus
-          className="w-full rounded-lg border bg-white/[0.05] px-2.5 py-1.5 text-[11.5px] text-slate-200 outline-none placeholder:text-slate-600"
+          className="w-full rounded-lg border bg-white/[0.05] px-2.5 py-1.5 text-[11.5px] text-[var(--text-1)] outline-none placeholder:text-[var(--text-3)]"
           style={{ borderColor: hexAlpha(accent, 0.3) }}
           placeholder="问点什么…（回车发送）"
           value={askText}
@@ -530,12 +531,12 @@ function AskBar({ askState, askText, setAskText, submitAsk, onAskBlur, onEscape,
           onBlur={onAskBlur}
         />
       ) : askState === 'thinking' ? (
-        <div className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.04] px-2.5 py-1.5 text-[11.5px] text-slate-400">
+        <div className="flex items-center gap-2 rounded-lg border border-[var(--line)] bg-white/[0.04] px-2.5 py-1.5 text-[11.5px] text-[var(--text-3)]">
           <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full" style={{ background: accent }} />思考中…
         </div>
       ) : (
         <div
-          className="max-h-24 overflow-y-auto rounded-lg border px-2.5 py-2 text-[11.5px] leading-relaxed text-slate-200"
+          className="max-h-24 overflow-y-auto rounded-lg border px-2.5 py-2 text-[11.5px] leading-relaxed text-[var(--text-1)]"
           style={{ borderColor: hexAlpha(accent, 0.2), background: hexAlpha(accent, 0.06) }}
         >
           {askAnswer}
@@ -635,7 +636,7 @@ export default function SuggestionWidget() {
   /** 未归类时的操作钮（各态共用） */
   const attrBtn = (
     <button
-      className="shrink-0 rounded-full border border-[var(--line)] px-2 py-0.5 text-[10px] text-slate-500 transition-colors hover:border-[rgba(139,92,246,0.5)] hover:text-[var(--violet)]"
+      className="shrink-0 rounded-full border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--text-3)] transition-colors hover:border-[rgba(139,92,246,0.5)] hover:text-[var(--violet)]"
       title="把当前工作挂到一个项目，时长才会计入"
       onClick={(e) => {
         e.stopPropagation()
@@ -1017,7 +1018,7 @@ export default function SuggestionWidget() {
           <>
             {dm.focusRing ? <StateDot color={meta.color} size={11} /> : null}
             {dm.emptyHint ? (
-              <span className="min-w-0 flex-1 truncate text-[11px] text-slate-500">做点什么，然后归到项目</span>
+              <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-3)]">做点什么，然后归到项目</span>
             ) : <span className="min-w-0 flex-1" />}
             {dm.classifyBtn ? (
             <button
@@ -1037,7 +1038,7 @@ export default function SuggestionWidget() {
         )}
         {dm.penetrationBtn && !penetration ? (
         <button
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[var(--text-3)] transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--text-1)]"
           style={{ color: penetration ? accent : undefined }}
           title={penetrationTitle}
           data-no-capsule-drag
@@ -1082,24 +1083,24 @@ export default function SuggestionWidget() {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 <span className="text-[14px] font-bold" style={{ color: meta.color }}>{meta.label}</span>
-                <span className="text-[10px] tabular-nums text-slate-500">
+                <span className="text-[10px] tabular-nums text-[var(--text-3)]">
                   {chain?.active ? `⚡ 链路 ${Math.max(1, Math.round(chain.sec / 60))}min` : `专注度 ${focus}`}
                 </span>
               </div>
-              <div className="mt-0.5 truncate text-[12px] text-slate-300">
+              <div className="mt-0.5 truncate text-[12px] text-[var(--text-2)]">
                 {attr?.projectId
                   ? (attr.taskTitle || attr.projectName)
                   : liveTitle || '等待采集…'}
               </div>
               {chain ? (
-                <div className="mt-0.5 truncate text-[10px] text-slate-500">
+                <div className="mt-0.5 truncate text-[10px] text-[var(--text-3)]">
                   今日 {chain.chainsToday} 段 · 最长 {Math.max(1, Math.round(chain.longestChainSecToday / 60))}m · 中断 {chain.interruptionsToday}
                 </div>
               ) : null}
             </div>
             {!attr?.projectId ? attrBtn : (
               <button
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--violet)] transition-colors hover:bg-white/10"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--violet)] transition-colors hover:bg-[var(--surface-3)]"
                 title="问点什么…"
                 onClick={() => setAskState(askState === 'hidden' || askState === 'answer' ? 'input' : 'hidden')}
               >
@@ -1156,7 +1157,7 @@ export default function SuggestionWidget() {
               ) : null}
               {meta.label}{' '}
               <span
-                className="text-[11px] font-normal text-slate-500"
+                className="text-[11px] font-normal text-[var(--text-3)]"
                 title={presence ? `实时专注度 ${focus}（0-100）· 当前状态 ${presence.state}\n多维注意力评分见「监控/报表」页` : undefined}
               >
                 专注度 {focus}
@@ -1174,7 +1175,7 @@ export default function SuggestionWidget() {
             )}
           </div>
             <button
-              className={`ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-white/10 ${askState !== 'hidden' && askState !== 'answer' ? 'text-slate-500 hover:text-slate-200' : 'text-[var(--violet)]'}`}
+              className={`ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-[var(--surface-3)] ${askState !== 'hidden' && askState !== 'answer' ? 'text-[var(--text-3)] hover:text-[var(--text-1)]' : 'text-[var(--violet)]'}`}
               title="问点什么…"
               onClick={() => setAskState(askState === 'hidden' || askState === 'answer' ? 'input' : 'hidden')}
               style={{ display: df.askBtn && aiEnabled ? undefined : 'none' }}
@@ -1190,12 +1191,12 @@ export default function SuggestionWidget() {
         {unattrCard}
         {/* 归属项目今日待办（颗粒勾选） */}
         {attrPlans.length && df.attrPlans ? (
-          <div className="mx-3 mb-2 rounded-xl border border-[var(--line)] bg-white/[0.02] px-2.5 py-2">
-            <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-600">{attr?.projectName} · 今日待办</div>
+          <div className="mx-3 mb-2 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-2">
+            <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--text-3)]">{attr?.projectName} · 今日待办</div>
             {attrPlans.map((p) => (
               <div key={p.id} className="flex items-center gap-2 py-[3px]">
                 <button
-                  className="shrink-0 text-[12px] text-slate-500 transition-colors hover:text-slate-200"
+                  className="shrink-0 text-[12px] text-[var(--text-3)] transition-colors hover:text-[var(--text-1)]"
                   title="完成"
                   onClick={() => {
                     void window.api?.setPlanStatus?.(p.id, 'done')
@@ -1204,7 +1205,7 @@ export default function SuggestionWidget() {
                 >
                   ○
                 </button>
-                <span className="min-w-0 flex-1 truncate text-[11.5px] text-slate-300">{p.title}</span>
+                <span className="min-w-0 flex-1 truncate text-[11.5px] text-[var(--text-2)]">{p.title}</span>
               </div>
             ))}
           </div>
@@ -1225,7 +1226,7 @@ export default function SuggestionWidget() {
           {bpConfirm ? (
             <AlertShell color="#3B82F6" label="🌐 浏览器检测" collapsed={!!alertCollapsed['bp']} onToggle={() => toggleAlert('bp')}>
               <div className="mb-1 text-[11px] font-medium" style={{ color: '#7FB0F7' }}>🌐 浏览器检测</div>
-              <div className="mb-2 pr-4 text-xs leading-relaxed text-slate-200">
+              <div className="mb-2 pr-4 text-xs leading-relaxed text-[var(--text-1)]">
                 检测到你在浏览与计划【{bpConfirm.planTitle}】相关的内容，你在做这项计划吗？
               </div>
               <div className="flex gap-2">
@@ -1237,7 +1238,7 @@ export default function SuggestionWidget() {
                   是，在做这个
                 </button>
                 <button
-                  className="flex-1 rounded-lg bg-white/[0.05] py-1.5 text-xs text-slate-400 transition-colors hover:bg-white/10"
+                  className="flex-1 rounded-lg bg-white/[0.05] py-1.5 text-xs text-[var(--text-3)] transition-colors hover:bg-[var(--surface-3)]"
                   onClick={() => answerBrowserPlan('no')}
                 >
                   不是
@@ -1249,30 +1250,30 @@ export default function SuggestionWidget() {
           {meetingDetected ? (
             <AlertShell color="#F59E0B" label="👥 会议检测" collapsed={!!alertCollapsed['md']} onToggle={() => toggleAlert('md')}>
               <div className="mb-1 text-[11px] font-medium" style={{ color: '#FBBF24' }}>👥 会议检测</div>
-              <div className="mb-2 pr-4 text-xs leading-relaxed text-slate-200">
+              <div className="mb-2 pr-4 text-xs leading-relaxed text-[var(--text-1)]">
                 检测到你正在使用 {meetingDetected.app.replace(/\.exe$/i, '')} 开会，选择会议模式：
               </div>
               <div className="flex gap-1.5">
                 <button
-                  className="flex-1 rounded-lg bg-white/[0.07] py-1.5 text-[11px] text-slate-200 transition-colors hover:bg-white/[0.12]"
+                  className="flex-1 rounded-lg bg-white/[0.07] py-1.5 text-[11px] text-[var(--text-1)] transition-colors hover:bg-white/[0.12]"
                   onClick={() => chooseMeetingMode('stealth')}
                 >
                   🤫 一键隐身
                 </button>
                 <button
-                  className="flex-1 rounded-lg bg-white/[0.07] py-1.5 text-[11px] text-slate-200 transition-colors hover:bg-white/[0.12]"
+                  className="flex-1 rounded-lg bg-white/[0.07] py-1.5 text-[11px] text-[var(--text-1)] transition-colors hover:bg-white/[0.12]"
                   onClick={() => chooseMeetingMode('quiet')}
                 >
                   🔇 免打扰
                 </button>
                 <button
-                  className="flex-1 rounded-lg bg-white/[0.07] py-1.5 text-[11px] text-slate-200 transition-colors hover:bg-white/[0.12]"
+                  className="flex-1 rounded-lg bg-white/[0.07] py-1.5 text-[11px] text-[var(--text-1)] transition-colors hover:bg-white/[0.12]"
                   onClick={() => chooseMeetingMode('assist')}
                 >
                   📝 会议辅助
                 </button>
               </div>
-              <label className="mt-2 flex cursor-pointer items-center gap-1.5 text-[10px] text-slate-500">
+              <label className="mt-2 flex cursor-pointer items-center gap-1.5 text-[10px] text-[var(--text-3)]">
                 <input type="checkbox" checked={meetingSetDefault} onChange={(e) => setMeetingSetDefault(e.target.checked)} />
                 以后都这样（可在设置中修改）
               </label>
@@ -1311,7 +1312,7 @@ export default function SuggestionWidget() {
             </InsetCard>
           ) : question ? (
             <AlertShell color="#8B5CF6" label="📋 轻问诊" collapsed={!!alertCollapsed['q']} onToggle={() => toggleAlert('q')}>
-              <div className="mb-2 pr-4 text-xs leading-relaxed text-slate-200">{question.question}</div>
+              <div className="mb-2 pr-4 text-xs leading-relaxed text-[var(--text-1)]">{question.question}</div>
               <div className="flex gap-2">
                 <button
                   className="flex-1 rounded-lg py-1.5 text-xs transition-colors hover:brightness-125"
@@ -1321,7 +1322,7 @@ export default function SuggestionWidget() {
                   是
                 </button>
                 <button
-                  className="flex-1 rounded-lg bg-white/[0.05] py-1.5 text-xs text-slate-400 transition-colors hover:bg-white/10"
+                  className="flex-1 rounded-lg bg-white/[0.05] py-1.5 text-xs text-[var(--text-3)] transition-colors hover:bg-[var(--surface-3)]"
                   onClick={() => answer('no')}
                 >
                   不是
@@ -1331,7 +1332,7 @@ export default function SuggestionWidget() {
           ) : !bpConfirm ? (
             widgetCompact || !df.idleHint ? null : (
               <InsetCard color="#94A3B8" title="📋 情境确认">
-                <div className="text-center text-[11px] text-slate-500">
+                <div className="text-center text-[11px] text-[var(--text-3)]">
                   暂无新的情境确认 · 越用越聪明
                 </div>
               </InsetCard>
@@ -1378,17 +1379,17 @@ function UnattrAskCard({ onDone, projects, apps, fp, date }: { onDone: () => voi
           <button
             key={p.id}
             className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-[11px] transition-all ${
-              pick === p.id ? 'border-[rgba(15,181,164,0.5)] bg-[var(--teal-soft)] text-[var(--teal-deep)]' : 'border-[var(--line)] text-slate-300 hover:bg-white/5'
+              pick === p.id ? 'border-[rgba(15,181,164,0.5)] bg-[var(--teal-soft)] text-[var(--teal-deep)]' : 'border-[var(--line)] text-[var(--text-2)] hover:bg-[var(--surface-2)]'
             }`}
             onClick={() => setPick(p.id)}
           >
             {pick === p.id ? '◉' : '○'} {p.name}
           </button>
         ))}
-        {!projects.length ? <div className="text-[10.5px] text-slate-500">还没有项目</div> : null}
+        {!projects.length ? <div className="text-[10.5px] text-[var(--text-3)]">还没有项目</div> : null}
       </div>
       <input
-        className="mb-2 w-full rounded-lg border border-[var(--line)] bg-white/5 px-2 py-1.5 text-[11px] text-slate-200 outline-none focus:border-[var(--border-active)]"
+        className="mb-2 w-full rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-[11px] text-[var(--text-1)] outline-none focus:border-[var(--border-active)]"
         placeholder="刚才在干什么？（如：调 DM8 连接）"
         value={doing}
         onChange={(e) => setDoing(e.target.value)}
@@ -1396,7 +1397,7 @@ function UnattrAskCard({ onDone, projects, apps, fp, date }: { onDone: () => voi
       {!pick ? (
         <div className="flex items-center gap-1.5">
           <input
-            className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-white/5 px-2 py-1.5 text-[11px] text-slate-200 outline-none focus:border-[var(--border-active)]"
+            className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-[11px] text-[var(--text-1)] outline-none focus:border-[var(--border-active)]"
             placeholder="或新建项目名…"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
@@ -1404,7 +1405,7 @@ function UnattrAskCard({ onDone, projects, apps, fp, date }: { onDone: () => voi
         </div>
       ) : null}
       <div className="mt-2 flex justify-end gap-1.5">
-        <button className="rounded-lg bg-white/5 px-2.5 py-1 text-[10.5px] text-slate-400 hover:bg-white/10" onClick={onDone}>
+        <button className="rounded-lg bg-[var(--surface-2)] px-2.5 py-1 text-[10.5px] text-[var(--text-3)] hover:bg-[var(--surface-3)]" onClick={onDone}>
           忽略
         </button>
         <button
