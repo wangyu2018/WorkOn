@@ -126,6 +126,12 @@ export function getTodayActivity(projectId: string): { changedFiles: number; new
   return { changedFiles: b.changedFiles, newFiles: b.newFiles, hotspot, lastChangeTs: b.lastChangeTs }
 }
 
+/** 项目近期目录活动（AI 后台工作信号）：withinMs 内有文件写入即视为在干活 */
+export function projectRecentDirActivity(projectId: string, withinMs = 180_000): boolean {
+  const b = today.get(key(projectId))
+  return !!(b && b.lastChangeTs && Date.now() - b.lastChangeTs <= withinMs)
+}
+
 /** 停滞检测：绑定目录的项目 N 天无任何变更 */
 export function stalledProjects(days: number): string[] {
   const threshold = Date.now() - days * 86400_000

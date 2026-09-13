@@ -18,6 +18,7 @@ import { addPoints } from './motions'
 import { pushNotify } from './notify'
 import { startIntegration } from './integration'
 import { startOnerAutoSync } from './oner'
+import { startAgentHookServer } from './agentHook'
 import { autoCleanOcrCache } from './ocr'
 import { bus } from './state'
 import { emitPetIntent } from './petIntent'
@@ -372,7 +373,8 @@ app.whenReady().then(() => {
           startMonitor()
           startOcrCollector()
           startFolderWatch()
-          startIntegration()
+          startAgentHookServer()
+  startIntegration()
           startOnerAutoSync()
           startPeriodicJobs()
           setPetNotifier((msg) => bus.setPet({ message: msg }))

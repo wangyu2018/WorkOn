@@ -3,6 +3,8 @@
  */
 import { execFile } from 'child_process'
 import { app } from 'electron'
+import { listBindings } from './attributions'
+import { projectRecentDirActivity } from './dirWatcher'
 import { getSettings } from './settings'
 import { sendTo } from './windows'
 import {
@@ -40,6 +42,14 @@ function runPs(script: string): Promise<string> {
       (_err, stdout) => resolve((stdout || '').trim())
     )
   })
+}
+
+/** 反查：某工具名（软绑定 apps）对应哪些主线 id */
+function projectsForTool(key: string): string[] {
+  const k = key.toLowerCase()
+  return listBindings()
+    .filter((b) => b.apps.some((a) => a.toLowerCase().includes(k) || k.includes(a.toLowerCase())))
+    .map((b) => b.projectId)
 }
 
 async function sampleProcesses(keys: string[]): Promise<{ key: string; title: string }[]> {
@@ -107,6 +117,34 @@ function clearBroadcast(): void {
 }
 
 /** monitor tick 调用（内部节流） */
+/** Layer4：agent hook 直报开始干活（外部钩子调用） */
+export function markToolBusy(key: string, title?: string): void {
+  const k = normalizeAssistKey(key)
+  if (!k) return
+  let tr = tracks.get(k)
+  if (!tr) {
+    tr = { key: k, status: 'busy', busySince: Date.now(), doneUntil: 0, title: title ?? '', seen: true }
+    tracks.set(k, tr)
+  } else {
+    if (tr.status !== 'busy') tr.busySince = Date.now()
+    tr.status = 'busy'
+    if (title) tr.title = title
+    tr.seen = true
+  }
+  broadcast([{ key: k, label: labelOfAssist(k), status: 'busy', title: tr.title }])
+}
+
+/** Layer4：agent hook 直报干完了（完成闪点） */
+export function markToolDone(key: string, flashMs = 45_000): void {
+  const k = normalizeAssistKey(key)
+  const tr = tracks.get(k)
+  if (!tr) return
+  tr.status = 'done'
+  tr.doneUntil = Date.now() + flashMs
+  tr.busySince = 0
+  broadcast([{ key: k, label: labelOfAssist(k), status: 'done', title: tr.title, doneUntil: tr.doneUntil }])
+}
+
 export async function aiAssistWatchTick(ts = Date.now()): Promise<void> {
   void ts
   const s = getSettings()
@@ -154,7 +192,9 @@ export async function aiAssistWatchTick(ts = Date.now()): Promise<void> {
     }
     tr.seen = true
     tr.title = hit.title
-    const busy = isAssistBusyTitle(hit.title)
+    // Layer2：目录在写 = 真在后台干活（覆盖"对话完进后台不改标题"盲区）
+    const dirBusy = projectsForTool(key).some((pid) => projectRecentDirActivity(pid, 180_000))
+    const busy = isAssistBusyTitle(hit.title) || dirBusy
     if (busy) {
       if (tr.status !== 'busy') tr.busySince = ts
       tr.status = 'busy'
