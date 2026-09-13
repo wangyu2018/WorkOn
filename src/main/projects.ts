@@ -157,6 +157,16 @@ export function removeProject(id: string): void {
   tasks.forEach((t) => removeFrom('projectTasks', t.id))
   const links = col<ProjectTimeLink>('projectTimeLinks').filter((l) => l.projectId === id)
   links.forEach((l) => removeFrom('projectTimeLinks', l.id))
+  // 级联补全：计划解链（保留条目清归属）、绑定与目录活动清理
+  col<PlanItem>('plans')
+    .filter((p) => p.projectId === id)
+    .forEach((p) => updateIn<PlanItem>('plans', p.id, { projectId: undefined, projectTaskId: undefined }))
+  col<{ id: string; projectId: string }>('projectBindings')
+    .filter((b) => b.projectId === id)
+    .forEach((b) => removeFrom('projectBindings', b.id))
+  col<{ id: string; projectId: string }>('dirActivity')
+    .filter((a) => a.projectId === id)
+    .forEach((a) => removeFrom('dirActivity', a.id))
 }
 
 /* ── 任务 CRUD ── */

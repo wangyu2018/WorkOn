@@ -16,8 +16,7 @@ import type {
   ReportEntryPatch,
   KnowledgeItem,
   KnowledgeLink,
-  MemoRecord
-} from '@shared/types'
+  MemoRecord, ProjectTask } from '@shared/types'
 import { genId } from '@shared/types'
 import { dateKey, buildMergedTrail } from '@shared/trail'
 import { planVsActual, forecastPlan, BUILTIN_CATEGORIES } from '@shared/planAnalysis'
@@ -425,6 +424,11 @@ export function registerIpc(): void {
   })
   ipcMain.handle('plans:setStatus', async (_e, id: string, status: PlanStatus) => {
     const updated = updateIn<PlanItem>('plans', id, { status })
+    // 核心闭环：挂了项目任务的待办，完成状态反哺 projectTasks
+    if (updated?.projectTaskId) {
+      const map: Record<string, ProjectTask['status']> = { done: 'done', in_progress: 'in_progress', partial: 'in_progress', planned: 'todo', delayed: 'blocked', cancelled: 'todo' }
+      updateIn<ProjectTask>('projectTasks', updated.projectTaskId, { status: map[status] ?? 'todo' })
+    }
     if (updated && updated.source === 'oner') await onerPushStatus(updated)
     return updated
   })
