@@ -368,23 +368,23 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
 
   return (
     <section className="anim-fade-up flex flex-col gap-3">
-      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.025] px-3.5 py-3">
-        <div className="text-[13px] font-semibold text-slate-100">跨天任务池</div>
-        <div className="mt-0.5 text-[11px] leading-snug text-slate-500">
+      <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] px-3.5 py-3">
+        <div className="text-[13px] font-semibold text-[var(--text-1)]">跨天任务池</div>
+        <div className="mt-0.5 text-[11px] leading-snug text-[var(--text-3)]">
           管目标、清单与进展反哺；排入今日后才会出现在「今日安排」。
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02]">
-      <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.05] px-3 py-2.5">
+      <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface-2)]">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] px-3 py-2.5">
         <span
           className="flex h-6 w-6 items-center justify-center rounded-lg border"
           style={{ background: 'var(--accent-softer)', borderColor: 'var(--border-active)', color: 'var(--accent)' }}
         >
           <Icon name="folder" size={13} />
         </span>
-        <h3 className="text-[13px] font-semibold text-slate-200">项目列表</h3>
-        <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] tabular-nums text-slate-400">{projects.length}</span>
+        <h3 className="text-[13px] font-semibold text-[var(--text-1)]">项目列表</h3>
+        <span className="rounded-md bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] tabular-nums text-[var(--text-2)]">{projects.length}</span>
         <div className="flex-1" />
         {adding ? (
           <div className="flex items-center gap-1.5">
@@ -417,8 +417,8 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
         <div className="mb-2 rounded-lg border border-[rgba(15,181,164,0.25)] bg-[rgba(15,181,164,0.08)] px-3 py-1.5 text-[11px] text-[var(--teal-deep)]">{loopTip}</div>
       ) : null}
       {projects.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] py-6 text-center">
-          <p className="text-[12px] text-slate-400">还没有项目。创建一个项目来管理跨天的开发任务，或用 AI 把需求拆解成任务清单。</p>
+        <div className="rounded-xl border border-dashed border-[var(--line)] bg-[var(--surface-2)] py-6 text-center">
+          <p className="text-[12px] text-[var(--text-2)]">还没有项目。创建一个项目来管理跨天的开发任务，或用 AI 把需求拆解成任务清单。</p>
         </div>
       ) : (
         <div className="flex flex-col gap-2">
@@ -431,15 +431,15 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
             const isActive = activeProject === p.id
             const apps = linkedApps[p.id] ?? []
             return (
-              <div key={p.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] transition-colors hover:bg-white/[0.035]">
+              <div key={p.id} className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] transition-colors hover:bg-white/[0.035]">
                 <div className="flex items-center gap-2 px-3 py-2">
-                  <button className="text-[10px] text-slate-600" onClick={() => toggleProject(p.id)}>{isExpanded ? '▾' : '▸'}</button>
+                  <button className="text-[10px] text-[var(--text-3)]" onClick={() => toggleProject(p.id)}>{isExpanded ? '▾' : '▸'}</button>
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: p.color ?? '#22D3EE' }} />
                   <button className="min-w-0 flex-1 text-left" onClick={() => toggleProject(p.id)}>
-                    <span className="truncate text-[13px] font-medium text-slate-200">{p.name}</span>
+                    <span className="truncate text-[13px] font-medium text-[var(--text-1)]">{p.name}</span>
                     {isActive ? <span className="chip ml-2 !text-[9px] !text-neon-cyan">今日开发中</span> : null}
                   </button>
-                  <span className="text-[10px] text-slate-500">{ts.length ? `${doneCount}/${ts.length}` : ''}</span>
+                  <span className="text-[10px] text-[var(--text-3)]">{ts.length ? `${doneCount}/${ts.length}` : ''}</span>
                             {p.deadline ? (
                     (() => {
                       const days = Math.ceil((new Date(`${p.deadline}T23:59:59`).getTime() - Date.now()) / 86400000)
@@ -458,7 +458,7 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                     <input
                       type="date"
                       title="设置上线目标日（距上线刻度）"
-                      className="shrink-0 rounded border border-[var(--line)] bg-transparent px-1 py-0 text-[9px] text-slate-500 outline-none hover:text-slate-300"
+                      className="shrink-0 rounded border border-[var(--line)] bg-transparent px-1 py-0 text-[9px] text-[var(--text-3)] outline-none hover:text-[var(--text-2)]"
                       onChange={(e) => {
                         if (!e.target.value) return
                         void window.api.saveProject({ id: p.id, deadline: e.target.value })
@@ -467,19 +467,19 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                     />
                   )}
                   {ts.length > 0 ? (
-                    <div className="h-1.5 w-16 overflow-hidden rounded-full bg-white/[0.06]">
+                    <div className="h-1.5 w-16 overflow-hidden rounded-full bg-[var(--surface-3)]">
                       <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, background: p.color ?? '#22D3EE' }} />
                     </div>
                   ) : null}
                   <span className="rounded px-1.5 py-0.5 text-[9px]" style={{ color: pri.color, background: `${pri.color}18` }}>{pri.label}</span>
                   {todayMinFor(p.id) > 0 ? (
-                    <span className="text-[10px] text-slate-400" title="今日开发时长">{fmtMin(todayMinFor(p.id))}</span>
+                    <span className="text-[10px] text-[var(--text-2)]" title="今日开发时长">{fmtMin(todayMinFor(p.id))}</span>
                   ) : null}
-                  <button className="text-slate-500 hover:text-red-400" title="删除项目" onClick={() => void doRemoveProject(p.id)}>✕</button>
+                  <button className="text-[var(--text-3)] hover:text-red-400" title="删除项目" onClick={() => void doRemoveProject(p.id)}>✕</button>
                 </div>
 
                 {isExpanded ? (
-                  <div className="anim-fade-in border-t border-white/[0.05] px-3 py-2">
+                  <div className="anim-fade-in border-t border-[var(--line)] px-3 py-2">
                     <div className="mb-2 flex flex-wrap items-center gap-1.5">
                       <button className="glass-btn !px-2 !py-1 !text-[11px]" onClick={() => void exportProgressCard(p.id)} title="复制反哺提示词：贴给 Cursor/开发 AI，要进展+下一步计划">
                         复制反哺提示词
@@ -504,27 +504,27 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                       />
                     </div>
                     {p.attrs?.['最近进展'] ? (
-                      <div className="mb-2 whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-white/[0.02] px-2.5 py-1.5 text-[11px] leading-relaxed text-slate-300">
-                        <span className="text-[10px] uppercase tracking-wider text-slate-600">最近进展 · </span>
+                      <div className="mb-2 whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[11px] leading-relaxed text-[var(--text-2)]">
+                        <span className="text-[10px] uppercase tracking-wider text-[var(--text-3)]">最近进展 · </span>
                         {String(p.attrs['最近进展'])}
                       </div>
                     ) : null}
                     {(dossiers[p.id] ?? []).length ? (
-                      <div className="mb-2 rounded-lg border border-[var(--line)] bg-white/[0.02] px-2.5 py-1.5">
-                        <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-600">相关过程案卷</div>
+                      <div className="mb-2 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1.5">
+                        <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--text-3)]">相关过程案卷</div>
                         <div className="space-y-1">
                           {(dossiers[p.id] ?? []).map((d) => (
-                            <div key={d.id} className="truncate text-[11px] text-slate-300" title={d.title}>
+                            <div key={d.id} className="truncate text-[11px] text-[var(--text-2)]" title={d.title}>
                               {d.title}
-                              {d.categoryName ? <span className="ml-1 text-[10px] text-slate-500">· {d.categoryName}</span> : null}
+                              {d.categoryName ? <span className="ml-1 text-[10px] text-[var(--text-3)]">· {d.categoryName}</span> : null}
                             </div>
                           ))}
                         </div>
                       </div>
                     ) : null}
                     {progressIn.open && progressIn.projectId === p.id ? (
-                      <div className="mb-2 rounded-lg border border-white/[0.07] bg-white/[0.02] p-2">
-                        <div className="mb-1 text-[10px] text-slate-500">贴回开发 AI 回复 → 写入进展与未实现，并把「今日粗目标」导入待办</div>
+                      <div className="mb-2 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-2">
+                        <div className="mb-1 text-[10px] text-[var(--text-3)]">贴回开发 AI 回复 → 写入进展与未实现，并把「今日粗目标」导入待办</div>
                         <textarea
                           className="glass-input !py-1 !text-[11px]"
                           rows={4}
@@ -534,8 +534,8 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                         />
                         {progressIn.diff ? (
                           <div className="mt-1.5 space-y-0.5 rounded-md border border-[var(--line)] p-2 text-[11px]">
-                            {progressIn.diff.summary ? <div className="text-slate-400">摘要：{progressIn.diff.summary}</div> : null}
-                            {progressIn.diff.progressNote ? <div className="whitespace-pre-wrap text-slate-300">进展：{progressIn.diff.progressNote}</div> : null}
+                            {progressIn.diff.summary ? <div className="text-[var(--text-2)]">摘要：{progressIn.diff.summary}</div> : null}
+                            {progressIn.diff.progressNote ? <div className="whitespace-pre-wrap text-[var(--text-2)]">进展：{progressIn.diff.progressNote}</div> : null}
                             {progressIn.diff.completed.map((t, i) => <div key={`c${i}`} className="text-[var(--teal-deep)]">☑ 待办完成：{t}</div>)}
                             {progressIn.diff.added.map((t, i) => <div key={`a${i}`} className="text-[#fbbf24]">➕ 今日目标：{t}</div>)}
                             {progressIn.diff.deferred.map((t, i) => <div key={`d${i}`} className="text-neon-amber/90">⏳ 未实现：{t}</div>)}
@@ -568,15 +568,15 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                             style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }}
                             title="拖动排序"
                           >
-                            <span className="text-slate-500">⠿</span>
-                            <span className="text-slate-500">{k}</span>
+                            <span className="text-[var(--text-3)]">⠿</span>
+                            <span className="text-[var(--text-3)]">{k}</span>
                             <input
-                              className="w-16 border-none bg-transparent text-right font-semibold text-slate-200 outline-none"
+                              className="w-16 border-none bg-transparent text-right font-semibold text-[var(--text-1)] outline-none"
                               value={String(p.attrs?.[k] ?? '')}
                               onChange={(e) => void setAttrValue(p, k, e.target.value)}
                             />
                             <button
-                              className="hidden text-slate-600 hover:text-red-400 group-hover:inline"
+                              className="hidden text-[var(--text-3)] hover:text-red-400 group-hover:inline"
                               title="删除属性"
                               onClick={() => void removeAttr(p, k)}
                             >✕</button>
@@ -586,24 +586,24 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                           <div className="flex items-center gap-1 rounded-lg border px-2 py-1" style={{ borderColor: 'var(--border-active)', background: 'var(--surface-2)' }}>
                             <input
                               autoFocus
-                              className="w-16 border-none bg-transparent text-[11px] text-slate-300 outline-none"
+                              className="w-16 border-none bg-transparent text-[11px] text-[var(--text-2)] outline-none"
                               placeholder="字段名"
                               value={attrNew.key}
                               onChange={(e) => setAttrNew((n) => ({ ...n, key: e.target.value }))}
                             />
-                            <span className="text-slate-600">:</span>
+                            <span className="text-[var(--text-3)]">:</span>
                             <input
-                              className="w-16 border-none bg-transparent text-[11px] font-semibold text-slate-200 outline-none"
+                              className="w-16 border-none bg-transparent text-[11px] font-semibold text-[var(--text-1)] outline-none"
                               placeholder="值"
                               value={attrNew.value}
                               onChange={(e) => setAttrNew((n) => ({ ...n, value: e.target.value }))}
                               onKeyDown={(e) => e.key === 'Enter' && void addAttr(p)}
                             />
-                            <button className="text-slate-500 hover:text-slate-200" onClick={() => void addAttr(p)}>✓</button>
+                            <button className="text-[var(--text-3)] hover:text-[var(--text-1)]" onClick={() => void addAttr(p)}>✓</button>
                           </div>
                         ) : (
                           <button
-                            className="rounded-lg border border-dashed px-2 py-1 text-[10.5px] text-slate-500 hover:text-slate-200"
+                            className="rounded-lg border border-dashed px-2 py-1 text-[10.5px] text-[var(--text-3)] hover:text-[var(--text-1)]"
                             style={{ borderColor: 'var(--line)' }}
                             onClick={() => { setAttrAdding(p.id); setAttrNew({ key: '', value: '' }) }}
                           >＋ 属性</button>
@@ -611,18 +611,18 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                       </div>
                     ) : (
                       <button
-                        className="mb-2 rounded-lg border border-dashed px-2 py-1 text-[10.5px] text-slate-500 hover:text-slate-200"
+                        className="mb-2 rounded-lg border border-dashed px-2 py-1 text-[10.5px] text-[var(--text-3)] hover:text-[var(--text-1)]"
                         style={{ borderColor: 'var(--line)' }}
                         onClick={() => { setAttrAdding(p.id); setAttrNew({ key: '', value: '' }) }}
                       >＋ 自定义属性（预算/客户/章节…按你的维度来）</button>
                     )}
                     {(linkedPlans[p.id]?.length ?? 0) > 0 ? (
                       <div className="mb-2 border-t border-dashed border-[var(--line)] pt-2">
-                        <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-600">今日安排里已挂本项目</div>
+                        <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--text-3)]">今日安排里已挂本项目</div>
                         {linkedPlans[p.id]!.map((pl) => (
                           <button
                             key={pl.id}
-                            className={`block w-full py-0.5 text-left text-[11.5px] ${pl.status === 'done' ? 'text-slate-500 line-through' : 'text-slate-300'} hover:text-[var(--teal-deep)]`}
+                            className={`block w-full py-0.5 text-left text-[11.5px] ${pl.status === 'done' ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'} hover:text-[var(--teal-deep)]`}
                             title="点击编辑该待办"
                             onClick={() => window.dispatchEvent(new CustomEvent('workon:edit-plan', { detail: { id: pl.id } }))}
                           >
@@ -632,12 +632,12 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                       </div>
                     ) : null}
                                   {review[p.id]?.text ? (
-                      <div className="mb-2 whitespace-pre-wrap rounded-lg border border-white/[0.07] bg-white/[0.02] p-2 text-[11px] leading-relaxed text-slate-300">
+                      <div className="mb-2 whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-2 text-[11px] leading-relaxed text-[var(--text-2)]">
                         {review[p.id].text}
                       </div>
                     ) : null}
                     {breakdown.open && breakdown.projectId === p.id ? (
-                      <div className="mb-2 rounded-lg border border-white/[0.07] bg-white/[0.02] p-2">
+                      <div className="mb-2 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-2">
                         <textarea
                           className="glass-input !py-1 !text-[11px]"
                           rows={2}
@@ -655,13 +655,13 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                     ) : null}
                     {/* 任务列表 */}
                     {ts.length === 0 ? (
-                      <p className="text-[11px] text-slate-500">暂无任务，可用 AI 拆解需求生成。</p>
+                      <p className="text-[11px] text-[var(--text-3)]">暂无任务，可用 AI 拆解需求生成。</p>
                     ) : (
                       <div className="flex flex-col gap-1">
                         {ts.map((t) => {
                           const tp = PRIORITY_META[t.priority] ?? PRIORITY_META.medium
                           return (
-                            <div key={t.id} className="flex items-center gap-2 rounded-lg px-1.5 py-1 transition-colors hover:bg-white/[0.03]">
+                            <div key={t.id} className="flex items-center gap-2 rounded-lg px-1.5 py-1 transition-colors hover:bg-[var(--surface-3)]">
                               <button
                                 className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all ${
                                   t.status === 'done' ? 'border-neon-green bg-neon-green/20 text-neon-green' : 'border-white/20 text-transparent hover:border-neon-green/50'
@@ -670,7 +670,7 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                               >
                                 <Icon name="check" size={10} />
                               </button>
-                              <span className={`min-w-0 flex-1 truncate text-[12px] ${t.status === 'done' ? 'text-slate-500 line-through' : 'text-slate-300'}`}>{t.title}</span>
+                              <span className={`min-w-0 flex-1 truncate text-[12px] ${t.status === 'done' ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{t.title}</span>
                               {t.status !== 'done' ? (
                                 <button
                                   className="glass-btn !px-1.5 !py-0.5 !text-[10px]"
@@ -695,22 +695,22 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                                 {TASK_STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
                               </select>
                               <span className="text-[10px]" style={{ color: tp.color }}>{tp.label}</span>
-                              <button className="text-slate-600 hover:text-red-400" title="删除任务" onClick={async () => { await window.api.removeProjectTask(t.id); await loadTasks(p.id) }}>✕</button>
+                              <button className="text-[var(--text-3)] hover:text-red-400" title="删除任务" onClick={async () => { await window.api.removeProjectTask(t.id); await loadTasks(p.id) }}>✕</button>
                             </div>
                           )
                         })}
                       </div>
                     )}
                     {/* 开发时间归类 */}
-                    <div className="mt-2 border-t border-white/[0.05] pt-2">
-                      <div className="mb-1 text-[10px] text-slate-500">开发时间归类（手动指定应用 → 该应用今日时长计入本项目）</div>
+                    <div className="mt-2 border-t border-[var(--line)] pt-2">
+                      <div className="mb-1 text-[10px] text-[var(--text-3)]">开发时间归类（手动指定应用 → 该应用今日时长计入本项目）</div>
                       <div className="flex flex-wrap items-center gap-1.5">
                         {apps.length === 0 ? (
-                          <span className="text-[11px] text-slate-600">未关联应用</span>
+                          <span className="text-[11px] text-[var(--text-3)]">未关联应用</span>
                         ) : apps.map((a) => (
                           <span key={a} className="chip !py-0">
                             {displayApp(a)}
-                            <button className="ml-1 text-slate-500 hover:text-red-400" onClick={() => void unlinkApp(p.id, a)}>✕</button>
+                            <button className="ml-1 text-[var(--text-3)] hover:text-red-400" onClick={() => void unlinkApp(p.id, a)}>✕</button>
                           </span>
                         ))}
                         <input
@@ -721,7 +721,7 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                           onKeyDown={(e) => { if (e.key === 'Enter') { void linkApp(p.id, manualApp); (e.target as HTMLInputElement).value = '' } }}
                         />
                         <button className="glass-btn !px-2 !py-1 !text-[10px]" onClick={() => void linkApp(p.id, manualApp)}>归类</button>
-                        {todayMinFor(p.id) > 0 ? <span className="text-[10px] text-neon-cyan">今日已计入 {fmtMin(todayMinFor(p.id))}</span> : <span className="text-[10px] text-slate-600">按应用自动累计</span>}
+                        {todayMinFor(p.id) > 0 ? <span className="text-[10px] text-neon-cyan">今日已计入 {fmtMin(todayMinFor(p.id))}</span> : <span className="text-[10px] text-[var(--text-3)]">按应用自动累计</span>}
                       </div>
                     </div>
                   </div>
@@ -738,7 +738,7 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
           <div className="glass-card anim-scale-in w-[420px] max-h-[70vh] !p-5" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 flex items-center gap-2">
               <Icon name="sparkles" size={15} className="text-neon-cyan" />
-              <h3 className="text-[14px] font-semibold text-slate-100">AI 今日任务排期</h3>
+              <h3 className="text-[14px] font-semibold text-[var(--text-1)]">AI 今日任务排期</h3>
             </div>
             {schedule && schedule.length > 0 ? (
               <div className="flex flex-col gap-2">
@@ -746,12 +746,12 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                   const pc = { high: '#EF4444', medium: '#F59E0B', low: '#94a3b8' }[s.priority as 'high' | 'medium' | 'low'] ?? '#F59E0B'
                   const proj = projects.find((x) => x.name === s.projectName)
                   return (
-                    <div key={s.taskId} className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
+                    <div key={s.taskId} className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2">
                       <div className="flex items-center gap-2">
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-[11px] font-semibold text-slate-300">{i + 1}</span>
-                        <span className="min-w-0 flex-1 truncate text-[12px] text-slate-200">{s.title}</span>
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--surface-3)] text-[11px] font-semibold text-[var(--text-2)]">{i + 1}</span>
+                        <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--text-1)]">{s.title}</span>
                         <span className="chip !py-0 !text-[9px]" style={{ color: pc, borderColor: `${pc}44` }}>{s.priority}</span>
-                        <span className="text-[10px] text-slate-500">{s.projectName}</span>
+                        <span className="text-[10px] text-[var(--text-3)]">{s.projectName}</span>
                         {proj ? (
                           <button
                             className="glass-btn primary !px-1.5 !py-0.5 !text-[10px]"
@@ -767,13 +767,13 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                           </button>
                         ) : null}
                       </div>
-                      <div className="mt-1 pl-7 text-[11px] text-slate-500">{s.reason}</div>
+                      <div className="mt-1 pl-7 text-[11px] text-[var(--text-3)]">{s.reason}</div>
                     </div>
                   )
                 })}
               </div>
             ) : (
-              <p className="py-4 text-center text-[12px] text-slate-400">没有待办任务可排期，先去创建或 AI 拆解任务吧。</p>
+              <p className="py-4 text-center text-[12px] text-[var(--text-2)]">没有待办任务可排期，先去创建或 AI 拆解任务吧。</p>
             )}
             <div className="mt-4 flex justify-end gap-2">
               <button className="glass-btn text-[12px]" onClick={() => { setScheduleOpen(false); window.dispatchEvent(new CustomEvent('workon:goto-today')) }}>去今日安排</button>

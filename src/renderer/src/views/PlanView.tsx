@@ -167,7 +167,7 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
         style={{ borderRadius: 'var(--r-xl)', boxShadow: 'var(--shadow-lg)' }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="mb-4 flex items-center gap-2.5 text-[15px] font-semibold text-slate-100">
+        <h3 className="mb-4 flex items-center gap-2.5 text-[15px] font-semibold text-[var(--text-1)]">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--teal-soft)] text-[var(--teal-deep)]">
             <Icon name={isNew ? 'plus' : 'edit'} size={14} />
           </span>
@@ -220,32 +220,32 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
                 className={`glass-btn !px-2 !py-2 flex flex-col items-center gap-0.5 ${planType === t.v ? '!border-neon-cyan/60 !text-neon-cyan' : ''}`}
               >
                 <span className="text-[13px] font-medium">{t.label}</span>
-                <span className="text-[10px] text-slate-500">{t.desc}</span>
+                <span className="text-[10px] text-[var(--text-3)]">{t.desc}</span>
               </button>
             ))}
           </div>
-          <label className="text-[11px] font-medium text-slate-500">
+          <label className="text-[11px] font-medium text-[var(--text-3)]">
             日期
             <input type="date" className="glass-input mt-1" value={planDate} onChange={(e) => setPlanDate(e.target.value)} />
           </label>
           {planType === 'reminder' ? (
-            <label className="text-[11px] font-medium text-slate-500">
+            <label className="text-[11px] font-medium text-[var(--text-3)]">
               触发时间
               <input type="time" className="glass-input mt-1" value={start} onChange={(e) => setStart(e.target.value)} />
             </label>
           ) : planType === 'phase' ? (
             <>
               <div className="grid grid-cols-2 gap-2">
-                <label className="text-[11px] font-medium text-slate-500">
+                <label className="text-[11px] font-medium text-[var(--text-3)]">
                   开始（可选）
                   <input type="time" className="glass-input mt-1" value={start} onChange={(e) => setStart(e.target.value)} />
                 </label>
-                <label className="text-[11px] font-medium text-slate-500">
+                <label className="text-[11px] font-medium text-[var(--text-3)]">
                   结束（可选）
                   <input type="time" className="glass-input mt-1" value={end} onChange={(e) => setEnd(e.target.value)} />
                 </label>
               </div>
-              <label className="text-[11px] font-medium text-slate-500">
+              <label className="text-[11px] font-medium text-[var(--text-3)]">
                 或时长（分钟）
                 <input
                   type="number"
@@ -266,7 +266,7 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
             onChange={(e) => setNote(e.target.value)}
           />
           <div className="flex flex-col gap-1.5">
-            <span className="text-[11px] text-slate-500">分类（工作 / 生活 / 兴趣…）</span>
+            <span className="text-[11px] text-[var(--text-3)]">分类（工作 / 生活 / 兴趣…）</span>
             <div className="flex flex-wrap gap-1">
               {[
                 { id: 'work-customer', label: '工作' },
@@ -297,7 +297,7 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
             </select>
           </div>
           <div className="flex items-center gap-2">
-            <label className="shrink-0 text-[11px] text-slate-500">归属项目</label>
+            <label className="shrink-0 text-[11px] text-[var(--text-3)]">归属项目</label>
             <select className="glass-input !py-1 text-[12px]" value={projId} onChange={(e) => { setProjId(e.target.value); setTaskId('') }}>
               <option value="">不归属（纯计划）</option>
               {projOptions.map((p) => (
@@ -313,7 +313,7 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
               </select>
             ) : null}
           </div>
-          <div className="mt-1 flex items-center justify-end gap-2 border-t border-white/[0.06] pt-3">
+          <div className="mt-1 flex items-center justify-end gap-2 border-t border-[var(--line)] pt-3">
             <button className="glass-btn" onClick={onClose}>
               取消
             </button>
@@ -862,12 +862,12 @@ ${text.slice(0, 3000)}`
             className={`rounded-xl border px-3.5 py-2.5 text-left transition-colors ${
               tab === k
                 ? 'border-[var(--teal)]/35 bg-[var(--teal-soft)]'
-                : 'border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04]'
+                : 'border-[var(--line)] bg-[var(--surface-2)] hover:bg-[var(--surface-3)]'
             }`}
             onClick={() => setTab(k)}
           >
-            <div className={`text-[13px] font-semibold ${tab === k ? 'text-slate-100' : 'text-slate-300'}`}>{label}</div>
-            <div className={`mt-0.5 text-[11px] leading-snug ${tab === k ? 'text-slate-400' : 'text-slate-600'}`}>{hint}</div>
+            <div className={`text-[13px] font-semibold ${tab === k ? 'text-[var(--text-1)]' : 'text-[var(--text-2)]'}`}>{label}</div>
+            <div className={`mt-0.5 text-[11px] leading-snug ${tab === k ? 'text-[var(--text-2)]' : 'text-[var(--text-3)]'}`}>{hint}</div>
           </button>
         ))}
       </div>
@@ -879,21 +879,21 @@ ${text.slice(0, 3000)}`
 
       {scanProgress > 0 && (
         <div className="anim-fade-in">
-          <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+          <div className="flex items-center justify-between text-[11px] text-[var(--text-2)] mb-1">
             <span>扫描中...</span><span>{scanProgress}%</span>
           </div>
-          <div className="h-1 rounded-full bg-white/10"><div className="h-1 rounded-full bg-neon-cyan transition-all" style={{ width: `${scanProgress}%` }} /></div>
-          <p className="text-[10px] text-slate-500 mt-1 truncate">{scanFile}</p>
+          <div className="h-1 rounded-full bg-[var(--surface-3)]"><div className="h-1 rounded-full bg-neon-cyan transition-all" style={{ width: `${scanProgress}%` }} /></div>
+          <p className="text-[10px] text-[var(--text-3)] mt-1 truncate">{scanFile}</p>
         </div>
       )}
 
       {/* 日期 + 筛选控制条 */}
       <div
-        className="anim-fade-up flex flex-col gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-3"
+        className="anim-fade-up flex flex-col gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] p-3"
         style={{ animationDelay: '60ms' }}
       >
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center rounded-lg border border-white/[0.06] bg-black/20 p-0.5">
+          <div className="flex items-center rounded-lg border border-[var(--line)] bg-black/20 p-0.5">
             <button className="glass-btn !border-transparent !bg-transparent !px-2 !py-1" onClick={() => setDate((d) => addDays(d, -1))}>
               <Icon name="chevronLeft" size={14} />
             </button>
@@ -906,11 +906,11 @@ ${text.slice(0, 3000)}`
           </div>
           <div className="flex min-w-0 items-center gap-2">
             <Icon name="calendar" size={14} className="shrink-0 text-[var(--teal-deep)]" />
-            <span className="truncate text-[14px] font-semibold tracking-wide text-slate-100">{fmtDateLabel(date)}</span>
+            <span className="truncate text-[14px] font-semibold tracking-wide text-[var(--text-1)]">{fmtDateLabel(date)}</span>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 border-t border-white/[0.05] pt-2.5">
-          <span className="mr-1 text-[10px] font-medium uppercase tracking-wider text-slate-600">状态</span>
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-[var(--line)] pt-2.5">
+          <span className="mr-1 text-[10px] font-medium uppercase tracking-wider text-[var(--text-3)]">状态</span>
           {(['all', 'planned', 'in_progress', 'done', 'delayed', 'cancelled'] as const).map((s) => (
             <button
               key={s}
@@ -918,15 +918,15 @@ ${text.slice(0, 3000)}`
               className={`rounded-md px-2 py-1 text-[11px] transition-colors ${
                 statusFilter === s
                   ? 'bg-white/[0.1] font-medium text-neon-cyan'
-                  : 'text-slate-500 hover:bg-white/[0.04] hover:text-slate-300'
+                  : 'text-[var(--text-3)] hover:bg-[var(--surface-3)] hover:text-[var(--text-2)]'
               }`}
               onClick={() => setStatusFilter(s)}
             >
               {s === 'all' ? '未完成' : STATUS_LABEL[s]}
             </button>
           ))}
-          <span className="mx-1.5 h-3 w-px bg-white/10" />
-          <span className="mr-1 text-[10px] font-medium uppercase tracking-wider text-slate-600">范围</span>
+          <span className="mx-1.5 h-3 w-px bg-[var(--surface-3)]" />
+          <span className="mr-1 text-[10px] font-medium uppercase tracking-wider text-[var(--text-3)]">范围</span>
           {([
             ['all', '全部'],
             ['project', '项目'],
@@ -938,7 +938,7 @@ ${text.slice(0, 3000)}`
               className={`rounded-md px-2 py-1 text-[11px] transition-colors ${
                 scopeFilter === k
                   ? 'bg-white/[0.1] font-medium text-neon-cyan'
-                  : 'text-slate-500 hover:bg-white/[0.04] hover:text-slate-300'
+                  : 'text-[var(--text-3)] hover:bg-[var(--surface-3)] hover:text-[var(--text-2)]'
               }`}
               onClick={() => setScopeFilter(k)}
             >
@@ -968,7 +968,7 @@ ${text.slice(0, 3000)}`
           big={
             <>
               {doneCount}
-              <span className="text-[15px] font-bold text-slate-500">/{activePlans.length}</span>
+              <span className="text-[15px] font-bold text-[var(--text-3)]">/{activePlans.length}</span>
             </>
           }
           base={<>覆盖 {pva ? pva.matchedCount : 0} · 延期 {delayedCount}</>}
@@ -998,7 +998,7 @@ ${text.slice(0, 3000)}`
         <span className="text-[13px]" style={{ color: 'var(--teal)' }}>＋</span>
         <input
           ref={quickRef}
-          className="min-w-0 flex-1 bg-transparent text-[13px] text-slate-200 outline-none placeholder:text-slate-600"
+          className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--text-1)] outline-none placeholder:text-[var(--text-3)]"
           placeholder="今天要做什么？回车添加 · 支持「明天下午3点开会」"
           value={quickText}
           onChange={(e) => setQuickText(e.target.value)}
@@ -1039,11 +1039,11 @@ ${text.slice(0, 3000)}`
             return (
               <section
                 key={group.key}
-                className="anim-fade-up overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02]"
+                className="anim-fade-up overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface-2)]"
               >
                 {group.meta ? (
                   <div
-                    className={`flex flex-wrap items-center gap-2 px-3 py-2.5 ${collapsed ? '' : 'border-b border-white/[0.05]'}`}
+                    className={`flex flex-wrap items-center gap-2 px-3 py-2.5 ${collapsed ? '' : 'border-b border-[var(--line)]'}`}
                     style={{ borderLeft: `3px solid ${group.meta.color}` }}
                   >
                     <button
@@ -1051,7 +1051,7 @@ ${text.slice(0, 3000)}`
                       className="flex min-w-0 flex-1 items-center gap-2 text-left"
                       onClick={() => setCatCollapsed((m) => ({ ...m, [group.key]: !collapsed }))}
                     >
-                      <span className="text-[11px] text-slate-500">{collapsed ? '▸' : '▾'}</span>
+                      <span className="text-[11px] text-[var(--text-3)]">{collapsed ? '▸' : '▾'}</span>
                       {isProjectGroup ? (
                         <span
                           className="inline-flex h-2 w-2 shrink-0 rounded-full"
@@ -1061,16 +1061,16 @@ ${text.slice(0, 3000)}`
                         <span className="text-[14px] leading-none">{group.meta.emoji}</span>
                       )}
                       {isProjectGroup ? (
-                        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-slate-500">项目</span>
+                        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-[var(--text-3)]">项目</span>
                       ) : null}
                       <span className="min-w-0 truncate text-[13px] font-semibold tracking-wide" style={{ color: group.meta.color }}>
                         {group.meta.label}
                       </span>
-                      <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] tabular-nums text-slate-400">
+                      <span className="rounded-md bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] tabular-nums text-[var(--text-2)]">
                         {group.items.length}
                       </span>
                       {isProjectGroup && collapsed ? (
-                        <span className="text-[10px] text-slate-600">点击展开</span>
+                        <span className="text-[10px] text-[var(--text-3)]">点击展开</span>
                       ) : null}
                     </button>
                     {group.key === 'other' ? (
@@ -1116,15 +1116,15 @@ ${text.slice(0, 3000)}`
                 >
                   <button
                     className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                      done ? 'border-neon-green/60 bg-neon-green/15 text-neon-green' : 'border-white/15 text-slate-500'
+                      done ? 'border-neon-green/60 bg-neon-green/15 text-neon-green' : 'border-white/15 text-[var(--text-3)]'
                     }`}
                     title={done ? '标记为待办' : '标记完成'}
                     onClick={() => void toggleDone(p)}
                   >
                     <Icon name="check" size={10} />
                   </button>
-                  <div className={`min-w-0 flex-1 truncate text-[12px] ${done ? 'text-slate-400' : 'text-slate-500 line-through'}`}>{p.title}</div>
-                  <span className="shrink-0 text-[10px] text-slate-600">{done ? '已完成' : '已取消'}</span>
+                  <div className={`min-w-0 flex-1 truncate text-[12px] ${done ? 'text-[var(--text-2)]' : 'text-[var(--text-3)] line-through'}`}>{p.title}</div>
+                  <span className="shrink-0 text-[10px] text-[var(--text-3)]">{done ? '已完成' : '已取消'}</span>
                   <button className="glass-btn !px-1.5 !py-0.5" title="编辑" onClick={() => setEditor({ plan: p, isNew: false })}>
                     <Icon name="edit" size={12} />
                   </button>
@@ -1163,7 +1163,7 @@ ${text.slice(0, 3000)}`
               <div
                 key={p.id}
                 className={`anim-fade-up rounded-xl px-3 py-2.5 transition-colors ${
-                  isExpanded ? 'bg-white/[0.04]' : 'hover:bg-white/[0.03]'
+                  isExpanded ? 'bg-[var(--surface-3)]' : 'hover:bg-[var(--surface-3)]'
                 }`}
                 style={{
                   animationDelay: `${240 + Math.min(idx * 40, 240)}ms`,
@@ -1195,7 +1195,7 @@ ${text.slice(0, 3000)}`
                           {proj.name}
                         </span>
                       ) : null}
-                      <span className="min-w-0 truncate text-[13px] font-medium text-slate-100">{p.title}</span>
+                      <span className="min-w-0 truncate text-[13px] font-medium text-[var(--text-1)]">{p.title}</span>
                       <span
                         className="inline-flex shrink-0 items-center rounded px-1.5 py-px text-[10px] font-medium"
                         style={{
@@ -1206,14 +1206,14 @@ ${text.slice(0, 3000)}`
                         {STATUS_LABEL[p.status]}
                       </span>
                     </div>
-                    <div className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                    <div className="mt-1 text-[11px] leading-relaxed text-[var(--text-3)]">
                       {metaBits.length ? <span>{metaBits.join(' · ')}</span> : null}
                       {metaBits.length ? <span className="text-slate-700"> · </span> : null}
                       <SourceMark plan={p} />
                     </div>
-                    {p.note ? <div className="mt-1 truncate text-[11px] text-slate-600">{p.note}</div> : null}
+                    {p.note ? <div className="mt-1 truncate text-[11px] text-[var(--text-3)]">{p.note}</div> : null}
                     {ratio > 0 ? (
-                      <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+                      <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--surface-3)]">
                         <div
                           className="h-full rounded-full transition-all duration-500"
                           style={{ width: `${ratio}%`, background: planBarGradient(p, risky) }}
@@ -1253,7 +1253,7 @@ ${text.slice(0, 3000)}`
                   if (!kids.length) return null
                   return (
                     <div className="mt-2 space-y-1 border-t border-white/[0.04] pt-2 pl-7">
-                      <div className="text-[10px] text-slate-500">
+                      <div className="text-[10px] text-[var(--text-3)]">
                         子目标 · {kids.filter((k) => k.status === 'done').length}/{kids.length}
                       </div>
                       {kids.map((c) => (
@@ -1266,8 +1266,8 @@ ${text.slice(0, 3000)}`
                           >
                             <Icon name="check" size={9} />
                           </button>
-                          <span className={`min-w-0 flex-1 truncate text-[11px] ${c.status === 'done' ? 'text-slate-500 line-through' : 'text-slate-300'}`}>{c.title}</span>
-                          <button className="text-[10px] text-slate-600 hover:text-red-400" title="删除子待办" onClick={() => void remove(c)}>
+                          <span className={`min-w-0 flex-1 truncate text-[11px] ${c.status === 'done' ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{c.title}</span>
+                          <button className="text-[10px] text-[var(--text-3)] hover:text-red-400" title="删除子待办" onClick={() => void remove(c)}>
                             ✕
                           </button>
                         </div>
@@ -1276,9 +1276,9 @@ ${text.slice(0, 3000)}`
                   )
                 })()}
                 {isExpanded ? (
-                  <div className="anim-fade-in mt-2.5 space-y-2.5 border-t border-white/[0.05] pt-2.5 pl-7">
+                  <div className="anim-fade-in mt-2.5 space-y-2.5 border-t border-[var(--line)] pt-2.5 pl-7">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-[10px] font-medium uppercase tracking-wider text-slate-600">
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-3)]">
                         {group.key === 'other' || (!p.projectId && resolveCatId(p) === 'other') ? '归档到' : '归到'}
                       </span>
                       {QUICK_BUCKETS.map((b) => (
@@ -1288,7 +1288,7 @@ ${text.slice(0, 3000)}`
                           className={`rounded-md px-2 py-1 text-[11px] transition-colors ${
                             resolveCatId(p) === b.id
                               ? 'bg-neon-cyan/15 font-medium text-neon-cyan'
-                              : 'bg-white/[0.04] text-slate-400 hover:text-slate-200'
+                              : 'bg-[var(--surface-3)] text-[var(--text-2)] hover:text-[var(--text-1)]'
                           }`}
                           onClick={() => void setPlanCategory(p.id, b.id)}
                         >
@@ -1322,7 +1322,7 @@ ${text.slice(0, 3000)}`
                     </div>
                     {breakdowns[p.id] ? (
                       breakdowns[p.id].loading ? (
-                        <div className="mb-2.5 rounded-xl border border-white/[0.06] p-2.5" style={{ background: 'var(--aura-soft)' }}>
+                        <div className="mb-2.5 rounded-xl border border-[var(--line)] p-2.5" style={{ background: 'var(--aura-soft)' }}>
                           <AiThinking hints={['正在整理今日目的…', '正在归纳优化面…', '生成粗目标清单…']} />
                         </div>
                       ) : (
@@ -1349,14 +1349,14 @@ ${text.slice(0, 3000)}`
                               {breakdowns[p.id].applied ? '重新同步' : `同步（${parseBreakdownSteps(breakdowns[p.id].text).length}）`}
                             </button>
                           </div>
-                          <div className="whitespace-pre-wrap text-[11.5px] leading-relaxed text-slate-300">{breakdowns[p.id].text}</div>
+                          <div className="whitespace-pre-wrap text-[11.5px] leading-relaxed text-[var(--text-2)]">{breakdowns[p.id].text}</div>
                           {parseBreakdownSteps(breakdowns[p.id].text).length ? (
-                            <div className="mt-2 space-y-0.5 border-t border-white/[0.06] pt-2">
-                              <div className="mb-0.5 text-[10px] text-slate-500">
+                            <div className="mt-2 space-y-0.5 border-t border-[var(--line)] pt-2">
+                              <div className="mb-0.5 text-[10px] text-[var(--text-3)]">
                                 {breakdowns[p.id].applied ? '已同步' : '将同步'}
                               </div>
                               {parseBreakdownSteps(breakdowns[p.id].text).map((s, i) => (
-                                <div key={i} className="text-[11px] text-slate-400">· {s}</div>
+                                <div key={i} className="text-[11px] text-[var(--text-2)]">· {s}</div>
                               ))}
                             </div>
                           ) : null}
@@ -1367,11 +1367,11 @@ ${text.slice(0, 3000)}`
                       <>
                         <div className="mb-2 flex items-center gap-3 text-[11px]">
                           <div className="flex-1">
-                            <div className="mb-1 flex justify-between text-slate-500">
+                            <div className="mb-1 flex justify-between text-[var(--text-3)]">
                               <span>完成概率</span>
                               <span className="font-semibold text-neon-green">{fc.completionProb}%</span>
                             </div>
-                            <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                            <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-3)]">
                               <div
                                 className="h-full rounded-full bg-neon-green transition-all duration-300"
                                 style={{ width: `${fc.completionProb}%`, boxShadow: '0 0 8px rgba(16, 185, 129, 0.5)' }}
@@ -1379,11 +1379,11 @@ ${text.slice(0, 3000)}`
                             </div>
                           </div>
                           <div className="flex-1">
-                            <div className="mb-1 flex justify-between text-slate-500">
+                            <div className="mb-1 flex justify-between text-[var(--text-3)]">
                               <span>延期概率</span>
                               <span className="font-semibold text-neon-red">{fc.delayProb}%</span>
                             </div>
-                            <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                            <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-3)]">
                               <div
                                 className="h-full rounded-full bg-neon-red transition-all duration-300"
                                 style={{ width: `${fc.delayProb}%`, boxShadow: '0 0 8px rgba(239, 68, 68, 0.5)' }}
@@ -1393,25 +1393,25 @@ ${text.slice(0, 3000)}`
                         </div>
                         <div className="flex flex-col gap-1 text-[11px]">
                           {fc.factors.map((f, i) => (
-                            <div key={i} className="flex items-center gap-2 rounded-lg bg-white/[0.02] px-2 py-1">
+                            <div key={i} className="flex items-center gap-2 rounded-lg bg-[var(--surface-2)] px-2 py-1">
                               <span>{f.impact === 'positive' ? '➕' : f.impact === 'negative' ? '➖' : '➗'}</span>
-                              <span className="w-20 shrink-0 text-slate-400">{f.label}</span>
-                              <span className="text-slate-500">{f.detail}</span>
+                              <span className="w-20 shrink-0 text-[var(--text-2)]">{f.label}</span>
+                              <span className="text-[var(--text-3)]">{f.detail}</span>
                             </div>
                           ))}
                         </div>
                         <div className="mt-2 flex items-center justify-between text-[11px]">
                           <span className="text-neon-cyan">💡 {fc.recommendation}</span>
                           {fc.estimatedEndMin !== undefined ? (
-                            <span className="text-slate-500">预计 {clockOf(Math.min(1439, fc.estimatedEndMin))} 完成</span>
+                            <span className="text-[var(--text-3)]">预计 {clockOf(Math.min(1439, fc.estimatedEndMin))} 完成</span>
                           ) : null}
                         </div>
                       </>
                     ) : null}
                     {/* 完成比例拖动（半完成管理，仅 phase） */}
                     {(p.planType ?? 'phase') === 'phase' ? (
-                      <div className="mt-2 flex items-center gap-2 border-t border-white/[0.05] pt-2.5">
-                        <span className="w-16 shrink-0 text-[11px] text-slate-500">完成比例</span>
+                      <div className="mt-2 flex items-center gap-2 border-t border-[var(--line)] pt-2.5">
+                        <span className="w-16 shrink-0 text-[11px] text-[var(--text-3)]">完成比例</span>
                         <input
                           type="range"
                           min={0}
@@ -1526,7 +1526,7 @@ ${text.slice(0, 3000)}`
         {pasteOpen ? (
           <div className="anim-fade-in fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setPasteOpen(false)}>
             <div className="glass-card anim-scale-in w-[440px] !p-5" style={{ borderRadius: 'var(--r-xl)', boxShadow: 'var(--shadow-lg)' }} onClick={(e) => e.stopPropagation()}>
-              <div className="mb-2 flex items-center gap-2 text-[14px] font-semibold text-slate-100">
+              <div className="mb-2 flex items-center gap-2 text-[14px] font-semibold text-[var(--text-1)]">
                 <span
                   className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border"
                   style={{ background: 'var(--accent-softer)', borderColor: 'var(--border-active)', color: 'var(--accent)' }}
@@ -1543,9 +1543,9 @@ ${text.slice(0, 3000)}`
               />
               {pasteItems.length ? (
                 <div className="sub-card mt-2 !p-2.5">
-                  <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-600">解析出 {pasteItems.length} 项</div>
+                  <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--text-3)]">解析出 {pasteItems.length} 项</div>
                   {pasteItems.map((it, i) => (
-                    <div key={i} className="py-0.5 text-[12px] text-slate-300">· {it}</div>
+                    <div key={i} className="py-0.5 text-[12px] text-[var(--text-2)]">· {it}</div>
                   ))}
                 </div>
               ) : null}
@@ -1565,9 +1565,9 @@ ${text.slice(0, 3000)}`
       {folderModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setFolderModal(false)}>
           <div className="glass-card anim-scale-in w-[400px] max-h-[60vh] overflow-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="text-[15px] font-semibold text-slate-200 mb-3">📁 工作文件夹</h3>
-            {folderDirs.length === 0 ? (<p className="text-[12px] text-slate-500 mb-3">未配置工作目录。添加后会议纪要解析将自动生效。</p>) : (
-              folderDirs.map(d => <div key={d} className="flex items-center justify-between text-[12px] bg-white/5 rounded-lg px-3 py-2 mb-1"><span className="text-slate-300 truncate">{d}</span><button onClick={async () => { const next = folderDirs.filter(x => x !== d); setFolderDirs(next); await window.api?.setSettings?.({ folders: next }); await window.api?.setFolders?.(next) }} className="text-slate-500 hover:text-red-400">✕</button></div>)
+            <h3 className="text-[15px] font-semibold text-[var(--text-1)] mb-3">📁 工作文件夹</h3>
+            {folderDirs.length === 0 ? (<p className="text-[12px] text-[var(--text-3)] mb-3">未配置工作目录。添加后会议纪要解析将自动生效。</p>) : (
+              folderDirs.map(d => <div key={d} className="flex items-center justify-between text-[12px] bg-[var(--surface-3)] rounded-lg px-3 py-2 mb-1"><span className="text-[var(--text-2)] truncate">{d}</span><button onClick={async () => { const next = folderDirs.filter(x => x !== d); setFolderDirs(next); await window.api?.setSettings?.({ folders: next }); await window.api?.setFolders?.(next) }} className="text-[var(--text-3)] hover:text-red-400">✕</button></div>)
             )}
             <div className="flex gap-2 mt-3">
               <button className="glass-btn primary text-[12px]" onClick={async () => {
@@ -1599,10 +1599,10 @@ ${text.slice(0, 3000)}`
         const group = (label: string, list: PlanItem[]) =>
           list.length ? (
             <div key={label} className="min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
-              <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-600">{label} · {list.length}</div>
+              <div className="mb-1.5 text-[10px] uppercase tracking-wider text-[var(--text-3)]">{label} · {list.length}</div>
               {list.map((p) => (
                 <div key={p.id} className="flex items-center gap-2 py-1">
-                  <span className="min-w-0 flex-1 truncate text-[12px] text-slate-300">{p.title}</span>
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--text-2)]">{p.title}</span>
                   <button className="glass-btn !px-2 !py-0.5 !text-[10px]" onClick={() => setEditor({ plan: p, isNew: false })}>编辑</button>
                   <button
                     className="glass-btn !px-2 !py-0.5 !text-[10px]"
@@ -1615,7 +1615,7 @@ ${text.slice(0, 3000)}`
           ) : null
         return (
           <div className="anim-fade-up mt-5">
-            <div className="mb-2 text-[10px] uppercase tracking-[0.14em] text-slate-600">确认归档 · 已确认内容（可编辑 / 归档）</div>
+            <div className="mb-2 text-[10px] uppercase tracking-[0.14em] text-[var(--text-3)]">确认归档 · 已确认内容（可编辑 / 归档）</div>
             <div className="flex flex-wrap items-stretch gap-3">
               {group('每日计划', daily)}
               {group('项目开发', projRel)}
