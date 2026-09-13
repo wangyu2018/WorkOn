@@ -85,7 +85,7 @@ export interface ActivityRecord {
   state: WorkState
   screen: number // 屏幕索引
   startTs: number // 段起始时间戳（段变化才刷新）
-  active: boolean // 是否激活屏（前台焦点所在）
+  active: boolean // 是否激活窗（鼠标下的窗口；时间轴主记录）
   idleSec?: number // 系统空闲秒数
 }
 
@@ -940,6 +940,10 @@ export interface AppSettings {
   ocrAutoCompress: boolean // 截屏自动压缩（节省约 50% 存储）
   ocrCacheLimit: number // 截屏缓存上限（张），默认 200
   privacyExcludedApps: string[] // 隐私快标：不截屏/不OCR/不记标题的应用
+  /** AI 编程助手监控条：手动开启后，悬浮窗/待办显示名单状态点 */
+  aiAssistWatchEnabled: boolean
+  /** 正在监控的助手进程名（小写、可无 .exe），可从候选池拖入 */
+  aiAssistWatchApps: string[]
   workChains: string[][] // 已确认的作业链路（应用切换序列，如 ["WeChat","Excel","Browser"]）
   widgetVisible: boolean
   widgetMode: WidgetMode
@@ -1076,6 +1080,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ocrAutoCompress: false,
   ocrCacheLimit: 200,
   privacyExcludedApps: [],
+  aiAssistWatchEnabled: false,
+  aiAssistWatchApps: ['cursor', 'claude', 'chatgpt', 'windsurf'],
   workChains: [],
   widgetVisible: false, // 悬浮卡片默认隐藏（设置里可手动开启），状态由桌宠对话泡泡提供
   widgetMode: 'mini',

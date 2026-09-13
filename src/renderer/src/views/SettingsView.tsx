@@ -1,9 +1,106 @@
-import { useEffect, useState, Fragment } from 'react'
+import { useEffect, useState, Fragment, type DragEvent } from 'react'
 import type { AppSettings } from '@shared/types'
+import { AI_ASSIST_POOL, normalizeAssistKey } from '@shared/aiAssistWatch'
 import { useSettingsStore } from '../stores/settingsStore'
 import { Icon } from '../components/Icon'
 import { Toggle } from '../components/Toggle'
 import { PerfPanel } from '../components/PerfPanel'
+
+const ASSIST_MIME = 'application/x-workon-ai-assist'
+
+function AiAssistWatchDrag({
+  settings,
+  patch
+}: {
+  settings: AppSettings
+  patch: (p: Partial<AppSettings>) => void
+}) {
+  const watched = (settings.aiAssistWatchApps ?? []).map(normalizeAssistKey).filter(Boolean)
+  const watchedSet = new Set(watched)
+  const watchRows = watched.map((k) => ({
+    key: k,
+    label: AI_ASSIST_POOL.find((p) => p.key === k)?.label ?? k
+  }))
+
+  const setWatched = (next: string[]): void => {
+    patch({ aiAssistWatchApps: [...new Set(next.map(normalizeAssistKey).filter(Boolean))] })
+  }
+
+  const onDragStart = (e: DragEvent, key: string): void => {
+    e.dataTransfer.setData(ASSIST_MIME, key)
+    e.dataTransfer.setData('text/plain', key)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const allow = (e: DragEvent): void => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const dropIn = (e: DragEvent): void => {
+    e.preventDefault()
+    const key = normalizeAssistKey(e.dataTransfer.getData(ASSIST_MIME) || e.dataTransfer.getData('text/plain'))
+    if (!key) return
+    if (watchedSet.has(key)) return
+    setWatched([...watched, key])
+  }
+
+  const dropOut = (e: DragEvent): void => {
+    e.preventDefault()
+    const key = normalizeAssistKey(e.dataTransfer.getData(ASSIST_MIME) || e.dataTransfer.getData('text/plain'))
+    if (!key) return
+    setWatched(watched.filter((k) => k !== key))
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div
+        className="rounded-xl border border-[var(--border-active)] bg-[var(--accent-softer)]/40 p-2"
+        onDragOver={allow}
+        onDrop={dropIn}
+      >
+        <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">监控中</div>
+        <div className="flex min-h-[52px] flex-wrap gap-1.5">
+          {watchRows.length ? (
+            watchRows.map((r) => (
+              <button
+                key={r.key}
+                type="button"
+                draggable
+                onDragStart={(e) => onDragStart(e, r.key)}
+                className="cursor-grab rounded-lg border border-[var(--border-active)] bg-[var(--surface-3)] px-2 py-1 text-[11px] text-slate-200 active:cursor-grabbing"
+              >
+                {r.label}
+              </button>
+            ))
+          ) : (
+            <span className="text-[11px] text-slate-600">从右侧拖入</span>
+          )}
+        </div>
+      </div>
+      <div
+        className="rounded-xl border border-dashed border-[var(--line)] p-2"
+        onDragOver={allow}
+        onDrop={dropOut}
+      >
+        <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">未监控</div>
+        <div className="flex min-h-[52px] flex-wrap gap-1.5">
+          {AI_ASSIST_POOL.filter((p) => !watchedSet.has(p.key)).map((r) => (
+            <button
+              key={r.key}
+              type="button"
+              draggable
+              onDragStart={(e) => onDragStart(e, r.key)}
+              className="cursor-grab rounded-lg border border-[var(--line)] bg-transparent px-2 py-1 text-[11px] text-slate-400 active:cursor-grabbing hover:border-slate-500"
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function WatchedFolders() {
   const [dirs, setDirs] = useState<string[]>([])
@@ -360,9 +457,25 @@ export default function SettingsView() {
             ))}
           </div>
         </Row>
+        <Row
+          label="AI 助手监控"
+          desc="开启后在悬浮窗/待办显示助手状态点；后台跑完会闪绿点。把产品拖进「监控中」或拖回「未监控」"
+        >
+          <Toggle
+            checked={!!settings.aiAssistWatchEnabled}
+            onChange={(v) =>
+              p({
+                aiAssistWatchEnabled: v,
+                aiAssistWatchApps:
+                  settings.aiAssistWatchApps?.length
+                    ? settings.aiAssistWatchApps
+                    : ['cursor', 'claude', 'chatgpt', 'windsurf']
+              })
+            }
+          />
+        </Row>
+        {settings.aiAssistWatchEnabled ? <AiAssistWatchDrag settings={settings} patch={p} /> : null}
       </Section>
-
-      {/* 3. AI（配置区独立可展开；开启前先测连通，通过才启用） */}
       {aiKeyHint ? (
         <div className="anim-fade-in rounded-xl border border-neon-amber/30 bg-neon-amber/10 px-4 py-2.5 text-[12px] text-neon-amber">
           ⚠️ {aiKeyHint}

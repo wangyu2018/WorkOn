@@ -453,6 +453,20 @@ textarea {
     transform: scale(0.8);
   }
 }
+@keyframes ai-assist-done-blink {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55);
+  }
+  50% {
+    opacity: 0.2;
+    box-shadow: 0 0 0 4px rgba(52, 211, 153, 0);
+  }
+}
+.ai-assist-dot-done {
+  animation: ai-assist-done-blink 0.7s ease-in-out infinite;
+}
 @keyframes welcome-pop {
   0% {
     opacity: 0;

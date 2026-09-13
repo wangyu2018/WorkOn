@@ -209,17 +209,21 @@ let lastOcrText = ''
 let ocrRunning = false
 let lastOcrSig = ''            // 最近一次前台窗口签名（app|title），用于检测窗口切换
 let lastOcrAt = 0              // 最近一次真正执行 OCR 的时间戳，用于防抖节流
+let lastHashAt = 0             // 最近一次轻量截屏哈希时间
 let lastShotHash = ''          // 最近一次屏幕感知哈希，用于画面内容变化检测
-const OCR_MIN_INTERVAL = 1500  // 两次 OCR 之间最小间隔，防滚动抖动触发 OCR 风暴
-const OCR_ACTIVE_SKIP_SEC = 8  // 用户活跃（键鼠空闲 < 8s）时连轻量截屏都跳过：
-                               // desktopCapturer 抓屏 50-200ms/次，是周期性卡顿鼠标的最大元凶
-const HASH_DIM = 8             // 感知哈希维度 8x8 = 64bit
-const HASH_CHANGE_THRESHOLD = 5 // 64bit 中差异位数 >= 该值视为画面变化
-// —— P1 自适应频率 ——
-const DELAY_ACTIVE_MS = 2500   // 前台 app 高频变化时探测间隔
-const DELAY_IDLE_MS = 15000    // 前台 app 稳定时探测间隔
-const APP_ACTIVITY_ALPHA = 0.2 // 活跃度 EMA 系数（0~1，越大越快学习）
-const appActivity: Record<string, number> = {}  // 应用变化活跃度 EMA，0~1，默认 0.5（中性）
+const OCR_MIN_INTERVAL = 2000  // 两次全量 OCR 最小间隔
+/** 刚动手（idle < 2s）：坚决不 desktopCapturer，避免鼠标当下卡一下 */
+const OCR_HOT_SKIP_SEC = 2
+/** 还在干活但已松手片刻（idle < 20s）：仍采集，只把全量 OCR 拉稀 */
+const OCR_BUSY_IDLE_SEC = 20
+const OCR_BUSY_FULL_INTERVAL = 45_000  // 干活中全量 OCR 最少隔 45s
+const HASH_BUSY_INTERVAL = 12_000      // 干活中轻量哈希最少隔 12s
+const HASH_DIM = 8
+const HASH_CHANGE_THRESHOLD = 5
+const DELAY_ACTIVE_MS = 5000
+const DELAY_IDLE_MS = 15000
+const APP_ACTIVITY_ALPHA = 0.2
+const appActivity: Record<string, number> = {}
 
 /** 汉明距离：两个等長二进制串的差异位数 */
 function hamming(a: string, b: string): number {
@@ -254,7 +258,7 @@ function appEma(prev: number | undefined, hit: number): number {
   return p + APP_ACTIVITY_ALPHA * (hit - p)
 }
 
-/** 根据当前前台 app 的活跃度算下一次探测延迟：活跃度高→密（高帧率），稳定→稀（低帧率） */
+/** 根据当前前台 app 的活跃度算下一次探测延迟：活跃度高→密，稳定→稀 */
 function nextPollDelay(): number {
   const snap = presence.getSnapshot()
   const main = snap.screens.find((s) => s.screen === snap.mainScreen)
@@ -263,35 +267,50 @@ function nextPollDelay(): number {
   return Math.round(DELAY_IDLE_MS + (DELAY_ACTIVE_MS - DELAY_IDLE_MS) * act)
 }
 
-/** 轻量探测：窗口切换 OR 画面哈希变化 → 才触发全截 OCR；否则零成本跳过 */
+/**
+ * 轻量探测：窗口切换 OR 画面哈希变化 → 才触发全截 OCR。
+ * 口径（避免「一直干活 = 永远不采」）：
+ * - idle < 2s：正在动手，不截屏
+ * - idle < 20s：干活中，仍采，但哈希/全量都拉稀
+ * - idle ≥ 20s：正常变化驱动
+ */
 async function detectAndMaybeOcr(): Promise<void> {
   if (ocrRunning) return
   if (presence.excludedActive) { lastShotHash = ''; return }
-  // 性能关键：用户活跃操作时（键鼠 < 5s）连轻量截屏都跳过——
-  // desktopCapturer 抓屏一次 50-200ms，活跃期每 1s 一次就是"鼠标每隔几秒卡一下"的元凶。
-  // 用户停下后探测恢复，画面变化的补录由窗口签名兜底。
-  if (powerMonitor.getSystemIdleTime() < OCR_ACTIVE_SKIP_SEC) {
-    lastShotHash = ''
-    return
-  }
+
+  const idle = powerMonitor.getSystemIdleTime()
+  const now = Date.now()
+  if (idle < OCR_HOT_SKIP_SEC) return
+
   const snap = presence.getSnapshot()
   const main = snap.screens.find((s) => s.screen === snap.mainScreen)
   const sig = main ? `${main.app}|${main.title}` : ''
   const app = main?.app ?? ''
-  let hash = ''
-  try { hash = await captureHash() } catch { /* 截图失败则按窗口变化兜底 */ }
   const windowChanged = sig !== lastOcrSig
-  const hashChanged = !!hash && !!lastShotHash && hamming(hash, lastShotHash) >= HASH_CHANGE_THRESHOLD
+  const busyWorking = idle < OCR_BUSY_IDLE_SEC
+
+  // 干活中：轻量哈希也节流；停手后可更密
+  const hashDue = !busyWorking || now - lastHashAt >= HASH_BUSY_INTERVAL || windowChanged
+  let hash = ''
+  let hashChanged = false
+  if (hashDue) {
+    try {
+      hash = await captureHash()
+      lastHashAt = Date.now()
+    } catch { /* 截图失败则按窗口变化兜底 */ }
+    hashChanged = !!hash && !!lastShotHash && hamming(hash, lastShotHash) >= HASH_CHANGE_THRESHOLD
+    if (hash) lastShotHash = hash
+  }
+
   lastOcrSig = sig
-  lastShotHash = hash
-  // P1：更新本应用变化活跃度（EMA）—— 画面/窗口有变化记为 1，否则 0
   const hit = windowChanged || hashChanged ? 1 : 0
   appActivity[app] = appEma(appActivity[app], hit)
   if (!windowChanged && !hashChanged) return
-  if (Date.now() - lastOcrAt < OCR_MIN_INTERVAL) return
-  // 性能保护：用户正在活跃操作（键鼠 < 3s）时跳过 OCR 识别，避免截屏+识别抢占 CPU 导致卡顿；
-  // 仅保留轻量探测，待用户空闲后再补做备份。既保流畅又不丢备份。
-  if (powerMonitor.getSystemIdleTime() < OCR_ACTIVE_SKIP_SEC) return
+  if (now - lastOcrAt < OCR_MIN_INTERVAL) return
+  // 干活中全量 OCR 拉稀：45s 一次够用，不挡采集、少抢鼠标
+  if (busyWorking && now - lastOcrAt < OCR_BUSY_FULL_INTERVAL) return
+  // 再采前若用户又开始狂动，让给键鼠
+  if (powerMonitor.getSystemIdleTime() < OCR_HOT_SKIP_SEC) return
   void runOcr()
 }
 

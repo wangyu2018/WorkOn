@@ -19,8 +19,10 @@ import { WORK_STATES } from '@shared/stateMeta'
 import { usePresenceStore } from '../stores/presenceStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { Icon, type IconName } from '../components/Icon'
+import { AiAssistStrip } from '../components/AiAssistStrip'
 import { CATEGORY_META, categoryOfWithOverride, type AppCategory } from '@shared/appCategory'
 import { StateDot, ChainChip, GrainChip, Firefly } from '../components/widgetKit'
+import type { AiAssistItem } from '@shared/aiAssistWatch'
 
 /** 应用内通知卡（main notify.ts 推送） */
 interface WidgetNotify {
@@ -561,12 +563,14 @@ export default function SuggestionWidget() {
   const aiEnabled = useSettingsStore((s) => s.settings.aiEnabled)
   const rawDisplay = useSettingsStore((s) => s.settings.widgetDisplay)
   const settingsCompact = useSettingsStore((s) => s.settings.widgetCompact)
+  const aiAssistEnabled = useSettingsStore((s) => s.settings.aiAssistWatchEnabled)
   const widgetDisplay: WidgetDisplayOptions = {
     dock: { ...DEFAULT_WIDGET_DISPLAY.dock, ...(rawDisplay?.dock ?? {}) },
     mini: { ...DEFAULT_WIDGET_DISPLAY.mini, ...(rawDisplay?.mini ?? {}) },
     full: { ...DEFAULT_WIDGET_DISPLAY.full, ...(rawDisplay?.full ?? {}) },
     todo: { ...DEFAULT_WIDGET_DISPLAY.todo, ...(rawDisplay?.todo ?? {}) }
   }
+  const [aiAssistItems, setAiAssistItems] = useState<AiAssistItem[]>([])
   const [question, setQuestion] = useState<SuggestionQuestion | null>(null)
   const [bpConfirm, setBpConfirm] = useState<BrowserPlanConfirm | null>(null)
   const [meetingDetected, setMeetingDetected] = useState<{ app: string; title: string } | null>(null)
@@ -760,11 +764,16 @@ export default function SuggestionWidget() {
         widgetCompact?: boolean
         widgetAccent?: string
         widgetDisplay?: WidgetDisplayOptions
+        aiAssistWatchEnabled?: boolean
       }
       if (typeof patch.widgetPenetration === 'boolean') setPenetration(patch.widgetPenetration)
       if (typeof patch.widgetCompact === 'boolean') setWidgetCompact(patch.widgetCompact)
       if (typeof patch.widgetAccent === 'string' && patch.widgetAccent) setAccent(patch.widgetAccent)
-      if (patch.widgetDisplay) void useSettingsStore.getState().load()
+      if (patch.widgetDisplay || patch.aiAssistWatchEnabled !== undefined) void useSettingsStore.getState().load()
+    })
+    const offAiAssist = window.api.onAiAssistUpdate?.((p) => {
+      const payload = p as { enabled?: boolean; items?: AiAssistItem[] }
+      setAiAssistItems(Array.isArray(payload.items) ? payload.items : [])
     })
 
     // 挖洞：仅 [data-widget-solid] 收鼠标，空白穿透桌面
@@ -794,6 +803,7 @@ export default function SuggestionWidget() {
       offNotifyExp()
       offDock?.()
       offSettings?.()
+      offAiAssist?.()
       window.removeEventListener('pointermove', onPointerMove)
       document.documentElement.removeEventListener('mouseleave', onPointerLeave)
     }
@@ -920,7 +930,7 @@ export default function SuggestionWidget() {
   const dm = widgetDisplay.mini
   const dd = widgetDisplay.dock
   const df = widgetDisplay.full
-  const fireflyActive = firefly || notifies.length > 0
+  const fireflyActive = firefly || notifies.length > 0 || (aiAssistEnabled && aiAssistItems.some((i) => i.status === 'done' || i.status === 'busy'))
   const continuousMin = Math.max(0, Math.round((presence?.continuousFocusSec ?? 0) / 60))
   const liveTitle = presence?.screens?.find((s) => s.screen === presence.mainScreen)?.title
   // 当前活跃应用 → 分类图标（跟随用户手动归类，override 变化即同步）
@@ -1124,6 +1134,7 @@ export default function SuggestionWidget() {
           <NotificationStack list={notifies} onDone={(id) => setNotifies((l) => l.filter((x) => x.id !== id))} />
         </div>
 
+
         {welcome && !widgetCompact && (
           <div className="anim-fade-in mx-3 mt-2 rounded-lg border border-neon-green/20 bg-neon-green/10 px-3 py-1.5 text-center text-xs text-neon-green">
             欢迎回到正事
@@ -1140,6 +1151,9 @@ export default function SuggestionWidget() {
           <FocusRing size={44} focus={focus} color={meta.color} emoji={mainCatEmoji || meta.emoji} icon={mainCat ?? undefined} />
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-semibold" style={{ color: meta.color }}>
+              {aiAssistEnabled && aiAssistItems.some((i) => i.status === 'done' && mainApp && mainApp.toLowerCase().replace(/\.exe$/i, '') === i.key) ? (
+                <span className="ai-assist-dot-done mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle" style={{ background: '#34D399' }} />
+              ) : null}
               {meta.label}{' '}
               <span
                 className="text-[11px] font-normal text-slate-500"

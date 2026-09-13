@@ -541,8 +541,11 @@ export default function PrivacyView() {
         <Row label="智能轮询" desc="深度专注时自动降频省电，摸鱼时升频捕捉细节">
           <Toggle checked={settings.monitorSmart} onChange={(v) => p({ monitorSmart: v })} />
         </Row>
-        <Row label="深度模式（OCR）" desc="开启后每 30s 截屏 OCR 识别文字，提升内容推断精度。截屏缓存与清理见下方 OCR 资源管理">
+        <Row label="深度模式（OCR）" desc="空闲/干活都会采：仅「正在动手」那 1～2 秒跳过截屏防卡鼠标；干活中约每 45 秒可采一次">
           <Toggle checked={settings.deepMode} onChange={(v) => p({ deepMode: v })} />
+        </Row>
+        <Row label="性能优先" desc="停用屏幕 OCR 截屏（卡鼠标的主因之一），并降低后台采集负担。日常卡顿建议打开">
+          <Toggle checked={!!settings.performanceMode} onChange={(v) => p({ performanceMode: v })} />
         </Row>
         <details className="-mx-2 px-2 py-1.5">
           <summary className="cursor-pointer text-[11px] text-slate-500 hover:text-slate-300">记录分层说明</summary>

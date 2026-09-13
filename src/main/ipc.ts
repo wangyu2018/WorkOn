@@ -171,7 +171,9 @@ export function registerIpc(): void {
       patch.widgetCompact !== undefined ||
       patch.widgetOpacity !== undefined ||
       patch.widgetDockOnTop !== undefined ||
-      patch.widgetDockEdge !== undefined
+      patch.widgetDockEdge !== undefined ||
+      patch.aiAssistWatchEnabled !== undefined ||
+      patch.aiAssistWatchApps !== undefined
     ) {
       broadcastWidgetSettings()
     }

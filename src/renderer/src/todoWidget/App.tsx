@@ -5,6 +5,8 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Project, ProjectTask, PlanItem, WidgetDisplayOptions } from '@shared/types'
 import { DEFAULT_WIDGET_DISPLAY } from '@shared/types'
+import type { AiAssistItem } from '@shared/aiAssistWatch'
+import { AiAssistStrip } from '../components/AiAssistStrip'
 
 interface AttributionState {
   projectId: string | null
@@ -140,6 +142,8 @@ export default function TodoWidgetApp() {
   /** 三分区显隐：settings.widgetDisplay.todo（桌搭页可配；⚙ 本地也可切） */
   const [editMode, setEditMode] = useState(false)
   const [zones, setZones] = useState<WidgetDisplayOptions['todo']>(() => ({ ...DEFAULT_WIDGET_DISPLAY.todo }))
+  const [aiAssistEnabled, setAiAssistEnabled] = useState(false)
+  const [aiAssistItems, setAiAssistItems] = useState<AiAssistItem[]>([])
   const zoneOn = (k: keyof WidgetDisplayOptions['todo'], dflt = true): boolean => zones[k] ?? dflt
   const persistZones = (next: WidgetDisplayOptions['todo']): void => {
     setZones(next)
@@ -232,6 +236,15 @@ export default function TodoWidgetApp() {
     const offDisplay = (window.api as { onTodoWidgetDisplay?: (cb: (p: WidgetDisplayOptions['todo']) => void) => () => void }).onTodoWidgetDisplay?.((p) => {
       if (p) setZones({ ...DEFAULT_WIDGET_DISPLAY.todo, ...p })
     })
+    const offAiAssist = (window.api as {
+      onAiAssistUpdate?: (cb: (p: { enabled?: boolean; items?: AiAssistItem[] }) => void) => () => void
+    }).onAiAssistUpdate?.((p) => {
+      if (typeof p?.enabled === 'boolean') setAiAssistEnabled(p.enabled)
+      setAiAssistItems(Array.isArray(p?.items) ? p.items : [])
+    })
+    void window.api?.getSettings?.().then((s) => {
+      setAiAssistEnabled(!!(s as { aiAssistWatchEnabled?: boolean }).aiAssistWatchEnabled)
+    }).catch(() => undefined)
     const syncAppearance = (mode?: 'light' | 'dark' | 'auto'): void => {
       const apply = (appearanceMode?: 'light' | 'dark' | 'auto'): void => {
         const preferLight = resolvePreferLight(appearanceMode)
@@ -262,6 +275,7 @@ export default function TodoWidgetApp() {
       offPin?.()
       offCollapsed?.()
       offDisplay?.()
+      offAiAssist?.()
       offAppear?.()
     }
   }, [])
@@ -463,7 +477,6 @@ export default function TodoWidgetApp() {
         className={`flex min-h-0 flex-1 flex-col overflow-hidden p-3.5 ${lightMode ? 'todo-light-legible' : glass ? 'todo-glass-legible' : ''}`}
         style={todoPanelStyle(glass, panelOpacity, lightMode)}
       >
-        {/* 操作条：文案按钮，别再用看不懂的 ◉ */}
         <div className="mb-1.5 flex cursor-move items-center gap-1" style={APP_DRAG}>
           <button
             type="button"
@@ -522,6 +535,11 @@ export default function TodoWidgetApp() {
             </button>
           </div>
         </div>
+        {aiAssistEnabled && aiAssistItems.length ? (
+          <div className="mb-1.5" style={APP_NO_DRAG}>
+            <AiAssistStrip items={aiAssistItems} compact />
+          </div>
+        ) : null}
         <div className="min-h-0 flex-1 overflow-y-auto pr-0.5" style={APP_NO_DRAG}>
           {loadErr ? <div className="mb-2 text-[10.5px] text-[#f87171]">加载失败：{loadErr}</div> : null}
           {editMode ? (

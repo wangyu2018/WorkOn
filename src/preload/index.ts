@@ -250,6 +250,7 @@ const api = {
   widgetHit: (over: boolean) => ipcRenderer.send('widget:hit', over),
   onWidgetDock: on('widget:dock'),
   onWidgetSettings: on('settings:update'),
+  onAiAssistUpdate: on('ai-assist:update'),
   onWidgetAccent: on('widget:accent'),
   onWelcomeBack: on('welcome-back'),
   onErrorBanner: on('error-banner'),

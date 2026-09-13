@@ -75,7 +75,13 @@ export function broadcastWidgetSettings(): void {
     widgetDockEdge: s.widgetDockEdge ?? null,
     widgetDockOnTop: s.widgetDockOnTop !== false,
     widgetDisplay: s.widgetDisplay ?? undefined,
-    widgetAccent: s.widgetAccent
+    widgetAccent: s.widgetAccent,
+    aiAssistWatchEnabled: !!s.aiAssistWatchEnabled,
+    aiAssistWatchApps: s.aiAssistWatchApps ?? []
+  })
+  sendTo('todoWidget', 'settings:update', {
+    aiAssistWatchEnabled: !!s.aiAssistWatchEnabled,
+    aiAssistWatchApps: s.aiAssistWatchApps ?? []
   })
 }
 
@@ -537,21 +543,27 @@ export function createPetWindow(): BrowserWindow {
 }
 
 let petModalLock = false
+/** 去重：避免每帧重复调 Win32 setIgnoreMouseEvents 卡鼠标 */
+let lastPetIgnore: boolean | null = null
 
 export function setPetIgnoreMouse(ignore: boolean): void {
   if (petModalLock) return
-  if (petWindow && !petWindow.isDestroyed()) {
-    petWindow.setIgnoreMouseEvents(ignore, ignore ? { forward: true } : undefined)
-  }
+  if (!petWindow || petWindow.isDestroyed()) return
+  if (lastPetIgnore === ignore) return
+  lastPetIgnore = ignore
+  petWindow.setIgnoreMouseEvents(ignore, ignore ? { forward: true } : undefined)
 }
 
 /** 弹窗态：菜单/面板可见时强制窗口接收鼠标事件（优先级高于 hitTest） */
 export function setPetModal(active: boolean): void {
   petModalLock = active
   if (!petWindow || petWindow.isDestroyed()) return
+  lastPetIgnore = null
   if (active) {
+    lastPetIgnore = false
     petWindow.setIgnoreMouseEvents(false)
   } else {
+    lastPetIgnore = true
     petWindow.setIgnoreMouseEvents(true, { forward: true })
   }
 }
@@ -567,6 +579,7 @@ export function setWidgetPenetration(v: boolean): void {
 
 /** 挖洞命中：光标在实体 UI 上才收事件 */
 export function setWidgetHit(over: boolean): void {
+  if (widgetHitSolid === over) return
   widgetHitSolid = over
   if (!widgetWindow || widgetWindow.isDestroyed()) return
   if (widgetPenetration || widgetDragActive) return

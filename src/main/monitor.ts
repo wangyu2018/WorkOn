@@ -3,12 +3,12 @@
  * 依据：PRD.md F1/F2
  *  - 按 monitorInterval 轮询（默认 5s）
  *  - 段变化才刷新 startTs
- *  - 双屏并行：前台窗口为激活屏，其余屏沿用最后已知窗口（active=false）
+ *  - 双屏并行：鼠标下窗口=激活（时间轴主记录）；其余屏可见顶层=旁路（含后台 AI）
  *  - 空闲用 powerMonitor.getSystemIdleTime 推断
  *  - 应用常驻纠偏规则（宁漏勿误：screen + matchApp + matchTitleContains 全满足）
  */
 import { powerMonitor, screen } from 'electron'
-import { getForegroundWindow } from './winInfo'
+import { getAttentionWindow } from './winInfo'
 import { captureAppVisual } from './appVisuals'
 import { presence } from './presence'
 import { insertActivity, col, updateIn } from './db'
@@ -26,6 +26,7 @@ import { trackAppSwitch, matchKnownChain, saveWorkChain } from './qa/questionGen
 import { focusChainTick } from './focusChain'
 import { careTick, reportContinuousWork } from './care'
 import { automationMinuteTick, automationOnAppSwitch, automationOnFocusTick } from './automation'
+import { aiAssistWatchTick } from './aiAssistWatch'
 import { attributionTick } from './attributions'
 import { dirWatcherTick } from './dirWatcher'
 import { dispatchConfirmQueue } from './confirmQueue'
@@ -53,6 +54,26 @@ const tracks = new Map<number, ScreenTrack>()
 let timer: NodeJS.Timeout | null = null
 let running = false
 let lastTickAt = 0
+
+/** 后台 AI（副屏/旁路）：不因无键鼠立刻打成 idle——生成时常人在看别的屏 */
+function softenAuxState(state: WorkState, idleSec: number): WorkState {
+  if (state === 'aidev' || state === 'aiqa') {
+    if (idleSec > 15 * 60) return 'idle'
+    return state
+  }
+  if (idleSec > 60 && INPUT_REQUIRED_STATES.includes(state)) return 'idle'
+  return state
+}
+
+/** 激活窗：AI 生成时允许更长无输入（人在盯流式输出） */
+function softenActiveState(state: WorkState, idleSec: number): WorkState {
+  if (state === 'aidev' || state === 'aiqa') {
+    if (idleSec > 3 * 60) return 'idle'
+    return state
+  }
+  if (idleSec > 60 && INPUT_REQUIRED_STATES.includes(state)) return 'idle'
+  return state
+}
 
 function applyRules(screen: number, app: string, title: string): { app: string; title: string; stateOverride?: string } {
   // 权重降序：多条命中时高优先级规则先生效
@@ -139,26 +160,38 @@ async function tick(): Promise<void> {
   if (getSettings().recordingPaused) return
   const idleSec = powerMonitor.getSystemIdleTime()
 
-  const fg = await getForegroundWindow().catch(() => null)
+  // AI 助手后台名单：节流采样，完成时推闪点
+  void aiAssistWatchTick(ts).catch(() => undefined)
 
-  // 会议软件检测：首次激活弹选项，消失 60s 判定结束（与状态识别并行）
-  if (fg?.app && MEETING_APPS.test(fg.app)) {
+  const { attention, fg, tops } = await getAttentionWindow().catch(() => ({
+    attention: null,
+    fg: null,
+    tops: [] as Awaited<ReturnType<typeof getAttentionWindow>>['tops']
+  }))
+  // 时间轴 / 专注主记录：跟鼠标下的窗口；键盘前台仅作会议检测等辅助
+  const win = attention
+
+  // 会议软件检测：看键盘前台或注意力窗（会议常抢焦点）
+  const meetingProbe = fg?.app && MEETING_APPS.test(fg.app) ? fg : win
+  if (meetingProbe?.app && MEETING_APPS.test(meetingProbe.app)) {
     lastMeetingSeen = ts
     if (!meetingSince) {
       meetingSince = ts
-      sendTo('widget', 'meeting-detected', { app: fg.app, title: fg.title })
+      sendTo('widget', 'meeting-detected', { app: meetingProbe.app, title: meetingProbe.title })
     }
   } else if (meetingSince && ts - lastMeetingSeen > 60_000) {
     sendTo('widget', 'meeting-ended', { durationMin: Math.round((ts - meetingSince) / 60_000), sinceTs: meetingSince })
     meetingSince = 0
   }
 
-  if (fg && fg.app) {
+  if (win && win.app) {
     // deepMode 时预取 UIA 焦点元素提示（3s 缓存），供 field/text_length 真实化。
     // 性能：UIA 走 PowerShell 冷启动（300-600ms 突发），只在用户停下（idle≥3s）时做——
     // 活跃打字/划鼠标期间跳过，特征由行为探针兜底，杜绝每 2s 一次的系统级卡顿。
+    // UIA 只在「鼠标窗 ≈ 键盘前台」时有意义
     let uiaHint: { controlType: string; valueLength: number; selectedLength: number; docLength: number } | null = null
-    if (getSettings().deepMode && !getSettings().performanceMode && idleSec >= 8 && !isExcludedApp(fg.app, identifyApp(fg.app, fg.title).appName)) {
+    const sameAsFg = !!(fg && fg.app === win.app && fg.screen === win.screen)
+    if (sameAsFg && getSettings().deepMode && !getSettings().performanceMode && idleSec >= 8 && !isExcludedApp(win.app, identifyApp(win.app, win.title).appName)) {
       const el = await getFocusedElement().catch(() => null)
       if (el) {
         uiaHint = { controlType: el.controlType, valueLength: el.value.length, selectedLength: el.selectedText.length, docLength: el.docLength }
@@ -166,7 +199,7 @@ async function tick(): Promise<void> {
       }
     }
     // 双管道识别：纠偏规则 → 规则表兜底；shadow/model_first 时 python 小模型并行参与
-    const rec = await recognize({ ts, screen: fg.screen, app: fg.app, title: fg.title, active: true, idleSec, uiaHint })
+    const rec = await recognize({ ts, screen: win.screen, app: win.app, title: win.title, active: true, idleSec, uiaHint })
     const corrected = { app: rec.app, title: rec.title }
     const identified = { appName: rec.appName, state: rec.state as WorkState }
     // 隐私快标：标记应用完全停止采集（0 记录）——不截屏、不 OCR、不记标题、不落活动记录
@@ -175,44 +208,42 @@ async function tick(): Promise<void> {
     // 开发会话识别（P0）：dev 工具/localhost 组合 → 机动片段（排除应用不参与）
     presence.excludedActive = excluded
     const safeTitle = corrected.title
-    let state: WorkState = identified.state
-    // 输入活跃度校验：>60s 无键鼠操作时，输入型工作态降级为 idle（与 presence 引擎同口径）
-    if (idleSec > 60 && INPUT_REQUIRED_STATES.includes(state as WorkState)) state = 'idle'
+    let state: WorkState = softenActiveState(identified.state as WorkState, idleSec)
 
-    let tr = tracks.get(fg.screen)
+    let tr = tracks.get(win.screen)
     const changed = !tr || tr.app !== corrected.app || tr.title !== safeTitle
     // 语义标签：当前段关联的计划标题 / 项目名（顶栏与悬浮窗显示）
     const planTitle = currentPlanTitle(tr ? tr.startTs : ts)
     const projectName = currentProjectName(corrected.app)
     if (!excluded) {
       // 提取/补写图标+主题色（captureAppVisual 命中缓存即返回，仅首次真正提取 exe 图标）
-      void captureAppVisual(corrected.app, fg.exePath, identified.appName)
+      void captureAppVisual(corrected.app, win.exePath, identified.appName)
       if (!tr || changed) {
         tr = { app: corrected.app, title: safeTitle, startTs: ts, lastTs: ts }
-        tracks.set(fg.screen, tr)
+        tracks.set(win.screen, tr)
       } else {
         tr.lastTs = ts
       }
       // 仅主屏样本携带窗口矩形（桌宠漫游避让用；桌宠窗口只覆盖主屏）
       const primary = screen.getPrimaryDisplay()
       const onPrimary =
-        fg.x >= primary.bounds.x - 8 &&
-        fg.y >= primary.bounds.y - 8 &&
-        fg.x + fg.width <= primary.bounds.x + primary.bounds.width + 8 &&
-        fg.y + fg.height <= primary.bounds.y + primary.bounds.height + 8
+        win.x >= primary.bounds.x - 8 &&
+        win.y >= primary.bounds.y - 8 &&
+        win.x + win.width <= primary.bounds.x + primary.bounds.width + 8 &&
+        win.y + win.height <= primary.bounds.y + primary.bounds.height + 8
       const winRect = onPrimary
         ? {
             // 换算到桌宠窗口本地坐标（桌宠窗口原点在主屏 bounds.x/y）
-            x: fg.x - primary.bounds.x,
-            y: fg.y - primary.bounds.y,
-            width: fg.width,
-            height: fg.height
+            x: win.x - primary.bounds.x,
+            y: win.y - primary.bounds.y,
+            width: win.width,
+            height: win.height
           }
         : undefined
-      presence.push({ ts, app: corrected.app, title: safeTitle, appName: identified.appName, state: identified.state, planTitle, projectName, screen: fg.screen, active: true, idleSec, winRect })
+      presence.push({ ts, app: corrected.app, title: safeTitle, appName: identified.appName, state: identified.state, planTitle, projectName, screen: win.screen, active: true, idleSec, winRect })
     } else {
       // 已排除：仅推入空信号维持引擎心跳（presence 不显示该应用，activities 不产生记录）
-      presence.push({ ts, app: '', title: '', screen: fg.screen, active: true, idleSec })
+      presence.push({ ts, app: '', title: '', screen: win.screen, active: true, idleSec })
     }
 
     // 专注链路 v2（链路思维）：链路内切换不切碎；摸鱼/离开达阈值才切断（focusChainV2=false 回退 v1 休眠）
@@ -274,19 +305,37 @@ async function tick(): Promise<void> {
       }
     }
 
-    // 其余屏：沿用最后已知窗口做背景采样（双屏并行追踪）
-    for (const [scr, t] of tracks) {
-      if (scr === fg.screen) continue
-      if (ts - t.lastTs > 30 * 60 * 1000) continue // 30 分钟未见前台则不再当作并行屏
-      const id2 = identifyApp(t.app, t.title)
-      // 已排除应用同样不记录（副屏背景采样也遵守隐私标记）
-      if (isExcludedApp(t.app, id2.appName)) continue
-      presence.push({ ts, app: t.app, title: t.title, screen: scr, active: false, idleSec })
-      // 输入活跃度校验（与主屏同口径）
-      const auxState = idleSec > 60 && INPUT_REQUIRED_STATES.includes(id2.state as WorkState) ? 'idle' : id2.state
+    // 旁路屏：各屏可见顶层；后台 AI 窗记 active:false，不抢时间轴主行
+    const liveByScreen = new Map<number, (typeof tops)[number]>()
+    for (const t of tops) {
+      if (t.screen === win.screen) continue
+      liveByScreen.set(t.screen, t)
+    }
+    // 键盘前台若在另一屏且未被中心采样到，也并入旁路（例如最小化边缘的 AI IDE）
+    if (fg?.app && fg.screen !== win.screen && !liveByScreen.has(fg.screen)) {
+      liveByScreen.set(fg.screen, fg)
+    }
+    // 清掉已无顶层窗口的副屏记忆，防止幽灵残留
+    for (const scr of [...tracks.keys()]) {
+      if (scr === win.screen) continue
+      if (!liveByScreen.has(scr)) tracks.delete(scr)
+    }
+    for (const [scr, live] of liveByScreen) {
+      const id2 = identifyApp(live.app, live.title)
+      if (isExcludedApp(live.app, id2.appName)) continue
+      let auxTr = tracks.get(scr)
+      const auxChanged = !auxTr || auxTr.app !== live.app || auxTr.title !== live.title
+      if (!auxTr || auxChanged) {
+        auxTr = { app: live.app, title: live.title, startTs: ts, lastTs: ts }
+        tracks.set(scr, auxTr)
+      } else {
+        auxTr.lastTs = ts
+      }
+      presence.push({ ts, app: live.app, title: live.title, screen: scr, active: false, idleSec })
+      const auxState = softenAuxState(id2.state as WorkState, idleSec)
       insertActivity({
-        ts, app: t.app, appName: id2.appName, title: t.title,
-        state: auxState, screen: scr, startTs: t.startTs, active: false, idleSec
+        ts, app: live.app, appName: id2.appName, title: live.title,
+        state: auxState, screen: scr, startTs: auxTr.startTs, active: false, idleSec
       })
     }
 
@@ -297,7 +346,7 @@ async function tick(): Promise<void> {
         appName: identified.appName,
         title: safeTitle,
         state,
-        screen: fg.screen,
+        screen: win.screen,
         startTs: tr!.startTs,
         active: true,
         idleSec
