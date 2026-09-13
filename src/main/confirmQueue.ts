@@ -19,6 +19,10 @@ export interface QueuedAsk {
 
 const queue = new Map<string, QueuedAsk>()
 let lastDispatch = 0
+let deliveredCount = 0
+let deliveredDay = ''
+const DAILY_DELIVER_LIMIT = 2
+const QUESTION_TTL_MS = 10 * 60_000
 
 /** 是否处于可打扰时刻 */
 function canInterrupt(): boolean {
@@ -45,9 +49,25 @@ export function dispatchConfirmQueue(): void {
   lastDispatch = now
   if (queue.size === 0 || !canInterrupt()) return
   if (bus.question) return // 上一条还没答，不连环弹
-  const oldest = [...queue.values()].sort((a, b) => a.ts - b.ts)[0]
-  queue.delete(oldest.fp)
-  bus.setQuestion({ id: genId('q'), ctx: `attrib:${oldest.fp}`, question: oldest.question, ts: now, ...oldest.ctx })
+  // 每日配额：最多弹 2 条打断式确认，超出转静默
+  const day = new Date().toISOString().slice(0, 10)
+  if (deliveredDay !== day) { deliveredDay = day; deliveredCount = 0 }
+  if (deliveredCount >= DAILY_DELIVER_LIMIT) return
+  // TTL：超时确认自动按忽略结案
+  for (const [fp, q] of queue) {
+    if (now - q.ts > QUESTION_TTL_MS) queue.delete(fp)
+  }
+  if (queue.size === 0) return
+  const oldest = [...queue.entries()].sort((a, b) => a[1].ts - b[1].ts)[0]
+  queue.delete(oldest[0])
+  deliveredCount++
+  bus.setQuestion({
+    id: genId('q'),
+    ctx: `attrib:${oldest[1].fp}`,
+    question: oldest[1].question,
+    ts: now,
+    ...oldest[1].ctx
+  })
 }
 
 /** 队列规模（调试/展示） */

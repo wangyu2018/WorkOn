@@ -731,6 +731,11 @@ export function toggleWidget(): void {
     // 显式唤出时解除穿透，方便交互
     setWidgetPenetration(false)
   }
+  // 状态同步：托盘勾选与渲染层 penetration 跟随（修复 ✕ 关闭后不同步）
+  try {
+    const { refreshTray } = require('./tray') as { refreshTray: () => void }
+    refreshTray()
+  } catch { /* tray 不可用时跳过 */ }
 }
 
 export function togglePet(): void {
@@ -830,6 +835,8 @@ export function createTodoWidgetWindow(): BrowserWindow {
     resizable: false,
     hasShadow: false,
     backgroundColor: '#00000000',
+    // Windows 11+ 原生磨砂玻璃（不支持的系统自动降级为普通透明）
+    backgroundMaterial: 'acrylic',
     show: !!s.todoWidgetVisible,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),

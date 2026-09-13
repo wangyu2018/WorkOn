@@ -41,7 +41,9 @@ export function pushNotify(kind: NotifyKind, title: string, body: string, action
     actions
   }
   pending.set(card.id, card)
+  // widget 不可见时降级投递主窗口（系统通知托底由主窗口自己的未读角标承担）
   sendTo('widget', 'notify', card)
+  sendTo('main', 'notify', card)
   const t = setTimeout(() => expire(card.id), ttlSec * 1000)
   timers.set(card.id, t)
   return card
