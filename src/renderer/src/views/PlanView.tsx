@@ -8,7 +8,7 @@ import { InsightCard } from '../components/ui/InsightCard'
 import { AiThinking } from '../components/ui/AiThinking'
 import { addDays, clockOf, fmtDateLabel, fmtMin, timeToMin, todayKey } from '../components/utils'
 import { parsePlanText } from '../components/parsePlanText'
-import { ProjectBoard } from '../components/ProjectBoard'
+import { useAppStore } from '../stores/appStore'
 import { parseBreakdownSteps } from '@shared/parseBreakdown'
 
 const STATUS_LABEL: Record<PlanStatus, string> = {
@@ -432,7 +432,7 @@ export default function PlanView() {
 
   // 命令面板 / 项目推进「排入今日」→ 切回今日安排
   useEffect(() => {
-    const onGotoProjects = () => setTab('project')
+    const onGotoProjects = (): void => { window.dispatchEvent(new CustomEvent('workon:goto-mainline')); useAppStore.getState().setView('mainline') }
     const onGotoToday = () => setTab('plan')
     window.addEventListener('workon:goto-projects', onGotoProjects)
     window.addEventListener('workon:goto-today', onGotoToday)
@@ -831,7 +831,7 @@ ${text.slice(0, 3000)}`
       <PageHeader
         icon="target"
         title="计划"
-        desc={tab === 'plan' ? '今天要达成什么 · 按日执行与达成率' : '跨天任务池 · 挑今日要干的排进来'}
+        desc="今天要达成什么 · 按日执行与达成率"
         actions={
           tab === 'plan' ? (
             <>
@@ -851,30 +851,6 @@ ${text.slice(0, 3000)}`
         <div className="rounded-lg border border-neon-cyan/25 bg-neon-cyan/10 px-3 py-2 text-[11px] text-neon-cyan">{importMsg}</div>
       ) : null}
 
-      <div className="anim-fade-up grid grid-cols-2 gap-2">
-        {([
-          ['plan', '今日安排', '按日执行、达成率、归档'],
-          ['project', '项目推进', '跨天任务、反哺、排入今日']
-        ] as const).map(([k, label, hint]) => (
-          <button
-            key={k}
-            type="button"
-            className={`rounded-xl border px-3.5 py-2.5 text-left transition-colors ${
-              tab === k
-                ? 'border-[var(--teal)]/35 bg-[var(--teal-soft)]'
-                : 'border-[var(--line)] bg-[var(--surface-2)] hover:bg-[var(--surface-3)]'
-            }`}
-            onClick={() => setTab(k)}
-          >
-            <div className={`text-[13px] font-semibold ${tab === k ? 'text-[var(--text-1)]' : 'text-[var(--text-2)]'}`}>{label}</div>
-            <div className={`mt-0.5 text-[11px] leading-snug ${tab === k ? 'text-[var(--text-2)]' : 'text-[var(--text-3)]'}`}>{hint}</div>
-          </button>
-        ))}
-      </div>
-
-      {tab === 'project' ? (
-        <ProjectBoard trail={trail} />
-      ) : (
       <>
 
       {scanProgress > 0 && (
@@ -1583,10 +1559,9 @@ ${text.slice(0, 3000)}`
         </div>
       )}
       </>
-      )}
 
-      {/* ── 确认归档（仅每日计划 Tab）：已确认项分类展示 / 编辑 / 归档 ── */}
-      {tab === 'plan' ? (() => {
+      {/* ── 确认归档：已确认项分类展示 / 编辑 / 归档 ── */}
+      {(() => {
         const confirmed = plans.filter(
           (p) =>
             (p.confirmedFromQA || p.source === 'qa-confirm') &&
@@ -1623,7 +1598,7 @@ ${text.slice(0, 3000)}`
             </div>
           </div>
         )
-      })() : null}
+      })()}
     </div>
   )
 }

@@ -17,6 +17,7 @@ import MonitorView from './views/MonitorView'
 import KnowledgeView from './views/KnowledgeView'
 import CalendarView from './views/CalendarView'
 import PlanView from './views/PlanView'
+import MainlineView from './views/MainlineView'
 import ReportHub from './views/ReportHub'
 import BuddyStage from './views/BuddyStage'
 import QAReview from './views/QAReview'
@@ -43,6 +44,7 @@ const NAV_GROUPS: NavGroup[] = [
       { key: 'home', label: '首页', icon: 'home' },
       { key: 'calendar', label: '日历', icon: 'calendar' },
       { key: 'plan', label: '计划', icon: 'target' },
+      { key: 'mainline', label: '主线', icon: 'folder' },
       { key: 'report', label: '报表', icon: 'chart' },
       { key: 'knowledge', label: '知识库', icon: 'book' },
       { key: 'buddy', label: '桌搭', icon: 'cat' }
@@ -64,6 +66,7 @@ const VIEW_TITLES: Record<ViewKey, string> = {
   knowledge: '知识库',
   calendar: '日历',
   plan: '计划',
+  mainline: '主线',
   report: '报表',
   buddy: '桌搭',
   qa: '问答',
@@ -78,6 +81,7 @@ const VIEWS: Record<ViewKey, () => JSX.Element> = {
   knowledge: KnowledgeView,
   calendar: CalendarView,
   plan: PlanView,
+  mainline: MainlineView,
   report: ReportHub,
   buddy: BuddyStage,
   qa: QAReview,
