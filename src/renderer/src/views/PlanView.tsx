@@ -831,27 +831,6 @@ ${text.slice(0, 3000)}`
         actions={
           tab === 'plan' ? (
             <>
-              <button className="glass-btn !text-[12px]" onClick={() => setPasteOpen(true)}>
-                粘贴导入
-              </button>
-              <button
-                className="glass-btn !text-[12px]"
-                title="把同日同标题的「机动开发」合并成一条（时长相加）"
-                onClick={() => {
-                  void (async () => {
-                    const r = (await window.api.dedupeBurstPlans?.()) ?? { removed: 0, groups: 0 }
-                    await load()
-                    setImportMsg(
-                      r.removed > 0
-                        ? `已合并 ${r.groups} 组重复机动开发，删除 ${r.removed} 条`
-                        : '没有可合并的重复机动开发'
-                    )
-                    window.setTimeout(() => setImportMsg(''), 4000)
-                  })()
-                }}
-              >
-                合并机动开发
-              </button>
               <button className="glass-btn primary" onClick={() => setEditor({ plan: { date }, isNew: true })}>
                 <Icon name="plus" size={14} /> 新建安排
               </button>
