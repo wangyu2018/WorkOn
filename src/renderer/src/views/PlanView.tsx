@@ -348,6 +348,29 @@ export default function PlanView() {
   const [quickText, setQuickText] = useState('')
   const [quickProj, setQuickProj] = useState('')
   const quickRef = useRef<HTMLInputElement>(null)
+
+  const quickAdd = async (): Promise<void> => {
+    const text = quickText.trim()
+    if (!text) return
+    const r = parsePlanText(text)
+    const title = (r.matched.length ? r.title : text).slice(0, 100)
+    const targetDate = r.date ?? date
+    const hasTime = r.startMin !== undefined
+    await window.api.savePlan({
+      date: targetDate,
+      title,
+      category: 'other',
+      status: 'planned',
+      source: 'manual',
+      planType: hasTime ? 'reminder' : 'task',
+      startMin: r.startMin,
+      endMin: r.endMin,
+      durationMin: r.durationMin,
+      projectId: quickProj || undefined
+    })
+    setQuickText('')
+    void load()
+  }
   /** 关联任务名映射（行内 chip 显示） */
   const [taskNames, setTaskNames] = useState<Record<string, string>>({})
   useEffect(() => {
@@ -368,10 +391,6 @@ export default function PlanView() {
   const [delayReason, setDelayReason] = useState('')
   const [folderModal, setFolderModal] = useState(false)
   /** v7 粘贴文本导入：贴任意进展/纪要文本 → AI 解析成待办 */
-  const [pasteOpen, setPasteOpen] = useState(false)
-  const [pasteText, setPasteText] = useState('')
-  const [pasteItems, setPasteItems] = useState<string[]>([])
-  const [pasteBusy, setPasteBusy] = useState(false)
   const [folderDirs, setFolderDirs] = useState<string[]>([])
   const [ratioDraft, setRatioDraft] = useState<Record<string, number>>({})
   const ratioTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -639,67 +658,6 @@ export default function PlanView() {
     })
     return off
   }, [])
-
-  const parsePaste = async (): Promise<void> => {
-    const text = pasteText.trim()
-    if (!text || pasteBusy) return
-    setPasteBusy(true)
-    try {
-      const r = (await window.api?.askQA?.(
-        `从下面的文本里提取"可执行的待办/需求项"，输出 JSON 数组（每项一个 title 字符串，不要解释）：
-
-${text.slice(0, 3000)}`
-      )) as { content?: string } | string | undefined
-      const content = typeof r === 'string' ? r : r?.content ?? ''
-      const m = content.match(/\[[\s\S]*?\]/)
-      const items: string[] = m ? JSON.parse(m[0]) : []
-      setPasteItems(items.filter((x) => typeof x === 'string').slice(0, 12))
-    } catch {
-      setPasteItems([])
-    } finally {
-      setPasteBusy(false)
-    }
-  }
-
-  const savePasted = async (): Promise<void> => {
-    for (const title of pasteItems) {
-      await window.api.savePlan({
-        date,
-        title: title.slice(0, 100),
-        category: 'other',
-        status: 'planned' as const,
-        source: 'import' as const,
-        note: '来自文本导入'
-      })
-    }
-    setPasteItems([])
-    setPasteText('')
-    setPasteOpen(false)
-    void load()
-  }
-
-  const quickAdd = async (): Promise<void> => {
-    const text = quickText.trim()
-    if (!text) return
-    const r = parsePlanText(text)
-    const title = (r.matched.length ? r.title : text).slice(0, 100)
-    const targetDate = r.date ?? date
-    const hasTime = r.startMin !== undefined
-    await window.api.savePlan({
-      date: targetDate,
-      title,
-      category: 'other',
-      status: 'planned',
-      source: 'manual',
-      planType: hasTime ? 'reminder' : 'task',
-      startMin: r.startMin,
-      endMin: r.endMin,
-      durationMin: r.durationMin,
-      projectId: quickProj || undefined
-    })
-    setQuickText('')
-    void load()
-  }
 
   const importFromMeeting = async () => {
     if (folderDirs.length === 0) { setFolderModal(true); return }
@@ -1499,45 +1457,6 @@ ${text.slice(0, 3000)}`
           }}
         />
       ) : null}
-        {pasteOpen ? (
-          <div className="anim-fade-in fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setPasteOpen(false)}>
-            <div className="glass-card anim-scale-in w-[440px] !p-5" style={{ borderRadius: 'var(--r-xl)', boxShadow: 'var(--shadow-lg)' }} onClick={(e) => e.stopPropagation()}>
-              <div className="mb-2 flex items-center gap-2 text-[14px] font-semibold text-[var(--text-1)]">
-                <span
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border"
-                  style={{ background: 'var(--accent-softer)', borderColor: 'var(--border-active)', color: 'var(--accent)' }}
-                >
-                  <Icon name="scan" size={14} />
-                </span>
-                粘贴文本导入
-              </div>
-              <textarea
-                className="glass-input min-h-[140px] w-full resize-y !py-2.5 text-[12px] leading-relaxed"
-                placeholder="把会议纪要、聊天记录、需求描述粘进来，AI 会提取可执行的待办…"
-                value={pasteText}
-                onChange={(e) => { setPasteText(e.target.value); setPasteItems([]) }}
-              />
-              {pasteItems.length ? (
-                <div className="sub-card mt-2 !p-2.5">
-                  <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--text-3)]">解析出 {pasteItems.length} 项</div>
-                  {pasteItems.map((it, i) => (
-                    <div key={i} className="py-0.5 text-[12px] text-[var(--text-2)]">· {it}</div>
-                  ))}
-                </div>
-              ) : null}
-              <div className="mt-3 flex justify-end gap-2">
-                <button className="glass-btn text-[12px]" onClick={() => setPasteOpen(false)}>取消</button>
-                {pasteItems.length ? (
-                  <button className="glass-btn primary text-[12px]" onClick={() => void savePasted()}>导入 {pasteItems.length} 项</button>
-                ) : (
-                  <button className="glass-btn ai text-[12px]" disabled={pasteBusy || !pasteText.trim()} onClick={() => void parsePaste()}>
-                    ✦ {pasteBusy ? '解析中…' : 'AI 解析'}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        ) : null}
       {folderModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setFolderModal(false)}>
           <div className="glass-card anim-scale-in w-[400px] max-h-[60vh] overflow-auto" onClick={e => e.stopPropagation()}>
