@@ -51,7 +51,7 @@ function NotificationStack({ list, onDone }: { list: WidgetNotify[]; onDone: (id
       {list.map((n) => {
         const ic = NOTIFY_ICON[n.kind] ?? NOTIFY_ICON.generic
         return (
-          <div key={n.id} className="relative overflow-hidden rounded-xl border border-[var(--line)] p-2.5" style={PANEL_STYLE} data-widget-solid>
+          <div key={n.id} className="relative overflow-hidden rounded-xl p-2.5" style={PANEL_STYLE} data-widget-solid>
             <div className="flex items-start gap-2.5">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm" style={{ background: ic.bg }}>
                 {ic.emoji}
@@ -204,12 +204,11 @@ function restoreWidgetOpacity(): void {
 
 /** 浮窗面板：实色铺满窗口，禁用 backdrop/外阴影（Win 透明窗会画出高透明直角灰框） */
 const PANEL_STYLE: CSSProperties = {
-  background: 'var(--float-bg, var(--bg-surface))',
-  border: '1px solid var(--float-border, var(--line))',
-  color: 'var(--text-1)',
-  boxShadow: 'var(--float-shadow, var(--shadow-md))',
-  backdropFilter: 'var(--float-blur, blur(16px) saturate(1.1))',
-  WebkitBackdropFilter: 'var(--float-blur, blur(16px) saturate(1.1))'
+  background: 'var(--float-bg, rgba(14,13,11,0.35))',
+  border: 'none',
+  boxShadow: 'none',
+  backdropFilter: 'var(--float-blur, blur(32px) saturate(1.4))',
+  WebkitBackdropFilter: 'var(--float-blur, blur(32px) saturate(1.4))'
 }
 
 /** 头部小图标按钮 */
