@@ -23,6 +23,8 @@ interface TodayRow {
   nodes: RailNode[]
   /** 最近一次处理的时刻（今天有活动则=今天最后一次，否则=上次） */
   lastTouch: number | null
+  /** 目录活动（今日改动文件数/热点，dirWatcher 信号） */
+  dirInfo: { changedFiles: number; hotspot: string } | null
 }
 
 const fmtDur = (min: number): string =>
@@ -83,13 +85,19 @@ export default function MainlineView() {
           ...tasks.map((x) => ({ id: x.id, title: x.title, done: x.status === 'done', ms: !!x.isMilestone, kind: (x.isMilestone ? 'ms' : 'task') as RailNode['kind'] })),
           ...linkedPlans.map((x) => ({ id: x.id, title: x.title, done: x.status === 'done', ms: false, kind: 'plan' as RailNode['kind'] }))
         ]
+        let dirInfo: { changedFiles: number; hotspot: string } | null = null
+        try {
+          const act = (await window.api?.getTodayActivity?.(p.id)) as { changedFiles: number; hotspot: string } | undefined
+          if (act && act.changedFiles > 0) dirInfo = act
+        } catch { /* ignore */ }
         rows.push({
           project: p,
           todayMin: min,
           progress: tasks.length ? Math.round((done / tasks.length) * 100) : null,
           tasksLeft: tasks.filter((x) => x.status !== 'done').length,
           nodes,
-          lastTouch
+          lastTouch,
+          dirInfo
         })
       }
       setRows(rows.sort((a, b) => b.todayMin - a.todayMin))
@@ -109,6 +117,7 @@ export default function MainlineView() {
         <div className="flex flex-col gap-2.5">
           {rows.map((r) => {
             const active = attrProjectId === r.project.id
+            const dirInfo = r.dirInfo
             const goal = (r.project.goal ?? '').split('\n')[0]
             const nodes = r.nodes.slice(0, 14)
             const lastTouchStr = r.lastTouch
@@ -142,6 +151,17 @@ export default function MainlineView() {
                     <span className="shrink-0 text-[10px] font-bold text-[var(--teal-deep)]">● 正在干{attrTask ? `：${attrTask}` : ''}</span>
                   ) : null}
                 </div>
+                {/* 偏差推演：剩余任务 vs 剩余天数 */}
+                {r.progress !== null && r.project.deadline && r.tasksLeft > 0 ? (() => {
+                  const days = Math.ceil((new Date(`${r.project.deadline}T23:59:59`).getTime() - Date.now()) / 86400000)
+                  if (days < 0) return null
+                  const tight = days < r.tasksLeft
+                  return (
+                    <div className={`mt-1 flex items-center gap-1.5 text-[10.5px] ${tight ? 'text-[#fbbf24]' : 'text-slate-500'}`}>
+                      {tight ? '⚠' : '·'} 剩 {r.tasksLeft} 项任务 / {days} 天{tight ? ' —— 节奏偏紧，考虑砍范围或加时段' : ''}
+                    </div>
+                  )
+                })() : null}
                 {/* 行2：整行进度轨 + 任务节点 */}
                 {nodes.length ? (
                   <div className="mt-2 flex items-center gap-2">
@@ -185,15 +205,17 @@ export default function MainlineView() {
                     <span className="shrink-0 text-[11px] font-bold tabular-nums text-slate-400">{r.progress ?? 0}%</span>
                   </div>
                 ) : null}
-                {/* 行3：期待结果 + 上次处理 */}
+                {/* 行3：期待结果 + 目录活动 + 上次处理 */}
                 <div className="mt-1.5 flex items-center gap-2 text-[10.5px] text-slate-500">
                   {goal ? <span className="min-w-0 flex-1 truncate" title={r.project.goal}>◇ {goal}</span> : <span className="flex-1" />}
                   <span className="shrink-0">
-                    {r.todayMin > 0
-                      ? `今日 ${fmtDur(r.todayMin)}${lastTouchStr ? ` · 上次处理 ${lastTouchStr}` : ''}`
-                      : r.lastTouch
-                        ? `上次处理 ${new Date(r.lastTouch).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}`
-                        : '今日未动'}
+                    {dirInfo
+                      ? `📁 今日改动 ${dirInfo.changedFiles} 个文件${dirInfo.hotspot ? ` · 热点 ${dirInfo.hotspot}/` : ''}`
+                      : r.todayMin > 0
+                        ? `今日 ${fmtDur(r.todayMin)}${lastTouchStr ? ` · 上次处理 ${lastTouchStr}` : ''}`
+                        : r.lastTouch
+                          ? `上次处理 ${new Date(r.lastTouch).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}`
+                          : '今日未动'}
                   </span>
                 </div>
                 {/* 里程碑 chips + 编辑入口 */}
