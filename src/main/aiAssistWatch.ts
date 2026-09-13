@@ -28,7 +28,7 @@ const tracks = new Map<string, Track>()
 let lastSampleAt = 0
 let sampling = false
 let lastBroadcast = ''
-const SAMPLE_MIN_MS = 20_000
+const SAMPLE_MIN_MS = 60_000
 const DONE_FLASH_MS = 45_000
 const BUSY_MIN_MS = 2500
 
@@ -165,6 +165,10 @@ export async function aiAssistWatchTick(ts = Date.now()): Promise<void> {
   if (sampling || ts - lastSampleAt < SAMPLE_MIN_MS) return
   lastSampleAt = ts
   sampling = true
+  // 可见性门控：悬浮窗与待办小组件都不可见时，采样结果无人消费，直接跳过省掉 PS 开销
+  const { widgetWindow: ww, todoWidgetWindow: tw } = (await import('./windows')) as { widgetWindow?: import('electron').BrowserWindow | null; todoWidgetWindow?: import('electron').BrowserWindow | null }
+  const vis = (w?: import('electron').BrowserWindow | null): boolean => !!w && !w.isDestroyed() && w.isVisible()
+  if (!vis(ww) && !vis(tw)) return
 
   const live = await sampleProcesses(watched)
   const liveMap = new Map(live.map((x) => [x.key, x]))
