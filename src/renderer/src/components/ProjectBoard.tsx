@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { KnowledgeItem, Project, ProjectTask } from '@shared/types'
 import { fuzzyMatch } from '@shared/fuzzy'
+import { ProjectModal } from './ProjectModal'
 import { Icon } from '../components/Icon'
 import { displayApp } from '@shared/appDisplayName'
 import { fmtMin, todayKey } from '../components/utils'
@@ -118,6 +119,8 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
   const [attrAdding, setAttrAdding] = useState<string | null>(null)
   /** 里程碑编辑器（确认后整组替换里程碑任务） */
   const [msEdit, setMsEdit] = useState<{ pid: string; items: string[]; ai?: boolean } | null>(null)
+  /** 项目详情/管理弹窗 */
+  const [modalProj, setModalProj] = useState<Project | null>(null)
   const [attrNew, setAttrNew] = useState({ key: '', value: '' })
 
   /** 写属性袋：增/改/删/排序统一入口 */
@@ -472,32 +475,17 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                     {isActive ? <span className="chip ml-2 !text-[9px] !text-neon-cyan">今日开发中</span> : null}
                   </button>
                   <span className="text-[10px] text-[var(--text-3)]">{ts.length ? `${doneCount}/${ts.length}` : ''}</span>
-                            {p.deadline ? (
-                    (() => {
-                      const days = Math.ceil((new Date(`${p.deadline}T23:59:59`).getTime() - Date.now()) / 86400000)
-                      return (
-                        <span
-                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${
-                            days < 0 ? 'bg-[rgba(239,68,68,0.12)] text-[#f87171]' : days <= 7 ? 'bg-[rgba(245,158,11,0.12)] text-[#fbbf24]' : 'bg-[var(--teal-soft)] text-[var(--teal-deep)]'
-                          }`}
-                          title={`上线目标日 ${p.deadline}`}
-                        >
-                          {days < 0 ? `超期 ${-days} 天` : `↦ ${days} 天上线`}
-                        </span>
-                      )
-                    })()
-                  ) : (
-                    <input
-                      type="date"
-                      title="设置上线目标日（距上线刻度）"
-                      className="shrink-0 rounded border border-[var(--line)] bg-transparent px-1 py-0 text-[9px] text-[var(--text-3)] outline-none hover:text-[var(--text-2)]"
-                      onChange={(e) => {
-                        if (!e.target.value) return
-                        void window.api.saveProject({ id: p.id, deadline: e.target.value })
-                        void load()
-                      }}
-                    />
-                  )}
+                            {(() => {
+                    const days = p.deadline ? Math.ceil((new Date(`${p.deadline}T23:59:59`).getTime() - Date.now()) / 86400000) : null
+                    return days !== null ? (
+                      <span
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${days < 0 ? 'bg-[rgba(239,68,68,0.12)] text-[#f87171]' : days <= 7 ? 'bg-[rgba(245,158,11,0.12)] text-[#fbbf24]' : 'bg-[var(--teal-soft)] text-[var(--teal-deep)]'}`}
+                        title={`上线目标日 ${p.deadline}`}
+                      >
+                        {days < 0 ? `超期 ${-days} 天` : `↦ ${days} 天上线`}
+                      </span>
+                    ) : null
+                  })()}
                   {ts.length > 0 ? (
                     <div className="h-1.5 w-16 overflow-hidden rounded-full bg-[var(--surface-3)]">
                       <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, background: p.color ?? '#22D3EE' }} />
