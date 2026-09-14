@@ -34,7 +34,7 @@ public class GPU {
   [DllImport("user32.dll")] public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
 }
 "@
-$gpu = Get-CimInstance Win32_VideoController | Select-Object -First 2 Name, AdapterRAM, DriverVersion
+$gpu = Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM, DriverVersion
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $gpu | ConvertTo-Json -Compress
 `
@@ -89,38 +89,33 @@ function isIntegratedGPU(name: string): boolean {
 
 /** 从 GPU 名称估算显存（AdapterRAM 在 >4GB 时会溢出为负数，需要从名称估算） */
 function estimateVRAM(name: string, reportedBytes: number): number {
-  // 如果上报值合理（1-16GB），直接用
+  // WMI 的 AdapterRAM 是 32 位上限（≥4GB 全报 4GB），已知型号先按名称查表
+  const lower = name.toLowerCase()
+  const known = [
+    ['rtx 4090', 24], ['rtx 4080', 16], ['rtx 4070 ti', 16], ['rtx 4070', 12],
+    ['rtx 4060 ti', 16], ['rtx 4060', 8], ['rtx 3090', 24], ['rtx 3080', 10],
+    ['rtx 3070', 8], ['rtx 3060', 12], ['rtx 3050', 8],
+    ['rx 7900', 24], ['rx 7800', 16], ['rx 6800', 16], ['rx 6900', 16],
+    ['rx 6700', 8], ['rx 6600', 8]
+  ] as [string, number][]
+  for (const [key, gb] of known) {
+    if (lower.includes(key)) return gb
+  }
+  // 名称带显存标注（如 "8GB"）直接取
+  const m = lower.match(/(\d+)\s*(gb|g)/)
+  if (m) return parseInt(m[1], 10)
+  // 未知型号：WMI 上报值合理（1-16GB）就用
   if (reportedBytes > 512 * 1024 * 1024 && reportedBytes < 32 * 1024 * 1024 * 1024) {
     return Math.round(reportedBytes / (1024 * 1024 * 1024))
   }
-  // 从名称估算
-  const lower = name.toLowerCase()
-  const match = lower.match(/(\d+)\s*(gb|g)\b/)
-  if (match) return parseInt(match[1], 10)
-  // 常见型号查表
-  if (lower.includes('rtx 4090')) return 24
-  if (lower.includes('rtx 4080')) return 16
-  if (lower.includes('rtx 4070 ti')) return 16
-  if (lower.includes('rtx 4070')) return 12
-  if (lower.includes('rtx 4060 ti')) return 16
-  if (lower.includes('rtx 4060')) return 8
-  if (lower.includes('rtx 3090')) return 24
-  if (lower.includes('rtx 3080')) return 10
-  if (lower.includes('rtx 3070')) return 8
-  if (lower.includes('rtx 3060')) return 12
-  if (lower.includes('rtx 3050')) return 8
-  if (lower.includes('rx 7900')) return 24
-  if (lower.includes('rx 7800')) return 16
-  if (lower.includes('rx 6800') || lower.includes('rx 6900')) return 16
-  if (lower.includes('rx 6700') || lower.includes('rx 6600')) return 8
   // 核显或未知
   return 0
 }
 
 /** 计算硬件等级 */
 function calculateTier(ramGB: number, hasDiscreteGPU: boolean, gpuVRAMGB: number): HardwareTier {
-  // L2 高端：独显 8GB+ 且 32GB+ RAM
-  if (hasDiscreteGPU && gpuVRAMGB >= 8 && ramGB >= 32) return 'L2'
+  // L2 高端：独显 8GB+ 且 30GB+ RAM（32GB 条实际可见 31.x，四舍五入后别差 1GB 掉档）
+  if (hasDiscreteGPU && gpuVRAMGB >= 8 && ramGB >= 30) return 'L2'
   // L1 中端：独显 4GB+ 或 16GB+ RAM
   if ((hasDiscreteGPU && gpuVRAMGB >= 4) || ramGB >= 16) return 'L1'
   // L0 入门：其余

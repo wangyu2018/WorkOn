@@ -432,6 +432,36 @@ export default function SettingsView() {
           </div>
         </div>
       )}
+      {/* 0. 性能（忙时轻档） */}
+      <Section title="性能" icon="zap">
+        <Row label="忙时轻档（推荐开启）" desc="电脑忙到卡的时候，自动放慢 WorkOn 的后台节奏（读屏暂停、看窗口变慢、桌宠省电）；不忙了自动恢复。">
+          <Toggle checked={settings.loadGuardEnabled} onChange={(v) => p({ loadGuardEnabled: v })} />
+        </Row>
+        <Row label="读屏识别引擎" desc="系统快扫：Windows 自带识别，几乎不占 CPU（缺中文语言包时自动回落）；精细识别：本地 RapidOCR，更准但吃 CPU。">
+          <div className="flex gap-2">
+            {(
+              [
+                ['auto', '自动（推荐）'],
+                ['system', '系统快扫'],
+                ['rapidocr', '精细识别']
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                className={`rounded-full border px-2.5 py-0.5 text-[11px] transition-colors ${
+                  (settings.ocrEngine || 'auto') === id
+                    ? 'border-[var(--teal-border)] bg-[var(--teal-soft)] text-[var(--teal-deep)]'
+                    : 'border-[var(--line)] text-slate-400 hover:text-slate-200'
+                }`}
+                onClick={() => p({ ocrEngine: id })}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </Row>
+        <LoadPaceCard />
+      </Section>
       {/* 1. 监控 */}
       <Section title="监控" icon="activity">
         <Row label="计划完成预测（监控页三色标注）" desc="监控/日历时间轴上按计划完成概率三色标注（绿=可完成 橙=可能延迟 红=高风险）">
@@ -561,8 +591,8 @@ export default function SettingsView() {
             <summary className="cursor-pointer text-slate-400 hover:text-slate-200">📊 查看能力边界</summary>
             <div className="mt-2 rounded-xl border border-white/10 p-3">
               <div className="grid grid-cols-3 gap-2 text-[11px]">
-                <div className="font-medium text-slate-300">功能</div><div className="font-medium text-slate-400 text-center">无需 AI</div><div className="font-medium text-emerald-400 text-center">开启 AI 后增强</div>
-                {['日报/周报生成|65% 覆盖|95% + 摘要/拆解','实际活动记录|✓ 本地规则|LLM 增强','快捷推荐|✗|AI 推荐','注意力曲线|✓ 算法|—','位置提醒|✓ 天气 API|—','文件夹解析|✓ 正则|LLM 归纳','任务排期（AI）|按预估工时排序|AI 智能排入每日计划','实时建议提醒|固定模板|AI 结合当前项目/状态生成','项目复盘|✓ 手动汇总|AI 自动生成复盘与改进建议'].map((r,i)=>{const [n,w,a]=r.split('|');return <Fragment key={i}><div className="text-slate-200">{n}</div><div className="text-slate-400 text-center">{w}</div><div className="text-emerald-400 text-center">{a}</div></Fragment>})}
+                <div className="font-medium text-slate-300">功能</div><div className="font-medium text-slate-400 text-center">无需 AI</div><div className="font-medium text-[var(--teal)] text-center">开启 AI 后增强</div>
+                {['日报/周报生成|65% 覆盖|95% + 摘要/拆解','实际活动记录|✓ 本地规则|LLM 增强','快捷推荐|✗|AI 推荐','注意力曲线|✓ 算法|—','位置提醒|✓ 天气 API|—','文件夹解析|✓ 正则|LLM 归纳','任务排期（AI）|按预估工时排序|AI 智能排入每日计划','实时建议提醒|固定模板|AI 结合当前项目/状态生成','项目复盘|✓ 手动汇总|AI 自动生成复盘与改进建议'].map((r,i)=>{const [n,w,a]=r.split('|');return <Fragment key={i}><div className="text-slate-200">{n}</div><div className="text-slate-400 text-center">{w}</div><div className="text-[var(--teal)] text-center">{a}</div></Fragment>})}
               </div>
             </div>
           </details>
@@ -815,10 +845,11 @@ export default function SettingsView() {
         <Row label="动效" desc="开启保留过渡与动画；关闭后全局禁用，界面更省资源、切换更直接">
           <Toggle checked={settings.animationsEnabled} onChange={(v) => p({ animationsEnabled: v })} />
         </Row>
-        <Row label="开发者选项" desc="开启后显示性能监控面板与 AI 提示词三层上下文（调试用）">
+        <Row label="开发者选项" desc="识别引擎、行为探针、性能面板、数据导出等调试项；日常使用保持关闭，默认配置已是最优">
           <Toggle checked={settings.devMode} onChange={(v) => p({ devMode: v })} />
         </Row>
-        <Row label="识别引擎" desc="rules=纯规则；shadow=规则出状态、小模型只记账（推荐）；model_first=模型高置信时接管">
+        {settings.devMode ? (
+        <Row label="识别引擎" desc="纯规则=不用小模型；影子=规则出状态、小模型只记账（推荐）；模型优先=模型高置信时接管状态">
           <div className="flex items-center gap-1.5">
             {(['rules', 'shadow', 'model_first'] as const).map((m) => (
               <button
@@ -831,9 +862,12 @@ export default function SettingsView() {
             ))}
           </div>
         </Row>
+        ) : null}
+        {settings.devMode ? (
         <Row label="行为探针" desc="全局键鼠聚合计数（只记次数与快捷键组合，不记录任何键入内容），供小模型识别真实行为。关闭后识别回退占位特征">
           <Toggle checked={settings.inputProbeEnabled} onChange={(v) => p({ inputProbeEnabled: v })} />
         </Row>
+        ) : null}
         {settings.devMode ? <PerfPanel /> : null}
         {settings.devMode ? (
           <Row label="OCR 数据集（开发者）" desc="本地导出截图/结构化数据，或批量 OCR 生成标注集（数据不出本机）">
@@ -855,9 +889,6 @@ export default function SettingsView() {
 
       {/* v3.2 天气 */}
       <Section title="天气" icon="activity">
-        <Row label="启用天气" desc="右上角显示当前天气与未来趋势，下班/周末自动提醒（按下方城市查询天气（不使用定位））">
-          <Toggle checked={settings.weatherEnabled !== false} onChange={(v) => p({ weatherEnabled: v })} />
-        </Row>
         <Row label="和风 API Key" desc="和风天气密钥，在 console.qweather.com 申请，仅存本地">
           <TextSetting password value={settings.weatherApiKey ?? ''} placeholder="和风天气 Key" onCommit={(v) => p({ weatherApiKey: v })} />
         </Row>
@@ -919,6 +950,48 @@ export default function SettingsView() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/* ── 忙时轻档：后台节奏实时面板（人话） ── */
+interface PaceRow { key: string; label: string; human: string }
+interface LoadStatusRow { cpuPercent: number; memPercent: number; pressure: 'normal' | 'high'; engaged: boolean; enabled: boolean; paces: PaceRow[] }
+
+function LoadPaceCard() {
+  const [st, setSt] = useState<LoadStatusRow | null>(null)
+  useEffect(() => {
+    let alive = true
+    const pull = (): void => {
+      void window.api
+        ?.getLoadStatus?.()
+        .then((s) => { if (alive) setSt(s as LoadStatusRow) })
+        .catch(() => undefined)
+    }
+    pull()
+    const t2 = window.setInterval(pull, 3000)
+    return () => { alive = false; window.clearInterval(t2) }
+  }, [])
+  if (!st) return null
+  const mood = st.engaged
+    ? { text: '电脑有点忙 · 轻档运行中', cls: 'text-amber-400' }
+    : st.cpuPercent >= 60 || st.memPercent >= 80
+      ? { text: '电脑有点忙，准备进入轻档…', cls: 'text-amber-300/80' }
+      : { text: '电脑很顺畅', cls: 'text-[var(--teal)]' }
+  return (
+    <div className="px-4 py-3">
+      <div className={`mb-1.5 text-[12px] font-medium ${mood.cls}`}>
+        {mood.text}（CPU {st.cpuPercent}% · 内存 {st.memPercent}%）
+      </div>
+      <div className="flex flex-col gap-0.5">
+        {st.paces.map((row) => (
+          <div key={row.key} className="flex items-center justify-between text-[11px]">
+            <span className="text-slate-500">{row.label}</span>
+            <span className="tabular-nums text-slate-300">{row.human}</span>
+          </div>
+        ))}
+      </div>
+      {!st.enabled ? <div className="mt-1 text-[10.5px] text-slate-600">忙时轻档已关闭，WorkOn 会一直保持全速</div> : null}
     </div>
   )
 }

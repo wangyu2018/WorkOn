@@ -282,7 +282,7 @@ function StorageBars() {
     {
       emoji: '📝',
       label: '活动记录',
-      gradient: 'linear-gradient(90deg, rgba(15,181,164,.95), rgba(15,181,164,.4))',
+      gradient: 'linear-gradient(90deg, var(--teal), var(--teal-border))',
       width: 26,
       value: recordCount != null ? `${recordCount.toLocaleString()} 条 · 体积统计即将支持` : '统计中…'
     },
@@ -382,13 +382,13 @@ export default function PrivacyView() {
       <div
         className="anim-fade-up glass-card hoverable flex flex-wrap items-center gap-3.5 !p-4"
         style={{
-          background: 'linear-gradient(135deg, rgba(16,185,129,.10), rgba(15,181,164,.05))',
+          background: 'var(--teal-wash)',
           border: '1px solid rgba(16,185,129,.35)'
         }}
       >
         <span
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
-          style={{ background: 'linear-gradient(135deg, #10b981, #34d399)', boxShadow: '0 4px 14px rgba(16,185,129,.35)' }}
+          style={{ background: 'linear-gradient(135deg, var(--teal), var(--teal-border))', boxShadow: '0 4px 14px var(--teal-glow)' }}
         >
           <Icon name="shield" size={20} className="text-white" />
         </span>

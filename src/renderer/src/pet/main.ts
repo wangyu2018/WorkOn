@@ -206,6 +206,23 @@ async function boot(): Promise<void> {
     noteActivity()
   }
 
+  // 忙时轻档：整机卡顿时强制 eco（复用闲置降档的状态机，解除后回落原档）
+  let loadEcoOn = false
+  window.api?.onLoadEco?.((v: unknown) => {
+    loadEcoOn = !!v
+    if (loadEcoOn) {
+      if (!idleDropped) {
+        idleDropped = true
+        preIdleTier = stage.fpsTier
+        stage.setFpsTier('eco')
+      }
+    } else if (idleDropped) {
+      idleTimer = 0
+      idleDropped = false
+      stage.setFpsTier(preIdleTier)
+    }
+  })
+
   // 拖拽/过渡期间临时升帧，结束回落（Stage 内来源计数，叠加安全）
   // 拖拽直接拉满 ultra：30fps 下角色 33ms 才跟一次手，体感"卡+粘连"
   drag.onFpsBoost = () => stage.boostFps('drag', 'ultra')

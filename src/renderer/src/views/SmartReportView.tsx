@@ -773,14 +773,14 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
         <button
           className={`flex w-full items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left text-[12px] transition-all ${
             active
-              ? 'border-[rgba(15,181,164,0.45)] bg-[var(--teal-soft)] font-medium text-[var(--teal)]'
+              ? 'border-[var(--teal-border)] bg-[var(--teal-soft)] font-medium text-[var(--teal)]'
               : 'border-transparent text-slate-400 hover:border-white/[0.08] hover:bg-white/[0.03] hover:text-slate-200'
           }`}
           onClick={() => setSelectedTemplateId(t.id)}
         >
           <span
             className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-md ${
-              active ? 'bg-[rgba(15,181,164,0.18)] text-[var(--teal)]' : 'bg-white/[0.05] text-slate-500'
+              active ? 'bg-[var(--teal-wash-strong)] text-[var(--teal)]' : 'bg-white/[0.05] text-slate-500'
             }`}
           >
             <Icon name={isUser ? 'edit' : 'sparkles'} size={10} />

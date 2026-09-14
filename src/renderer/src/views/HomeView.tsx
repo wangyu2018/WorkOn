@@ -16,6 +16,7 @@ import { matchesExcludedApp } from '@shared/stateMeta'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useAppStore } from '../stores/appStore'
 import { CATEGORY_META, categoryOfWithOverride, type AppCategory } from '@shared/appCategory'
+import { memo } from 'react'
 import MonitorView, { MONITOR_SECTION_META, type MonitorSectionKey } from './MonitorView'
 import {
   buildHomeRenderSlots,
@@ -330,6 +331,8 @@ function insight(trail: MergedTrail, recent: MergedTrail[]): DailyInsight {
     workDetail: `聚焦 ${winFocus} · 窗口 ${new Date(startTs).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}–${new Date(nowTs).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
   }
 }
+
+const MemoMonitorView = memo(MonitorView)
 
 export default function HomeView() {
   /** 主页模块显隐 + 拖拽顺序 */
@@ -723,11 +726,11 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
     const glance = !!seg.glance
     // v6 色块：按语义渐变 — 工作=青绿→青 / 摸鱼=琥珀 / 其他=中性面板色（token，亮暗模式自适应）
     const grad = sense === 'work'
-      ? 'linear-gradient(90deg, #0fb5a4, #22d3ee)'
+      ? 'linear-gradient(90deg, var(--teal), var(--teal-border))'
       : sense === 'slack'
         ? 'linear-gradient(90deg, #f59e0b, #fbbf24)'
         : 'var(--surface-3)'
-    const glow = sense === 'work' ? 'rgba(15,181,164,0.30)' : sense === 'slack' ? 'rgba(245,158,11,0.28)' : 'rgba(100,116,139,0.20)'
+    const glow = sense === 'work' ? 'var(--teal-glow)' : sense === 'slack' ? 'rgba(245,158,11,0.28)' : 'rgba(100,116,139,0.20)'
     const blockText = sense === 'work' ? '#ffffff' : sense === 'slack' ? '#451a03' : 'var(--text-2)'
     const accent = sense === 'other' ? 'var(--text-3)' : 'rgba(255,255,255,0.45)'
     const baseShadow = `0 1px 5px ${glow}`
@@ -1083,7 +1086,7 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
                       <span
                         className="rounded-md px-1.5 py-0.5 text-[10px] font-bold"
                         style={{
-                          background: meta.size === '整行' ? 'rgba(15,181,164,0.18)' : 'rgba(139,92,246,0.18)',
+                          background: meta.size === '整行' ? 'var(--teal-wash-strong)' : 'rgba(139,92,246,0.18)',
                           color: meta.size === '整行' ? 'var(--teal-deep)' : '#c4b5fd'
                         }}
                       >
@@ -1099,7 +1102,7 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
                     type="button"
                     className={`shrink-0 self-center rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${
                       on
-                        ? 'border-[rgba(15,181,164,0.4)] bg-[var(--teal-soft)] text-[var(--teal-deep)]'
+                        ? 'border-[var(--teal-border)] bg-[var(--teal-soft)] text-[var(--teal-deep)]'
                         : 'border-white/10 text-slate-500'
                     }`}
                     onClick={() => setWidget(key, !on)}
@@ -1147,8 +1150,8 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
       {renderSlots.map((slot, si) => {
         if (slot.kind === 'monitor') {
           return (
-            <section key={`mon-${si}-${slot.keys.join('-')}`} className="flex flex-col gap-4">
-              <MonitorView embedded sections={monitorSectionsFor(slot.keys)} sectionOrder={slot.keys} />
+            <section key={`mon-${homeOrder.indexOf(slot.keys[0])}`} className="flex flex-col gap-4">
+              <MemoMonitorView embedded sections={monitorSectionsFor(slot.keys)} sectionOrder={slot.keys} />
             </section>
           )
         }
@@ -1293,6 +1296,7 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
         if (slot.key === 'timeline') {
           return (
       <div key="timeline">
+      <PinnedWidgets trail={trail} />
       {/* 时间轴 — 水平泳道 */}
       <section className="glass-card">
         <div className="mb-3 flex items-center gap-2.5">
@@ -1302,8 +1306,7 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
           >
             <Icon name="clock" size={13} />
           </span>
-          <span className="text-[13px] font-semibold text-slate-200"><PinnedWidgets trail={trail} />
-        时间轴</span>
+          <span className="text-[13px] font-semibold text-slate-200">时间轴</span>
           <span className="text-[12px] text-slate-500">{plans.length} 计划 · {fmtDur(items.reduce((a, i) => a + i.seg.durationMin, 0))}</span>
           <div className="ml-auto flex items-center gap-2">
             <div className="flex items-center gap-0.5 rounded-lg p-0.5"
@@ -1620,7 +1623,7 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
             {/* 图例行：色块语义 + 今日各分类时长合计（todayByCategory 聚合） */}
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-2.5" style={{ borderTop: '0.5px dashed var(--tl-lane-border)' }}>
               <span className="flex items-center gap-1.5 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
-                <i className="inline-block h-2.5 w-6 rounded-full" style={{ background: 'linear-gradient(90deg,#0fb5a4,#22d3ee)' }} />工作
+                <i className="inline-block h-2.5 w-6 rounded-full" style={{ background: 'linear-gradient(90deg, var(--teal), var(--teal-border))' }} />工作
               </span>
               <span className="flex items-center gap-1.5 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
                 <i className="inline-block h-2.5 w-6 rounded-full" style={{ background: 'linear-gradient(90deg,#f59e0b,#fbbf24)' }} />摸鱼
@@ -1714,8 +1717,8 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
           style={{
             minHeight: 360, borderRadius: 12,
             background: isDarkMode
-              ? 'radial-gradient(ellipse 55% 75% at 25% 50%, rgba(15,181,164,0.12), transparent 70%), radial-gradient(ellipse 55% 75% at 75% 50%, rgba(139,92,246,0.14), transparent 70%), radial-gradient(circle at 50% 35%, #141d33 0%, #0b101b 100%)'
-              : 'radial-gradient(ellipse 55% 75% at 25% 50%, rgba(15,181,164,0.07), transparent 70%), radial-gradient(ellipse 55% 75% at 75% 50%, rgba(139,92,246,0.08), transparent 70%), #f8fafc',
+              ? 'radial-gradient(ellipse 55% 75% at 25% 50%, var(--teal-chip), transparent 70%), radial-gradient(ellipse 55% 75% at 75% 50%, rgba(139,92,246,0.14), transparent 70%), radial-gradient(circle at 50% 35%, #141d33 0%, #0b101b 100%)'
+              : 'radial-gradient(ellipse 55% 75% at 25% 50%, rgb(var(--teal-rgb) / 0.07), transparent 70%), radial-gradient(ellipse 55% 75% at 75% 50%, rgba(139,92,246,0.08), transparent 70%), #f8fafc',
             border: isDarkMode ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(15,23,42,0.06)',
           }}
         >
@@ -1841,7 +1844,6 @@ function PinnedWidgets({ trail }: { trail: MergedTrail | null }) {
       <div className="grid gap-3 lg:grid-cols-2">
         {pins.includes('state') && <div className="glass-card p-3"><h4 className="text-[11px] text-slate-400 mb-2">状态分布</h4>{Object.entries(stateMinutes).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([s,m])=><div key={s} className="flex justify-between text-[11px] text-slate-300"><span>{s}</span><span>{Math.round(m)}m</span></div>)}</div>}
         {pins.includes('topapps') && <div className="glass-card p-3"><h4 className="text-[11px] text-slate-400 mb-2">TOP 应用</h4>{topApps.map(a=><div key={a.app} className="flex justify-between text-[11px] text-slate-300"><span>{a.app}</span><span>{Math.round(a.minutes)}m</span></div>)}</div>}
-        {pins.includes('attention') && <AttentionPin />}
         {pins.includes('attention') && <AttentionPin />}
       </div>
     </section>

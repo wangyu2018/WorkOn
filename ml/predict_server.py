@@ -17,11 +17,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
-import pandas as pd
-from xgboost import XGBClassifier
+# 单条 9 特征预测用不了多线程；默认 OpenMP 线程池（=全部核）predict 后自旋
+# KMP_BLOCKTIME 毫秒级烧核，22 核机器上每次 predict ≈ 0.8 核纯发热 → 系统级鼠标延迟
+os.environ.setdefault("OMP_NUM_THREADS", "2")
+os.environ.setdefault("KMP_BLOCKTIME", "0")
+os.environ.setdefault("MKL_NUM_THREADS", "2")
+
+import pandas as pd  # noqa: E402
+from xgboost import XGBClassifier  # noqa: E402
 
 CATEGORICAL_COLS = ["app_category", "action_type", "field"]
 
@@ -54,7 +61,7 @@ def main() -> None:
     label_classes = json.loads((model_dir / "label_classes.json").read_text(encoding="utf-8"))
 
     try:
-        model = XGBClassifier()
+        model = XGBClassifier(nthread=2)
         model.load_model(str(model_path))
         model.n_classes_ = len(label_classes)
     except Exception as e:  # noqa: BLE001

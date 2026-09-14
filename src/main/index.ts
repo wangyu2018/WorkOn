@@ -376,6 +376,9 @@ app.whenReady().then(() => {
           startOcrCollector()
           startFolderWatch()
           startAgentHookServer()
+          if (getSettings().loadGuardEnabled !== false) {
+            void import('./loadGuard').then((m) => m.startLoadGuard())
+          }
   startIntegration()
           startOnerAutoSync()
           startPeriodicJobs()

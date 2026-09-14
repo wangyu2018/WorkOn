@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import type { ComponentProps, ReactNode } from 'react'
 import type { AttentionScore, MergedTrail, PlanForecast, PlanVsActual, WorkState } from '@shared/types'
 import { MOOD_SLACK_STATES, WORK_LIKE_STATES, WORK_STATES } from '@shared/stateMeta'
@@ -17,7 +17,7 @@ import { CATEGORY_META, categoryOf } from '@shared/appCategory'
 
 /** 状态分组（状态分布堆叠彩条口径）：工作 teal 渐变 / AI 协作 indigo→violet / 学习 cyan / 摸鱼 amber / 离开 surface */
 const STATE_GROUPS: { key: string; label: string; fill: string; dot: string; states: WorkState[] }[] = [
-  { key: 'work', label: '工作', fill: 'linear-gradient(90deg, #0fb5a4, #22d3ee)', dot: '#0fb5a4', states: ['focus', 'coding', 'meeting', 'remote'] },
+  { key: 'work', label: '工作', fill: 'linear-gradient(90deg, var(--teal), var(--teal-border))', dot: 'var(--teal)', states: ['focus', 'coding', 'meeting', 'remote'] },
   { key: 'ai', label: 'AI 协作', fill: 'linear-gradient(90deg, #6366f1, #8b5cf6)', dot: '#8b5cf6', states: ['aidev', 'aiqa'] },
   { key: 'study', label: '学习', fill: 'linear-gradient(90deg, #06b6d4, #67e8f9)', dot: '#06b6d4', states: ['writing'] },
   { key: 'slack', label: '摸鱼', fill: 'linear-gradient(90deg, #f59e0b, #fbbf24)', dot: '#f59e0b', states: ['slack', 'relax', 'break', 'lunch'] },
@@ -26,7 +26,7 @@ const STATE_GROUPS: { key: string; label: string; fill: string; dot: string; sta
 
 /** 应用 TOP 榜权重色：前三名 teal / violet / cyan 渐变 */
 const RANK_BARS = [
-  'linear-gradient(90deg, #0fb5a4, #22d3ee)',
+  'linear-gradient(90deg, var(--teal), var(--teal-border))',
   'linear-gradient(90deg, #8b5cf6, #c4b5fd)',
   'linear-gradient(90deg, #06b6d4, #67e8f9)'
 ]
@@ -135,12 +135,12 @@ function MiniTrailBar({ trail, plans, forecasts }: { trail: MergedTrail; plans: 
                 ? '#EF4444'
                 : prob !== undefined
                   ? prob >= 60
-                    ? '#10B981'
+                    ? 'var(--teal)'
                     : prob >= 30
                       ? '#F59E0B'
                       : '#EF4444'
                   : it.matched
-                    ? '#10B981'
+                    ? 'var(--teal)'
                     : '#F59E0B'
             return (
               <div
@@ -422,7 +422,7 @@ export default function MonitorView({
       ? ['#f59e0b', '#fbbf24']
       : grade && grade.grade === 'D'
         ? ['#ef4444', '#fb7185']
-        : ['#0fb5a4', '#22d3ee']
+        : ['var(--teal)', 'var(--teal-border)']
   const stateMeta = presence ? WORK_STATES[presence.state] : null
   // 今日概览：工作/摸鱼时长按 shared/stateMeta 口径从 trail.stateMinutes 聚合
   const overviewWorkMin = trail ? WORK_LIKE_STATES.reduce((s, st) => s + (trail.stateMinutes[st] ?? 0), 0) : 0
@@ -511,7 +511,7 @@ export default function MonitorView({
                       key={sc.screen}
                       className="flex items-center gap-2 rounded-lg border px-2.5 py-1.5 transition-colors hover:bg-white/[0.05]"
                       style={{
-                        borderColor: isFocus ? 'rgba(15,181,164,0.35)' : 'rgba(255,255,255,0.05)',
+                        borderColor: isFocus ? 'var(--teal-border)' : 'rgba(255,255,255,0.05)',
                         background: isFocus ? 'var(--teal-soft)' : 'rgba(255,255,255,0.03)'
                       }}
                     >
@@ -727,7 +727,7 @@ export default function MonitorView({
                         className="flex h-6 w-11 shrink-0 items-center justify-center gap-1 rounded-md border text-[10px] font-bold"
                         style={
                           isFocus
-                            ? { borderColor: 'rgba(15,181,164,0.45)', background: 'var(--teal-soft)', color: 'var(--teal)' }
+                            ? { borderColor: 'var(--teal-border)', background: 'var(--teal-soft)', color: 'var(--teal)' }
                             : { borderColor: 'rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.03)', color: '#94a3b8' }
                         }
                         title={`屏 ${idx + 1}${isFocus ? ' · 当前焦点屏' : ''}`}
@@ -739,7 +739,7 @@ export default function MonitorView({
                           className="h-full rounded-full transition-all"
                           style={{
                             width: `${Math.min(100, (min / Math.max(1, trail!.totalMin)) * 100)}%`,
-                            background: isFocus ? 'linear-gradient(90deg, #0fb5a4, #22d3ee)' : 'rgba(255,255,255,0.28)',
+                            background: isFocus ? 'linear-gradient(90deg, var(--teal), var(--teal-border))' : 'rgba(255,255,255,0.28)',
                             transitionDuration: '300ms'
                           }}
                         />

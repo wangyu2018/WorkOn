@@ -7,8 +7,10 @@ import { ProgressRing } from '../components/ProgressRing'
 import { InsightCard } from '../components/ui/InsightCard'
 import { AiThinking } from '../components/ui/AiThinking'
 import { addDays, clockOf, fmtDateLabel, fmtMin, timeToMin, todayKey } from '../components/utils'
+import { guessPlanCategory } from '@shared/planAnalysis'
 import { parsePlanText } from '../components/parsePlanText'
 import { useAppStore } from '../stores/appStore'
+import { useTerm } from '../i18n/useTerm'
 import { parseBreakdownSteps } from '@shared/parseBreakdown'
 
 const STATUS_LABEL: Record<PlanStatus, string> = {
@@ -30,9 +32,9 @@ const PLAN_TYPE_LABEL: Record<PlanType, string> = {
 /** 状态徽章配色：进行中 teal / 已完成 mint / 部分 amber / 延期 red / 取消 灰 */
 const STATUS_COLOR: Record<PlanStatus, string> = {
   planned: '#94A3B8',
-  in_progress: '#0FB5A4',
+  in_progress: 'var(--teal)',
   partial: '#F59E0B',
-  done: '#10B981',
+  done: 'var(--teal)',
   delayed: '#EF4444',
   cancelled: '#64748B'
 }
@@ -46,7 +48,7 @@ function planStatusColor(p: PlanItem, risky: boolean): string {
 
 /** 进度条渐变填色（与状态色条同源） */
 function planBarGradient(p: PlanItem, risky: boolean): string {
-  if (p.status === 'done') return 'linear-gradient(90deg, #10B981, #34D399)'
+  if (p.status === 'done') return 'linear-gradient(90deg, var(--teal), #34D399)'
   if (risky) return 'linear-gradient(90deg, #EF4444, #F97316)'
   if (p.status === 'in_progress') return 'linear-gradient(90deg, var(--teal), #22D3EE)'
   if (p.status === 'partial') return 'linear-gradient(90deg, #F59E0B, #FBBF24)'
@@ -329,6 +331,7 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
 
 /* ── 计划视图 ── */
 export default function PlanView() {
+  const t = useTerm()
   const [date, setDate] = useState(todayKey())
   const [tab, setTab] = useState<'plan' | 'project'>('plan')
   /** 今日安排内：全部 / 仅项目相关 / 仅日常 */
@@ -359,7 +362,7 @@ export default function PlanView() {
     await window.api.savePlan({
       date: targetDate,
       title,
-      category: 'other',
+      category: guessPlanCategory(title),
       status: 'planned',
       source: 'manual',
       planType: hasTime ? 'reminder' : 'task',
@@ -387,6 +390,16 @@ export default function PlanView() {
   }, [plans])
   const [expanded, setExpanded] = useState<string | null>(null)
   const [delayOpen, setDelayOpen] = useState<string | null>(null)
+  /** 未分类/分类组一键绑定到项目 */
+  const [bindGroupOpen, setBindGroupOpen] = useState<string | null>(null)
+  const bindGroupToProject = async (items: PlanItem[], projectId: string): Promise<void> => {
+    for (const p of items) {
+      if (p.projectId === projectId) continue
+      await window.api.savePlan({ id: p.id, projectId })
+    }
+    setBindGroupOpen(null)
+    await load()
+  }
   const [delayDate, setDelayDate] = useState('')
   const [delayReason, setDelayReason] = useState('')
   const [folderModal, setFolderModal] = useState(false)
@@ -646,7 +659,7 @@ export default function PlanView() {
     const hit = categories.find((c) => c.id === id)
     if (hit) return hit
     if (id === 'interest') return { id, label: '兴趣', color: '#EC4899', emoji: '✨' }
-    if (id === 'personal') return { id, label: '生活', color: '#10B981', emoji: '🏠' }
+    if (id === 'personal') return { id, label: '生活', color: 'var(--teal)', emoji: '🏠' }
     if (id === 'work-customer') return { id, label: '工作', color: '#3B82F6', emoji: '💼' }
     return { id: 'other', label: '未分类', color: '#64748B', emoji: '📋' }
   }
@@ -679,7 +692,7 @@ export default function PlanView() {
       await window.api.savePlan({
         date,
         title: title.slice(0, 100),
-        category: 'other',
+        category: guessPlanCategory(title),
         status: 'planned' as const,
         source: 'import' as const,
         note: `来自会议纪要导入`
@@ -773,7 +786,7 @@ export default function PlanView() {
       .sort((a, b) => a.ts - b.ts)
 
   const achievement = pva ? Math.min(100, pva.achievement) : 0
-  const ringColor = achievement >= 80 ? '#10B981' : achievement >= 50 ? '#F59E0B' : '#EF4444'
+  const ringColor = achievement >= 80 ? 'var(--teal)' : achievement >= 50 ? '#F59E0B' : '#EF4444'
   const forecastList = [...forecasts.values()]
   const avgProb = forecastList.length ? Math.round(forecastList.reduce((a, f) => a + f.completionProb, 0) / forecastList.length) : null
   const riskCount = forecastList.filter((f) => f.completionProb < 40).length
@@ -863,7 +876,7 @@ export default function PlanView() {
           <span className="mr-1 text-[10px] font-medium uppercase tracking-wider text-[var(--text-3)]">范围</span>
           {([
             ['all', '全部'],
-            ['project', '项目'],
+            ['project', t('project')],
             ['daily', '日常']
           ] as const).map(([k, label]) => (
             <button
@@ -995,7 +1008,7 @@ export default function PlanView() {
                         <span className="text-[14px] leading-none">{group.meta.emoji}</span>
                       )}
                       {isProjectGroup ? (
-                        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-[var(--text-3)]">项目</span>
+                        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-[var(--text-3)]">{t('project')}</span>
                       ) : null}
                       <span className="min-w-0 truncate text-[13px] font-semibold tracking-wide" style={{ color: group.meta.color }}>
                         {group.meta.label}
@@ -1007,6 +1020,37 @@ export default function PlanView() {
                         <span className="text-[10px] text-[var(--text-3)]">点击展开</span>
                       ) : null}
                     </button>
+                    {!isProjectGroup && group.meta ? (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {bindGroupOpen === group.key ? (
+                          <>
+                            <select
+                              className="glass-input !w-32 !py-0.5 !text-[11px]"
+                              defaultValue=""
+                              autoFocus
+                              onChange={(e) => {
+                                const pid = e.target.value
+                                if (pid) void bindGroupToProject(group.items, pid)
+                              }}
+                            >
+                              <option value="" disabled>选项目…</option>
+                              {projects.map((pj) => (
+                                <option key={pj.id} value={pj.id}>{pj.name}</option>
+                              ))}
+                            </select>
+                            <button className="glass-btn !px-2 !py-0.5 !text-[10px]" onClick={() => setBindGroupOpen(null)}>取消</button>
+                          </>
+                        ) : (
+                          <button
+                            className="glass-btn !px-2 !py-0.5 !text-[10px]"
+                            title={`把「${group.meta.label}」整组待办绑定到一个项目`}
+                            onClick={() => setBindGroupOpen(group.key)}
+                          >
+                            归到项目
+                          </button>
+                        )}
+                      </div>
+                    ) : null}
                     {group.key === 'other' ? (
                       <div className="flex flex-wrap items-center gap-1.5">
                         {newCatOpen ? (
@@ -1092,6 +1136,7 @@ export default function PlanView() {
                 fc.completionProb > 70 ? `大概率 ${fc.completionProb}%` : fc.completionProb >= 40 ? `有风险 ${fc.completionProb}%` : `可能延期 ${fc.completionProb}%`
               )
             }
+            if (p.carried) metaBits.push(`顺延自 ${p.carriedFrom?.slice(5)}`)
             if (p.fired && !done) metaBits.push('已提醒')
             return (
               <div

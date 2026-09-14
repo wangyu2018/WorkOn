@@ -31,8 +31,10 @@ interface TodayRow {
 const fmtDur = (min: number): string =>
   min >= 60 ? `${Math.floor(min / 60)}h${Math.round(min % 60) ? `${Math.round(min % 60)}m` : ''}` : `${Math.round(min)}m`
 
+let mainlineTrailCache: MergedTrail | null = null
+
 export default function MainlineView() {
-  const [trail, setTrail] = useState<MergedTrail | null>(null)
+  const [trail, setTrail] = useState<MergedTrail | null>(() => mainlineTrailCache)
   const [attrProjectId, setAttrProjectId] = useState<string | null>(null)
   const [attrTask, setAttrTask] = useState('')
   const [reloadTick, setReloadTick] = useState(0)
@@ -43,7 +45,7 @@ export default function MainlineView() {
   const [modalProj, setModalProj] = useState<Project | null>(null)
 
   useEffect(() => {
-    void window.api?.getTrail?.().then((t) => setTrail((t as MergedTrail) ?? null)).catch(() => undefined)
+    void window.api?.getTrail?.().then((x) => { const tv = (x as MergedTrail) ?? null; mainlineTrailCache = tv; setTrail(tv) }).catch(() => undefined)
     const t = window.setInterval(() => setReloadTick((n) => n + 1), 60_000)
     return () => window.clearInterval(t)
   }, [])
@@ -129,7 +131,7 @@ export default function MainlineView() {
             return (
               <div
                 key={r.project.id}
-                className={`px-3.5 py-3 ${isInk ? 'border-t border-[var(--line)] first:border-t-0' : `rounded-xl border ${active ? 'border-[rgba(15,181,164,0.45)]' : 'border-[var(--line)]'}`}`}
+                className={`px-3.5 py-3 transition-colors ${isInk ? 'border-t border-[var(--line)] first:border-t-0' : `rounded-xl border ${active ? 'border-[var(--teal-border)]' : 'border-[var(--line)]'}`}`}
                 style={isInk ? { background: 'var(--teal-soft)' } : { background: active ? 'var(--teal-soft)' : 'var(--surface-2)' }}
               >
                 {/* 行1：名称 + 正在干 + 上线刻度 */}
@@ -171,7 +173,7 @@ export default function MainlineView() {
                     <div className="relative h-2 min-w-0 flex-1 rounded-full bg-[var(--surface-3)]">
                       <div
                         className="h-full rounded-full bg-[var(--teal)]"
-                        style={{ width: `${r.progress ?? 0}%`, boxShadow: '0 0 8px rgba(15,181,164,0.4)' }}
+                        style={{ width: `${r.progress ?? 0}%`, boxShadow: '0 0 8px var(--teal-glow)' }}
                       />
                       {nodes.map((nt, i) => (
                         <div key={nt.id} className="group/node absolute top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ left: `${((i + 1) / nodes.length) * 100}%` }}>

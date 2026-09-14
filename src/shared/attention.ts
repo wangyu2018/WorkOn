@@ -20,6 +20,12 @@ export interface UserTypeMeta {
 
 /** 六类用户画像（v2.6 §1.2 / §2.2） */
 export const USER_TYPE_META: Record<UserType, UserTypeMeta> = {
+  developer: {
+    label: '开发者', emoji: '🧑‍💻',
+    desc: '编码/调试/评审穿插；目标是保住心流、按时交付（评分权重试验中，沿用办公族基准）',
+    weights: { depth: 0.20, sustain: 0.30, resist: 0.20, rhythm: 0.15, recover: 0.15 },
+    targetWorkMin: 420, targetPomodoros: 12
+  },
   office_worker: {
     label: '办公族', emoji: '💼',
     desc: '9-6 制式工作，会议穿插；目标是高效完成当日任务、准时下班',
@@ -446,7 +452,8 @@ const TYPE_APP_RULES: Record<UserType, { groups: AppGroup[]; factor: number }> =
   student: { groups: ['pdf', 'notes', 'onlineCourse'], factor: 0.75 }, // 同考研党组合但权重 0.3
   freelancer: { groups: ['design', 'collab', 'dev'], factor: 0.75 }, // Figma/PS + 沟通工具
   creator: { groups: ['design', 'writing', 'material'], factor: 0.75 }, // 设计/写作/素材工具
-  entrepreneur: { groups: ['dev', 'collab', 'dataDoc'], factor: 0.75 } // 全栈工具 + 沟通 + 文档
+  entrepreneur: { groups: ['dev', 'collab', 'dataDoc'], factor: 0.75 }, // 全栈工具 + 沟通 + 文档
+  developer: { groups: ['dev', 'collab'], factor: 1 } // IDE/终端 + 沟通
 }
 
 /** 计划关键词 → 用户类型（照 §1.3 信号3 原文） */
@@ -456,7 +463,8 @@ const TYPE_PLAN_KEYWORDS: Record<UserType, string[]> = {
   freelancer: ['交付', '客户', '设计稿'],
   student: ['作业', '实验', '论文'],
   creator: ['写稿', '剪辑', '设计', '素材'],
-  entrepreneur: ['融资', '产品', '团队', '路演']
+  entrepreneur: ['融资', '产品', '团队', '路演'],
+  developer: ['开发', '联调', '部署', '评审', '重构']
 }
 
 /** 应用组合匹配度 0-1：命中组数占比 × 类型系数 */
@@ -490,6 +498,9 @@ function scheduleMatch(type: UserType, startMin: number | null, endMin: number |
     case 'entrepreneur': // 9 点前开始 + 无明确结束（21 点后或无记录）
       if (startMin != null && startMin < 540) score += 0.5
       if (endMin == null || endMin >= 1260) score += 0.5
+      return score
+    case 'developer': // 深夜收尾但开始弹性：只看晚结束给弱信号
+      if (endMin != null && endMin >= 1260) score += 0.3
       return score
   }
 }

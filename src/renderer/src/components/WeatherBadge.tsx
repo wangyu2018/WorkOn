@@ -94,13 +94,12 @@ function WeatherGlyph({ text, size = 14 }: { text: string; size?: number }) {
 
 export const WeatherBadge = memo(function WeatherBadge() {
   const city = useSettingsStore((s) => s.settings.city)
-  const weatherEnabled = useSettingsStore((s) => s.settings.weatherEnabled)
   const weatherHours = useSettingsStore((s) => s.settings.weatherHours ?? 3)
   const [data, setData] = useState<WeatherData | null>(null)
   const [err, setErr] = useState(false)
 
   useEffect(() => {
-    if (!city || weatherEnabled === false) {
+    if (!city) {
       setData(null)
       return
     }
@@ -118,7 +117,7 @@ export const WeatherBadge = memo(function WeatherBadge() {
     return () => {
       alive = false
     }
-  }, [city, weatherEnabled])
+  }, [city])
 
   if (!data || err) return null
 

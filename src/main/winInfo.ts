@@ -137,7 +137,9 @@ while ($true) {
       $script:lastOut = $out
     }
   } catch {}
-  Start-Sleep -Milliseconds 1000
+  $sleepMs = 1000
+  if ($env:WORKON_WININFO_SLEEP) { try { $sleepMs = [int]$env:WORKON_WININFO_SLEEP } catch {} }
+  Start-Sleep -Milliseconds $sleepMs
 }
 `
 
@@ -365,6 +367,25 @@ function handleLine(line: string): void {
   }
 }
 
+/** 采样睡眠（ms）：忙时轻档会切 3000 */
+let winInfoSleepMs = 1000
+let intentionalRestart = false
+
+/** 忙时轻档切换采样节奏；已有常驻进程则以「有意重启」方式换挡 */
+export function setWinInfoSlow(slow: boolean): void {
+  const target = slow ? 3000 : 1000
+  if (target === winInfoSleepMs) return
+  winInfoSleepMs = target
+  if (server && !server.killed) {
+    intentionalRestart = true
+    try { server.kill() } catch { /* ignore */ }
+  }
+}
+
+export function getWinInfoSleepMs(): number {
+  return winInfoSleepMs
+}
+
 function startServer(): void {
   if (stopped || server || serverStarting) return
   if (serverFailures >= MAX_SERVER_FAILURES) return
@@ -374,7 +395,11 @@ function startServer(): void {
     const proc = spawn(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-EncodedCommand', ENCODED_SERVER],
-      { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true }
+      {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+        env: { ...process.env, WORKON_WININFO_SLEEP: String(winInfoSleepMs) }
+      }
     )
     server = proc
     function lowerPriority(pid: number | undefined): void {
@@ -403,6 +428,12 @@ function startServer(): void {
       server = null
       serverAlive = false
       serverStarting = false
+      if (intentionalRestart) {
+        intentionalRestart = false
+        console.info(`[winInfo] 采样节奏切换，常驻进程换挡重启（${winInfoSleepMs}ms）`)
+        setTimeout(() => startServer(), 300)
+        return
+      }
       serverFailures++
       console.warn(`[winInfo] 常驻采集进程退出 code=${code}（失败 ${serverFailures}/${MAX_SERVER_FAILURES}），${RESTART_COOLDOWN_MS}ms 后重试`)
       if (!stopped && serverFailures < MAX_SERVER_FAILURES) {

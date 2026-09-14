@@ -4,6 +4,9 @@
  */
 import { useEffect, useState } from 'react'
 import type { Project, ProjectTask } from '@shared/types'
+import { DOMAIN_META, guessDomain, PRESET_DOMAINS, resolveTerm } from '@shared/dictionary'
+import { defaultDomainOfUserType } from '@shared/dictionary'
+import { useSettingsStore } from '../stores/settingsStore'
 
 type Tab = 'view' | 'manage'
 
@@ -16,6 +19,12 @@ export function ProjectModal({ project, onClose, onSaved }: {
   const [tasks, setTasks] = useState<ProjectTask[]>([])
   const [draft, setDraft] = useState<Project>({ ...project })
   const [newTask, setNewTask] = useState('')
+  const [customDomain, setCustomDomain] = useState(
+    project.domain && !PRESET_DOMAINS.includes(project.domain) ? project.domain : ''
+  )
+  const userType = useSettingsStore((s) => s.settings.userType)
+  // 猜域：项目还没标域时，从名称/目标里找行话，一次性建议
+  const domainGuess = !project.domain ? guessDomain({ text: `${project.name} ${project.goal ?? ''}` }) : null
 
   useEffect(() => {
     void window.api?.listProjectTasks?.(project.id).then((ts) => setTasks((ts as ProjectTask[]) ?? [])).catch(() => undefined)
@@ -168,6 +177,63 @@ export function ProjectModal({ project, onClose, onSaved }: {
                     <option value="low">低</option>
                   </select>
                 </label>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] uppercase tracking-wider text-slate-500">工作域（这个项目说什么行话）</span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {PRESET_DOMAINS.map((d) => {
+                    const on = draft.domain === d || (!draft.domain && d === defaultDomainOfUserType(userType))
+                    const meta = DOMAIN_META[d]
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        title={meta?.desc}
+                        className={`rounded-full border px-2 py-0.5 text-[10.5px] transition-colors ${
+                          draft.domain === d
+                            ? 'border-[var(--teal-border)] bg-[var(--teal-soft)] text-[var(--teal-deep)]'
+                            : on && d === defaultDomainOfUserType(userType)
+                              ? 'border-[var(--line)] bg-[var(--surface-2)] text-slate-400'
+                              : 'border-[var(--line)] bg-[var(--surface-2)] text-slate-400 hover:text-slate-200'
+                        }`}
+                        onClick={() => setDraft((dd) => ({ ...dd, domain: dd.domain === d ? undefined : d }))}
+                      >
+                        {meta?.emoji} {meta?.label}
+                        {d === defaultDomainOfUserType(userType) && !draft.domain ? '（默认）' : ''}
+                      </button>
+                    )
+                  })}
+                  {customDomain || draft.domain && !PRESET_DOMAINS.includes(draft.domain) ? (
+                    <span className="rounded-full border border-[var(--line)] bg-[var(--surface-2)] px-2 py-0.5 text-[10.5px] text-slate-300">
+                      ✳ {draft.domain && !PRESET_DOMAINS.includes(draft.domain) ? draft.domain : customDomain}
+                    </span>
+                  ) : null}
+                  <input
+                    className="w-24 rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-1.5 py-0.5 text-[10.5px] text-slate-200 placeholder:text-slate-600"
+                    placeholder="自定义域…"
+                    value={customDomain}
+                    onChange={(e) => {
+                      const v = e.target.value.trim()
+                      setCustomDomain(v)
+                      setDraft((dd) => ({ ...dd, domain: v || undefined }))
+                    }}
+                  />
+                </div>
+                {domainGuess ? (
+                  <button
+                    type="button"
+                    className="self-start text-[10.5px] text-[var(--teal)] hover:underline"
+                    onClick={() => {
+                      setDraft((dd) => ({ ...dd, domain: domainGuess }))
+                      if (PRESET_DOMAINS.includes(domainGuess)) setCustomDomain('')
+                    }}
+                  >
+                    看起来像「{DOMAIN_META[domainGuess]?.label ?? domainGuess}」的活？点一下标上
+                  </button>
+                ) : null}
+                <span className="text-[10px] text-slate-600">
+                  当前词汇：{resolveTerm(draft.domain, 'project')} · {resolveTerm(draft.domain, 'step')} · {resolveTerm(draft.domain, 'statusCard')}
+                </span>
               </div>
               <button className="glass-btn primary self-end !py-1 text-[11px]" onClick={() => void saveHeader()}>保存信息</button>
 

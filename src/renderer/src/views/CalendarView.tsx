@@ -293,7 +293,7 @@ interface MonthDayStat {
 }
 
 /** 热力 5 档：surface-3 / teal .25 / .5 / .75 / 1 */
-const HEAT_TIERS = ['var(--surface-3)', 'rgba(15,181,164,0.25)', 'rgba(15,181,164,0.5)', 'rgba(15,181,164,0.75)', 'rgba(15,181,164,1)']
+const HEAT_TIERS = ['var(--surface-3)', 'var(--teal-border)', 'rgb(var(--teal-rgb) / 0.5)', 'rgb(var(--teal-rgb) / 0.75)', 'var(--teal)']
 
 const PLAN_STATUS_SHORT: Record<PlanStatus, string> = {
   planned: '待',
@@ -573,7 +573,7 @@ function DayDetailCard({ date, reloadKey, onEditEntry, onAdd, dayPlans, categori
                   className="h-full rounded-full transition-all duration-500"
                   style={{
                     width: `${planProg.pct}%`,
-                    background: planProg.pct >= 100 ? '#10B981' : 'linear-gradient(90deg, var(--teal), #22D3EE)'
+                    background: planProg.pct >= 100 ? 'var(--teal)' : 'linear-gradient(90deg, var(--teal), #22D3EE)'
                   }}
                 />
               </div>
@@ -959,7 +959,7 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
                   background: 'var(--surface-2)',
                   borderColor: isToday ? 'var(--teal)' : 'var(--line)',
                   boxShadow: isToday
-                    ? '0 0 0 1px var(--teal), 0 0 14px rgba(15,181,164,0.35)'
+                    ? '0 0 0 1px var(--teal), 0 0 14px var(--teal-glow)'
                     : undefined,
                   minHeight: 108
                 }}
@@ -988,7 +988,7 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
                       className="h-full rounded-full transition-all duration-500"
                       style={{
                         width: `${prog.pct}%`,
-                        background: prog.pct >= 100 ? '#10B981' : 'var(--teal)'
+                        background: prog.pct >= 100 ? 'var(--teal)' : 'var(--teal)'
                       }}
                     />
                   </div>

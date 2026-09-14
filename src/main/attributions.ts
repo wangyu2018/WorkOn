@@ -11,7 +11,8 @@ import { fuzzyMatch } from '@shared/fuzzy'
 import { categoryOfWithOverride } from '@shared/appCategory'
 import { enqueueAsk } from './confirmQueue'
 import { dateKey } from '@shared/trail'
-import { findDuplicateProject } from './projects'
+import { findDuplicateProject, listProjects } from './projects'
+import { defaultDomainOfUserType, formatTerm, resolveTerm, type TermKey } from '@shared/dictionary'
 import { extractPathHint, isIdeApp } from './pathHint'
 import type { Project, ProjectTask } from '@shared/types'
 
@@ -220,6 +221,10 @@ export interface AttributionState {
   taskTitle: string
   sec: number
   source: 'binding' | 'keyword' | 'question' | 'none' | 'dir'
+  /** 归属存疑：当前上下文与归属不符已超过阈值（显示层用，不打扰） */
+  stale?: boolean
+  /** 已检测到上下文不匹配的持续秒数 */
+  driftSec?: number
 }
 
 function appNameMatch(app: string, apps: string[]): string | null {
@@ -282,8 +287,10 @@ function buildConfirmCopy(opts: {
   windowTitle?: string
   pathHint?: string
   projectName?: string
+  projectDomain?: string
   reason?: string
 }): string {
+  const t = (key: TermKey): string => resolveTerm(opts.projectDomain, key)
   const soft = fmtApps(opts.apps)
   const win = opts.windowTitle?.trim()
   const path = opts.pathHint?.trim()
@@ -292,11 +299,11 @@ function buildConfirmCopy(opts: {
   if (win) lines.push(`窗口：「${win.slice(0, 60)}」`)
   if (path) lines.push(`工作区/路径线索：「${path}」`)
   if (opts.mode === 'drift' && opts.projectName) {
-    lines.push(`这段操作还是在做项目「${opts.projectName}」吗？`)
+    lines.push(formatTerm(t('askStillQ'), { p: opts.projectName ?? '' }))
     if (opts.reason) lines.push(`（依据：${opts.reason}）`)
     else lines.push('（确认的是这段操作，不是整个软件永久绑定）')
   } else {
-    lines.push('这段操作要挂到哪个项目？')
+    lines.push(t('askProjectQ'))
     if (opts.reason) lines.push(`（线索：${opts.reason}）`)
     else lines.push('（可先不挂；Cursor 等多开按窗口/路径分段）')
   }
@@ -395,7 +402,8 @@ export function attributionTick(app: string, title: string, ts: number, idleSec:
       const pk = pathKeyOf(pathHint)
       const fp = `drift:${rt.projectId}:${day}:${pk}`
       if (!askedDriftToday(rt.projectId, day, pk)) {
-        const reason = `你刚才挂在「${rt.projectName}」，但现在这段操作不在该项目的绑定线索里`
+        const reason = formatTerm(resolveTerm(undefined, 'driftWhy'), { p: rt.projectName })
+        const driftDomain = listProjects().find((x) => x.id === rt.projectId)?.domain
         const asked = askConfirm(
           fp,
           buildConfirmCopy({
@@ -404,6 +412,7 @@ export function attributionTick(app: string, title: string, ts: number, idleSec:
             windowTitle: title,
             pathHint: pathHint ?? undefined,
             projectName: rt.projectName,
+            projectDomain: driftDomain,
             reason
           }),
           {
@@ -443,6 +452,7 @@ export function attributionTick(app: string, title: string, ts: number, idleSec:
             apps: [...rt.unattrAppSet],
             windowTitle: title,
             pathHint: pathHint ?? undefined,
+            projectDomain: defaultDomainOfUserType(getSettings().userType),
             reason
           }),
           {
@@ -560,13 +570,20 @@ export function answerAttribution(
   return { projectId: rt.projectId, projectName: rt.projectName }
 }
 
+/** 归属存疑阈值：上下文不匹配持续 3 分钟即标记（早于 15 分钟的漂移提问） */
+const STALE_AFTER_SEC = 180
+
 export function getAttribution(): AttributionState {
+  const driftSec =
+    rt.projectId && rt.unattrSinceTs ? Math.max(0, Math.round((Date.now() - rt.unattrSinceTs) / 1000)) : 0
   return {
     projectId: rt.projectId,
     projectName: rt.projectName,
     taskId: rt.taskId,
     taskTitle: rt.taskTitle,
     sec: rt.sinceTs ? Math.round((Date.now() - rt.sinceTs) / 1000) : 0,
-    source: rt.projectId ? 'binding' : 'none'
+    source: rt.projectId ? 'binding' : 'none',
+    stale: driftSec >= STALE_AFTER_SEC,
+    driftSec
   }
 }

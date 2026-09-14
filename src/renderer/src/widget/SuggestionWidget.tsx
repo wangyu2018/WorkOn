@@ -14,10 +14,14 @@ interface AttributionState {
   taskTitle: string
   sec: number
   source: 'binding' | 'keyword' | 'question' | 'none'
+  stale?: boolean
+  driftSec?: number
 }
 import { WORK_STATES } from '@shared/stateMeta'
 import { usePresenceStore } from '../stores/presenceStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useTerm } from '../i18n/useTerm'
+import { guessPlanCategory } from '@shared/planAnalysis'
 import { Icon, type IconName } from '../components/Icon'
 import { AiAssistStrip, AiAssistRing } from '../components/AiAssistStrip'
 import { CATEGORY_META, categoryOfWithOverride, type AppCategory } from '@shared/appCategory'
@@ -565,6 +569,7 @@ export default function SuggestionWidget() {
   const aiEnabled = useSettingsStore((s) => s.settings.aiEnabled)
   const rawDisplay = useSettingsStore((s) => s.settings.widgetDisplay)
   const settingsCompact = useSettingsStore((s) => s.settings.widgetCompact)
+  const t = useTerm()
   const aiAssistEnabled = useSettingsStore((s) => s.settings.aiAssistWatchEnabled)
   const widgetDisplay: WidgetDisplayOptions = {
     dock: { ...DEFAULT_WIDGET_DISPLAY.dock, ...(rawDisplay?.dock ?? {}) },
@@ -634,29 +639,58 @@ export default function SuggestionWidget() {
   const loadProjects = (): void => {
     void window.api?.listProjects?.().then((ps) => setAllProjects((ps as Project[]) ?? [])).catch(() => undefined)
   }
+  /** 归属芯片：常驻可点 = 改归属/解除的总入口（存疑时琥珀高亮；用户主动，不消耗提问预算） */
+  const attrChip = (attr: AttributionState): JSX.Element => {
+    const chip = <GrainChip projectName={attr.projectName} taskTitle={attr.taskTitle} sec={attr.sec} />
+    const title = attr.stale
+      ? `归属存疑：当前干的活和「${attr.projectName}」的绑定线索对不上已 ${Math.max(1, Math.round((attr.driftSec ?? 0) / 60))} 分钟 · 点一下改归属或解除`
+      : `当前挂在「${attr.projectName}」· 点一下改归属或解除`
+    return (
+      <button
+        type="button"
+        data-no-capsule-drag
+        className={`min-w-0 rounded-md px-1 py-0.5 text-left transition-colors ${
+          attr.stale
+            ? 'border border-[rgba(245,158,11,0.55)] hover:border-[rgba(245,158,11,0.9)]'
+            : 'border border-transparent hover:border-[var(--line)]'
+        }`}
+        title={title}
+        onClick={(e) => {
+          e.stopPropagation()
+          loadProjects()
+          setShowUnattrAsk(true)
+          if (widgetMode === 'mini') setMode('full') // mini 不渲染卡片，展开到完整面板
+        }}
+      >
+        {chip}
+      </button>
+    )
+  }
+
   /** 未归类时的操作钮（各态共用） */
   const attrBtn = (
     <button
       className="shrink-0 rounded-full border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--text-3)] transition-colors hover:border-[rgba(139,92,246,0.5)] hover:text-[var(--violet)]"
-      title="把当前工作挂到一个项目，时长才会计入"
+      title={`把当前工作挂到一个${t('project')}，时长才会计入`}
       onClick={(e) => {
         e.stopPropagation()
         loadProjects()
         setShowUnattrAsk(true)
       }}
     >
-      ◈ 归到项目
+      ◈ 归到{t('project')}
     </button>
   )
   /** 未归因卡（compact/full 内嵌） */
-  const unattrCard = showUnattrAsk && !attr?.projectId ? (
+  const unattrCard = showUnattrAsk ? (
     <div className="mx-3 mb-2">
-      <InsetCard color="#8B5CF6" title="📂 归到哪个项目？">
+      <InsetCard color="#8B5CF6" title={`📂 ${t('askProjectQ')}`}>
         <UnattrAskCard
           projects={allProjects}
           apps={(question as unknown as { apps?: string[] })?.apps}
           fp={(question?.ctx ?? '').startsWith('attrib:') ? question!.ctx.slice(7) : undefined}
           date={new Date().toISOString().slice(0, 10)}
+          current={attr}
           onDone={() => {
             setShowUnattrAsk(false)
             if (question) answer('yes')
@@ -1012,15 +1046,7 @@ export default function SuggestionWidget() {
       >
         {hasAttr && dm.project ? (
           <>
-            <GrainChip projectName={attr!.projectName} taskTitle={attr!.taskTitle} sec={attr!.sec} />
-            {aiAssistEnabled ? aiAssistItems.filter((i) => i.status === 'busy' || i.status === 'done').slice(0, 2).map((i) => (
-              <span
-                key={i.key}
-                data-no-capsule-drag
-                className={`inline-block h-2 w-2 shrink-0 rounded-full ${i.status === 'busy' ? 'bg-[#10B981] ring-breathe-green' : 'bg-[#EF4444]'}`}
-                title={`${i.label} · ${i.status === 'busy' ? '处理中' : '刚停止回复'}`}
-              />
-            )) : null}
+            {attrChip(attr!)}
             {dm.chain && chain?.active ? <ChainChip sec={chain.sec} interruptions={chain.interruptionsToday} /> : null}
           </>
         ) : (
@@ -1045,6 +1071,17 @@ export default function SuggestionWidget() {
             ) : null}
           </>
         )}
+        {aiAssistEnabled && dm.aiDots ? (
+          <div className="ml-auto flex shrink-0 items-center gap-1.5" data-no-capsule-drag>
+            {aiAssistItems.filter((i) => i.status === 'busy' || i.status === 'done').slice(0, 3).map((i) => (
+              <span
+                key={i.key}
+                className={`inline-block h-2 w-2 rounded-full ${i.status === 'busy' ? 'bg-[var(--teal)] ring-breathe-green' : 'bg-[#EF4444]'}`}
+                title={`${i.label} · ${i.status === 'busy' ? '处理中' : '刚完成'}`}
+              />
+            ))}
+          </div>
+        ) : null}
         {dm.penetrationBtn && !penetration ? (
         <button
           className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[var(--text-3)] transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--text-1)]"
@@ -1173,19 +1210,17 @@ export default function SuggestionWidget() {
               </span>
             </div>
             {attr?.projectId ? (
-              <>
-                {df.projectChip ? <div className="mt-0.5 flex min-w-0 items-center gap-1"><GrainChip projectName={attr.projectName} taskTitle={attr.taskTitle} sec={attr.sec} /></div> : null}
-                {aiAssistEnabled && aiAssistItems.length ? (
-                  <div className="mt-1 flex items-center gap-2.5">
-                    {aiAssistItems.slice(0, 6).map((i) => (
-                      <AiAssistRing key={i.key} item={i} />
-                    ))}
-                  </div>
-                ) : null}
-              </>
+              <>{df.projectChip ? <div className="mt-0.5 flex min-w-0 items-center gap-1">{attrChip(attr)}</div> : null}</>
             ) : (
               <div className="mt-0.5">{attrBtn}</div>
             )}
+            {aiAssistEnabled && df.aiRing && aiAssistItems.length ? (
+              <div className="mt-1 flex items-center gap-2.5">
+                {aiAssistItems.slice(0, 6).map((i) => (
+                  <AiAssistRing key={i.key} item={i} />
+                ))}
+              </div>
+            ) : null}
             {presence && presence.continuousFocusSec > 60 && showFocusMinutes && df.focusMinutes && (
               <div className="mt-0.5 text-[11px]" style={{ color: accent }}>
                 已专注 {Math.round(presence.continuousFocusSec / 60)} 分钟
@@ -1320,7 +1355,7 @@ export default function SuggestionWidget() {
           ) : null}
 
           {question && (question.ctx ?? '').startsWith('attrib') ? (
-            <InsetCard color="#8B5CF6" title="📂 归到哪个项目？">
+            <InsetCard color="#8B5CF6" title={`📂 ${t('askProjectQ')}`}>
               <UnattrAskCard
                 projects={allProjects}
                 apps={(question as unknown as { apps?: string[] })?.apps}
@@ -1364,7 +1399,7 @@ export default function SuggestionWidget() {
 }
 
 /** 未归因轻问卡：先问在干啥 → 归到已有项目 / 现场新建（真指纹+真应用，归属后自动落一条计划） */
-function UnattrAskCard({ onDone, projects, apps, fp, date }: { onDone: () => void; projects: Project[]; apps?: string[]; fp?: string; date?: string }) {
+function UnattrAskCard({ onDone, projects, apps, fp, date, current }: { onDone: () => void; projects: Project[]; apps?: string[]; fp?: string; date?: string; current?: AttributionState | null }) {
   const [pick, setPick] = useState<string>('')
   const [newName, setNewName] = useState('')
   const [doing, setDoing] = useState('')
@@ -1380,7 +1415,7 @@ function UnattrAskCard({ onDone, projects, apps, fp, date }: { onDone: () => voi
           void window.api?.savePlan?.({
             date: date ?? new Date().toISOString().slice(0, 10),
             title: doing.trim().slice(0, 100),
-            category: 'other',
+            category: guessPlanCategory(doing.trim()),
             status: 'planned',
             projectId: pid,
             source: 'manual',
@@ -1392,6 +1427,17 @@ function UnattrAskCard({ onDone, projects, apps, fp, date }: { onDone: () => voi
   }
   return (
     <div className="w-full">
+      {current?.projectId ? (
+        <div
+          className={`mb-2 rounded-lg border px-2 py-1.5 text-[10.5px] leading-relaxed ${
+            current.stale ? 'border-[rgba(245,158,11,0.5)] text-amber-300' : 'border-[var(--line)] text-[var(--text-2)]'
+          }`}
+        >
+          当前挂在「{current.projectName}」{current.taskTitle ? ` · ${current.taskTitle}` : ''} · 已 {Math.max(1, Math.round((current.sec ?? 0) / 60))} 分钟
+          {current.stale ? ' · 归属存疑' : ''}
+        </div>
+      ) : null}
+      <div className="max-h-52 overflow-y-auto pr-0.5">
       <div className="mb-2 flex flex-col gap-1">
         {projects.slice(0, 5).map((p) => (
           <button
@@ -1412,6 +1458,14 @@ function UnattrAskCard({ onDone, projects, apps, fp, date }: { onDone: () => voi
         value={doing}
         onChange={(e) => setDoing(e.target.value)}
       />
+      <button
+        type="button"
+        className="mb-2 w-full rounded-lg border border-[var(--line)] px-2 py-1 text-[10.5px] text-[var(--text-3)] transition-colors hover:border-[var(--border-active)] hover:text-[var(--text-1)]"
+        title="这段先不算任何项目；已挂的会解除"
+        onClick={() => answer('no')}
+      >
+        先不挂项目 / 解除归属
+      </button>
       {!pick ? (
         <div className="flex items-center gap-1.5">
           <input
@@ -1422,6 +1476,7 @@ function UnattrAskCard({ onDone, projects, apps, fp, date }: { onDone: () => voi
           />
         </div>
       ) : null}
+      </div>
       <div className="mt-2 flex justify-end gap-1.5">
         <button className="rounded-lg bg-[var(--surface-2)] px-2.5 py-1 text-[10.5px] text-[var(--text-3)] hover:bg-[var(--surface-3)]" onClick={onDone}>
           忽略

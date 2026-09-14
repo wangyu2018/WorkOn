@@ -449,7 +449,7 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
         <div className="mb-2 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-1.5 text-[11px] text-red-300">{err}</div>
       ) : null}
       {loopTip ? (
-        <div className="mb-2 rounded-lg border border-[rgba(15,181,164,0.25)] bg-[rgba(15,181,164,0.08)] px-3 py-1.5 text-[11px] text-[var(--teal-deep)]">{loopTip}</div>
+        <div className="mb-2 rounded-lg border border-[var(--teal-border)] bg-[var(--teal-wash)] px-3 py-1.5 text-[11px] text-[var(--teal-deep)]">{loopTip}</div>
       ) : null}
       {projects.length === 0 ? (
         <div className="rounded-xl border border-dashed border-[var(--line)] bg-[var(--surface-2)] py-6 text-center">

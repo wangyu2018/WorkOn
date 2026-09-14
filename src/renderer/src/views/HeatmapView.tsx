@@ -48,9 +48,13 @@ interface HeatmapViewProps {
   yearMonth?: string
 }
 
+// 跨挂载缓存：7d/月度各自按 key 存，再次进页直接出图
+const heatCache = new Map<string, unknown>()
+
 export default function HeatmapView({ range = '7d', yearMonth }: HeatmapViewProps) {
-  const [rows, setRows] = useState<{ key: string; hours: number[] }[]>([])
-  const [loaded, setLoaded] = useState(false)
+  const cacheKey = `${range}:${yearMonth ?? ''}`
+  const [rows, setRows] = useState<{ key: string; hours: number[] }[]>(() => (heatCache.get(`r:${cacheKey}`) as { key: string; hours: number[] }[] | undefined) ?? [])
+  const [loaded, setLoaded] = useState(() => heatCache.has(`r:${cacheKey}`) || heatCache.has(`d:${cacheKey}`))
 
   // 月度数据：每天的工作分钟数
   const [dailyData, setDailyData] = useState<{ key: string; focusMin: number }[]>([])
@@ -64,7 +68,9 @@ export default function HeatmapView({ range = '7d', yearMonth }: HeatmapViewProp
       })
       Promise.all(days.map((d) => window.api.getTrail(d).catch(() => null)))
         .then((trails) => {
-          setRows(days.map((key, i) => ({ key, hours: workMinutesPerHour(trails[i] as MergedTrail | null) })))
+          const mapped = days.map((key, i) => ({ key, hours: workMinutesPerHour(trails[i] as MergedTrail | null) }))
+          heatCache.set(`r:${cacheKey}`, mapped)
+          setRows(mapped)
           setLoaded(true)
         })
         .catch(() => setLoaded(true))
@@ -77,7 +83,9 @@ export default function HeatmapView({ range = '7d', yearMonth }: HeatmapViewProp
       }
       Promise.all(days.map((d) => window.api.getTrail(d).catch(() => null)))
         .then((trails) => {
-          setDailyData(days.map((key, i) => ({ key, focusMin: dailyFocusMinutes(trails[i] as MergedTrail | null) })))
+          const mapped = days.map((key, i) => ({ key, focusMin: dailyFocusMinutes(trails[i] as MergedTrail | null) }))
+          heatCache.set(`d:${cacheKey}`, mapped)
+          setDailyData(mapped)
           setLoaded(true)
         })
         .catch(() => setLoaded(true))
@@ -269,8 +277,8 @@ export default function HeatmapView({ range = '7d', yearMonth }: HeatmapViewProp
                     title={`${key} ${h}:00 · 工作 ${Math.round(min)}m`}
                     className={`h-5 flex-1 rounded-[4px] transition-transform hover:scale-110 ${isNow ? 'ring-1 ring-neon-cyan' : ''}`}
                     style={{
-                      background: min > 0 ? `rgba(15,181,164,${alpha.toFixed(2)})` : 'rgba(255,255,255,0.04)',
-                      outline: isGolden && min > 0 ? '1.5px solid rgba(15,181,164,0.75)' : undefined,
+                      background: min > 0 ? `rgb(var(--teal-rgb) / ${alpha.toFixed(2)})` : 'rgba(255,255,255,0.04)',
+                      outline: isGolden && min > 0 ? '1.5px solid rgb(var(--teal-rgb) / 0.75)' : undefined,
                       outlineOffset: isGolden ? 1 : undefined
                     }}
                   />
@@ -283,7 +291,7 @@ export default function HeatmapView({ range = '7d', yearMonth }: HeatmapViewProp
         <div className="mt-3 flex items-center justify-end gap-1.5 text-[10px] text-slate-500">
           <span>少</span>
           {[0.1, 0.3, 0.55, 0.8, 0.95].map((a) => (
-            <span key={a} className="h-3 w-3 rounded-[3px]" style={{ background: `rgba(15,181,164,${a})` }} />
+            <span key={a} className="h-3 w-3 rounded-[3px]" style={{ background: `rgb(var(--teal-rgb) / ${a})` }} />
           ))}
           <span>多</span>
           <span className="ml-2">工作类状态分钟数 · 描边列 = 黄金时段</span>

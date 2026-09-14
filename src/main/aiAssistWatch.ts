@@ -2,6 +2,7 @@
  * AI 助手后台监控：名单内进程忙碌→完成时通知前端闪点
  */
 import { execFile } from 'child_process'
+import { isLoadGuardEngaged } from './loadGuard'
 import { app } from 'electron'
 import { listBindings } from './attributions'
 import { projectRecentDirActivity } from './dirWatcher'
@@ -162,7 +163,8 @@ export async function aiAssistWatchTick(ts = Date.now()): Promise<void> {
   for (const key of [...tracks.keys()]) {
     if (!watched.includes(key)) tracks.delete(key)
   }
-  if (sampling || ts - lastSampleAt < SAMPLE_MIN_MS) return
+  const minMs = SAMPLE_MIN_MS * (isLoadGuardEngaged() ? 3 : 1)
+  if (sampling || ts - lastSampleAt < minMs) return
   lastSampleAt = ts
   sampling = true
   // 可见性门控：悬浮窗与待办小组件都不可见时，采样结果无人消费，直接跳过省掉 PS 开销
@@ -234,4 +236,9 @@ export async function aiAssistWatchTick(ts = Date.now()): Promise<void> {
   })
   sampling = false
   broadcast(items)
+}
+
+/** 忙时轻档面板用：当前采样节奏 */
+export function getAiAssistPace(): { minIntervalMs: number } {
+  return { minIntervalMs: SAMPLE_MIN_MS * (isLoadGuardEngaged() ? 3 : 1) }
 }

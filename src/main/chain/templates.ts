@@ -351,6 +351,37 @@ const CREATOR_TEMPLATES: ChainTemplate[] = [
   }
 ]
 
+const SLACK_TITLE_KEYWORDS = ['微博', 'weibo', '抖音', 'douyin', '快手', '小红书', '淘宝', '京东', '天猫', '爱奇艺', '腾讯视频', '优酷', '综艺', '娱乐', '搞笑', '直播']
+
+const DEVELOPER_TEMPLATES: ChainTemplate[] = [
+  {
+    id: 'dev-coding',
+    name: '编码任务链',
+    type: 'self_driven',
+    userType: 'developer',
+    requireOutput: true,
+    steps: [
+      { appPattern: AI_IDE, role: 'process' },
+      { appPattern: 'Terminal|DevTool', role: 'process' },
+      { appPattern: BROWSER, role: 'intake', titleExclude: SLACK_TITLE_KEYWORDS },
+      { appPattern: AI_IDE, role: 'output' }
+    ]
+  },
+  {
+    id: 'dev-bugfix',
+    name: '缺陷修复链',
+    type: 'task_assigned',
+    userType: 'developer',
+    requireOutput: true,
+    steps: [
+      { appPattern: COMM, role: 'intake', titleExclude: CHAT_EXCLUDE },
+      { appPattern: AI_IDE, role: 'process' },
+      { appPattern: 'Terminal|DevTool', role: 'process' },
+      { appPattern: `${AI_IDE}|Terminal`, role: 'output' }
+    ]
+  }
+]
+
 const ENTREPRENEUR_TEMPLATES: ChainTemplate[] = [
   {
     id: 'ent-decision',
@@ -396,7 +427,6 @@ const ENTREPRENEUR_TEMPLATES: ChainTemplate[] = [
 // TODO：spec 的 has_active_project（有活跃项目时素材站算链路）/ time_range（非工作时段闲聊）
 //       两种条件 P0 不实现，此处只保留 title_contains / in_chain 两种可判定条件
 
-const SLACK_TITLE_KEYWORDS = ['微博', 'weibo', '抖音', 'douyin', '快手', '小红书', '淘宝', '京东', '天猫', '爱奇艺', '腾讯视频', '优酷', '综艺', '娱乐', '搞笑', '直播']
 
 export const USER_CHAIN_CONFIGS: Record<UserType, UserChainConfig> = {
   office_worker: {
@@ -448,6 +478,15 @@ export const USER_CHAIN_CONFIGS: Record<UserType, UserChainConfig> = {
   entrepreneur: {
     userType: 'entrepreneur',
     templates: ENTREPRENEUR_TEMPLATES,
+    primaryDistractions: ['^Game$', '^Video$', '^VideoSite$', '^Music$'],
+    conditionalDistractions: [
+      { appPattern: BROWSER, condition: 'title_contains', slackingKeywords: SLACK_TITLE_KEYWORDS },
+      { appPattern: COMM, condition: 'title_contains', slackingKeywords: CHAT_EXCLUDE }
+    ]
+  },
+  developer: {
+    userType: 'developer',
+    templates: DEVELOPER_TEMPLATES,
     primaryDistractions: ['^Game$', '^Video$', '^VideoSite$', '^Music$'],
     conditionalDistractions: [
       { appPattern: BROWSER, condition: 'title_contains', slackingKeywords: SLACK_TITLE_KEYWORDS },

@@ -3,7 +3,7 @@
  * 依据：PRD.md F5「把结构化计划与当日合并轨迹比对，达成率封顶100%」
  */
 import type {
-  CustomCategory, ForecastFactor, MergedTrail, PlanForecast, PlanItem, PlanVsActual, PlanVsActualItem, WorkState
+  CustomCategory, ForecastFactor, MergedTrail, PlanCategory, PlanForecast, PlanItem, PlanVsActual, PlanVsActualItem, WorkState
 } from './types'
 import { WORK_LIKE_STATES } from './stateMeta'
 
@@ -17,6 +17,17 @@ export const BUILTIN_CATEGORIES: CustomCategory[] = [
   { id: 'other', label: '未分类', color: '#64748B', emoji: '📋', stateHints: [], isBuiltIn: true, ts: 0 }
 ]
 
+
+/** 计划标题 → 猜内置分类：命中即归，未命中 other。自定义分类不参与猜测（无法枚举用户语义） */
+export function guessPlanCategory(title: string): PlanCategory {
+  const t = (title || '').toLowerCase()
+  if (/(泡脚|泡澡|洗澡|洗漱|刷牙|敷面膜|睡觉|午睡|午休|起床|睡觉前|做饭|早餐|午餐|晚餐|吃饭|买菜|超市|快递|洗衣|打扫|收拾|遛狗|散步|跑步|健身|运动|锻炼|吃药|体检|看医生|理发|喝水|休息|翘脚|按摩|泡茶)/.test(t)) return 'personal'
+  if (/(游戏|追剧|看电影|听歌|唱歌|弹琴|画画|读书|看书|小说|动漫|钓鱼|羽毛球|篮球|足球|乒乓球|摄影|旅行|逛街)/.test(t)) return 'interest'
+  if (/(开会|会议|周会|晨会|例会|复盘会|评审|汇报|对齐|1v1|one.?on.?one|面聊|沟通|答辩|面试|访谈|宣讲)/.test(t)) return 'leader'
+  if (/(编码|写代码|改代码|调试|debug|bug|重构|部署|联调|提测|code.?review|commit|合并|分支|接口|训练|微调|推理|评测|prompt|模型|脚本)/.test(t)) return 'ai-dev'
+  if (/(需求|文档|prd|方案|排期|交付|客户|日报|周报|月报|报告|邮件|报销|审批|合同|订单|报表|标的|招标)/.test(t)) return 'work-customer'
+  return 'other'
+}
 
 const CATEGORY_STATE_HINT: Record<string, string[]> = Object.fromEntries(
   BUILTIN_CATEGORIES.map((c) => [c.id, c.stateHints ?? []])

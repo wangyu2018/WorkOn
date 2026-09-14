@@ -54,6 +54,8 @@ const api = {
   // 星图逻辑层（v6）
   getStarGraph: (days?: number) => ipcRenderer.invoke('star:graph', days),
   onNotify: on('notify'),
+  getLoadStatus: () => ipcRenderer.invoke('load:getStatus'),
+  onLoadEco: on('load:eco'),
   onNotifyExpired: on('notify-expired'),
   notifyAction: (id: string, action: string) => ipcRenderer.invoke('notify:action', id, action),
   getRecentRecognition: () => ipcRenderer.invoke('recognition:recent'),

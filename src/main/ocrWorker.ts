@@ -9,7 +9,7 @@ import fs from 'fs'
 import path from 'path'
 import { getSettings } from './settings'
 import { presence } from './presence'
-import { getActiveEngine, recognizeWithRapidOCR } from './ocrEngine'
+import { getActiveEngine, recognizeWithRapidOCR, recognizeWithSystemOcrProcessed } from './ocrEngine'
 import type { WorkState } from '@shared/types'
 
 // v2.9 报表 OCR 采集订阅：每次 OCR 产出文本行时广播给订阅者（ocrCollector 落库结构化快照）
@@ -112,7 +112,7 @@ export async function ocrScreen(): Promise<string[]> {
     const engine = getActiveEngine()
     let text: string
 
-    if (engine === 'rapidocr') {
+    if (engine === 'rapidocr' || engine === 'system') {
       const meta = await sharp(png).metadata()
       const w = meta.width ?? 0
       const h = meta.height ?? 0
@@ -128,8 +128,10 @@ export async function ocrScreen(): Promise<string[]> {
         })
       }
       const processed = await pipeline.png({ compressionLevel: 1 }).toBuffer()
-      const result = await recognizeWithRapidOCR(processed)
-      text = result.text
+      const result = engine === 'system'
+        ? await recognizeWithSystemOcrProcessed(processed)
+        : await recognizeWithRapidOCR(processed)
+      text = result?.text ?? ''
     } else {
       // Tesseract.js: 灰度化 + 归一化（算力有限，仍用较小边）
       const recognize = await ensureRecognize()

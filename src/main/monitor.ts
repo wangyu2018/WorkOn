@@ -8,6 +8,7 @@
  *  - 应用常驻纠偏规则（宁漏勿误：screen + matchApp + matchTitleContains 全满足）
  */
 import { powerMonitor, screen } from 'electron'
+import { isLoadGuardEngaged } from './loadGuard'
 import { getAttentionWindow } from './winInfo'
 import { captureAppVisual } from './appVisuals'
 import { presence } from './presence'
@@ -191,7 +192,7 @@ async function tick(): Promise<void> {
     // UIA 只在「鼠标窗 ≈ 键盘前台」时有意义
     let uiaHint: { controlType: string; valueLength: number; selectedLength: number; docLength: number } | null = null
     const sameAsFg = !!(fg && fg.app === win.app && fg.screen === win.screen)
-    if (sameAsFg && getSettings().deepMode && !getSettings().performanceMode && idleSec >= 8 && !isExcludedApp(win.app, identifyApp(win.app, win.title).appName)) {
+    if (sameAsFg && getSettings().deepMode && !getSettings().performanceMode && !isLoadGuardEngaged() && idleSec >= 8 && !isExcludedApp(win.app, identifyApp(win.app, win.title).appName)) {
       const el = await getFocusedElement().catch(() => null)
       if (el) {
         uiaHint = { controlType: el.controlType, valueLength: el.value.length, selectedLength: el.selectedText.length, docLength: el.docLength }
@@ -368,8 +369,13 @@ export function startMonitor(): void {
   console.log(`[monitor] 已启动，基础采样间隔 ${Math.max(2000, s.monitorInterval || 5000)}ms${s.monitorSmart ? '（智能模式）' : ''}`)
 }
 
-/** 当前应有采样间隔：智能模式下按状态动态升降频 */
+/** 当前应有采样间隔：智能模式下按状态动态升降频；忙时轻档整体压到 ≥8s */
 function currentInterval(): number {
+  const iv = baseInterval()
+  return isLoadGuardEngaged() ? Math.max(iv, 8000) : iv
+}
+
+function baseInterval(): number {
   const s = getSettings()
   const base = Math.max(2000, s.monitorInterval || 5000)
   if (!s.monitorSmart) return base

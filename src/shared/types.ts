@@ -219,6 +219,9 @@ export interface PlanItem {
   projectTaskId?: string
   /** 子待办父级（粘贴分拣 / AI 拆解生成子待办）；桌面待办窗会挂在父项下 */
   parentPlanId?: string
+  /** 跨日顺延标记：今日视图收纳近几日未完成项时附带（计算字段，不落库） */
+  carried?: boolean
+  carriedFrom?: string
 }
 
 /** 计划分类（内置不可删 + 用户自定义） */
@@ -246,6 +249,8 @@ export interface Project {
   goal?: string      // 目标/需求描述
   color?: string
   deadline?: string  // 上线目标日（YYYY-MM-DD）：「距上线终点」刻度
+  /** 工作域（词汇包标签）：dev/ops/impl/ai_dev/exam/finance/startup/office/creative 或自定义；空=跟随主角色 */
+  domain?: string
   /** 属性袋（v7.1）：自由维度，每个项目各长各的样（预算/客户/章节/工序…）。有数据才渲染 */
   attrs?: Record<string, string | number>
   /** 属性卡顺序（可拖动小卡排序持久化） */
@@ -644,7 +649,7 @@ export type WsInboundMessage =
 // ───────────────────────── 注意力评分（v2.6） ─────────────────────────
 
 /** 用户类型（六类分群；权重与默认目标见 shared/attention.ts USER_TYPE_META） */
-export type UserType = 'office_worker' | 'exam_candidate' | 'freelancer' | 'student' | 'creator' | 'entrepreneur'
+export type UserType = 'office_worker' | 'exam_candidate' | 'freelancer' | 'student' | 'creator' | 'entrepreneur' | 'developer'
 
 /** 评分等级（950/900/800/700/600/500 分档，见 v2.6 §2.3） */
 export type ScoreGrade = 'S+' | 'S' | 'A' | 'B' | 'C' | 'D' | 'F'
@@ -788,6 +793,7 @@ export interface WidgetDisplayOptions {
     emptyHint: boolean
     classifyBtn: boolean
     penetrationBtn: boolean
+    aiDots: boolean
   }
   full: {
     status: boolean
@@ -797,6 +803,7 @@ export interface WidgetDisplayOptions {
     attrPlans: boolean
     petBubble: boolean
     idleHint: boolean
+    aiRing: boolean
   }
   todo: {
     projects: boolean
@@ -813,7 +820,8 @@ export const DEFAULT_WIDGET_DISPLAY: WidgetDisplayOptions = {
     chain: true,
     emptyHint: true,
     classifyBtn: true,
-    penetrationBtn: true
+    penetrationBtn: true,
+    aiDots: true
   },
   full: {
     status: true,
@@ -822,7 +830,8 @@ export const DEFAULT_WIDGET_DISPLAY: WidgetDisplayOptions = {
     askBtn: true,
     attrPlans: true,
     petBubble: true,
-    idleHint: true
+    idleHint: true,
+    aiRing: true
   },
   todo: { projects: true, todos: true, life: true }
 }
@@ -986,6 +995,7 @@ export interface AppSettings {
   slackAutoHide: boolean // 启用摸鱼自动隐身，默认开
   recognitionMode: RecognitionMode // 识别引擎模式，默认 shadow（规则出状态，模型只记账）
   performanceMode: boolean // 性能模式：停屏幕 OCR 采集/降桌宠负载，保留监控与识别核心
+  loadGuardEnabled: boolean // 忙时轻档：整机卡顿时自动放慢后台节奏，回落后恢复
   // ── v2.6 注意力评分 ──
   userType?: UserType // 用户类型；未设置时自动识别
   userTypeAuto: boolean // 自动识别用户类型，默认开
@@ -1000,11 +1010,11 @@ export interface AppSettings {
   petVrmPath?: string // 自定义 VRM 角色文件路径（L1 上传入口）
   petFpsTierAuto?: boolean // 帧率档位由硬件分级自动设置中（用户手动改档位后置 false 停止接管）
   inputProbeEnabled: boolean // 行为探针：全局键鼠聚合计数供识别特征（不记录内容），默认开
-  ocrEngine?: 'tesseract' | 'rapidocr' // OCR 引擎选择，默认 rapidocr
+  ocrEngine?: 'tesseract' | 'rapidocr' | 'system' | 'auto' // 读屏引擎：auto=系统快扫优先（不可用回落精细）
   folders?: string[] // v3.0 文件夹 ingestion：用户配置的工作目录
   mutualExclusive?: boolean // v3.1 互斥模式：桌面形象与浮窗互相排斥
   city?: string // v3.1 用户城市（天气/通勤提醒用）
-  weatherEnabled?: boolean // v3.2 天气功能开关，默认 true
+  weatherEnabled?: boolean // 已废弃：天气为默认能力，UI 不再有开关（字段保留兼容旧数据）
   weatherHours?: number // v3.2 右上角天气显示时间范围（小时），默认 3
   weatherApiKey?: string // v3.2 和风天气 API Key（免费版，控制台申请）
   weatherApiHost?: string // v3.4 和风天气 API Host（形如 xxxxx.qweatherapi.com，控制台设置页查看）
@@ -1101,13 +1111,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
   slackAutoHide: true,
   recognitionMode: 'shadow',
   performanceMode: false,
+  loadGuardEnabled: true,
   inputProbeEnabled: true,
   // v2.6：userType/targetWorkMin/targetPomodoros 留空 = 自动识别 / 用类型默认值
   userTypeAuto: true,
   employmentMode: 'full',
   scorePetAdapt: true,
   smartReportAI: true,
-  ocrEngine: 'rapidocr',
+  ocrEngine: 'auto',
   city: '',
   weatherEnabled: true,
   weatherHours: 3,

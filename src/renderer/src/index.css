@@ -657,6 +657,23 @@ textarea {
 [data-theme='amber'] input[type='range']::-webkit-slider-thumb { background: #fbbf24; box-shadow: 0 0 6px rgba(251, 191, 36, 0.45); }
 
 /* ── 墨与琥珀主题（data-theme=ink）：暖纸/真墨双基底，琥珀=注意，青瓷=数据 ── */
+/* 青瓷系主题变量：border/wash/chip 三档透明度随主题走，视图层禁止硬编码 rgba(15,181,164,…) */
+:root {
+  --teal-border: rgba(15, 181, 164, 0.45);
+  --teal-wash: rgba(15, 181, 164, 0.08);
+  --teal-chip: rgba(15, 181, 164, 0.12);
+  --teal-glow: rgba(15, 181, 164, 0.3);
+  --teal-wash-strong: rgba(15, 181, 164, 0.18);
+  --teal-rgb: 15 181 164;
+}
+[data-theme='ink'] {
+  --teal-border: rgba(13, 115, 119, 0.45);
+  --teal-wash: rgba(13, 115, 119, 0.08);
+  --teal-chip: rgba(13, 115, 119, 0.12);
+  --teal-glow: rgba(13, 115, 119, 0.3);
+  --teal-wash-strong: rgba(13, 115, 119, 0.18);
+  --teal-rgb: 13 115 119;
+}
 [data-theme='ink'] {
   --accent: #C2410C;
   --accent-soft: rgba(194, 65, 12, 0.12);
@@ -673,11 +690,12 @@ textarea {
   --paper: #F7F4EE;
   --paper-2: #EFEBE2;
   --ink: #1A1814;
+  /* 背景保持暖纸粉肉色；卡片层用青瓷绿，绿卡浮在暖纸上 */
   --bg-deep: #F7F4EE;
-  --bg-surface: #FFFDF8;
-  --bg-elevated: #F2EEE5;
-  --surface-2: #F2EEE5;
-  --surface-3: #EAE4D8;
+  --bg-surface: #E9F1EC;
+  --bg-elevated: #E4EEE8;
+  --surface-2: #E6EFE9;
+  --surface-3: #DCE8E1;
   --line: #E2DCCF;
   --line-strong: #D3CCBC;
   --text-1: #1A1814;
@@ -689,11 +707,12 @@ textarea {
   --text-muted: #8A8270;
 }
 [data-theme='ink'][data-mode='dark'] {
+  /* 暗色同构：背景回暖墨，卡片层青瓷墨 */
   --bg-deep: #0E0D0B;
-  --bg-surface: #16140F;
-  --bg-elevated: #1C1913;
-  --surface-2: #1C1913;
-  --surface-3: #242019;
+  --bg-surface: #14201B;
+  --bg-elevated: #182621;
+  --surface-2: #172420;
+  --surface-3: #1D2C26;
   --line: #2E2A22;
   --line-strong: #3D382D;
   --text-1: #EDE8DE;
@@ -718,6 +737,23 @@ textarea {
 [data-theme='ink'][data-mode='light'] {
   --float-bg: rgba(247, 244, 238, 0.45);
   --float-border: rgba(194, 65, 12, 0.1);
+}
+
+/* 墨与琥珀：卡片语言 = 直角 + 发丝线（悬浮窗 overlay 窗口不参与，保持胶囊圆角） */
+html[data-theme='ink']:not([data-overlay='1']) .glass-card,
+html[data-theme='ink']:not([data-overlay='1']) .rounded-2xl,
+html[data-theme='ink']:not([data-overlay='1']) .rounded-xl {
+  border-radius: 0;
+}
+
+/* 左侧导航栏默认：半透明混合（默认主题） */
+.app-sidebar {
+  background: color-mix(in srgb, var(--bg-surface) 72%, transparent);
+}
+/* 墨主题：导航栏融入暖纸背景（卡片才用青瓷，导航不用） */
+html[data-theme='ink']:not([data-overlay='1']) .app-sidebar {
+  background: var(--bg-deep);
+  border-color: var(--line);
 }
 
 [data-theme='ink'] .serif-num {
@@ -814,6 +850,10 @@ textarea {
   background: #ffffff;
   border-color: var(--line);
   box-shadow: var(--shadow-sm);
+}
+/* 墨主题亮色：glass-card 不吃上面的纯白，回到青瓷纸底 */
+html[data-theme='ink'][data-mode='light']:not([data-overlay='1']) .glass-card {
+  background: var(--bg-surface);
 }
 [data-mode='light'] .glass-card.hoverable:hover {
   border-color: var(--line-strong);

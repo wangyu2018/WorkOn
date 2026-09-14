@@ -7,7 +7,7 @@ import { ProgressRing } from '../components/ProgressRing'
 import { useSettingsStore } from '../stores/settingsStore'
 
 function scoreColor(v: number): string {
-  return v >= 75 ? '#10B981' : v >= 50 ? '#F59E0B' : '#EF4444'
+  return v >= 75 ? 'var(--teal)' : v >= 50 ? '#F59E0B' : '#EF4444'
 }
 
 /** 近 7 天趋势 / Top3 / 时段对比数据（v6 深度分析） */
@@ -18,8 +18,11 @@ interface TrendData {
   afternoonMin: number
 }
 
+let trendCache: TrendData | null = null
+
 function useTrend(): TrendData | null {
-  const [data, setData] = useState<TrendData | null>(null)
+  // 跨挂载缓存：再次进页先给旧趋势，后台照常重算
+  const [data, setData] = useState<TrendData | null>(() => trendCache ?? null)
   useEffect(() => {
     const days: { key: string; label: string; focusMin: number }[] = []
     const appMin = new Map<string, number>()
@@ -44,7 +47,9 @@ function useTrend(): TrendData | null {
         } catch { /* 跳过无数据日 */ }
       }
       const topApps = [...appMin.entries()].map(([app, min]) => ({ app, min })).sort((a, b) => b.min - a.min).slice(0, 3)
-      setData({ days, topApps, morningMin: Math.round(morning), afternoonMin: Math.round(afternoon) })
+      const result = { days, topApps, morningMin: Math.round(morning), afternoonMin: Math.round(afternoon) }
+      trendCache = result
+      setData(result)
     })()
     return
   }, [])
@@ -75,13 +80,13 @@ function TrendSection() {
         <svg viewBox={`0 0 ${W} ${H}`} className="h-16 flex-1">
           <defs>
             <linearGradient id="anag" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#0fb5a4" stopOpacity=".28" />
-              <stop offset="1" stopColor="#0fb5a4" stopOpacity="0" />
+              <stop offset="0" style={{ stopColor: 'var(--teal)', stopOpacity: 0.28 }} />
+              <stop offset="1" style={{ stopColor: 'var(--teal)', stopOpacity: 0 }} />
             </linearGradient>
           </defs>
           <polygon points={`0,${H} ${pts.join(' ')} ${W},${H}`} fill="url(#anag)" />
-          <polyline points={pts.join(' ')} fill="none" stroke="#0fb5a4" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-          <circle cx={(peakIdx * step).toFixed(1)} cy={(H - 6 - (t.days[peakIdx].focusMin / max) * (H - 14)).toFixed(1)} r="3.4" fill="#0fb5a4" stroke="#fff" strokeWidth="1.6" />
+          <polyline points={pts.join(' ')} fill="none" style={{ stroke: 'var(--teal)', strokeWidth: 2.2, strokeLinecap: 'round', strokeLinejoin: 'round' }} />
+          <circle cx={(peakIdx * step).toFixed(1)} cy={(H - 6 - (t.days[peakIdx].focusMin / max) * (H - 14)).toFixed(1)} r="3.4" style={{ fill: 'var(--teal)' }} stroke="#fff" strokeWidth="1.6" />
         </svg>
         <div className="w-[42%] shrink-0">
           <div className="mb-1.5 text-[10px] font-bold text-slate-500">时间去哪了 · Top 3</div>

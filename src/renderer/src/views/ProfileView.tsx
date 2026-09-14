@@ -930,7 +930,7 @@ export default function ProfileView() {
       <>
         <LayerBanner layerKey="psychological" />
         <div className="flex flex-col divide-y divide-white/[0.05]">
-          <InfoRow label="压力耐受"><MeterBar value={psy.stressTolerance} color="#10B981" /></InfoRow>
+          <InfoRow label="压力耐受"><MeterBar value={psy.stressTolerance} color="var(--teal)" /></InfoRow>
           <InfoRow label="倦怠风险"><MeterBar value={psy.burnoutRisk} color="#F59E0B" /></InfoRow>
           <InfoRow label="心理韧性"><MeterBar value={psy.resilienceScore} color="#8B5CF6" /></InfoRow>
           <InfoRow label="动机类型">{MOTIVATION_LABEL[psy.motivationType] ?? psy.motivationType}</InfoRow>

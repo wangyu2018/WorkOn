@@ -32,7 +32,7 @@ export default function CapabilityView() {
               <tr key={i} className="border-t border-white/[0.04]">
                 <td className="px-4 py-2.5 text-slate-200">{name}</td>
                 <td className="px-4 py-2.5 text-center text-[12px] text-slate-400">{without}</td>
-                <td className="px-4 py-2.5 text-center text-[12px] text-emerald-400">{withAi}</td>
+                <td className="px-4 py-2.5 text-center text-[12px] text-[var(--teal)]">{withAi}</td>
               </tr>
             ))}
           </tbody>

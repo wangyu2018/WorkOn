@@ -5,6 +5,7 @@
  * - apply：确认后落 PlanItem + ProjectTask + 项目「最近进展」
  */
 import { col, insertInto, updateIn, removeFrom } from './db'
+import { resolveTerm, type TermKey } from '@shared/dictionary'
 import { getAttribution } from './attributions'
 import { getTodayActivity } from './dirWatcher'
 import { dateKey } from '@shared/trail'
@@ -67,6 +68,8 @@ export function buildStatusCard(projectId: string): StatusCard {
     .slice(0, 12)
     .join('\n')
 
+  const dom = project?.domain
+  const t = (k: TermKey): string => resolveTerm(dom, k)
   const fmtMin = (m: number): string => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60}m` : `${Math.round(m)}m`)
   const checkLine = (title: string, done: boolean, tag?: string): string =>
     `- [${done ? 'x' : ' '}] ${title}${tag ? ` ${tag}` : ''}`
@@ -78,8 +81,8 @@ export function buildStatusCard(projectId: string): StatusCard {
     '> 粒度：只要「今天达成什么目的 / 优化了哪些方面」，不要细到改某个文件某行。',
     '> 重要：下方「已有清单」必须带着走——完成的勾上，未完成的原样保留，禁止清空后只写新目标。',
     '',
-    '## 项目上下文（只读）',
-    `- 目标：${project?.goal?.trim() || '（待补充）'}`,
+    `## ${t('project')}上下文（只读）`,
+    `- ${t('goal')}：${project?.goal?.trim() || '（待补充）'}`,
     recent ? `- 最近进展（WorkOn）：\n${recent.split('\n').map((l) => `  ${l}`).join('\n')}` : '- 最近进展：（暂无）',
     `- 今日已完成：${todayDone.length ? todayDone.map((p) => p.title).join('、') : '（无）'}`,
     `- 今日进行中：${
@@ -101,7 +104,7 @@ export function buildStatusCard(projectId: string): StatusCard {
         : '（无）'
     }`,
     `- 跨日未完成：${backlog.length ? backlog.slice(0, 12).map((p) => p.title).join('、') : '（无）'}`,
-    `- 项目任务：开放 ${taskOpen.length} / 合计 ${tasks.length || 0}`,
+    `- ${t('projectTask')}：开放 ${taskOpen.length} / 合计 ${tasks.length || 0}`,
     deferredExisting.length ? `- 未实现（已记）：${deferredExisting.slice(0, 8).join('、')}` : '',
     dir.changedFiles > 0
       ? `- 目录信号：今日变更 ${dir.changedFiles} 个文件${dir.hotspot ? `（热点：${dir.hotspot}/）` : ''}`
@@ -109,7 +112,7 @@ export function buildStatusCard(projectId: string): StatusCard {
     attr.projectId === projectId ? `- 归属时长：当前「${attr.taskTitle || name}」已持续 ${fmtMin(attr.sec / 60)}` : '',
     '',
     '## 已有清单（请更新勾选；未完成项必须保留）',
-    '### 今日待办',
+    `### ${t('todayTodo')}`,
     ...(todayOpen.length
       ? todayOpen.slice(0, 24).map((p) =>
           checkLine(
@@ -126,7 +129,7 @@ export function buildStatusCard(projectId: string): StatusCard {
       ? backlog.slice(0, 20).map((p) => checkLine(`${p.title} · ${p.date}`, false))
       : ['- [ ] （无）']),
     '',
-    '### 项目任务',
+    `### ${t('projectTask')}`,
     ...(taskOpen.length
       ? taskOpen.slice(0, 30).map((t) =>
           checkLine(t.title, false, t.status === 'in_progress' ? '（进行中）' : undefined)

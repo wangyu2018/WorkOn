@@ -2,6 +2,10 @@
  * IPC 注册：window.api 的全部通道
  */
 import { ipcMain, dialog, app, clipboard } from 'electron'
+import { getLoadStatus, startLoadGuard, stopLoadGuard, isLoadGuardEngaged } from './loadGuard'
+import { getAiAssistPace } from './aiAssistWatch'
+import { getActiveEngine } from './ocrEngine'
+import { getWinInfoSleepMs } from './winInfo'
 import fs from 'fs'
 import path from 'path'
 import type {
@@ -139,6 +143,11 @@ export function registerIpc(): void {
       if (patch.performanceMode) stopOcr()
       else if (getSettings().deepMode) startOcr()
       restartMonitor()
+    }
+    // 忙时轻档开关：关 = 立即恢复节奏
+    if (patch.loadGuardEnabled !== undefined) {
+      if (patch.loadGuardEnabled) startLoadGuard()
+      else stopLoadGuard()
     }
     if (patch.monitorInterval || patch.monitorSmart !== undefined) restartMonitor()
     if (patch.deepMode !== undefined) restartMonitor()
@@ -367,14 +376,26 @@ export function registerIpc(): void {
   })
 
   // ── 轨迹 ──
+  // 统计页逐天拉 trail；过去日期聚合结果不可变 → 会话内永久缓存，今天带 TTL。
+  // 172k 条活动下，命中缓存 = 内存返回，未命中才重聚合。
+  const trailCache = new Map<string, { data: unknown; ts: number }>()
+  const TRAIL_TODAY_TTL_MS = 8000
+  const invalidateTrail = (date: string): void => { trailCache.delete(date) }
   ipcMain.handle('trail:get', (_e, date?: string) => {
     const d = date ?? dateKey(Date.now())
-    return buildMergedTrail(listActivities(d), d)
+    const today = dateKey(Date.now())
+    const hit = trailCache.get(d)
+    if (hit && (d !== today || Date.now() - hit.ts < TRAIL_TODAY_TTL_MS)) return hit.data
+    const data = buildMergedTrail(listActivities(d), d)
+    if (trailCache.size >= 120) trailCache.delete(trailCache.keys().next().value as string)
+    trailCache.set(d, { data, ts: Date.now() })
+    return data
   })
   ipcMain.handle('appVisuals:get', () => getAllAppVisuals())
   ipcMain.handle('trail:update', (_e, startTs: number, patch: { title?: string }) => {
     if (patch.title === undefined) return { success: false }
     const updated = updateActivityTitleByStartTs(startTs, patch.title)
+    if (updated) invalidateTrail(dateKey(startTs))
     return updated ? { success: true } : { success: false }
   })
 
@@ -388,6 +409,7 @@ export function registerIpc(): void {
     } else {
       removeFrom('segmentPlans', id)
     }
+    invalidateTrail(date)
     return { success: true }
   })
   ipcMain.handle('trail:getSegmentPlans', (_e, date?: string) => {
@@ -407,20 +429,36 @@ export function registerIpc(): void {
   // ── 计划 ──
   ipcMain.handle('plans:list', (_e, date?: string) => {
     const all = col<PlanItem>('plans')
-    return date ? all.filter((p) => p.date === date) : all
+    if (!date) return all
+    const today = dateKey(Date.now())
+    if (date !== today) return all.filter((p) => p.date === date)
+    // 今日视图顺延：近 3 天内未完成的待办自动累加进来（带 carried 标记，不落库）
+    const cutoff = dateKey(Date.now() - 3 * 86400000)
+    const own = all.filter((p) => p.date === today && !p.archived)
+    const carried = all
+      .filter((p) => p.date < today && p.date >= cutoff)
+      .filter((p) => !p.archived && p.status !== 'cancelled' && p.status !== 'done' && p.status !== 'delayed')
+      .map((p) => ({ ...p, carried: true, carriedFrom: p.date }))
+      .sort((a, b) => (b.carriedFrom ?? '').localeCompare(a.carriedFrom ?? ''))
+    return [...own, ...carried]
   })
   ipcMain.handle('plans:save', (_e, plan: Partial<PlanItem> & { date: string; title: string }) => {
-    if (plan.id) return updateIn<PlanItem>('plans', plan.id, plan)
-    return insertInto<PlanItem>('plans', {
-      category: 'other', status: 'planned', source: 'manual', ts: Date.now(),
-      ...plan, id: genId('plan')
-    } as PlanItem)
+    const r = plan.id
+      ? updateIn<PlanItem>('plans', plan.id, plan)
+      : insertInto<PlanItem>('plans', {
+          category: 'other', status: 'planned', source: 'manual', ts: Date.now(),
+          ...plan, id: genId('plan')
+        } as PlanItem)
+    sendTo('main', 'plan-updated')
+    return r
   })
   ipcMain.handle('plans:remove', (_e, id: string) => {
     // 级联清理段→计划关联：孤儿关联会让时间轴上的活动段凭空消失
     const links = col<SegmentPlanLink>('segmentPlans').filter((x) => x.planId === id)
     for (const l of links) removeFrom('segmentPlans', l.id)
-    return removeFrom('plans', id)
+    const r = removeFrom('plans', id)
+    sendTo('main', 'plan-updated')
+    return r
   })
   ipcMain.handle('plans:setStatus', async (_e, id: string, status: PlanStatus) => {
     const updated = updateIn<PlanItem>('plans', id, { status })
@@ -785,6 +823,20 @@ export function registerIpc(): void {
 
   // ── 桌宠 ──
   ipcMain.handle('pet:get', () => bus.pet)
+  // 忙时轻档：人话「后台节奏」面板数据
+  ipcMain.handle('load:getStatus', () => {
+    const s = getLoadStatus()
+    const busy = isLoadGuardEngaged()
+    const fmtSec = (ms: number): string => (ms >= 1000 ? `每 ${Math.round(ms / 1000)} 秒` : '实时')
+    const paces = [
+      { key: 'monitor', label: '盯着你在用哪个软件', human: fmtSec(getMonitorPerf().intervalMs) },
+      { key: 'wininfo', label: '记录窗口标题和位置', human: fmtSec(getWinInfoSleepMs()) },
+      { key: 'ocr', label: '读屏内容做洞察', human: busy ? '暂停（电脑忙）' : getSettings().deepMode && !getSettings().performanceMode ? `开着（${getActiveEngine() === 'system' ? '系统快扫' : getActiveEngine() === 'rapidocr' ? '精细' : '基础'}）` : '关着' },
+      { key: 'aiassist', label: '看 AI 编程工具状态', human: fmtSec(getAiAssistPace().minIntervalMs) },
+      { key: 'pet', label: '桌宠动画', human: busy ? '省电档' : '正常档' }
+    ]
+    return { ...s, engaged: busy, paces }
+  })
   ipcMain.handle('pet:set', (_e, patch: Partial<PetState>) => bus.setPet(patch))
   ipcMain.on('pet:hit', (_e, over: boolean) => setPetIgnoreMouse(!over))
   ipcMain.on('pet:hide', () => {
@@ -1011,6 +1063,7 @@ export function registerIpc(): void {
     const status: PlanStatus = r >= 1 ? 'done' : r > 0 ? 'in_progress' : 'planned'
     const updated = updateIn<PlanItem>('plans', id, { completionRatio: r, status })
     if (updated && updated.source === 'oner') await onerPushStatus(updated)
+    sendTo('main', 'plan-updated')
     return updated
   })
 

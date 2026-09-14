@@ -48,7 +48,7 @@ function ChipToggle({
       type="button"
       className={`rounded-full border px-2 py-0.5 text-[10px] font-bold transition-all ${
         on
-          ? 'border-[rgba(15,181,164,0.5)] bg-[var(--teal-soft)] text-[var(--teal-deep)]'
+          ? 'border-[var(--teal-border)] bg-[var(--teal-soft)] text-[var(--teal-deep)]'
           : 'border-[var(--line)] text-slate-500 hover:border-white/20 hover:text-slate-300'
       }`}
       onClick={onClick}
@@ -486,7 +486,7 @@ export default function BuddyStage() {
               </div>
               <div className="flex flex-col gap-1.5 border-t border-white/[0.06] pt-3">
                 <div className="text-[11px] text-slate-500">心情同步（PAD 情感，随你的工作状态实时变化）</div>
-                <PadBar label="P" value={pet.emotion.pleasure} color="#10B981" />
+                <PadBar label="P" value={pet.emotion.pleasure} color="var(--teal)" />
                 <PadBar label="A" value={pet.emotion.arousal} color="#F59E0B" />
                 <PadBar label="D" value={pet.emotion.dominance} color="#8B5CF6" />
               </div>
@@ -885,7 +885,7 @@ export default function BuddyStage() {
                 />
               ))}
             </OptionRow>
-            <OptionRow title="迷你态" hint="自由胶囊条上要显示的内容">
+            <OptionRow title="迷你态" hint="自由胶囊条上要显示的内容；「AI工具状态」首次开启会自动打开 AI 助手监控">
               {(
                 [
                   ['focusRing', '专注环'],
@@ -893,14 +893,21 @@ export default function BuddyStage() {
                   ['chain', '专注链路'],
                   ['emptyHint', '空闲提示'],
                   ['classifyBtn', '归类按钮'],
-                  ['penetrationBtn', '穿透按钮']
+                  ['penetrationBtn', '穿透按钮'],
+                  ['aiDots', 'AI工具状态']
                 ] as const
               ).map(([k, label]) => (
                 <ChipToggle
                   key={k}
                   on={!!display.mini[k]}
                   label={label}
-                  onClick={() => patchDisplay({ mini: { ...display.mini, [k]: !display.mini[k] } })}
+                  onClick={() => {
+                    if (k === 'aiDots' && !display.mini.aiDots && !settings.aiAssistWatchEnabled) {
+                      // 就地激活：连同 AI 助手监控总开关一起打开（默认监控常用 AI 编程工具）
+                      void patch({ aiAssistWatchEnabled: true, aiAssistWatchApps: settings.aiAssistWatchApps?.length ? settings.aiAssistWatchApps : ['cursor', 'claude', 'chatgpt', 'windsurf'] })
+                    }
+                    patchDisplay({ mini: { ...display.mini, [k]: !display.mini[k] } })
+                  }}
                 />
               ))}
             </OptionRow>
@@ -913,7 +920,8 @@ export default function BuddyStage() {
                   ['askBtn', 'AI 提问'],
                   ['attrPlans', '今日待办'],
                   ['petBubble', '搭子气泡'],
-                  ['idleHint', '空闲占位']
+                  ['idleHint', '空闲占位'],
+                  ['aiRing', 'AI状态环']
                 ] as const
               ).map(([k, label]) => (
                 <ChipToggle

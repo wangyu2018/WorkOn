@@ -3,6 +3,7 @@
  * RapidOCR 成功时 data 为 [{ text, score, box }, ...]，必须按数组解析。
  */
 import { execFile } from 'child_process'
+import { probeSystemOcr, systemOcrAvailable, recognizeWithSystemOcr } from './systemOcr'
 import os from 'os'
 import fs from 'fs'
 import path from 'path'
@@ -12,11 +13,11 @@ import { getSettings } from './settings'
 export interface OcrResult {
   text: string
   lines: string[]
-  engine: 'tesseract' | 'rapidocr'
+  engine: 'tesseract' | 'rapidocr' | 'system'
   elapsedMs: number
 }
 
-type OcrEngine = 'tesseract' | 'rapidocr'
+type OcrEngine = 'tesseract' | 'rapidocr' | 'system'
 
 let cachedEngine: OcrEngine | null = null
 let rapidocrAvailable = false
@@ -42,17 +43,45 @@ export function isRapidOCRAvailable(): boolean {
 
 export function getActiveEngine(): OcrEngine {
   if (cachedEngine) return cachedEngine
-  const preferred = (getSettings().ocrEngine as OcrEngine) || 'rapidocr'
-  if (preferred === 'rapidocr' && isRapidOCRAvailable()) {
-    cachedEngine = 'rapidocr'
-  } else {
-    cachedEngine = 'tesseract'
-    if (preferred === 'rapidocr' && !rapidocrAvailable) {
-      console.warn('[ocrEngine] RapidOCR 不可用，回退 Tesseract.js')
+  const raw = (getSettings().ocrEngine as string) || 'auto'
+  const preferred: 'system' | 'rapidocr' | 'tesseract' | 'auto' =
+    raw === 'system' || raw === 'rapidocr' || raw === 'tesseract' ? raw : 'auto'
+  // 系统快扫：auto 或显式 system 时优先（进程零 CPU 负担）；未就绪/不可用按原链回落
+  if (preferred === 'system' || preferred === 'auto') {
+    if (systemOcrAvailable()) {
+      cachedEngine = 'system'
+      return cachedEngine
     }
+    if (preferred === 'system' && !systemProbe().available) {
+      console.warn('[ocrEngine] 系统 OCR 不可用（缺语言包或旧系统），回退精细引擎')
+    }
+  }
+  if (preferred === 'auto' || preferred === 'rapidocr') {
+    if (isRapidOCRAvailable()) {
+      cachedEngine = 'rapidocr'
+      return cachedEngine
+    }
+  }
+  cachedEngine = 'tesseract'
+  if (preferred === 'rapidocr' && !rapidocrAvailable) {
+    console.warn('[ocrEngine] RapidOCR 不可用，回退 Tesseract.js')
   }
   return cachedEngine
 }
+
+/** 系统快扫识别（预处理的 png buffer → 临时落盘 → WinRT 桥） */
+export async function recognizeWithSystemOcrProcessed(imageBuffer: Buffer): Promise<OcrResult | null> {
+  const r = await recognizeWithSystemOcr(imageBuffer)
+  if (!r) return null
+  if (r.text.length < 2) return null // 空结果也回落，宁可慢不可空
+  return { text: r.text, lines: r.lines, engine: 'system', elapsedMs: r.elapsedMs }
+}
+
+let systemProbeCache: { available: boolean } | null = null
+function systemProbe(): { available: boolean } {
+  return systemProbeCache ?? { available: false }
+}
+void probeSystemOcr().then((p) => { systemProbeCache = p }).catch(() => undefined)
 
 /** 粘贴/截图预处理：保证可读分辨率，避免过糊或超大图拖垮检测 */
 async function preprocessForOcr(imageBuffer: Buffer): Promise<Buffer> {
@@ -230,6 +259,16 @@ export async function recognizePngBuffer(imageBuffer: Buffer): Promise<OcrResult
   const start = Date.now()
   if (!imageBuffer?.length) {
     return { text: '', lines: [], engine: 'rapidocr', elapsedMs: 0, error: '空图片' }
+  }
+
+  if (getActiveEngine() === 'system') {
+    try {
+      const prepared = await preprocessForOcr(imageBuffer)
+      const r = await recognizeWithSystemOcrProcessed(prepared)
+      if (r) return r
+    } catch (e) {
+      console.warn('[ocrEngine] 系统 OCR failed', e)
+    }
   }
 
   if (isRapidOCRAvailable()) {

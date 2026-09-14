@@ -191,7 +191,8 @@ const USER_TYPE_INDUSTRY: Record<UserType, string> = {
   entrepreneur: 'sales',
   creator: 'education',
   student: 'education',
-  exam_candidate: 'education'
+  exam_candidate: 'education',
+  developer: 'it'
 }
 
 /**

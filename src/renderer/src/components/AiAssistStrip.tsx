@@ -83,35 +83,45 @@ const RING_EMOJI: Record<string, string> = {
   qoder: ' ❓', gemini: ' ✨', kimi: ' 🌙', aider: ' aider'
 }
 
-export function AiAssistRing({ item }: { item: AiAssistItem }) {
-  const emoji = RING_EMOJI[item.key] ?? item.label.slice(0, 1)
+export function AiAssistRing({ item, size = 32 }: { item: AiAssistItem; size?: number }) {
+  const emoji = RING_EMOJI[item.key] ?? item.label.slice(0, 1).toUpperCase()
   const busy = item.status === 'busy'
   const justDone = item.status === 'done'
   const idle = item.status === 'idle' || item.status === 'off'
-  const ringCls = busy
-    ? 'border-[#10B981] ring-breathe-green'
-    : justDone
-      ? 'border-[#EF4444]'
-      : 'border-[var(--line-strong)]'
-  const inner = busy ? '#10B981' : justDone ? '#EF4444' : 'var(--text-3)'
+  const R = size / 2 - 2
+  const CIRC = 2 * Math.PI * R
+  // 外环弧长比例：busy=100%（满圈呼吸）、done=满圈红色常亮、idle=灰色 25%
+  const arcPct = busy ? 1 : justDone ? 1 : 0.25
+  const ringColor = busy ? '#10B981' : justDone ? '#EF4444' : 'var(--line-strong)'
+  const stroke = busy ? 3 : 2
   return (
-    <div className="group/ring relative flex flex-col items-center gap-1" title={`${item.label} · ${busy ? '处理中' : justDone ? '刚停止回复' : idle ? '空闲' : '未运行'}`}>
-      <div
-        className={`flex h-8 w-8 items-center justify-center rounded-full border-2 bg-[var(--bg-surface)] ${busy ? 'ring-breathe-green' : ''}`}
-        style={{ borderColor: busy ? '#10B981' : justDone ? '#EF4444' : 'var(--line-strong)' }}
-      >
-        <span className="text-[11px] leading-none" style={{ color: busy ? '#10B981' : justDone ? '#EF4444' : 'var(--text-3)' }}>{emoji}</span>
+    <div className="group/ring relative flex flex-col items-center" title={`${item.label} · ${busy ? '处理中' : justDone ? '刚完成' : '空闲'}`}>
+      <div className="relative" style={{ width: size, height: size }}>
+        {/* 外环：SVG 状态弧 */}
+        <svg width={size} height={size} className="-rotate-90">
+          <circle cx={size/2} cy={size/2} r={R} fill="none" stroke="var(--line)" strokeWidth={stroke - 0.5} />
+          {(busy || justDone) && (
+            <circle
+              cx={size/2} cy={size/2} r={R} fill="none"
+              stroke={ringColor} strokeWidth={stroke} strokeLinecap="round"
+              strokeDasharray={CIRC} strokeDashoffset={CIRC * (1 - arcPct)}
+              className={busy ? 'ring-breathe-green' : ''}
+            />
+          )}
+        </svg>
+        {/* 内圈：工具标识 */}
+        <span
+          className="absolute inset-0 flex items-center justify-center text-[10px] font-bold"
+          style={{ color: busy ? '#10B981' : justDone ? '#EF4444' : 'var(--text-3)' }}
+        >{emoji}</span>
       </div>
       {/* hover 卡 */}
       <div
         className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-2 hidden w-40 -translate-x-1/2 rounded-xl border border-[var(--line)] p-2 text-left group-hover/ring:block"
         style={{ background: 'var(--bg-surface)', boxShadow: 'var(--shadow-md)' }}
       >
-        <div className="flex items-center gap-1.5">
-          <b className="min-w-0 flex-1 truncate text-[11px] text-slate-100">{item.label}</b>
-          <span className={`h-1.5 w-1.5 rounded-full ${busy ? 'bg-[#10B981] ring-breathe-green' : justDone ? 'bg-[#EF4444]' : 'bg-slate-600'}`} />
-        </div>
-        <div className="mt-0.5 text-[10px] text-slate-500">{busy ? '处理中 · 绿色呼吸' : justDone ? '刚停止回复' : '空闲'}</div>
+        <b className="text-[11px] text-slate-100">{item.label}</b>
+        <div className="mt-0.5 text-[10px] text-slate-500">{busy ? '处理中' : justDone ? '刚完成' : '空闲'}</div>
       </div>
     </div>
   )

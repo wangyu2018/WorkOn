@@ -7,6 +7,7 @@ import type { Project, ProjectTask, PlanItem, WidgetDisplayOptions } from '@shar
 import { DEFAULT_WIDGET_DISPLAY } from '@shared/types'
 import type { AiAssistItem } from '@shared/aiAssistWatch'
 import { AiAssistStrip } from '../components/AiAssistStrip'
+import { useTerm } from '../i18n/useTerm'
 
 interface AttributionState {
   projectId: string | null
@@ -15,6 +16,8 @@ interface AttributionState {
   taskTitle: string
   sec: number
   source: 'binding' | 'keyword' | 'question' | 'none'
+  stale?: boolean
+  driftSec?: number
 }
 
 type NodeState = 'done' | 'doing' | 'todo' | 'blocked'
@@ -124,6 +127,7 @@ function todayKey(): string {
 }
 
 export default function TodoWidgetApp() {
+  const t = useTerm()
   const [projects, setProjects] = useState<Project[]>([])
   const [tasks, setTasks] = useState<Record<string, ProjectTask[]>>({})
   const [plans, setPlans] = useState<PlanItem[]>([])
@@ -521,7 +525,7 @@ export default function TodoWidgetApp() {
           {editMode ? (
             <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-lg border border-dashed border-[var(--line)] p-1.5">
               <span className="text-[10px] text-slate-500">显示分区：</span>
-              {([['projects', '项目'], ['todos', '待办'], ['life', '生活']] as const).map(([k, label]) => (
+              {([['projects', t('project')], ['todos', '待办'], ['life', '生活']] as const).map(([k, label]) => (
                 <button
                   key={k}
                   className={`rounded-full border px-2 py-0.5 text-[10px] font-bold transition-all ${zoneOn(k) ? 'border-[rgba(15,181,164,0.5)] bg-[var(--teal-soft)] text-[var(--teal-deep)]' : 'border-[var(--line)] text-slate-500'}`}
@@ -633,7 +637,7 @@ export default function TodoWidgetApp() {
                   {(childMap[p.id] ?? []).map((c) => renderPlanRow(c, true))}
                 </div>
               ))}
-              {!todoZone.length ? <div className="py-1 text-[10.5px] text-slate-600">暂无未挂项目的待办</div> : null}
+              {!todoZone.length ? <div className="py-1 text-[10.5px] text-slate-600">暂无未挂{t('project')}的待办</div> : null}
               {todoRoots.length > todoZone.length ? <div className="text-[10px] text-slate-600">还有 {todoRoots.length - todoZone.length} 条</div> : null}
             </>
           ) : null}

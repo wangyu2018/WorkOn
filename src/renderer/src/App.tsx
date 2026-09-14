@@ -133,6 +133,21 @@ export default function App() {
 
   // 强调色主题 + 亮暗模式应用到根节点
   useEffect(() => {
+    // 空闲预热：统计页近 7 天 trail，主进程聚合一次后常驻缓存
+    if (!(window as unknown as { __trailWarmed?: boolean }).__trailWarmed) {
+      ;(window as unknown as { __trailWarmed?: boolean }).__trailWarmed = true
+      const warm = (): void => {
+        for (let i = 0; i < 7; i++) {
+          const d = new Date()
+          d.setDate(d.getDate() - i)
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+          void window.api?.getTrail?.(key).catch(() => undefined)
+        }
+      }
+      const w = window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }
+      if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(warm, { timeout: 20000 })
+      else setTimeout(warm, 6000)
+    }
     document.documentElement.dataset.theme = theme
   }, [theme])
   useEffect(() => {
@@ -231,8 +246,7 @@ export default function App() {
     <div className="flex h-screen w-screen overflow-hidden text-slate-200" style={{ background: 'var(--bg-deep)' }}>
       <PasteInboxModal open={pasteInboxOpen} onClose={() => setPasteInboxOpen(false)} />
       <aside
-        className="flex w-[212px] shrink-0 flex-col border-r border-white/[0.06] px-3 pb-3 pt-3"
-        style={{ background: 'color-mix(in srgb, var(--bg-surface) 72%, transparent)' }}
+        className="app-sidebar flex w-[212px] shrink-0 flex-col border-r border-white/[0.06] px-3 pb-3 pt-3"
       >
         {/* 品牌区 */}
         <div className="mb-5 flex items-center gap-2.5 px-1.5 pt-1">

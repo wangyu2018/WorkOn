@@ -768,7 +768,7 @@ export default function KnowledgeView() {
                   </span>
                   <button
                     type="button"
-                    className="rounded-md border border-[rgba(15,181,164,0.35)] px-1.5 py-0.5 text-[var(--teal-deep)]"
+                    className="rounded-md border border-[var(--teal-border)] px-1.5 py-0.5 text-[var(--teal-deep)]"
                     onClick={() => void createCategory(catSuggest.name)}
                   >
                     确认创建并选用
@@ -880,7 +880,7 @@ export default function KnowledgeView() {
                       <span className="text-[9px] text-slate-600">{fmtTs(m.ts)}</span>
                       <button
                         type="button"
-                        className="ml-auto rounded-md border border-[rgba(15,181,164,0.35)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--teal-deep)] hover:bg-[var(--teal-soft)]"
+                        className="ml-auto rounded-md border border-[var(--teal-border)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--teal-deep)] hover:bg-[var(--teal-soft)]"
                         disabled={busy}
                         onClick={() => void sedimentMemo(m)}
                       >
