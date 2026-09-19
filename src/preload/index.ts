@@ -28,6 +28,8 @@ const api = {
   bindProject: (projectId: string, patch: { apps?: string[]; keywords?: string[]; dirs?: string[] }) =>
     ipcRenderer.invoke('attr:bind', projectId, patch),
   unbindProject: (projectId: string) => ipcRenderer.invoke('attr:unbind', projectId),
+  setBinding: (projectId: string, next: { apps?: string[]; keywords?: string[]; dirs?: string[] }) =>
+    ipcRenderer.invoke('attr:bindSet', projectId, next),
   answerAttribution: (fp: string, answer: string, payload?: { projectId?: string; projectName?: string; apps?: string[] }) =>
     ipcRenderer.invoke('attr:answer', fp, answer, payload),
   getTodayActivity: (projectId: string) => ipcRenderer.invoke('attr:todayActivity', projectId),
@@ -54,6 +56,8 @@ const api = {
   // 星图逻辑层（v6）
   getStarGraph: (days?: number) => ipcRenderer.invoke('star:graph', days),
   onNotify: on('notify'),
+  onWidgetPenetration: on('widget:penetration'),
+  onTodoPenetration: on('todoWidget:penetration'),
   getLoadStatus: () => ipcRenderer.invoke('load:getStatus'),
   onLoadEco: on('load:eco'),
   onNotifyExpired: on('notify-expired'),
@@ -86,6 +90,7 @@ const api = {
 
   // 粘贴分拣
   peekClipboard: () => ipcRenderer.invoke('clipboard:peek'),
+  writeClipboard: (text: string) => ipcRenderer.invoke('clipboard:write', text),
   ocrRecognizePng: (b64: string) => ipcRenderer.invoke('ocr:recognizePng', b64),
   extractPasteTodos: (text: string) => ipcRenderer.invoke('paste:extractTodos', text),
 

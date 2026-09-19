@@ -5,6 +5,7 @@
  */
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react'
 import type { KnowledgeItem, PlanItem, Project, ProjectTask } from '@shared/types'
+import { PRIO_META, prioW } from '@shared/priority'
 import { Icon } from './Icon'
 import { todayKey } from './utils'
 import { useAppStore } from '../stores/appStore'
@@ -92,7 +93,7 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
     const planList = (Array.isArray(ps) ? ps : []).filter((p) => !p.archived)
     setPlans(planList)
     const active = (Array.isArray(pr) ? pr : []).filter((p) => p.status === 'active' || !p.status)
-    setProjects(active.length ? active : Array.isArray(pr) ? pr : [])
+    setProjects((active.length ? active : Array.isArray(pr) ? pr : []).sort((a, b) => prioW(a.priority) - prioW(b.priority)))
     setKnowledge(
       (Array.isArray(kn) ? kn : [])
         .slice()
@@ -350,6 +351,40 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
       }
     } catch {
       setStatus('分拣失败，请重试')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const addAllToProject = async (projectId: string): Promise<void> => {
+    const left = pendingTags
+    if (!left.length) {
+      setStatus('没有待分拣标签')
+      return
+    }
+    setLoading(true)
+    try {
+      let sort = (projectTasks[projectId] ?? []).length
+      const note = fromImage ? '来自粘贴截图识别' : '来自粘贴分拣'
+      for (const tag of left) {
+        await window.api.saveProjectTask?.({
+          projectId,
+          title: tag.title.slice(0, 100),
+          status: 'todo',
+          priority: 'medium',
+          sort: sort++,
+          note,
+          aiGenerated: true
+        })
+        markPlaced(tag.id, 'project')
+      }
+      const name = projects.find((p) => p.id === projectId)?.name ?? '项目'
+      setStatus(`已把 ${left.length} 项归入「${name}」`)
+      setExpandedProjects((m) => ({ ...m, [projectId]: true }))
+      const tasks = ((await window.api.listProjectTasks?.(projectId)) as ProjectTask[]) ?? []
+      setProjectTasks((m) => ({ ...m, [projectId]: tasks }))
+    } catch {
+      setStatus('归入失败，请重试')
     } finally {
       setLoading(false)
     }
@@ -667,21 +702,34 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
                         onDragLeave={clearDrop}
                         onDrop={(e) => void onDropTarget(e, { tree: 'project', id: p.id })}
                       >
-                        <button
-                          type="button"
-                          className="flex w-full items-center gap-1.5 text-left text-[12px] font-medium text-slate-200"
-                          onClick={() => void toggleProject(p.id)}
-                        >
-                          <span className="text-slate-500">{openNode ? '▾' : '▸'}</span>
-                          <span
-                            className="h-2 w-2 shrink-0 rounded-full"
-                            style={{ background: p.color || 'var(--accent)' }}
-                          />
-                          <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                          <span className="text-[10px] font-normal text-slate-600">
-                            {dragging ? '松手 → 加任务' : tasks.length ? String(tasks.length) : ''}
-                          </span>
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-[12px] font-medium text-slate-200"
+                            onClick={() => void toggleProject(p.id)}
+                          >
+                            <span className="text-slate-500">{openNode ? '▾' : '▸'}</span>
+                            <span
+                              className="h-2 w-2 shrink-0 rounded-full"
+                              style={{ background: p.color || 'var(--accent)' }}
+                            />
+                            <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                            <span className="shrink-0 text-[9px]" style={{ color: PRIO_META[p.priority ?? 'medium'].color }} title={`优先级：${PRIO_META[p.priority ?? 'medium'].label}`}>{PRIO_META[p.priority ?? 'medium'].mark}</span>
+                            <span className="text-[10px] font-normal text-slate-600">
+                              {dragging ? '松手 → 加任务' : tasks.length ? String(tasks.length) : ''}
+                            </span>
+                          </button>
+                          {pendingTags.length && !dragging ? (
+                            <button
+                              type="button"
+                              className="shrink-0 rounded border border-dashed border-[var(--line)] px-1.5 py-0 text-[9.5px] text-slate-500 hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                              title={`把剩余 ${pendingTags.length} 个标签全部归为「${p.name}」任务`}
+                              onClick={() => void addAllToProject(p.id)}
+                            >
+                              全归入
+                            </button>
+                          ) : null}
+                        </div>
                         {openNode ? (
                           <ul className="mt-1 space-y-0.5 border-l border-[var(--line)] pl-3">
                             {tasks.length ? (

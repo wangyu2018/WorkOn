@@ -252,7 +252,7 @@ function WidgetHeader({ children }: { children: ReactNode }) {
 function ResizeHandle({ onDown, onMove, onUp }: {
   onDown: (e: ReactPointerEvent) => void
   onMove: (e: ReactPointerEvent) => void
-  onUp: () => void
+  onUp: (e?: ReactPointerEvent) => void
 }) {
   return (
     <div
@@ -260,6 +260,8 @@ function ResizeHandle({ onDown, onMove, onUp }: {
       onPointerDown={onDown}
       onPointerMove={onMove}
       onPointerUp={onUp}
+      onPointerCancel={onUp}
+      onLostPointerCapture={onUp}
       title="拖动改变大小"
     >
       <svg viewBox="0 0 24 24" className="h-3 w-3">
@@ -431,7 +433,9 @@ function DockCapsuleRings({
   icon,
   chainSec,
   projectName,
-  minutes
+  minutes,
+  pending,
+  accent
 }: {
   left: DockRingContent
   right: DockRingContent
@@ -444,6 +448,9 @@ function DockCapsuleRings({
   chainSec: number
   projectName: string
   minutes: number
+  /** 有待确认项：中点绿色；否则主题色 */
+  pending?: boolean
+  accent: string
 }) {
   const gauge = 26
   const ctx = { focus, focusColor, appPct, appColor, emoji, icon, chainSec, projectName, minutes }
@@ -452,7 +459,11 @@ function DockCapsuleRings({
   return (
     <div className="flex h-full w-full items-center justify-between gap-1 px-1.5">
       <IslandGauge size={gauge} value={L.value} color={L.color} glow={L.glow} title={L.title}>{L.center}</IslandGauge>
-      <span className="h-[3px] w-[3px] shrink-0 rounded-full" style={{ background: 'rgba(255,255,255,0.28)' }} />
+      <span
+        className={`h-[3px] w-[3px] shrink-0 rounded-full transition-colors duration-500 ${pending ? 'dot-breathe-green' : ''}`}
+        style={{ background: pending ? '#34d399' : 'rgba(0,0,0,0.65)' }}
+        title={pending ? '有待确认项' : undefined}
+      />
       <IslandGauge size={gauge} value={R.value} color={R.color} glow={R.glow} title={R.title}>{R.center}</IslandGauge>
     </div>
   )
@@ -603,6 +614,7 @@ export default function SuggestionWidget() {
   const [askText, setAskText] = useState('')
   const [askAnswer, setAskAnswer] = useState('')
   const resizeRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null)
+  const fullRootRef = useRef<HTMLDivElement>(null)
   const blurTimer = useRef<number | null>(null)
   const prevAlert = useRef(false)
   const [petBubble, setPetBubble] = useState<string | null>(null)
@@ -701,8 +713,27 @@ export default function SuggestionWidget() {
   ) : null
   /** 萤火虫：有未处理确认问题 或 AI 回答尚未查看 */
   const firefly = !!question || askState === 'answer' || notifies.length > 0
+  /** 待确认信号（吸附态中点）：确认卡/通知/未看的 AI 回答 */
+  const pendingAlive =
+    !!(question || bpConfirm || meetingDetected || showUnattrAsk) || notifies.length > 0 || askState === 'answer'
+  // 挂起 8 分钟无人应答 → 全部结案，中点熄灭（对齐主进程 question TTL；防止被忽略的卡让绿点常亮）
+  useEffect(() => {
+    if (!pendingAlive) return
+    const t = window.setTimeout(() => {
+      setQuestion(null)
+      setBpConfirm(null)
+      setMeetingDetected(null)
+      setShowUnattrAsk(false)
+      setNotifies([])
+      setAskState((s) => (s === 'answer' ? 'hidden' : s))
+    }, 8 * 60_000)
+    return () => window.clearTimeout(t)
+  }, [pendingAlive, question, bpConfirm, meetingDetected, showUnattrAsk, notifies, askState])
   /** 归属项目的今日待办（full 态直接勾选） */
   const [attrPlans, setAttrPlans] = useState<PlanItem[]>([])
+  // 主程序/其它窗口改动计划时同步刷新（之前只在归属变化时拉一次，主程序里勾选完成此处不更新）
+  const [planTick, setPlanTick] = useState(0)
+  useEffect(() => window.api.onPlanUpdated?.(() => setPlanTick((t) => t + 1)), [])
   useEffect(() => {
     if (!attr?.projectId) {
       setAttrPlans([])
@@ -715,7 +746,7 @@ export default function SuggestionWidget() {
         setAttrPlans(list.slice(0, 4))
       })
       .catch(() => undefined)
-  }, [attr?.projectId, attr?.taskTitle])
+  }, [attr?.projectId, attr?.taskTitle, planTick])
   useEffect(() => {
     const pull = (): void => { void window.api.getFocusChain?.().then((c) => setChain(c as FocusChainState)).catch(() => undefined) }
     pull()
@@ -730,6 +761,10 @@ export default function SuggestionWidget() {
     window.api.widgetSetMode(next)
   }
 
+  // 跨窗口同步：托盘/设置页改穿透时，本窗口状态跟随
+  useEffect(() => {
+    window.api.onWidgetPenetration?.((v: unknown) => setPenetration(!!v))
+  }, [])
   const togglePenetration = () => {
     const v = !penetration
     setPenetration(v)
@@ -820,6 +855,7 @@ export default function SuggestionWidget() {
       try { window.api.widgetHit?.(over) } catch { /* ignore */ }
     }
     const onPointerMove = (e: PointerEvent): void => {
+      if (resizeRef.current) { reportHit(true); return }
       const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null
       reportHit(!!el?.closest?.('[data-widget-solid]'))
     }
@@ -867,17 +903,36 @@ export default function SuggestionWidget() {
       if (hasAlert && !penetration && !dockEdge) setMode('full')
       return
     }
-    // full：不在此临时撑高（避免窗体抽动）
-    if (mode === 'full') return
+    // full：内容（确认卡等）超高时按实测溢出向上撑高——只增不减，尊重用户手拖的尺寸
+    if (mode === 'full') {
+      const measure = (): void => {
+        const el = fullRootRef.current
+        if (!el) return
+        const deficit = el.scrollHeight - el.clientHeight
+        if (deficit > 8) {
+          window.api.widgetResizeTransient(window.outerWidth, Math.min(900, Math.round(window.outerHeight + deficit + 8)))
+        }
+      }
+      // 刚从 mini/吸附展开时主进程的模式尺寸可能尚未落地，量到的还是胶囊窗高——延迟到落地后再测
+      if (window.outerHeight < 120) {
+        const t = window.setTimeout(measure, 150)
+        return () => window.clearTimeout(t)
+      }
+      measure()
+      return
+    }
     const base = SIZES.compact.h
     const extra = hasContent ? Math.min(340,
       (question ? 170 : 0) + (bpConfirm ? 150 : 0) + (meetingDetected ? 170 : 0) + (askState !== 'hidden' ? 70 : 0)
     ) : 0
     const target = base + extra
     window.api.widgetResizeTransient(SIZES.compact.w, target)
-  }, [widgetMode, question, bpConfirm, meetingDetected, askState, petBubble, penetration, dockEdge])
+  }, [widgetMode, question, bpConfirm, meetingDetected, askState, petBubble, penetration, dockEdge, notifies, welcome, showUnattrAsk])
 
   // 右下角拖拽改大小（从当前窗尺寸起步，避免跳回默认）
+  // rAF 合并 IPC + 拖动期间强制收事件（防挖洞把窗穿透导致 move/up 丢失、resizeRef 残留）
+  const resizePending = useRef<{ w: number; h: number } | null>(null)
+  const resizeRaf = useRef(0)
   const onResizePointerDown = (e: ReactPointerEvent) => {
     e.preventDefault(); e.stopPropagation()
     const base = SIZES[widgetMode]
@@ -887,15 +942,36 @@ export default function SuggestionWidget() {
       w: window.outerWidth || base.w,
       h: window.outerHeight || base.h
     }
+    try { window.api.widgetHit?.(true) } catch { /* ignore */ }
     e.currentTarget.setPointerCapture(e.pointerId)
   }
   const onResizePointerMove = (e: ReactPointerEvent) => {
     if (!resizeRef.current) return
     const w = Math.max(200, Math.min(640, Math.round(resizeRef.current.w + (e.clientX - resizeRef.current.x))))
     const h = Math.max(120, Math.min(900, Math.round(resizeRef.current.h + (e.clientY - resizeRef.current.y))))
-    window.api.widgetResize(w, h)
+    resizePending.current = { w, h }
+    if (!resizeRaf.current) {
+      resizeRaf.current = requestAnimationFrame(() => {
+        resizeRaf.current = 0
+        const p = resizePending.current
+        resizePending.current = null
+        if (p && resizeRef.current) window.api.widgetResize(p.w, p.h)
+      })
+    }
   }
-  const onResizePointerUp = () => { resizeRef.current = null }
+  const onResizePointerUp = (e?: ReactPointerEvent) => {
+    // 松手前先把最后一帧未发的尺寸冲出去（否则拖拽尾段增量被丢，宽度记不准）
+    if (resizeRaf.current) { cancelAnimationFrame(resizeRaf.current); resizeRaf.current = 0 }
+    const pending = resizePending.current
+    resizeRef.current = null
+    resizePending.current = null
+    if (pending) window.api.widgetResize(pending.w, pending.h)
+    if (e?.currentTarget && e.pointerId != null) {
+      try {
+        if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId)
+      } catch { /* ignore */ }
+    }
+  }
 
   const state = presence?.state ?? 'idle'
   const meta = WORK_STATES[state] ?? WORK_STATES.idle
@@ -1012,6 +1088,8 @@ export default function SuggestionWidget() {
             <DockCapsuleRings
               left={dd.left}
               right={dd.right}
+              pending={pendingAlive}
+              accent={accent}
               focus={focus}
               focusColor={meta.color}
               appPct={Math.max(focus, 8)}
@@ -1166,6 +1244,7 @@ export default function SuggestionWidget() {
   // ── full 态：铺满窗口，无透明外边 ──
   return (
       <div
+        ref={fullRootRef}
         data-widget-solid
         className="relative flex h-screen w-screen flex-col overflow-hidden rounded-xl"
         style={PANEL_STYLE}
@@ -1356,6 +1435,11 @@ export default function SuggestionWidget() {
 
           {question && (question.ctx ?? '').startsWith('attrib') ? (
             <InsetCard color="#8B5CF6" title={`📂 ${t('askProjectQ')}`}>
+              {question.question ? (
+                <div className="mb-2 whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-[10.5px] leading-relaxed text-[var(--text-2)]">
+                  {question.question}
+                </div>
+              ) : null}
               <UnattrAskCard
                 projects={allProjects}
                 apps={(question as unknown as { apps?: string[] })?.apps}

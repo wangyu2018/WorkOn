@@ -60,10 +60,10 @@ export function Firefly({ active, children }: { active: boolean; children: React
     <div className="wkd-firefly relative h-full w-full min-h-0">
       {children}
       <style>{`
-        .wkd-firefly { animation: wkd-fire 3s ease-in-out infinite; border-radius: inherit; }
+        .wkd-firefly { animation: wkd-fire 6s ease-in-out infinite; border-radius: inherit; }
         @keyframes wkd-fire {
           0%, 100% { filter: brightness(1); }
-          50% { filter: brightness(1.08); }
+          42%, 58% { filter: brightness(1.12); }
         }
       `}</style>
     </div>

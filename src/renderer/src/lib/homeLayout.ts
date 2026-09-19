@@ -4,7 +4,7 @@
 import type { MonitorSectionKey } from '../views/MonitorView'
 import { DEFAULT_MONITOR_SECTIONS, MONITOR_SECTION_META } from '../views/MonitorView'
 
-export type HomeCoreKey = 'insight' | 'timeline' | 'starmap'
+export type HomeCoreKey = 'dayplan' | 'insight' | 'timeline' | 'starmap' | 'quote' | 'soup' | 'almanac' | 'countdown'
 export type HomeBlockKey = HomeCoreKey | MonitorSectionKey
 
 export type HomeWidgets = Record<HomeBlockKey, boolean>
@@ -16,9 +16,14 @@ export const HOME_CORE_META: {
   size: '整行' | '半宽'
   group: '首页' | '监控'
 }[] = [
+  { key: 'dayplan', label: '今日计划', desc: '今日三件事 · 计划清单预览 · 顺延项', size: '整行', group: '首页' },
   { key: 'insight', label: '今日洞察', desc: '专注 / 摸鱼 / AI 评分 KPI 与基线对比', size: '整行', group: '首页' },
   { key: 'timeline', label: '工作时间轴', desc: '泳道时间轴 · 计划对照 · 可缩放', size: '整行', group: '首页' },
-  { key: 'starmap', label: '应用星图', desc: '近 7 天应用切换关系与停留', size: '整行', group: '首页' }
+  { key: 'starmap', label: '应用星图', desc: '近 7 天应用切换关系与停留', size: '整行', group: '首页' },
+  { key: 'quote', label: '每日一句', desc: '按天换一句，可手动换', size: '整行', group: '首页' },
+  { key: 'soup', label: '毒鸡汤', desc: '按天一碗，可手动换', size: '整行', group: '首页' },
+  { key: 'almanac', label: '今日黄历', desc: '宜忌五行冲煞（本地规则，图一乐）', size: '整行', group: '首页' },
+  { key: 'countdown', label: '倒数日', desc: '自定义事件倒数（本地存储）', size: '整行', group: '首页' }
 ]
 
 export const HOME_BLOCK_META: {
@@ -34,9 +39,14 @@ export const HOME_BLOCK_META: {
 
 export const DEFAULT_HOME_ORDER: HomeBlockKey[] = [
   ...MONITOR_SECTION_META.map((m) => m.key),
+  'dayplan',
   'insight',
   'timeline',
-  'starmap'
+  'starmap',
+  'quote',
+  'soup',
+  'almanac',
+  'countdown'
 ]
 
 export function isMonitorBlockKey(k: string): k is MonitorSectionKey {
@@ -45,9 +55,14 @@ export function isMonitorBlockKey(k: string): k is MonitorSectionKey {
 
 export function defaultHomeWidgets(): HomeWidgets {
   return {
+    dayplan: true,
     insight: true,
     timeline: true,
     starmap: true,
+    quote: true,
+    soup: true,
+    almanac: true,
+    countdown: true,
     ...DEFAULT_MONITOR_SECTIONS
   }
 }
@@ -77,8 +92,12 @@ export function loadHomeOrder(): HomeBlockKey[] {
     if (s) {
       const parsed = JSON.parse(s) as string[]
       const cleaned = parsed.filter((k): k is HomeBlockKey => valid.has(k as HomeBlockKey))
+      // 新增块插到默认序的对应位置（而不是一律垫底）：找默认序里它后面第一个已存在的块插到其前面
       for (const k of DEFAULT_HOME_ORDER) {
-        if (!cleaned.includes(k)) cleaned.push(k)
+        if (cleaned.includes(k)) continue
+        const successor = DEFAULT_HOME_ORDER.slice(DEFAULT_HOME_ORDER.indexOf(k) + 1).find((s) => cleaned.includes(s))
+        if (successor) cleaned.splice(cleaned.indexOf(successor), 0, k)
+        else cleaned.push(k)
       }
       return cleaned
     }

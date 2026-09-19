@@ -43,7 +43,7 @@ import { getFocusChainState } from './focusChain'
 import { registerNotifyIpc, pushNotify } from './notify'
 import { listAutomations, saveAutomation, removeAutomation, toggleAutomation, automationMinuteTick } from './automation'
 import { starGraphForDays } from './starGraph'
-import { attributionTick, getAttribution, listBindings, bindProject, unbindProject, answerAttribution } from './attributions'
+import { attributionTick, getAttribution, listBindings, bindProject, unbindProject, setBinding, answerAttribution } from './attributions'
 import { startAllWatchers, getTodayActivity, stalledProjects, dirWatcherTick } from './dirWatcher'
 import { buildStatusCard, parseStatusCard, applyCardDiff, summarizeProgressPaste } from './statusCard'
 import { classifyPaste } from '@shared/pasteDetect'
@@ -85,12 +85,12 @@ import { ACHIEVEMENT_DEFS } from '@shared/achievements'
 import {
   mainWindow, widgetWindow, petWindow, toggleWidget, togglePet, setWidgetPenetration,
   setWidgetMode, resizeWidget, resizeWidgetTransient, moveWidgetBy, beginWidgetDrag, endWidgetDrag,
-  setWidgetHit, broadcastWidgetSettings,
+  setWidgetHit, broadcastWidgetSettings, broadcast,
   setPetIgnoreMouse, setPetModal, createMainWindow, createPetWindow, closePetWindow, sendTo,
   toggleTodoWidget, createTodoWidgetWindow, setTodoWidgetLayer, setTodoWidgetPenetration,
   setWidgetOnTop, setPetOpacity, todoWidgetWindow,
   setTodoWidgetCollapsed, applyTodoWidgetGlass, applyTodoWidgetChrome,
-  applyTodoDesktopPin, applyWidgetDesktopPin, applyAppearanceToOverlays
+  applyTodoDesktopPin, applyWidgetDesktopPin, applyAppearanceToOverlays, applyWidgetOpacity
 } from './windows'
 import type { UserAnalysis, MergedTrail, CustomCategory, UserHabits, Achievement, UserType, ReportTemplate, CategoryInference, SegmentPlanLink, Project } from '@shared/types'
 import { generateReport, generateWeeklyReport } from './report/engine'
@@ -154,9 +154,7 @@ export function registerIpc(): void {
     if (patch.wsEnabled !== undefined || patch.wsPort) startIntegration()
     if (patch.onerAutoSyncMin !== undefined) startOnerAutoSync()
     if (patch.petCharacter) bus.setPet({ characterId: patch.petCharacter })
-    if (patch.widgetOpacity !== undefined && widgetWindow && !widgetWindow.isDestroyed()) {
-      widgetWindow.setOpacity(patch.widgetOpacity)
-    }
+    if (patch.widgetOpacity !== undefined) applyWidgetOpacity()
     if (patch.widgetPenetration !== undefined) {
       setWidgetPenetration(patch.widgetPenetration)
       refreshTray()
@@ -224,7 +222,7 @@ export function registerIpc(): void {
       })
     }
     // ── 悬浮面运行时属性（透明度/穿透/顶层）：设置驱动统一应用 ──
-    if (patch.widgetOpacity !== undefined && widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.setOpacity(next.widgetOpacity)
+    if (patch.widgetOpacity !== undefined) applyWidgetOpacity()
     // widgetOnTop / widgetDockOnTop 已在上方按是否吸附分支处理
     if (patch.todoWidgetOpacity !== undefined && todoWidgetWindow && !todoWidgetWindow.isDestroyed()) {
       todoWidgetWindow.setOpacity(1)
@@ -273,6 +271,10 @@ export function registerIpc(): void {
     unbindProject(String(projectId))
     startAllWatchers()
   })
+  ipcMain.handle('attr:bindSet', (_e, projectId: string, next: { apps?: string[]; keywords?: string[]; dirs?: string[] }) => {
+    setBinding(String(projectId), next ?? {})
+    startAllWatchers()
+  })
   ipcMain.handle('attr:answer', (_e, fp: string, answer: string, payload: { projectId?: string; projectName?: string; apps?: string[] }) =>
     answerAttribution(String(fp), String(answer), payload ?? {})
   )
@@ -286,6 +288,10 @@ export function registerIpc(): void {
   )
 
   // ── 粘贴分拣 / OCR ──
+  ipcMain.handle('clipboard:write', (_e, text: string) => {
+    clipboard.writeText(String(text ?? ''))
+    return true
+  })
   ipcMain.handle('clipboard:peek', () => {
     const text = clipboard.readText() ?? ''
     let hasImage = false
@@ -449,7 +455,7 @@ export function registerIpc(): void {
           category: 'other', status: 'planned', source: 'manual', ts: Date.now(),
           ...plan, id: genId('plan')
         } as PlanItem)
-    sendTo('main', 'plan-updated')
+    broadcast('plan-updated')
     return r
   })
   ipcMain.handle('plans:remove', (_e, id: string) => {
@@ -457,7 +463,7 @@ export function registerIpc(): void {
     const links = col<SegmentPlanLink>('segmentPlans').filter((x) => x.planId === id)
     for (const l of links) removeFrom('segmentPlans', l.id)
     const r = removeFrom('plans', id)
-    sendTo('main', 'plan-updated')
+    broadcast('plan-updated')
     return r
   })
   ipcMain.handle('plans:setStatus', async (_e, id: string, status: PlanStatus) => {
@@ -974,7 +980,7 @@ export function registerIpc(): void {
         if (plan) {
           updateIn<UserFeedback>('feedbacks', fb.id, { planItemId: plan.id })
           bus.setPet({ message: '好的，已记录到你的计划中 ✓' })
-          sendTo('main', 'plan-updated')
+          broadcast('plan-updated')
         }
       }
       return { feedback: fb, plan }
@@ -992,7 +998,7 @@ export function registerIpc(): void {
         note: (plan.note ?? '') + '\n[浏览器确认]'
       })
       bus.setPet({ message: '好的，我会帮你记录这段时间~' })
-      sendTo('main', 'plan-updated')
+      broadcast('plan-updated')
     } else {
       // 用户拒绝：标记已确认，当天不再重复询问该计划
       updateIn<PlanItem>('plans', planId, { confirmedFromQA: true })
@@ -1063,7 +1069,7 @@ export function registerIpc(): void {
     const status: PlanStatus = r >= 1 ? 'done' : r > 0 ? 'in_progress' : 'planned'
     const updated = updateIn<PlanItem>('plans', id, { completionRatio: r, status })
     if (updated && updated.source === 'oner') await onerPushStatus(updated)
-    sendTo('main', 'plan-updated')
+    broadcast('plan-updated')
     return updated
   })
 
@@ -1092,7 +1098,7 @@ export function registerIpc(): void {
     insertInto('plans', newPlan)
     const updated = updateIn<PlanItem>('plans', id, { status: 'delayed', delayToDate: targetDate, delayReason: reason })
     if (updated && updated.source === 'oner') await onerPushStatus(updated)
-    sendTo('main', 'plan-updated')
+    broadcast('plan-updated')
     return { newPlan }
   })
   ipcMain.on('page-switch', () => {
@@ -1158,7 +1164,11 @@ export function registerIpc(): void {
   ipcMain.on('win:togglePet', () => togglePet())
   ipcMain.on('win:openMain', () => createMainWindow())
   ipcMain.on('widget:opacity', (_e, v: number) => {
-    if (widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.setOpacity(v)
+    // 临时透明度（quiet 模式等）：吸附态恒不透明，不写设置
+    if (!widgetWindow || widgetWindow.isDestroyed()) return
+    const s = getSettings()
+    const docked = s.widgetMode === 'mini' && !!s.widgetDockEdge
+    widgetWindow.setOpacity(docked ? 1 : Math.min(1, Math.max(0.3, v)))
   })
   ipcMain.on('widget:penetration', (_e, v: boolean) => {
     setWidgetPenetration(v)

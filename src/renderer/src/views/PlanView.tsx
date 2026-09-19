@@ -8,6 +8,7 @@ import { InsightCard } from '../components/ui/InsightCard'
 import { AiThinking } from '../components/ui/AiThinking'
 import { addDays, clockOf, fmtDateLabel, fmtMin, timeToMin, todayKey } from '../components/utils'
 import { guessPlanCategory } from '@shared/planAnalysis'
+import { PRIO_META, prioW } from '@shared/priority'
 import { parsePlanText } from '../components/parsePlanText'
 import { useAppStore } from '../stores/appStore'
 import { useTerm } from '../i18n/useTerm'
@@ -85,13 +86,13 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
   const [planType, setPlanType] = useState<PlanType>(plan.planType ?? 'phase')
   /** 归属项目（显式关联：计划 ↔ 项目） */
   const [projId, setProjId] = useState(plan.projectId ?? '')
-  const [projOptions, setProjOptions] = useState<{ id: string; name: string }[]>([])
+  const [projOptions, setProjOptions] = useState<{ id: string; name: string; priority?: string }[]>([])
   const [taskOptions, setTaskOptions] = useState<{ id: string; title: string }[]>([])
   const [taskId, setTaskId] = useState(plan.projectTaskId ?? '')
   const [category, setCategory] = useState(plan.category || 'other')
   const [catOptions, setCatOptions] = useState<CustomCategory[]>([])
   useEffect(() => {
-    void window.api?.listProjects?.().then((ps) => setProjOptions((ps as { id: string; name: string }[]) ?? [])).catch(() => undefined)
+    void window.api?.listProjects?.().then((ps) => setProjOptions(((ps as { id: string; name: string; priority?: string }[]) ?? []).sort((a, b) => prioW(a.priority) - prioW(b.priority)))).catch(() => undefined)
     void window.api?.listCategories?.().then((cs) => setCatOptions((cs as CustomCategory[]) ?? [])).catch(() => undefined)
   }, [])
   useEffect(() => {
@@ -303,7 +304,7 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
             <select className="glass-input !py-1 text-[12px]" value={projId} onChange={(e) => { setProjId(e.target.value); setTaskId('') }}>
               <option value="">不归属（纯计划）</option>
               {projOptions.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+                <option key={p.id} value={p.id}>{PRIO_META[(p.priority as 'high' | 'medium' | 'low') ?? 'medium']?.mark ?? '●'} {p.name}</option>
               ))}
             </select>
             {projId && taskOptions.length ? (
@@ -337,7 +338,7 @@ export default function PlanView() {
   /** 今日安排内：全部 / 仅项目相关 / 仅日常 */
   const [scopeFilter, setScopeFilter] = useState<'all' | 'project' | 'daily'>('all')
   const [plans, setPlans] = useState<PlanItem[]>([])
-  const [projects, setProjects] = useState<{ id: string; name: string; color?: string }[]>([])
+  const [projects, setProjects] = useState<{ id: string; name: string; color?: string; priority?: string }[]>([])
   const [categories, setCategories] = useState<CustomCategory[]>([])
   const [catCollapsed, setCatCollapsed] = useState<Record<string, boolean>>({})
   const [newCatOpen, setNewCatOpen] = useState(false)
@@ -428,7 +429,7 @@ export default function PlanView() {
       setPlans(((ps as PlanItem[]) ?? []).filter((p) => !p.archived))
       setPva(pv as PlanVsActual)
       setTrail(tr as { segments: { mainApp: string; durationMin: number; mainState: string }[] } | null)
-      setProjects((prjs as { id: string; name: string; color?: string }[]) ?? [])
+      setProjects((prjs as { id: string; name: string; color?: string; priority?: string }[]) ?? [])
       setCategories((cats as CustomCategory[]) ?? [])
       setForecasts(new Map(((fc as PlanForecast[]) ?? []).map((f) => [f.planId, f])))
     } catch {
@@ -655,7 +656,7 @@ export default function PlanView() {
     return 'other'
   }
 
-  const catMeta = (id: string): Pick<CustomCategory, 'id' | 'label' | 'color' | 'emoji'> => {
+  const catMeta = (id: string): Pick<CustomCategory, 'id' | 'label' | 'color' | 'emoji'> & { prio?: string } => {
     const hit = categories.find((c) => c.id === id)
     if (hit) return hit
     if (id === 'interest') return { id, label: '兴趣', color: '#EC4899', emoji: '✨' }
@@ -713,7 +714,7 @@ export default function PlanView() {
       if (scopeFilter === 'daily') return !p.projectId
       return true
     })
-    .sort((a, b) => (a.startMin ?? 9999) - (b.startMin ?? 9999))
+    .sort((a, b) => (a.startMin ?? 9999) - (b.startMin ?? 9999) || prioW(projects.find((pj) => pj.id === a.projectId)?.priority) - prioW(projects.find((pj) => pj.id === b.projectId)?.priority) || a.ts - b.ts)
 
   /** 未完成树：有所属项目 → 按具体项目头分组（默认收起）；无项目按分类，缺省「未分类」 */
   const useCatTree = statusFilter !== 'done' && statusFilter !== 'cancelled'
@@ -740,9 +741,9 @@ export default function PlanView() {
       defaultCollapsed: boolean
       kind: 'project' | 'category' | 'flat'
     }[] = []
-    // 项目顺序：现有项目列表顺序，再补孤儿 projectId
+    // 项目顺序：按项目优先级（高→中→低），再补孤儿 projectId
     const projOrder = [
-      ...projects.map((pj) => pj.id).filter((id) => byProject.has(id)),
+      ...[...projects].sort((a, b) => prioW(a.priority) - prioW(b.priority)).map((pj) => pj.id).filter((id) => byProject.has(id)),
       ...[...byProject.keys()].filter((id) => !projects.some((pj) => pj.id === id))
     ]
     for (const pid of projOrder) {
@@ -755,7 +756,8 @@ export default function PlanView() {
           id: pid,
           label: pj?.name ?? '未知项目',
           color: pj?.color ?? '#22D3EE',
-          emoji: '📁'
+          emoji: '📁',
+          prio: pj?.priority ?? 'medium'
         },
         items,
         defaultCollapsed: true,
@@ -1013,6 +1015,15 @@ export default function PlanView() {
                       <span className="min-w-0 truncate text-[13px] font-semibold tracking-wide" style={{ color: group.meta.color }}>
                         {group.meta.label}
                       </span>
+                      {isProjectGroup && group.meta.prio ? (
+                        <span
+                          className="shrink-0 text-[9px] font-bold"
+                          style={{ color: PRIO_META[(group.meta.prio as 'high' | 'medium' | 'low')]?.color ?? '#fbbf24' }}
+                          title={`项目优先级：${PRIO_META[(group.meta.prio as 'high' | 'medium' | 'low')]?.label ?? '中'}`}
+                        >
+                          {PRIO_META[(group.meta.prio as 'high' | 'medium' | 'low')]?.mark ?? '●'}
+                        </span>
+                      ) : null}
                       <span className="rounded-md bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] tabular-nums text-[var(--text-2)]">
                         {group.items.length}
                       </span>

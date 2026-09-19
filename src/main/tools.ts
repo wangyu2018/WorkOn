@@ -161,7 +161,7 @@ export const WORKON_TOOLS: ToolDef[] = [
     type: 'function',
     function: {
       name: 'get_weekly_summary',
-      description: '获取本周工作总结：完成项数、工作时长趋势、主要项目进度',
+      description: '获取近 7 天趋势（周曲线）：每天专注分钟数与迷你曲线、最高/日均、今日对比、周内 Top3 应用、工作 vs 摸鱼占比、本周计划完成度。用户问「周曲线/本周怎么样/最近趋势/一周总结」时调用',
       parameters: { type: 'object', properties: {}, required: [] }
     }
   },
@@ -313,8 +313,8 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
         }
         insertInto('plans', plan)
         // 通知前端刷新
-        const { sendTo } = await import('./windows')
-        sendTo('main', 'plan-updated')
+        const { broadcast } = await import('./windows')
+        broadcast('plan-updated')
         return JSON.stringify({ success: true, planId: plan.id, message: `已创建计划：${title}` })
       }
 
@@ -325,8 +325,8 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
         const plan = plans.find((p) => p.id === planId)
         if (!plan) return JSON.stringify({ success: false, error: '计划不存在' })
         updateIn<import('@shared/types').PlanItem>('plans', planId, { status: 'done', completionRatio: 1 })
-        const { sendTo } = await import('./windows')
-        sendTo('main', 'plan-updated')
+        const { broadcast } = await import('./windows')
+        broadcast('plan-updated')
         return JSON.stringify({ success: true, message: `已完成计划：${plan.title}` })
       }
 
@@ -385,16 +385,48 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
 
       case 'get_weekly_summary': {
         const { dateKey } = await import('@shared/trail')
-        const { col: colFn } = await import('./db')
-        const today = dateKey(Date.now())
-        const plans = colFn<{ status: string; date: string }>('plans')
-        const done = plans.filter((p) => p.status === 'done')
-        const inProgress = plans.filter((p) => p.status === 'in_progress')
+        const { listActivitiesRange, col: colFn } = await import('./db')
+        const { buildMergedTrail } = await import('@shared/trail')
+        const { WORK_LIKE_STATES } = await import('@shared/stateMeta')
+        const days: { date: string; label: string; focusMin: number; slackMin: number }[] = []
+        const appMin = new Map<string, number>()
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date()
+          d.setDate(d.getDate() - i)
+          const key = dateKey(d.getTime())
+          const trail = buildMergedTrail(listActivitiesRange(d.getTime() - 86400000, d.getTime()), key)
+          const focusMin = Math.round(WORK_LIKE_STATES.reduce((a, s) => a + (trail.stateMinutes[s] ?? 0), 0))
+          const slackMin = Math.round((trail.stateMinutes['slack'] ?? 0) + (trail.stateMinutes['relax'] ?? 0))
+          days.push({ date: key, label: `${d.getMonth() + 1}/${d.getDate()}`, focusMin, slackMin })
+          for (const seg of trail.segments) {
+            if (seg.glance || seg.durationMin <= 0) continue
+            appMin.set(seg.mainApp, (appMin.get(seg.mainApp) ?? 0) + seg.durationMin)
+          }
+        }
+        // 迷你曲线（7 格）：▁▂▃▄▅▆█
+        const bars = '▁▂▃▄▅▆█'
+        const max = Math.max(1, ...days.map((d) => d.focusMin))
+        const spark = days.map((d) => bars[Math.min(7, Math.max(1, Math.ceil((d.focusMin / max) * 7))) - 1]).join('')
+        const focusArr = days.map((d) => d.focusMin)
+        const best = days[focusArr.indexOf(Math.max(...focusArr))]
+        const avg = Math.round(focusArr.reduce((a, b) => a + b, 0) / 7)
+        const todayFocus = focusArr[6]
+        const weekStart = Date.now() - 6 * 86400000
+        const weekPlans = colFn<{ status: string; date: string; ts: number }>('plans').filter((p) => new Date(p.date + 'T23:59:59').getTime() >= weekStart - 86400000)
+        const weekDone = weekPlans.filter((p) => p.status === 'done').length
+        const topApps = [...appMin.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([app, min]) => ({ app, hours: +(min / 60).toFixed(1) }))
+        const totalFocus = focusArr.reduce((a, b) => a + b, 0)
+        const totalSlack = days.reduce((a, d) => a + d.slackMin, 0)
         return JSON.stringify({
-          date: today,
-          completed: done.length,
-          inProgress: inProgress.length,
-          message: `本周已完成 ${done.length} 项，${inProgress.length} 项进行中`
+          days,
+          sparkline: spark,
+          bestDay: { label: best.label, focusMin: best.focusMin },
+          avgPerDay: avg,
+          todayVsAvg: avg > 0 ? `${todayFocus >= avg ? '+' : ''}${Math.round(((todayFocus - avg) / avg) * 100)}%` : '—',
+          workVsSlack: totalFocus + totalSlack > 0 ? `工作 ${Math.round((totalFocus / (totalFocus + totalSlack)) * 100)}% / 摸鱼 ${Math.round((totalSlack / (totalFocus + totalSlack)) * 100)}%` : '暂无数据',
+          topApps,
+          weekPlans: { done: weekDone, total: weekPlans.length },
+          hint: '回答时把 sparkline 当作周曲线展示（7 格从左到右=7 天前到今天），数字保持精确，给一句可执行建议'
         })
       }
 

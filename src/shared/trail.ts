@@ -4,6 +4,7 @@
  */
 import type { ActivityRecord, MergedTrail, TrailSegment, WorkState } from './types'
 import { WORK_LIKE_STATES, inferMicroActivity } from './stateMeta'
+import { categoryOf } from './appCategory'
 
 const SEG_GAP_MS = 60 * 1000 // 间隔超 1 分钟切段
 const SEG_CAP_MS = 60 * 60 * 1000 // 单段时长封顶 1h，避免休眠跳变虚高
@@ -55,12 +56,14 @@ function buildMergedTrailInner(records: ActivityRecord[], date: string): MergedT
 
   for (const r of sorted) {
     // 切段条件：时间 gap 超 1 分钟，或主屏（active）应用发生变化（短切换独立成段，与悬浮窗一致）
+    // IM 类应用加一条：标题即会话对象（微信=联系人/群名），同应用换标题也切段，记录颗粒度到会话
     let screenAppChanged = false
     if (cur && r.active) {
       const list = cur.byScreen.get(r.screen) ?? []
       for (let i = list.length - 1; i >= 0; i--) {
         if (list[i].active) {
-          if (list[i].app !== r.app) screenAppChanged = true
+          const prev = list[i]
+          if (prev.app !== r.app || (categoryOf(prev.app) === 'im' && prev.title !== r.title)) screenAppChanged = true
           break
         }
       }

@@ -85,6 +85,14 @@ export function broadcastWidgetSettings(): void {
   })
 }
 
+/** 悬浮窗有效透明度：吸附态恒不透明（贴边胶囊要一眼看清），其余按 widgetOpacity */
+export function applyWidgetOpacity(): void {
+  if (!widgetWindow || widgetWindow.isDestroyed()) return
+  const s = getSettings()
+  const docked = s.widgetMode === 'mini' && !!s.widgetDockEdge
+  widgetWindow.setOpacity(docked ? 1 : Math.min(1, Math.max(0.3, s.widgetOpacity ?? 1)))
+}
+
 function notifyDock(edge: DockEdge | null): void {
   sendTo('widget', 'widget:dock', { edge })
   applyWidgetTopForMode()
@@ -144,6 +152,7 @@ function applyMiniDock(edge: DockEdge, preferY?: number, preferX?: number): void
   widgetWindow.setBounds({ x: Math.round(nx), y: Math.round(ny), width: sz.w, height: sz.h }, true)
   applyMiniSizeLock(edge)
   setSettings({ widgetMode: 'mini', widgetDockEdge: edge, widgetPosX: Math.round(nx), widgetPosY: Math.round(ny) })
+  applyWidgetOpacity()
   touchWidgetHabit('dock', edge)
   notifyDock(edge)
   setTimeout(() => { snapping = false }, 120)
@@ -177,6 +186,7 @@ function applyMiniFree(keepPos: boolean, nudgeFromEdge?: DockEdge | null): void 
     widgetPosY: ny,
     widgetSizes: sizes
   })
+  applyWidgetOpacity()
   touchWidgetHabit('mini')
   notifyDock(null)
   setTimeout(() => { snapping = false }, 120)
@@ -214,6 +224,7 @@ function undockMiniForDrag(cursor: { x: number; y: number }): { ox: number; oy: 
     widgetPosY: ny,
     widgetSizes: sizes
   })
+  applyWidgetOpacity()
   touchWidgetHabit('mini')
   notifyDock(null)
   setTimeout(() => { snapping = false }, 80)
@@ -251,16 +262,24 @@ function trySnapMiniWidget(): void {
   if (cur && nearest.d >= SNAP_OUT_PX) applyMiniFree(true)
 }
 
-function resizeWidgetWindow(w: number, h: number): void {
+function resizeWidgetWindow(w: number, h: number, anchorBottom = true): void {
   if (!widgetWindow || widgetWindow.isDestroyed()) return
   const [x, y] = widgetWindow.getPosition()
   const [, curH] = widgetWindow.getSize()
-  widgetWindow.setSize(Math.round(w), Math.round(h))
   const wa = workAreaOfWidget()
-  const ny = Math.min(Math.max(y + curH - h, wa.y), Math.max(wa.y, wa.y + wa.height - h))
+  // 高度不超出工作区：向上撑高到顶后继续长会把底边顶出屏幕
+  h = Math.min(h, wa.height)
+  // anchorBottom：脚底不动向上长（模式切换/临时撑高）；手动拖角：顶左锚定让角跟手
+  const ny = anchorBottom
+    ? Math.min(Math.max(y + curH - h, wa.y), Math.max(wa.y, wa.y + wa.height - h))
+    : Math.min(Math.max(y, wa.y), Math.max(wa.y, wa.y + wa.height - h))
   const nx = Math.min(Math.max(x, wa.x), Math.max(wa.x, wa.x + wa.width - w))
-  widgetWindow.setPosition(Math.round(nx), Math.round(ny))
+  // setBounds 原子改框，避免 setSize+setPosition 两步造成的窗口抽动
+  widgetWindow.setBounds({ x: Math.round(nx), y: Math.round(ny), width: Math.round(w), height: Math.round(h) })
 }
+
+/** 最近一次手动拖角的尺寸（含发起时的模式）。临时撑高/纯位移不碰它——宽度由此记忆，高度不被自动撑高污染 */
+let pendingSizeSave: { mode: WidgetMode; w: number; h: number } | null = null
 
 let saveWidgetTimer: ReturnType<typeof setTimeout> | null = null
 function scheduleWidgetBoundsSave(): void {
@@ -268,16 +287,20 @@ function scheduleWidgetBoundsSave(): void {
   saveWidgetTimer = setTimeout(() => {
     if (!widgetWindow || widgetWindow.isDestroyed()) return
     const [x, y] = widgetWindow.getPosition()
-    const [w, h] = widgetWindow.getSize()
+    const [w] = widgetWindow.getSize()
     const s = getSettings()
-    // mini（含吸附）只记位置，永不写尺寸
-    if (s.widgetMode === 'mini') {
-      setSettings({ widgetPosX: x, widgetPosY: y })
-      return
-    }
     const sizes = { ...(s.widgetSizes ?? {}) }
     delete sizes.mini
-    sizes[s.widgetMode] = { w, h }
+    if (pendingSizeSave) {
+      // 手动拖角的尺寸按发起时的模式落库（拖完立刻收起成 mini 也丢不掉）
+      sizes[pendingSizeSave.mode] = { w: pendingSizeSave.w, h: pendingSizeSave.h }
+      pendingSizeSave = null
+    } else if (s.widgetMode !== 'mini') {
+      // 位移保存：宽记当前（临时撑高不改宽），高保留已存值——自动撑高不写死
+      const prev = sizes[s.widgetMode]
+      sizes[s.widgetMode] = { w, h: prev?.h ?? WIDGET_DEFAULT_SIZE[s.widgetMode].h }
+    }
+    // mini（含吸附）只记位置；上面的手动尺寸已按所属模式落库
     setSettings({ widgetPosX: x, widgetPosY: y, widgetSizes: sizes })
   }, 400)
 }
@@ -437,7 +460,7 @@ export function createWidgetWindow(): BrowserWindow {
     roundedCorners: false,
     backgroundColor: '#00000000',
     show: s.widgetVisible,
-    opacity: Math.min(1, Math.max(0.3, s.widgetOpacity ?? 1)),
+    opacity: s.widgetMode === 'mini' && s.widgetDockEdge ? 1 : Math.min(1, Math.max(0.3, s.widgetOpacity ?? 1)),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -571,10 +594,13 @@ export function setPetModal(active: boolean): void {
 export function setWidgetPenetration(v: boolean): void {
   widgetPenetration = v
   if (widgetWindow && !widgetWindow.isDestroyed()) {
-    if (v) widgetWindow.setIgnoreMouseEvents(true)
+    // forward：穿透下仍转发鼠标移动，渲染层保住 hover 感知（与挖洞逻辑一致）
+    if (v) widgetWindow.setIgnoreMouseEvents(true, { forward: true })
     else if (widgetHitSolid) widgetWindow.setIgnoreMouseEvents(false)
     else widgetWindow.setIgnoreMouseEvents(true, { forward: true })
   }
+  // 任何入口（托盘/设置页/悬浮窗自身）改穿透，窗口渲染层都要跟上
+  sendTo('widget', 'widget:penetration', v)
 }
 
 /** 挖洞命中：光标在实体 UI 上才收事件 */
@@ -597,6 +623,7 @@ export function setWidgetMode(mode: WidgetMode): void {
     notifyDock(null)
     const size = getSettings().widgetSizes?.[next] ?? WIDGET_DEFAULT_SIZE[next]
     if (widgetWindow && !widgetWindow.isDestroyed()) resizeWidgetWindow(size.w, size.h)
+    applyWidgetOpacity()
     applyWidgetTopForMode()
     return
   }
@@ -613,22 +640,28 @@ export function setWidgetMode(mode: WidgetMode): void {
   }
   touchWidgetHabit('mini')
   notifyDock(null)
+  applyWidgetOpacity()
   applyWidgetTopForMode()
 }
 
 /** 手动缩放：应用尺寸并记忆到当前模式 + 位置（mini 忽略，保持定死） */
 export function resizeWidget(w: number, h: number): void {
-  if (getSettings().widgetMode === 'mini') {
+  const mode = getSettings().widgetMode
+  if (mode === 'mini') {
     applyMiniSizeLock(getSettings().widgetDockEdge ?? null)
     return
   }
-  resizeWidgetWindow(w, h)
+  pendingSizeSave = { mode, w: Math.round(w), h: Math.round(h) }
+  resizeWidgetWindow(w, h, false)
   scheduleWidgetBoundsSave()
 }
 
-/** 临时缩放（动态高度，如告警弹出）：不记忆尺寸；mini 忽略 */
-export function resizeWidgetTransient(w: number, h: number): void {
+/** 临时缩放（动态高度，如告警弹出）：只调高不记忆；宽度忽略入参、恒用当前窗宽——
+ *  展开瞬间渲染层可能读到吸附态的旧宽度回传，透传会污染已记忆的宽度 */
+export function resizeWidgetTransient(_w: number, h: number): void {
   if (getSettings().widgetMode === 'mini') return
+  if (!widgetWindow || widgetWindow.isDestroyed()) return
+  const [w] = widgetWindow.getSize()
   resizeWidgetWindow(w, h)
 }
 
@@ -823,11 +856,20 @@ export function createTodoWidgetWindow(): BrowserWindow {
   const wa = display.workArea
   const w = 300
   const h = 560
+  // 位置记忆：上次的坐标还在屏内就用，否则回落右下角默认位
+  const saved = s.todoWidgetPos
+  const onScreen = (x: number, y: number): boolean =>
+    screen.getAllDisplays().some(
+      (d) => x >= d.bounds.x - 60 && y >= d.bounds.y - 20 && x <= d.bounds.x + d.bounds.width - 100 && y <= d.bounds.y + d.bounds.height - 60
+    )
+  const px = saved && onScreen(saved.x, saved.y) ? saved.x : wa.x + wa.width - w - 12
+  const py = saved && onScreen(saved.x, saved.y) ? saved.y : wa.y + 48
+  console.log(`[todoWin] create: saved=${JSON.stringify(saved)} -> (${px}, ${py})`)
   todoWidgetWindow = new BrowserWindow({
     width: w,
     height: h,
-    x: wa.x + wa.width - w - 12,
-    y: wa.y + 48,
+    x: px,
+    y: py,
     frame: false,
     transparent: true,
     alwaysOnTop: s.todoWidgetOnTop !== false,
@@ -852,6 +894,17 @@ export function createTodoWidgetWindow(): BrowserWindow {
     todoWidgetWindow.setAlwaysOnTop(false)
   }
   load(todoWidgetWindow, 'todoWidget')
+  // 拖动后记忆位置（moved 防抖 500ms，拖完一次性落盘）
+  let moveSaveTimer: NodeJS.Timeout | null = null
+  todoWidgetWindow.on('moved', () => {
+    if (moveSaveTimer) clearTimeout(moveSaveTimer)
+    moveSaveTimer = setTimeout(() => {
+      if (!todoWidgetWindow || todoWidgetWindow.isDestroyed()) return
+      const [cx, cy] = todoWidgetWindow.getPosition()
+      console.log(`[todoWin] moved-save: (${cx}, ${cy})`)
+      setSettings({ todoWidgetPos: { x: cx, y: cy } })
+    }, 500)
+  })
   todoWidgetWindow.once('ready-to-show', () => {
     applyTodoWidgetChrome()
     if (getSettings().todoWidgetCollapsed) {
@@ -893,8 +946,10 @@ export function setTodoWidgetLayer(onTop: boolean): void {
 export function setTodoWidgetPenetration(v: boolean): void {
   setSettings({ todoWidgetPenetration: v })
   if (!todoWidgetWindow || todoWidgetWindow.isDestroyed()) return
-  if (v) todoWidgetWindow.setIgnoreMouseEvents(true, { forward: true })
-  else if (getSettings().todoWidgetOnTop !== false) todoWidgetWindow.setIgnoreMouseEvents(false)
+  setSettings({ todoWidgetPenetration: v })
+  // 关穿透无条件恢复鼠标（旧逻辑沉底时不恢复 → 卡在穿透态直到重启）
+  todoWidgetWindow.setIgnoreMouseEvents(!v, { forward: v })
+  sendTo('todoWidget', 'todoWidget:penetration', v)
 }
 
 /** 监控悬浮窗：顶层开关 */
@@ -952,7 +1007,9 @@ export function applyTodoDesktopPin(): boolean {
   if (!todoWidgetWindow || todoWidgetWindow.isDestroyed()) return false
   if (getSettings().todoWidgetDesktopPin) {
     todoWidgetWindow.setAlwaysOnTop(false)
+    console.log(`[todoWin] desktop-pin attach, bounds before:`, JSON.stringify(todoWidgetWindow.getBounds()))
     const ok = attachWindowToDesktop(todoWidgetWindow)
+    console.log(`[todoWin] desktop-pin attach ok=${ok}, bounds after:`, todoWidgetWindow && !todoWidgetWindow.isDestroyed() ? JSON.stringify(todoWidgetWindow.getBounds()) : 'destroyed')
     if (!ok) {
       setSettings({ todoWidgetDesktopPin: false })
       if (getSettings().todoWidgetOnTop !== false) {

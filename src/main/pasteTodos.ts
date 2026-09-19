@@ -18,7 +18,7 @@ export async function extractAndPolishPasteTodos(text: string): Promise<string[]
   const raw = String(text ?? '').trim()
   if (!raw) return []
 
-  const heuristic = extractTodoTitlesHeuristic(raw, 30).map(cleanTitle).filter((t) => t.length >= 2)
+  const heuristic = extractTodoTitlesHeuristic(raw, 40).map(cleanTitle).filter((t) => t.length >= 2)
 
   const s = getSettings()
   if (!s.aiEnabled || !s.aiApiKey) return heuristic
@@ -31,7 +31,7 @@ export async function extractAndPolishPasteTodos(text: string): Promise<string[]
     `2) 抽可执行的今日/近期计划项：要做什么、改什么、约什么、交付什么。`,
     `3) 润色成短标题：动词开头、一句一事、去掉语气词/表情/重复寒暄；每条 8～36 字为宜，最多 40 字。`,
     `4) 不要闲聊、不要纯情绪、不要已完成的回顾（除非明确「还要补做」）。`,
-    `5) 去重合并同义项；最多 12 条。`,
+    `5) 去重合并同义项；最多 40 条，宁多勿漏。`,
     `6) 只输出 JSON 数组，不要代码块、不要解释。格式示例：["修好登录页白屏","约产品对齐需求"]`,
     ``,
     `原文：`,
@@ -47,19 +47,19 @@ export async function extractAndPolishPasteTodos(text: string): Promise<string[]
     else if (parsed && Array.isArray(parsed.items)) list = parsed.items
     else if (parsed && Array.isArray(parsed.todos)) list = parsed.todos
 
-    list = [...new Set(list.map(cleanTitle).filter((t) => t.length >= 2))].slice(0, 12)
+    list = [...new Set(list.map(cleanTitle).filter((t) => t.length >= 2))].slice(0, 40)
     if (!list.length) return heuristic
 
     // 若 AI 明显漏掉启发式里「我/承诺」类短句，补几条未覆盖的
     const lowerJoined = list.join('\n').toLowerCase()
     for (const h of heuristic) {
-      if (list.length >= 12) break
+      if (list.length >= 40) break
       const key = h.slice(0, 10).toLowerCase()
       if (key && !lowerJoined.includes(key)) {
         list.push(h)
       }
     }
-    return [...new Set(list)].slice(0, 12)
+    return [...new Set(list)].slice(0, 40)
   } catch (e) {
     console.warn('[pasteTodos] AI 抽取失败，用启发式', e)
     return heuristic

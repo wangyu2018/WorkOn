@@ -7,6 +7,7 @@ import { PageHeader } from '../components/PageHeader'
 import { useSettingsStore } from '../stores/settingsStore'
 import { ProjectModal } from '../components/ProjectModal'
 import type { MergedTrail, Project, ProjectTask } from '@shared/types'
+import { PRIO_META, prioW } from '@shared/priority'
 
 interface RailNode {
   id: string
@@ -42,7 +43,7 @@ export default function MainlineView() {
   const isInk = useSettingsStore((s) => s.settings.theme) === 'ink'
   /** 里程碑编辑器 + 项目弹窗 */
   const [msEdit, setMsEdit] = useState<{ pid: string; items: string[]; msIds: string[] } | null>(null)
-  const [modalProj, setModalProj] = useState<Project | null>(null)
+  const [modalProj, setModalProj] = useState<{ project: Project; tab: 'view' | 'manage' } | null>(null)
 
   useEffect(() => {
     void window.api?.getTrail?.().then((x) => { const tv = (x as MergedTrail) ?? null; mainlineTrailCache = tv; setTrail(tv) }).catch(() => undefined)
@@ -61,7 +62,6 @@ export default function MainlineView() {
   // 这里只算「今日活跃」概览：归属时长 + 正在干
   const [rows, setRows] = useState<TodayRow[]>([])
   useEffect(() => {
-    if (!trail) return
     void (async () => {
       const projects = ((await window.api?.listProjects?.()) as Project[]) ?? []
       const rows: TodayRow[] = []
@@ -75,7 +75,7 @@ export default function MainlineView() {
           const links = (await window.api?.getProjectLinks?.(p.id)) as { app: string }[] | undefined
           const apps = new Set((links ?? []).map((l) => (l.app ?? '').toLowerCase().replace(/\.exe$/i, '')))
           if (apps.size) {
-            for (const seg of (trail as MergedTrail).segments ?? []) {
+            for (const seg of trail?.segments ?? []) {
               if (seg.glance) continue
               const k = (seg.mainApp ?? '').trim().toLowerCase().replace(/\.exe$/i, '')
               if (!apps.has(k)) continue
@@ -105,9 +105,10 @@ export default function MainlineView() {
           dirInfo
         })
       }
-      setRows(rows.sort((a, b) => b.todayMin - a.todayMin))
+      // 优先级在前（高→中→低），同级再按今日投入排序
+      setRows(rows.sort((a, b) => prioW(a.project.priority) - prioW(b.project.priority) || b.todayMin - a.todayMin))
     })()
-  }, [trail])
+  }, [trail, reloadTick])
 
   return (
     <div className="view-enter flex flex-col gap-4">
@@ -115,6 +116,18 @@ export default function MainlineView() {
         icon="folder"
         title="主线"
         desc="长命的事各长各的样 · 实时工作由归属引擎自动归因"
+        actions={
+          <button
+            className="glass-btn primary !px-3 !py-1.5 !text-[11.5px]"
+            onClick={() => void (async () => {
+              const p = (await window.api.saveProject({ name: '未命名主线' })) as Project
+              setReloadTick((n) => n + 1)
+              setModalProj({ project: p, tab: 'manage' })
+            })()}
+          >
+            ＋ 新建主线
+          </button>
+        }
       />
 
       {/* ── 今日活跃概览：每条主线一条，正在干的排最前 ── */}
@@ -134,9 +147,28 @@ export default function MainlineView() {
                 className={`px-3.5 py-3 transition-colors ${isInk ? 'border-t border-[var(--line)] first:border-t-0' : `rounded-xl border ${active ? 'border-[var(--teal-border)]' : 'border-[var(--line)]'}`}`}
                 style={isInk ? { background: 'var(--teal-soft)' } : { background: active ? 'var(--teal-soft)' : 'var(--surface-2)' }}
               >
-                {/* 行1：名称 + 正在干 + 上线刻度 */}
+                {/* 行1：名称 + 优先级 + 正在干 + 上线刻度 */}
                 <div className="flex items-center gap-2">
                   <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-100">{r.project.name}</span>
+                  {(() => {
+                    const pm = PRIO_META[r.project.priority ?? 'medium']
+                    return (
+                      <button
+                        type="button"
+                        className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold transition-colors"
+                        style={{ background: `${pm.color}1f`, color: pm.color }}
+                        title="优先级 · 点击切换（高→中→低）；影响主线排序与计划页分组顺序"
+                        onClick={() => void (async () => {
+                          const order: Project['priority'][] = ['high', 'medium', 'low']
+                          const next = order[(order.indexOf(r.project.priority ?? 'medium') + 1) % order.length]
+                          await window.api.saveProject({ ...r.project, priority: next })
+                          setReloadTick((n) => n + 1)
+                        })()}
+                      >
+                        {pm.mark} {pm.label}
+                      </button>
+                    )
+                  })()}
                   {r.project.status !== 'active' ? (
                     <span className="shrink-0 rounded-full bg-white/5 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">
                       {r.project.status === 'paused' ? '⏸ 暂停' : r.project.status === 'done' ? '✓ 已完成' : '已归档'}
@@ -241,11 +273,11 @@ export default function MainlineView() {
                 <div className="mt-1.5 flex gap-1.5">
                   <button
                     className="glass-btn !px-2 !py-0.5 !text-[10px]"
-                    onClick={() => setModalProj(r.project)}
-                  >👁 查看详情</button>
+                    onClick={() => setModalProj({ project: r.project, tab: 'view' })}
+                  >👁 查看 · 对接</button>
                   <button
                     className="glass-btn !px-2 !py-0.5 !text-[10px]"
-                    onClick={() => setModalProj(r.project)}
+                    onClick={() => setModalProj({ project: r.project, tab: 'manage' })}
                   >⚙ 管理</button>
                 </div>
                 {msEdit?.pid === r.project.id ? (
@@ -288,12 +320,12 @@ export default function MainlineView() {
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-[var(--line)] px-4 py-3 text-[12px] text-slate-500">
-          还没有活跃主线 · 去计划页创建，或等归属引擎问你在干啥时现场建一条
+          还没有活跃主线 · 点右上角「＋ 新建主线」开一条，或等归属引擎问你在干啥时现场建
         </div>
       )}
 
       {modalProj ? (
-        <ProjectModal project={modalProj} onClose={() => setModalProj(null)} onSaved={() => setReloadTick((n) => n + 1)} />
+        <ProjectModal project={modalProj.project} initialTab={modalProj.tab} onClose={() => setModalProj(null)} onSaved={() => setReloadTick((n) => n + 1)} />
       ) : null}
     </div>
   )

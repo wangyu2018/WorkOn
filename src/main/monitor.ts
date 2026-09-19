@@ -28,7 +28,7 @@ import { focusChainTick } from './focusChain'
 import { careTick, reportContinuousWork } from './care'
 import { automationMinuteTick, automationOnAppSwitch, automationOnFocusTick } from './automation'
 import { aiAssistWatchTick } from './aiAssistWatch'
-import { attributionTick } from './attributions'
+import { attributionTick, isEntertainmentContext } from './attributions'
 import { dirWatcherTick } from './dirWatcher'
 import { dispatchConfirmQueue } from './confirmQueue'
 import { bus } from './state'
@@ -144,9 +144,11 @@ function currentPlanTitle(segStartTs: number): string | null {
   return col<PlanItem>('plans').find((pl) => pl.id === planId)?.title ?? null
 }
 
-/** 当前应用归属的项目名（projectTimeLinks 最近一条） */
+/** 当前应用归属的项目名（projectTimeLinks 按日链接，只取今天） */
 function currentProjectName(app: string): string | null {
-  const links = col<ProjectTimeLink>('projectTimeLinks').filter((l) => l.app === app.toLowerCase())
+  const key = app.toLowerCase().replace(/\.exe$/i, '')
+  const today = dateKey(Date.now())
+  const links = col<ProjectTimeLink>('projectTimeLinks').filter((l) => l.app === key && l.date === today)
   if (!links.length) return null
   const last = links.reduce((a, b) => (b.ts > a.ts ? b : a))
   return col<Project>('projects').find((x) => x.id === last.projectId)?.name ?? null
@@ -215,7 +217,8 @@ async function tick(): Promise<void> {
     const changed = !tr || tr.app !== corrected.app || tr.title !== safeTitle
     // 语义标签：当前段关联的计划标题 / 项目名（顶栏与悬浮窗显示）
     const planTitle = currentPlanTitle(tr ? tr.startTs : ts)
-    const projectName = currentProjectName(corrected.app)
+    // 摸鱼上下文不挂项目标签——浏览器刷抖音不等于在项目上干活
+    const projectName = isEntertainmentContext(corrected.app, safeTitle, state) ? null : currentProjectName(corrected.app)
     if (!excluded) {
       // 提取/补写图标+主题色（captureAppVisual 命中缓存即返回，仅首次真正提取 exe 图标）
       void captureAppVisual(corrected.app, win.exePath, identified.appName)

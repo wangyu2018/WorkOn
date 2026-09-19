@@ -5,7 +5,7 @@
 import { app, BrowserWindow, Notification } from 'electron'
 import { initSettings, getSettings } from './settings'
 import { initDb, flushNow, loadActivitiesDeferred } from './db'
-import { createMainWindow, createWidgetWindow, createPetWindow, createSplashWindow, closeSplash, sendTo, widgetWindow, mainWindow, createTodoWidgetWindow } from './windows'
+import { createMainWindow, createWidgetWindow, createPetWindow, createSplashWindow, closeSplash, sendTo, broadcast, widgetWindow, mainWindow, createTodoWidgetWindow } from './windows'
 import { createTray } from './tray'
 import { registerShortcuts, unregisterShortcuts } from './globalShortcut'
 import { registerIpc } from './ipc'
@@ -33,6 +33,7 @@ import { stopWinInfoServer } from './winInfo'
 import { presence } from './presence'
 import { genQuestion, analyzeDay, deriveHabits } from './ai'
 import { genPersonaGapQuestion } from './qa/questionGenerator'
+import { canInterrupt } from './confirmQueue'
 import { aiDevAdvice } from './projects'
 import { listActivities, listActivitiesRange, insertInto, col, updateIn } from './db'
 import type { UserHabits, PlanItem } from '@shared/types'
@@ -104,6 +105,7 @@ function startPeriodicJobs(): void {
     const snap = presence.getSnapshot()
     if (snap.state === 'idle' || snap.state === 'away') return
     if (bus.question) return
+    if (!canInterrupt()) return
     const pq = genPersonaGapQuestion(habitsOfUser())
     if (pq) {
       bus.setQuestion({ id: pq.id, ctx: pq.ctx, question: pq.question, ts: Date.now() })
@@ -164,7 +166,7 @@ function startPeriodicJobs(): void {
       for (const r of due) {
         updateIn<PlanItem>('plans', r.id, { fired: true })
         pushNotify('rest', 'WorkOn 提醒', r.title, [{ label: '知道了', action: 'dismiss', primary: true }], 30)
-        sendTo('main', 'plan-updated')
+        broadcast('plan-updated')
       }
     } catch (e) {
       console.warn('[reminder] 检查失败', e)

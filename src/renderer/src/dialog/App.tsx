@@ -4,6 +4,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import type { Project } from '@shared/types'
+import { prioW } from '@shared/priority'
 
 interface Msg {
   role: 'user' | 'assistant'
@@ -44,7 +45,7 @@ export default function DialogApp() {
 
   const refreshProjects = async (): Promise<Project[]> => {
     const ps = ((await window.api?.listProjects?.()) as Project[]) ?? []
-    const list = ps.filter((p) => p.status === 'active')
+    const list = ps.filter((p) => p.status === 'active').sort((a, b) => prioW(a.priority) - prioW(b.priority))
     setProjects(list)
     if (!cardProjectId && list[0]) setCardProjectId(list[0].id)
     return list

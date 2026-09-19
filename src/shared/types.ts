@@ -3,6 +3,8 @@
  * 依据：PRD.md 第5节数据模型
  */
 
+import type { Perspective } from './perspective'
+
 // ───────────────────────── 工作状态 ─────────────────────────
 
 /** 专注链路状态（v2 链路思维，悬浮窗/首页消费） */
@@ -1020,6 +1022,10 @@ export interface AppSettings {
   weatherApiHost?: string // v3.4 和风天气 API Host（形如 xxxxx.qweatherapi.com，控制台设置页查看）
   widgetCompact?: boolean // 浮窗紧凑模式，默认 false
   reportAutoRefreshMin?: number // 报表自动刷新间隔分钟，0=关闭，默认 120
+  /** 日视角手动锁：null/未设置=按时钟自动（晨架构师/昼工作者/晚管理者），设值=锁死 */
+  perspectiveLock?: Perspective | null
+  /** 待办小组件窗口位置（拖动后记忆；非法/离屏时回落默认右下角） */
+  todoWidgetPos?: { x: number; y: number }
   
   petVrmUploadEnabled?: boolean // v3.0 VRM 照片生成：入口占位开关，默认 true
 }
@@ -1125,6 +1131,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   weatherApiKey: '07b9e0e0e70342b794728af1ccb5641d',
   weatherApiHost: 'jv6r7339hc.re.qweatherapi.com',
   widgetCompact: false,
+  perspectiveLock: null,
   reportAutoRefreshMin: 120
 }
 

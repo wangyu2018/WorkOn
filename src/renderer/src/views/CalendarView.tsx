@@ -5,6 +5,7 @@ import { ALL_STATES, WORK_STATES, WORK_LIKE_STATES } from '@shared/stateMeta'
 import { BUILTIN_CATEGORIES } from '@shared/planAnalysis'
 import { genId } from '@shared/types'
 import { displayApp } from '@shared/appDisplayName'
+import { holidayOf } from '@shared/cnHolidays'
 import { CATEGORY_META, categoryOf, type AppCategory } from '@shared/appCategory'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
@@ -852,6 +853,17 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
             <Icon name="chevronLeft" size={13} /> 返回月视图
           </button>
           <span className="text-[14px] font-semibold text-slate-200">{fmtDateLabel(dayView)}</span>
+          {(() => {
+            const hol = holidayOf(dayView)
+            return hol ? (
+              <span
+                className={`chip ${hol.type === 'holiday' ? 'text-red-400' : 'text-sky-400'}`}
+                title={hol.type === 'workday' ? '周末调休补班日' : '法定节假日'}
+              >
+                {hol.name}{hol.type === 'workday' ? ' · 补班' : ''}
+              </span>
+            ) : null
+          })()}
           {dayView === today ? <span className="chip text-[var(--teal)]">今天</span> : null}
         </div>
         <DayDetailCard
@@ -948,12 +960,13 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
             const visible = dayPlans.slice(0, 4)
             const more = dayPlans.length - visible.length
             const prog = dayPlanProgress(dayPlans)
+            const hol = holidayOf(date)
             return (
               <button
                 key={date}
                 type="button"
                 onClick={() => setDayView(date)}
-                title={`${date}${isToday ? ' · 今天' : ''} · 计划 ${prog.done}/${prog.total}（${prog.pct}%）· 专注 ${fmtMin(stat?.workMin ?? 0)} · 点击进入日视图`}
+                title={`${date}${hol ? ` · ${hol.name}${hol.type === 'workday' ? '（调休补班）' : '（放休）'}` : ''}${isToday ? ' · 今天' : ''} · 计划 ${prog.done}/${prog.total}（${prog.pct}%）· 专注 ${fmtMin(stat?.workMin ?? 0)} · 点击进入日视图`}
                 className="flex flex-col overflow-hidden rounded-lg border p-1.5 text-left transition-colors hover:border-[var(--cyan)]"
                 style={{
                   background: 'var(--surface-2)',
@@ -972,7 +985,18 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
                   >
                     {i + 1}
                   </span>
-                  {prog.total > 0 ? (
+                  {hol ? (
+                    <span
+                      className={`rounded px-1 py-px text-[9px] font-bold ${
+                        hol.type === 'holiday'
+                          ? 'bg-red-500/15 text-red-400'
+                          : 'bg-sky-500/15 text-sky-400'
+                      }`}
+                      title={hol.name}
+                    >
+                      {hol.type === 'holiday' ? '休' : '班'}
+                    </span>
+                  ) : prog.total > 0 ? (
                     <span
                       className={`text-[9px] tabular-nums ${
                         prog.pct >= 100 ? 'text-neon-green' : prog.pct > 0 ? 'text-[var(--teal)]' : 'text-slate-500'

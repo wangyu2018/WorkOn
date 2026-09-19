@@ -6,6 +6,7 @@ import type { EnrichmentResult, ReportEntry, TrailSegment, WorkState, ReportTime
 import { WORK_STATES } from '@shared/stateMeta'
 import { dateKey } from '@shared/trail'
 import { genId } from '@shared/types'
+import { categoryOf } from '@shared/appCategory'
 
 export interface AggregationConfig {
   minSegmentMin: number // 最小段时长，低于此值的合并到相邻段 (默认5分钟)
@@ -110,12 +111,17 @@ function mergeAdjacentSameState(segs: TrailSegment[], gapMin: number): TrailSegm
   return out
 }
 
-/** Step 3：相邻同状态 + 同应用合并 */
+/** Step 3：相邻同状态 + 同应用合并（IM 类应用标题即会话对象，标题不同不合并，保留联系人级粒度） */
 function mergeSameAppSegs(segs: TrailSegment[]): TrailSegment[] {
   const out: TrailSegment[] = []
   for (const seg of segs) {
     const prev = out[out.length - 1]
-    if (prev && prev.mainState === seg.mainState && prev.mainApp === seg.mainApp) {
+    if (
+      prev &&
+      prev.mainState === seg.mainState &&
+      prev.mainApp === seg.mainApp &&
+      (categoryOf(prev.mainApp) !== 'im' || prev.mainTitle === seg.mainTitle)
+    ) {
       mergeInto(prev, seg)
       continue
     }

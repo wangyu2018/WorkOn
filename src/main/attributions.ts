@@ -8,6 +8,7 @@ import { col, insertInto, updateIn } from './db'
 import { getSettings, setSettings } from './settings'
 import { genId } from '@shared/types'
 import { fuzzyMatch } from '@shared/fuzzy'
+import { canonAppKey } from '@shared/appDisplayName'
 import { categoryOfWithOverride } from '@shared/appCategory'
 import { enqueueAsk } from './confirmQueue'
 import { dateKey } from '@shared/trail'
@@ -55,11 +56,13 @@ interface AttributionRuntime {
 
 const UNATTRIBUTED_SEC = 10 * 60
 const DRIFT_MIN_SEC = 15 * 60
+/** 摸鱼上下文静默释放归属的阈值：不打断提问，超过即脱钩（回工作应用时绑定秒级重挂） */
+const SLACK_RELEASE_SEC = 5 * 60
 const DAILY_QUOTA = 2
 const SLACK_LIKE = new Set(['slack', 'relax', 'break', 'lunch'])
 const ENTERTAINMENT_TITLE = /抖音|douyin|tiktok|bilibili|哔哩|youtube|优酷|爱奇艺|腾讯视频|网易云|spotify|twitch|漫画|小说|微博|知乎热|iqiyi|youku/i
 
-function isEntertainmentContext(app: string, title: string, state?: string): boolean {
+export function isEntertainmentContext(app: string, title: string, state?: string): boolean {
   if (SLACK_LIKE.has(state ?? '')) return true
   const catNow = categoryOfWithOverride(app ?? '', getSettings().appCategoryOverride)
   if (catNow === 'media' || catNow === 'game') return true
@@ -90,22 +93,18 @@ function alreadyAnswered(fp: string): boolean {
   return memoryAll().some((m) => m.id === fp)
 }
 
-function askedUnattrToday(day: string, pathKey: string): boolean {
+/** 未归因提问去重：按「归一化程序名」一天只问一次——同程序换窗口标题/路径不换题 */
+function askedUnattrToday(day: string, appKey: string): boolean {
   return memoryAll().some(
-    (m) => m.id === `unattr:${day}:${pathKey}` || (pathKey === 'nopath' && m.id === `unattr:${day}`)
+    (m) => m.id === `unattr:${day}:${appKey}` || (!appKey && m.id === `unattr:${day}`)
   )
 }
 
-function askedDriftToday(projectId: string, day: string, pathKey: string): boolean {
-  const exact = `drift:${projectId}:${day}:${pathKey}`
-  if (memoryAll().some((m) => m.id === exact)) return true
-  // 无路径线索时仍按项目/日限制一次
-  if (pathKey === 'nopath') {
-    return memoryAll().some(
-      (m) => m.id === `drift:${projectId}:${day}` || (m.id.startsWith(`drift:${projectId}:${day}`) && sameDay(m.ts, day))
-    )
-  }
-  return false
+/** 漂移确认去重：同一项目一天最多确认一次 */
+function askedDriftToday(projectId: string, day: string): boolean {
+  return memoryAll().some(
+    (m) => m.id === `drift:${projectId}:${day}` || (m.id.startsWith(`drift:${projectId}:${day}:`) && sameDay(m.ts, day))
+  )
 }
 
 function sameDay(ts: number, day: string): boolean {
@@ -132,6 +131,9 @@ function pathKeyOf(hint: string | null | undefined): string {
   return h.replace(/[^\w\u4e00-\u9fff]+/g, '_').slice(0, 28) || 'nopath'
 }
 
+/** 本会话已入队过的指纹：被忽略/超时的问题当天不再二次打扰（答过与否另有 confirmMemory 兜底） */
+const askedSession = new Set<string>()
+
 function quotaLeft(): boolean {
   const s = getSettings()
   const day = dateKey(Date.now())
@@ -149,9 +151,13 @@ function consumeQuota(): void {
 }
 
 function askConfirm(fp: string, question: string, ctx: Record<string, unknown>): boolean {
+  if (askedSession.has(fp)) return false
   if (alreadyAnswered(fp)) return false
   if (!quotaLeft()) return false
   if (!enqueueAsk(fp, question, ctx)) return false
+  askedSession.add(fp)
+  // 入队即留痕「问过未答」：忽略的问题跨重启也不重弹（用户真答时 rememberAnswer 会覆盖为正式答案）
+  rememberAnswer(fp, 'asked')
   consumeQuota()
   return true
 }
@@ -188,7 +194,30 @@ export function unbindProject(projectId: string): void {
   if (b) updateIn<ProjectBinding>('projectBindings', b.id, { apps: [], keywords: [], dirs: [], updatedAt: Date.now() })
 }
 
-/** IDE 等多开工具：绑关键词/路径，不绑死整个软件 */
+/** 覆盖式写绑定（UI 编辑：单条删除/调整 → 整组覆盖回写） */
+export function setBinding(projectId: string, next: { apps?: string[]; keywords?: string[]; dirs?: string[] }): void {
+  const clean = (a?: string[]): string[] => [...new Set((a ?? []).map((x) => x.trim()).filter(Boolean))]
+  const exist = listBindings().find((b) => b.projectId === projectId)
+  if (exist) {
+    updateIn<ProjectBinding>('projectBindings', exist.id, {
+      apps: next.apps !== undefined ? clean(next.apps) : exist.apps,
+      keywords: next.keywords !== undefined ? clean(next.keywords) : exist.keywords,
+      dirs: next.dirs !== undefined ? clean(next.dirs) : exist.dirs,
+      updatedAt: Date.now()
+    })
+  } else {
+    insertInto<ProjectBinding>('projectBindings', {
+      id: genId('bd'),
+      projectId,
+      apps: clean(next.apps),
+      keywords: clean(next.keywords),
+      dirs: clean(next.dirs),
+      updatedAt: Date.now()
+    })
+  }
+}
+
+/** IDE/浏览器等多开工具：绑关键词/路径，不绑死整个软件（浏览器按站点/标题线索，不归整个 exe） */
 export function segmentBindPatch(apps: string[] | undefined, windowTitle?: string, pathHint?: string): {
   apps?: string[]
   keywords?: string[]
@@ -197,7 +226,9 @@ export function segmentBindPatch(apps: string[] | undefined, windowTitle?: strin
   const list = [...new Set((apps ?? []).map(fmtApp).filter(Boolean))]
   const primary = list[0] ?? ''
   const hint = (pathHint || extractPathHint(windowTitle || '') || '').trim()
-  if (list.some(isIdeApp) || isIdeApp(primary)) {
+  const isMultiCtx = (a: string) =>
+    isIdeApp(a) || categoryOfWithOverride(a, getSettings().appCategoryOverride) === 'browser'
+  if (list.some(isMultiCtx) || isMultiCtx(primary)) {
     const keywords: string[] = []
     const dirs: string[] = []
     if (hint) {
@@ -228,6 +259,13 @@ export interface AttributionState {
 }
 
 function appNameMatch(app: string, apps: string[]): string | null {
+  const canon = canonAppKey(app)
+  // 先按归一键精确命中（同程序不同进程名/显示名算一个），再走模糊兜底
+  if (canon) {
+    for (const a of apps) {
+      if (a && canonAppKey(a) === canon) return a
+    }
+  }
   for (const a of apps) {
     if (a && fuzzyMatch(app, a)) return a
   }
@@ -294,8 +332,9 @@ function buildConfirmCopy(opts: {
   const soft = fmtApps(opts.apps)
   const win = opts.windowTitle?.trim()
   const path = opts.pathHint?.trim()
+  const capturedAt = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
   const lines: string[] = []
-  lines.push(`你正在用「${soft}」`)
+  lines.push(`刚才 ${capturedAt} 前后，你在用「${soft}」`)
   if (win) lines.push(`窗口：「${win.slice(0, 60)}」`)
   if (path) lines.push(`工作区/路径线索：「${path}」`)
   if (opts.mode === 'drift' && opts.projectName) {
@@ -348,8 +387,12 @@ export function attributionTick(app: string, title: string, ts: number, idleSec:
     }
   }
   if (!hit) {
+    // 多上下文应用（IDE/浏览器）不吃整应用软绑——否则浏览器一旦链到项目，刷抖音也算该项目
+    const multiCtx =
+      isIdeApp(app) ||
+      categoryOfWithOverride(app, getSettings().appCategoryOverride) === 'browser'
     for (const b of bindings) {
-      if (appNameMatch(app, b.apps)) {
+      if (!multiCtx && appNameMatch(app, b.apps)) {
         hit = b
         source = 'binding'
         break
@@ -389,19 +432,20 @@ export function attributionTick(app: string, title: string, ts: number, idleSec:
       }
     }
   } else if (rt.projectId) {
+    rt.unattrSinceTs = rt.unattrSinceTs ?? ts
+    if (app && !rt.unattrAppSet.some((a) => canonAppKey(a) === canonAppKey(app))) rt.unattrAppSet.push(app)
+    const driftSec = (ts - rt.unattrSinceTs) / 1000
     if (isEntertainmentContext(app ?? '', title ?? '', state)) {
-      rt.unattrSinceTs = null
-      rt.unattrAppSet = []
+      // 摸鱼上下文不打断提问，但持续超过阈值静默释放归属——否则刷抖音一直挂着上个项目
+      if (driftSec >= SLACK_RELEASE_SEC) {
+        rt = { ...rt, projectId: null, projectName: '', taskId: null, taskTitle: '', sinceTs: 0, unattrSinceTs: null, unattrAppSet: [] }
+      }
       return getAttribution()
     }
-    rt.unattrSinceTs = rt.unattrSinceTs ?? ts
-    if (!rt.unattrAppSet.includes(app)) rt.unattrAppSet.push(app)
-    const driftSec = (ts - rt.unattrSinceTs) / 1000
     if (idleSec < 30 && driftSec >= DRIFT_MIN_SEC && rt.unattrAppSet.length >= 1) {
       const day = new Date(ts).toISOString().slice(0, 10)
-      const pk = pathKeyOf(pathHint)
-      const fp = `drift:${rt.projectId}:${day}:${pk}`
-      if (!askedDriftToday(rt.projectId, day, pk)) {
+      const fp = `drift:${rt.projectId}:${day}`
+      if (!askedDriftToday(rt.projectId, day)) {
         const reason = formatTerm(resolveTerm(undefined, 'driftWhy'), { p: rt.projectName })
         const driftDomain = listProjects().find((x) => x.id === rt.projectId)?.domain
         const asked = askConfirm(
@@ -435,13 +479,14 @@ export function attributionTick(app: string, title: string, ts: number, idleSec:
       return getAttribution()
     }
     rt.unattrSinceTs = rt.unattrSinceTs ?? ts
-    if (!rt.unattrAppSet.includes(app)) rt.unattrAppSet.push(app)
+    if (app && !rt.unattrAppSet.some((a) => canonAppKey(a) === canonAppKey(app))) rt.unattrAppSet.push(app)
     const unattrSec = (ts - rt.unattrSinceTs) / 1000
     if (idleSec < 30 && unattrSec >= UNATTRIBUTED_SEC && rt.unattrAppSet.length >= 1) {
       const day = new Date(ts).toISOString().slice(0, 10)
       const pk = pathKeyOf(pathHint)
-      const fp = `unattr:${day}:${pk}`
-      if (!askedUnattrToday(day, pk)) {
+      const appKey = canonAppKey(app) || pk
+      const fp = `unattr:${day}:${appKey}`
+      if (!askedUnattrToday(day, appKey)) {
         const reason = pathHint
           ? `窗口/路径线索「${pathHint}」尚未挂到任何项目`
           : `软件「${fmtApps(rt.unattrAppSet)}」持续一段，尚未挂项目`

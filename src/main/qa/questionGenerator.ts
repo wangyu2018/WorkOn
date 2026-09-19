@@ -7,6 +7,7 @@
 import { col, insertInto } from '../db'
 import { getSettings, setSettings } from '../settings'
 import { genId } from '@shared/types'
+import { canonAppKey } from '@shared/appDisplayName'
 import type { UserFeedback, UserHabits } from '@shared/types'
 
 const QUESTION_TEMPLATES: Record<string, string> = {
@@ -29,13 +30,15 @@ const PERSONA_GAP_QUESTIONS: { key: keyof UserHabits; question: string }[] = [
   { key: 'commonBreakApps', question: '你休息时主要刷视频/社交媒体放松吗？' }
 ]
 
-/** 场景问题（24h 去重 + 已确认 yes 跳过） */
+/** 场景问题（24h 去重 + 已确认 yes 跳过；无匹配模板不问——不要弹没有指代的空话） */
 export function genQuestion(ctx: string): { id: string; ctx: string; question: string } | null {
   const feedbacks = col<UserFeedback>('feedbacks')
   if (feedbacks.some((f) => f.ctx === ctx && f.answer === 'yes')) return null
   const askedRecently = feedbacks.some((f) => f.ctx === ctx && Date.now() - f.ts < 86400000)
   if (askedRecently) return null
-  const template = QUESTION_TEMPLATES[ctx] ?? QUESTION_TEMPLATES.default
+  // ctx 形如 single-coding / dual-aidev-relax；先精确匹配，再退化到去掉 single- 前缀的裸场景
+  const template = QUESTION_TEMPLATES[ctx] ?? QUESTION_TEMPLATES[ctx.replace(/^single-/, '')]
+  if (!template) return null
   return { id: genId('q'), ctx, question: template.replace('{ctx}', ctx) }
 }
 
@@ -60,9 +63,10 @@ const appSeq: { app: string; ts: number }[] = []
 let chainCooldownUntil = 0
 let knownChainCooldownUntil = 0
 
-/** 记录一次前台应用切换，返回检测到的候选链路（重复出现 2 次的 3 连序列） */
+/** 记录一次前台应用切换，返回检测到的候选链路（重复出现 2 次的 3 连序列）。应用名归一化：同程序不同进程名算同一个 */
 export function trackAppSwitch(app: string, ts: number): string[] | null {
   if (!app) return null
+  app = canonAppKey(app)
   const last = appSeq[appSeq.length - 1]
   if (last && last.app === app) return null
   appSeq.push({ app, ts })
@@ -88,17 +92,19 @@ export function trackAppSwitch(app: string, ts: number): string[] | null {
   return null
 }
 
-/** 是否已是已确认的作业链路 */
+/** 是否已是已确认的作业链路（按归一键比较，容忍进程名/显示名差异） */
 export function isKnownChain(chain: string[]): boolean {
   const chains = (getSettings() as { workChains?: string[][] }).workChains ?? []
-  return chains.some((c) => c.join('>') === chain.join('>'))
+  const canon = chain.map(canonAppKey).join('>')
+  return chains.some((c) => c.map(canonAppKey).join('>') === canon)
 }
 
-/** 确认保存作业链路 */
+/** 确认保存作业链路（按归一键去重） */
 export function saveWorkChain(chain: string[]): void {
   const s = getSettings() as { workChains?: string[][] }
   const chains = s.workChains ?? []
-  if (chains.some((c) => c.join('>') === chain.join('>'))) return
+  const canon = chain.map(canonAppKey).join('>')
+  if (chains.some((c) => c.map(canonAppKey).join('>') === canon)) return
   setSettings({ workChains: [...chains, chain] } as Partial<import('@shared/types').AppSettings>)
   console.log(`[workchain] 已保存作业链路: ${chain.join(' → ')}`)
 }
@@ -112,10 +118,11 @@ export function matchKnownChain(): string[] | null {
   const apps = appSeq.map((a) => a.app)
   for (const c of chains) {
     if (c.length < 2) continue
+    const canonChain = c.map(canonAppKey)
     // 序列按序包含链路全部元素即命中
     let idx = 0
     for (const app of apps) {
-      if (app === c[idx]) idx++
+      if (app === canonChain[idx]) idx++
       if (idx >= c.length) break
     }
     if (idx >= c.length) {

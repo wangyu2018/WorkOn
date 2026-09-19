@@ -1,11 +1,15 @@
 /**
- * 系统托盘（v7 重构：记录/生成/显示/系统 四段分组 + 快捷键提示 + 勾选态）
- * 菜单随设置动态刷新：未开启的模块不显示
+ * 系统托盘（v8 重构）：状态 → 日常动作 → 三个悬浮面 → 细化 → 系统控制。
+ * - 去重：穿透/桌宠开关只出现一处；主界面入口不再混在「记录」组
+ * - 人话：鼠标穿透 → 点击穿过；透明度缩进不再用空格伪装
+ * - 托盘常驻：藏悬浮窗不再销毁托盘（否则用户彻底失联，只能重启）
+ * 注：托盘是 Windows 原生菜单，颜色字体跟系统走，无法套应用主题皮肤；
+ *     这里的「风格」= 命名与产品词典一致 + 结构与勾选逻辑干净。
  */
 import { app, Menu, Tray, nativeImage } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import { createMainWindow, toggleWidget, togglePet, sendTo, setWidgetPenetration, petWindow, widgetWindow, toggleTodoWidget, setTodoWidgetPenetration, setTodoWidgetLayer, setWidgetOnTop, setPetOpacity } from './windows'
+import { createMainWindow, toggleWidget, togglePet, sendTo, setWidgetPenetration, petWindow, widgetWindow, toggleTodoWidget, setTodoWidgetPenetration, setTodoWidgetLayer, setWidgetOnTop, setPetOpacity, applyWidgetOpacity } from './windows'
 import { getSettings, setSettings } from './settings'
 
 let tray: Tray | null = null
@@ -34,51 +38,41 @@ async function generateTodayReport(): Promise<void> {
   openMain('report')
 }
 
+/** 透明度三档 radio（共用模板）：档位判定与写回 */
+function opacityRadios(
+  value: number,
+  pick: (v: number) => void
+): Electron.MenuItemConstructorOptions[] {
+  const tiers: { label: string; v: number }[] = [
+    { label: '100%', v: 1 },
+    { label: '70%', v: 0.7 },
+    { label: '40%', v: 0.4 }
+  ]
+  return tiers.map((t, i) => ({
+    label: t.label,
+    type: 'radio',
+    checked: i === 0 ? value > 0.85 : i === 1 ? value > 0.55 && value <= 0.85 : value <= 0.55,
+    click: () => pick(t.v)
+  }))
+}
+
 function buildMenu(): void {
   if (!tray) return
   const s = getSettings()
+  const paused = !!s.recordingPaused
 
   const sep = (): Electron.MenuItemConstructorOptions => ({ type: 'separator' })
 
   const items: Electron.MenuItemConstructorOptions[] = [
-    // ── 记录 ──
-    { label: '记录', enabled: false },
-    {
-      label: '暂停记录',
-      type: 'checkbox',
-      checked: !!s.recordingPaused,
-      accelerator: 'CmdOrCtrl+Alt+P',
-      registerAccelerator: false,
-      click: (item) => {
-        const paused = !!(item as Electron.MenuItem & { checked?: boolean }).checked
-        setSettings({ recordingPaused: paused })
-        refreshTray()
-      }
-    },
-    {
-      label: '打开主界面',
-      accelerator: 'CmdOrCtrl+Alt+O',
-      registerAccelerator: false,
-      click: () => openMain()
-    },
+    // ── 状态 ──
+    { label: paused ? '⏸ 记录已暂停' : '● 记录中', enabled: false },
     sep(),
-    // ── 生成（AI） ──
-    { label: '生成', enabled: false },
-    {
-      label: '✦ 生成今日日报',
-      accelerator: 'CmdOrCtrl+Alt+D',
-      registerAccelerator: false,
-      click: () => { void generateTodayReport() }
-    },
-    {
-      label: '✦ 问 AI 搭子',
-      accelerator: 'CmdOrCtrl+Alt+K',
-      registerAccelerator: false,
-      click: () => openMain('qa')
-    },
+    // ── 日常动作 ──
+    { label: '打开 WorkOn', accelerator: 'CmdOrCtrl+Alt+O', registerAccelerator: false, click: () => openMain() },
+    { label: '✦ 生成今日日报', accelerator: 'CmdOrCtrl+Alt+D', registerAccelerator: false, click: () => { void generateTodayReport() } },
+    { label: '✦ 问 AI 搭子', accelerator: 'CmdOrCtrl+Alt+K', registerAccelerator: false, click: () => openMain('qa') },
     sep(),
-    // ── 显示 ──
-    { label: '显示', enabled: false },
+    // ── 三个悬浮面（一级开关，一处一个） ──
     {
       label: '悬浮窗',
       type: 'checkbox',
@@ -90,16 +84,11 @@ function buildMenu(): void {
       }
     },
     {
-      label: '鼠标穿透（悬浮窗）',
+      label: '待办小组件',
       type: 'checkbox',
-      checked: !!s.widgetPenetration,
-      visible: !!s.widgetVisible,
+      checked: !!s.todoWidgetVisible,
       registerAccelerator: false,
-      click: (item) => {
-        const v = !!(item as Electron.MenuItem & { checked?: boolean }).checked
-        setSettings({ widgetPenetration: v })
-        setWidgetPenetration(v)
-      }
+      click: () => toggleTodoWidget()
     },
     {
       label: '桌宠',
@@ -115,40 +104,43 @@ function buildMenu(): void {
       }
     },
     sep(),
-    // ── 显示设置（默认收起，展开编辑三块悬浮面） ──
+    // ── 细化（每个悬浮面只在这里调穿透/层级/透明度） ──
     {
-      label: '显示设置 ▸',
+      label: '悬浮窗细化 ▸',
+      visible: !!s.widgetVisible,
       submenu: [
-        // 悬浮窗
-        { label: '悬浮窗', enabled: false },
-        { label: '鼠标穿透', type: 'checkbox', checked: !!s.widgetPenetration, click: (it) => { const v = !!(it as Electron.MenuItem & { checked?: boolean }).checked; setSettings({ widgetPenetration: v }); setWidgetPenetration(v) } },
-        { label: '顶层显示', type: 'checkbox', checked: s.widgetOnTop !== false, click: (it) => { const v = !!(it as Electron.MenuItem & { checked?: boolean }).checked; setWidgetOnTop(v) } },
-        { label: '透明度', enabled: false },
-        { label: '   100%', type: 'radio', checked: (s.widgetOpacity ?? 1) > 0.85, click: () => { setSettings({ widgetOpacity: 1 }); if (widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.setOpacity(1) } },
-        { label: '   70%', type: 'radio', checked: (s.widgetOpacity ?? 1) <= 0.85 && (s.widgetOpacity ?? 1) > 0.55, click: () => { setSettings({ widgetOpacity: 0.7 }); if (widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.setOpacity(0.7) } },
-        { label: '   40%', type: 'radio', checked: (s.widgetOpacity ?? 1) <= 0.55, click: () => { setSettings({ widgetOpacity: 0.4 }); if (widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.setOpacity(0.4) } },
+        { label: '点击穿过（透到下层窗口）', type: 'checkbox', checked: !!s.widgetPenetration, click: (it) => { const v = !!(it as Electron.MenuItem & { checked?: boolean }).checked; setSettings({ widgetPenetration: v }); setWidgetPenetration(v) } },
+        { label: '置顶显示', type: 'checkbox', checked: s.widgetOnTop !== false, click: (it) => { const v = !!(it as Electron.MenuItem & { checked?: boolean }).checked; setWidgetOnTop(v) } },
         { type: 'separator' },
-        // 待办小组件
-        { label: '待办小组件', enabled: false },
-        { label: '显示', type: 'checkbox', checked: !!s.todoWidgetVisible, click: () => toggleTodoWidget() },
-        { label: '鼠标穿透', type: 'checkbox', checked: !!s.todoWidgetPenetration, click: (it) => { const v = !!(it as Electron.MenuItem & { checked?: boolean }).checked; setTodoWidgetPenetration(v) } },
-        { label: '顶层显示', type: 'checkbox', checked: s.todoWidgetOnTop !== false, click: (it) => { const v = !!(it as Electron.MenuItem & { checked?: boolean }).checked; setTodoWidgetLayer(v) } },
-        { label: '透明度', enabled: false },
-        { label: '   100%', type: 'radio', checked: (s.todoWidgetOpacity ?? 0.95) > 0.85, click: () => { setSettings({ todoWidgetOpacity: 1 }); refreshTray() } },
-        { label: '   70%', type: 'radio', checked: (s.todoWidgetOpacity ?? 0.95) <= 0.85 && (s.todoWidgetOpacity ?? 0.95) > 0.55, click: () => { setSettings({ todoWidgetOpacity: 0.7 }); refreshTray() } },
-        { label: '   40%', type: 'radio', checked: (s.todoWidgetOpacity ?? 0.95) <= 0.55, click: () => { setSettings({ todoWidgetOpacity: 0.4 }); refreshTray() } },
-        { type: 'separator' },
-        // 桌宠
-        { label: '桌宠', enabled: false },
-        { label: '显示', type: 'checkbox', checked: !!s.petEnabled, click: () => togglePet() },
-        { label: '透明度', enabled: false },
-        { label: '   100%', type: 'radio', checked: (s.petOpacity ?? 1) > 0.85, click: () => setPetOpacity(1) },
-        { label: '   70%', type: 'radio', checked: (s.petOpacity ?? 1) <= 0.85 && (s.petOpacity ?? 1) > 0.55, click: () => setPetOpacity(0.7) },
-        { label: '   40%', type: 'radio', checked: (s.petOpacity ?? 1) <= 0.55, click: () => setPetOpacity(0.4) }
+        ...opacityRadios(s.widgetOpacity ?? 1, (v) => { setSettings({ widgetOpacity: v }); applyWidgetOpacity() })
       ]
     },
+    {
+      label: '待办小组件细化 ▸',
+      visible: !!s.todoWidgetVisible,
+      submenu: [
+        { label: '点击穿过（透到下层窗口）', type: 'checkbox', checked: !!s.todoWidgetPenetration, click: (it) => { const v = !!(it as Electron.MenuItem & { checked?: boolean }).checked; setTodoWidgetPenetration(v) } },
+        { label: '置顶显示', type: 'checkbox', checked: s.todoWidgetOnTop !== false, click: (it) => { const v = !!(it as Electron.MenuItem & { checked?: boolean }).checked; setTodoWidgetLayer(v) } },
+        { type: 'separator' },
+        ...opacityRadios(s.todoWidgetOpacity ?? 0.95, (v) => { setSettings({ todoWidgetOpacity: v }); refreshTray() })
+      ]
+    },
+    {
+      label: '桌宠细化 ▸',
+      visible: !!s.petEnabled,
+      submenu: opacityRadios(s.petOpacity ?? 1, (v) => setPetOpacity(v))
+    },
     sep(),
-    // ── 系统 ──
+    // ── 系统控制 ──
+    {
+      label: paused ? '恢复记录' : '暂停记录',
+      accelerator: 'CmdOrCtrl+Alt+P',
+      registerAccelerator: false,
+      click: () => {
+        setSettings({ recordingPaused: !getSettings().recordingPaused })
+        refreshTray()
+      }
+    },
     { label: '设置…', accelerator: 'CmdOrCtrl+,', registerAccelerator: false, click: () => openMain('settings') },
     {
       label: '退出 WorkOn',
@@ -161,6 +153,7 @@ function buildMenu(): void {
 }
 
 export function createTray(): void {
+  if (tray) return
   const icon = loadIcon('tray-dark-16.png')
   tray = new Tray(icon)
   tray.setToolTip('WorkOn — 桌面工作记录')
@@ -173,13 +166,10 @@ export function refreshTray(): void {
   buildMenu()
 }
 
-/** 根据设置的总开关创建/销毁托盘 */
+/**
+ * 托盘常驻：不管悬浮窗藏不藏，托盘都是最后的控制权
+ * （旧逻辑藏悬浮窗即销毁托盘 → 用户失联只能重启，已废弃；仅确保存在）。
+ */
 export function syncTrayFromSettings(): void {
-  const s = getSettings()
-  if (!s.widgetVisible && tray) {
-    tray.destroy()
-    tray = null
-  } else if (s.widgetVisible && !tray) {
-    createTray()
-  }
+  createTray()
 }

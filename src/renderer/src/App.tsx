@@ -25,6 +25,9 @@ import ProfileView from './views/ProfileView'
 import PrivacyView from './views/PrivacyView'
 import SettingsView from './views/SettingsView'
 import { PasteInboxModal } from './components/PasteInboxModal'
+import { usePerspective } from './lib/usePerspective'
+import { PERSPECTIVE_NAV } from './lib/perspective'
+import { PERSPECTIVES, PERSPECTIVE_META } from '@shared/perspective'
 
 interface NavItem {
   key: ViewKey
@@ -130,6 +133,19 @@ export default function App() {
   const mainCat: AppCategory | null = mainApp ? categoryOfWithOverride(mainApp, appCategoryOverride) : null
   /** 右上角当前应用标签 */
   const currentAppLabel = mainApp ? displayApp(mainApp) : '等待采集…'
+
+  // 日视角：晨·架构师 / 昼·工作者 / 晚·管理者（手动锁 ∥ 时钟自动）
+  const { perspective, locked, lock } = usePerspective()
+  const [moreOpen, setMoreOpen] = useState(false)
+  const { navGroups, moreItems } = useMemo(() => {
+    const allow = new Set<ViewKey>(PERSPECTIVE_NAV[perspective])
+    return {
+      navGroups: NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => allow.has(i.key)) })).filter(
+        (g) => g.items.length > 0
+      ),
+      moreItems: NAV_GROUPS.flatMap((g) => g.items).filter((i) => !allow.has(i.key))
+    }
+  }, [perspective])
 
   // 强调色主题 + 亮暗模式应用到根节点
   useEffect(() => {
@@ -262,9 +278,59 @@ export default function App() {
           </div>
         </div>
 
-        {/* 分组导航 */}
+        {/* 日视角切换：点选=锁定该视角，再点已激活项或「自动」回到时钟驱动 */}
+        <div className="mb-4 flex flex-col gap-1.5 px-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-600">视角</span>
+            <button
+              type="button"
+              onClick={() => lock(locked ? null : perspective)}
+              title={locked ? '已锁定 · 点击回到按时钟自动切换' : '按时钟自动切换 · 点击锁定当前视角'}
+              className="rounded-md px-1.5 py-0.5 text-[10px] transition-colors"
+              style={{
+                color: locked ? 'var(--accent)' : 'var(--text-3, #64748b)',
+                background: locked ? 'var(--accent-softer)' : 'transparent'
+              }}
+            >
+              {locked ? '已锁定' : '自动'}
+            </button>
+          </div>
+          <div className="grid grid-cols-3 gap-1">
+            {PERSPECTIVES.map((p) => {
+              const m = PERSPECTIVE_META[p]
+              const active = perspective === p
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => lock(active && locked ? null : p)}
+                  title={`${m.emoji} ${m.label}视角 · ${m.desc}（自动时段 ${m.range}）`}
+                  className={`rounded-lg py-1 text-[11px] transition-all duration-150 ${
+                    active ? 'font-semibold' : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                  style={
+                    active
+                      ? {
+                          background: 'var(--accent-softer)',
+                          color: 'var(--accent)',
+                          boxShadow: 'inset 0 0 0 1px var(--border-active)'
+                        }
+                      : undefined
+                  }
+                >
+                  {m.emoji} {m.short}
+                </button>
+              )
+            })}
+          </div>
+          <div className="px-0.5 text-[10px] leading-snug text-slate-600">
+            {PERSPECTIVE_META[perspective].label}视角 · {PERSPECTIVE_META[perspective].desc}
+          </div>
+        </div>
+
+        {/* 分组导航（按当前视角收敛；其余入口收进「更多」） */}
         <nav className="flex flex-col gap-4">
-          {NAV_GROUPS.map((g) => (
+          {navGroups.map((g) => (
             <div key={g.label}>
               <div className="mb-1 px-2.5 text-[10px] font-medium uppercase tracking-[0.14em] text-slate-600">
                 {g.label}
@@ -276,6 +342,25 @@ export default function App() {
               </div>
             </div>
           ))}
+          {moreItems.length > 0 ? (
+            <div>
+              <button
+                type="button"
+                onClick={() => setMoreOpen((o) => !o)}
+                className="mb-1 flex w-full items-center justify-between px-2.5 text-[10px] font-medium uppercase tracking-[0.14em] text-slate-600 transition-colors hover:text-slate-400"
+              >
+                <span>更多</span>
+                <span>{moreOpen ? '▾' : '▸'}</span>
+              </button>
+              {moreOpen ? (
+                <div className="flex flex-col gap-0.5">
+                  {moreItems.map((item) => (
+                    <NavButton key={item.key} item={item} active={view === item.key} onClick={() => setView(item.key)} />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </nav>
 
         <div className="flex-1" />
@@ -287,6 +372,13 @@ export default function App() {
         <header className="flex h-11 shrink-0 items-center justify-between border-b border-white/[0.06] px-4">
           <div className="app-drag flex min-w-0 flex-1 items-baseline gap-2 self-stretch pl-1">
             <span className="self-center text-[13px] font-semibold text-slate-200">{VIEW_TITLES[view]}</span>
+            <span
+              className="self-center rounded-md px-1.5 py-0.5 text-[10px] text-slate-500"
+              style={{ background: 'var(--surface-2)' }}
+              title={`${PERSPECTIVE_META[perspective].desc}${locked ? '（已锁定）' : '（自动）'}`}
+            >
+              {PERSPECTIVE_META[perspective].emoji} {PERSPECTIVE_META[perspective].label}
+            </span>
           </div>
           <div
             className="app-no-drag flex shrink-0 items-center gap-2"

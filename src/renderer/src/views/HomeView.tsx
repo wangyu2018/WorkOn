@@ -1,7 +1,7 @@
 /**
  * 首页 — 今日图谱 + 工作/生活时间轴（PRD v3.1 G+H）
  */
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef, useDeferredValue } from 'react'
 import { createPortal } from 'react-dom'
 import { WORK_LIKE_STATES } from '@shared/stateMeta'
 import type { MergedTrail, TrailSegment, WorkState, PlanItem, AttentionScore } from '@shared/types'
@@ -28,6 +28,11 @@ import {
   type HomeBlockKey,
   type HomeWidgets
 } from '../lib/homeLayout'
+import { usePerspective } from '../lib/usePerspective'
+import { DailyLineCard, AlmanacCard, CountdownCard } from '../components/homeWidgets/LifeWidgets'
+import { PERSPECTIVE_HOME } from '../lib/perspective'
+import { PERSPECTIVE_META } from '@shared/perspective'
+import { prioW } from '@shared/priority'
 
 type Channel = 'CMD' | '浏览器' | '微信' | 'IDE' | '其他'
 type Column = 'work' | 'life'
@@ -367,7 +372,20 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
     next.splice(ti, 0, from)
     persistLayout(widgets, next)
   }
+  // 日视角收敛 + keep-alive：槽位结构只跟用户布局走，视角只控制显隐（display:none）。
+  // 首次激活才挂载（晨间永不挂监控块，省掉首轮 IPC）；切走后常驻，切换零重挂零重拉。
+  const { perspective } = usePerspective()
+  const deferredPerspective = useDeferredValue(perspective)
+  const perspectiveBlocks = PERSPECTIVE_HOME[deferredPerspective]
   const renderSlots = useMemo(() => buildHomeRenderSlots(homeOrder, widgets), [homeOrder, widgets])
+  const activatedRef = useRef<Set<HomeBlockKey>>(new Set())
+  for (const slot of renderSlots) {
+    const keys: HomeBlockKey[] = slot.kind === 'monitor' ? slot.keys : [slot.key]
+    if (!perspectiveBlocks || keys.some((k) => perspectiveBlocks.includes(k))) {
+      keys.forEach((k) => activatedRef.current.add(k))
+    }
+  }
+  const activatedBlocks = activatedRef.current
   const monitorSectionsFor = (keys: MonitorSectionKey[]) =>
     Object.fromEntries(MONITOR_SECTION_META.map(({ key }) => [key, keys.includes(key)])) as Record<
       MonitorSectionKey,
@@ -383,6 +401,11 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
   /** 项目→色标映射 + 应用→项目归类（时间轴着色） */
   const [projectColors, setProjectColors] = useState<Record<string, string>>({})
   const [projectAppMap, setProjectAppMap] = useState<Record<string, string>>({}) // app(小写) → projectId
+  const [projPrio, setProjPrio] = useState<Record<string, string>>({}) // projectId → priority
+  /** 项目趋势：活跃项目任务完成率 + 上线倒计时（晨间排布参考） */
+  const [projectTrend, setProjectTrend] = useState<
+    { id: string; name: string; color: string; pct: number | null; done: number; total: number; daysLeft: number | null }[]
+  >([])
   useEffect(() => {
     void (async () => {
       try {
@@ -393,6 +416,24 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
         const appMap: Record<string, string> = {}
         ;(links as { app: string; projectId: string }[]).forEach((l) => { appMap[l.app] = l.projectId })
         setProjectAppMap(appMap)
+        const prioMap: Record<string, string> = {}
+        ;(ps as { id: string; priority?: string }[]).forEach((x) => { prioMap[x.id] = x.priority ?? 'medium' })
+        setProjPrio(prioMap)
+        // 项目趋势：按优先级取前 5 个活跃项目，算任务完成率
+        const actives = (ps as { id: string; name: string; status?: string; color?: string; deadline?: string; priority?: string }[])
+          .filter((p) => (p.status ?? 'active') === 'active')
+          .sort((a, b) => prioW(a.priority) - prioW(b.priority))
+          .slice(0, 5)
+        const trend = await Promise.all(
+          actives.map(async (p) => {
+            const tasks = (await window.api.listProjectTasks?.(p.id).catch(() => [])) as { status: string }[] | undefined
+            const total = tasks?.length ?? 0
+            const done = tasks?.filter((t) => t.status === 'done').length ?? 0
+            const daysLeft = p.deadline ? Math.ceil((new Date(`${p.deadline}T23:59:59`).getTime() - Date.now()) / 86400000) : null
+            return { id: p.id, name: p.name, color: p.color ?? '#22D3EE', pct: total ? Math.round((done / total) * 100) : null, done, total, daysLeft }
+          })
+        )
+        setProjectTrend(trend)
       } catch { /* ignore */ }
     })()
   }, [])
@@ -431,19 +472,7 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
   const hoverLeaveTimer = useRef<number | null>(null)
   /** 时间轴自适应宽度：泳道跟随容器宽度（全屏撑满，不再固定 760） */
   const timelineScrollRef = useRef<HTMLDivElement>(null)
-  const onRulerWheelRef = useRef<((e: { clientX: number; deltaY: number }) => void) | null>(null)
-  // 时间轴区域滚轮 = 缩放（非被动监听，接管页面滚动）
-  useEffect(() => {
-    const el = timelineScrollRef.current
-    if (!el) return
-    const handler = (e: WheelEvent) => {
-      e.preventDefault()
-      const fn = onRulerWheelRef.current
-      if (typeof fn === 'function') fn(e)
-    }
-    el.addEventListener('wheel', handler, { passive: false })
-    return () => el.removeEventListener('wheel', handler)
-  }, [])
+  // 时间轴滚轮缩放已禁用：滚轮留给页面滚动；改范围用顶部档位按钮，刻度条拖动平移
   const [laneW, setLaneW] = useState(LANE_W)
   /** 隐私排除的应用（时间轴末尾管理区 + 刷新过滤共用） */
   const excludedApps = useSettingsStore((s) => s.settings.privacyExcludedApps ?? [])
@@ -454,14 +483,6 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
       const p = await window.api?.listPlans?.(dateKey(Date.now())) as PlanItem[] | undefined
       // 应用图标/主题色缓存（监控识别新应用时主进程会增量写入）
       window.api?.getAppVisuals?.().then((v) => setAppVisuals((v as Record<string, { iconDataUrl: string; themeColor: string }>) ?? {})).catch(() => undefined)
-      // 近 7 天 trail（洞察卡同期对比用）
-      const days: (MergedTrail | null)[] = []
-      for (let i = 1; i <= 7; i++) {
-        const d = new Date()
-        d.setDate(d.getDate() - i)
-        days.push((await window.api?.getTrail?.(dateKey(d.getTime()))) as MergedTrail | null)
-      }
-      setRecentTrails(days.filter((x): x is MergedTrail => !!x && !!x.segments?.length))
       if (t) {
         setTrail(t)
         // 隐私排除的应用不再进入时间轴/星图（0 采集；历史数据也一并隐去）
@@ -499,6 +520,22 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
       const list = (links as Array<{ segStartTs: number; planId: string }>) ?? []
       if (list.length) setPlanSegments(new Map(list.map((l) => [l.segStartTs, l.planId])))
     }).catch(() => undefined)
+  }, [])
+
+  // 近 7 天 trail（洞察卡同期对比基线）：挂载拉一次 + 10min 慢刷——不再挤进 30s/2s 的 refresh 主路
+  useEffect(() => {
+    const load7 = async () => {
+      const days: (MergedTrail | null)[] = []
+      for (let i = 1; i <= 7; i++) {
+        const d = new Date()
+        d.setDate(d.getDate() - i)
+        days.push((await window.api?.getTrail?.(dateKey(d.getTime()))) as MergedTrail | null)
+      }
+      setRecentTrails(days.filter((x): x is MergedTrail => !!x && !!x.segments?.length))
+    }
+    void load7()
+    const t = setInterval(() => void load7(), 600000)
+    return () => clearInterval(t)
   }, [])
 
   // 近 30 天 trail：KPI 卡「同时段均值」基线数据源（现有 getTrail 日聚合，仅首次加载）
@@ -736,7 +773,7 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
     const baseShadow = `0 1px 5px ${glow}`
     const hoverShadow = `0 5px 14px ${glow}`
     return (
-      <div key={seg.startTs}
+      <div key={`${seg.startTs}-${seg.mainApp}`}
         draggable
         onDragStart={e => {
           e.dataTransfer.setData('text/start-ts', String(seg.startTs))
@@ -827,25 +864,7 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
     } catch { /* ignore */ }
   }
 
-  // 滚轮缩放：以鼠标位置为中心缩放时间范围
-  const onRulerWheel = (e: React.WheelEvent) => {
-    // 注意：合成 wheel 监听是 passive 的，这里不做 preventDefault（时间轴卡片自身不滚动页面）
-    const el = rangeRef.current; if (!el) return
-    const rect = el.getBoundingClientRect()
-    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
-    const anchor = rangeLo + ratio * (rangeHi - rangeLo)
-    const factor = e.deltaY < 0 ? 0.85 : 1.18
-    let lo = anchor - (anchor - rangeLo) * factor
-    let hi = anchor + (rangeHi - anchor) * factor
-    const minSpan = 60
-    if (hi - lo < minSpan) { lo = anchor - minSpan / 2; hi = anchor + minSpan / 2 }
-    if (hi - lo > 1440) { lo = 0; hi = 1440 }
-    if (lo < 0) { hi -= lo; lo = 0 }
-  onRulerWheelRef.current = onRulerWheel as unknown as (e: { clientX: number; deltaY: number }) => void
-    if (hi > 1440) { lo -= (hi - 1440); hi = 1440 }
-    setRangeLo(Math.round(lo))
-    setRangeHi(Math.round(hi))
-  }
+  // 滚轮缩放已移除（滚轮劫持页面滚动导致卡顿）；平移=刻度条拖拽，缩放=顶部档位按钮
 
   const clampRange = (lo: number, hi: number) => {
     const span = hi - lo
@@ -1033,7 +1052,10 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
         <div className="glass-card anim-scale-in sticky top-0 z-20 flex flex-col gap-3 !p-4" style={{ boxShadow: 'var(--shadow-md)' }}>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[13px] font-semibold text-slate-100">首页布局</span>
-            <span className="text-[11px] text-slate-500">拖拽左侧把手调整顺序 · 点开关显隐 · 自动记住</span>
+            <span className="text-[11px] text-slate-500">
+              拖拽左侧把手调整顺序 · 点开关显隐 · 自动记住
+              {perspectiveBlocks ? ` · 当前${PERSPECTIVE_META[perspective].label}视角已收敛` : ''}
+            </span>
             <button className="glass-btn primary ml-auto !px-3 !py-1 !text-[11px]" onClick={() => setEditing(false)}>
               完成
             </button>
@@ -1095,6 +1117,11 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
                       <span className="rounded-md border border-white/[0.08] px-1.5 py-0.5 text-[10px] text-slate-500">
                         {meta.group}
                       </span>
+                      {perspectiveBlocks && !perspectiveBlocks.includes(key) ? (
+                        <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-400">
+                          本视角隐藏
+                        </span>
+                      ) : null}
                     </div>
                     <div className="mt-0.5 text-[11px] leading-snug text-slate-500">{meta.desc}</div>
                   </div>
@@ -1149,15 +1176,249 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
 
       {renderSlots.map((slot, si) => {
         if (slot.kind === 'monitor') {
+          const monKeys = perspectiveBlocks ? slot.keys.filter((k) => perspectiveBlocks.includes(k)) : slot.keys
+          if (monKeys.length === 0 && !slot.keys.some((k) => activatedBlocks.has(k))) return null
           return (
-            <section key={`mon-${homeOrder.indexOf(slot.keys[0])}`} className="flex flex-col gap-4">
-              <MemoMonitorView embedded sections={monitorSectionsFor(slot.keys)} sectionOrder={slot.keys} />
+            <section
+              key={`mon-${homeOrder.indexOf(slot.keys[0])}`}
+              className="flex flex-col gap-4"
+              style={monKeys.length === 0 ? { display: 'none' } : undefined}
+            >
+              <MemoMonitorView embedded sections={monitorSectionsFor(monKeys)} sectionOrder={slot.keys} />
+            </section>
+          )
+        }
+        const homeActive = !perspectiveBlocks || perspectiveBlocks.includes(slot.key)
+        if (!homeActive && !activatedBlocks.has(slot.key)) return null
+        const hideStyle = homeActive ? undefined : ({ display: 'none' } as const)
+        if (slot.key === 'quote') return <div key="quote"><DailyLineCard kind="quote" /></div>
+        if (slot.key === 'soup') return <div key="soup"><DailyLineCard kind="soup" /></div>
+        if (slot.key === 'almanac') return <div key="almanac"><AlmanacCard /></div>
+        if (slot.key === 'countdown') return <div key="countdown"><CountdownCard /></div>
+        if (slot.key === 'dayplan') {
+          // 定时项按时刻排；无时刻项按所属项目优先级排（高优先项目的排入今日任务浮到上面）
+          const sortedPlans = [...plans].sort(
+            (a, b) => (a.startMin ?? 1440) - (b.startMin ?? 1440) || prioW(projPrio[a.projectId ?? '']) - prioW(projPrio[b.projectId ?? '']) || a.ts - b.ts
+          )
+          const pending = sortedPlans.filter((p) => p.status !== 'done' && p.status !== 'cancelled')
+          const top3 = pending.slice(0, 3)
+          const doneCount = plans.filter((p) => p.status === 'done').length
+          const isNow = (p: PlanItem) => p.startMin != null && p.endMin != null && nowMin >= p.startMin && nowMin < p.endMin
+          const shown = sortedPlans.slice(0, 8)
+          const carriedPlans = sortedPlans.filter((p) => p.carried)
+          // 昨日回顾：压缩 24h 色条（recentTrails 倒序，[0]=昨天）
+          const yTrail = recentTrails[0]
+          const yInfo = (() => {
+            if (!yTrail?.segments?.length) return null
+            let work = 0, slack = 0, first = Infinity, last = 0
+            const marks: { x: number; w: number; sense: SenseKind }[] = []
+            for (const s of yTrail.segments) {
+              if (s.glance) continue
+              const st = new Date(s.startTs)
+              const startM = st.getHours() * 60 + st.getMinutes()
+              const durM = Math.max(1, (s.endTs - s.startTs) / 60000)
+              const sense = senseOf(s.mainState)
+              if (sense === 'work') work += durM
+              else if (sense === 'slack') slack += durM
+              if (s.mainState !== 'idle' && s.mainState !== 'away') {
+                first = Math.min(first, startM)
+                last = Math.max(last, startM + durM)
+              }
+              marks.push({ x: (startM / 1440) * 100, w: (durM / 1440) * 100, sense })
+            }
+            return { marks, work, slack, first, last }
+          })()
+          return (
+            <section key="dayplan" className="glass-card hoverable" style={hideStyle}>
+              <div className="mb-2.5 flex items-center gap-2.5">
+                <span
+                  className="flex h-6 w-6 items-center justify-center rounded-lg border"
+                  style={{ background: 'var(--accent-softer)', borderColor: 'var(--border-active)', color: 'var(--accent)' }}
+                >
+                  <span className="text-[13px] leading-none">🗓</span>
+                </span>
+                <h3 className="text-[13px] font-semibold text-slate-200">今日计划</h3>
+                {plans.length > 0 ? (
+                  <span className="text-[11px] text-slate-500">{doneCount}/{plans.length} 完成</span>
+                ) : null}
+                <button
+                  type="button"
+                  className="ml-auto rounded-md px-2 py-0.5 text-[11px] text-slate-500 transition-colors hover:bg-[var(--surface-2)] hover:text-slate-300"
+                  onClick={() => useAppStore.getState().setView('plan')}
+                >
+                  去编排 →
+                </button>
+              </div>
+              {/* 三件事：未完成计划前 3 项 */}
+              {plans.length > 0 ? (
+                top3.length > 0 ? (
+                  <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-600">三件事</span>
+                    {top3.map((p, i) => (
+                      <span
+                        key={p.id}
+                        className="max-w-[220px] truncate rounded-full border px-2 py-0.5 text-[11px]"
+                        style={{
+                          borderColor: 'var(--border-active)',
+                          background: 'var(--accent-softer)',
+                          color: 'var(--text-2)'
+                        }}
+                        title={p.title}
+                      >
+                        {i + 1}. {p.title}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mb-2 text-[11px] text-slate-500">今日计划全部完成 ✓</div>
+                )
+              ) : null}
+
+              {/* 昨日回顾：压缩 24h 状态色条 + 工作/摸鱼时长 + 起止 */}
+              {yInfo ? (
+                <div className="mb-2 flex items-center gap-2.5">
+                  <span className="w-[42px] shrink-0 text-[10px] font-medium uppercase tracking-[0.12em] text-slate-600">昨日</span>
+                  <div className="relative h-2.5 min-w-0 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--surface-2)' }}>
+                    {yInfo.marks.map((m, i) => (
+                      <span
+                        key={i}
+                        className="absolute bottom-0 top-0"
+                        style={{
+                          left: `${m.x}%`,
+                          width: `${m.w}%`,
+                          background:
+                            m.sense === 'work' ? 'var(--teal)' : m.sense === 'slack' ? '#f59e0b' : 'rgba(100,116,139,0.35)'
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <span className="shrink-0 text-[10px] tabular-nums text-slate-500">
+                    工作 {fmtDur(yInfo.work)} · 摸鱼 {fmtDur(yInfo.slack)}
+                    {yInfo.first < yInfo.last ? ` · ${fmtHHMM(Math.round(yInfo.first))}–${fmtHHMM(Math.min(1439, Math.round(yInfo.last)))}` : ''}
+                  </span>
+                </div>
+              ) : null}
+
+              {/* 顺延遗留：前几日未完成带入今天的项 */}
+              {carriedPlans.length > 0 ? (
+                <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                  <span className="w-[42px] shrink-0 text-[10px] font-medium uppercase tracking-[0.12em] text-amber-500/80">
+                    顺延 {carriedPlans.length}
+                  </span>
+                  {carriedPlans.slice(0, 5).map((p) => (
+                    <span
+                      key={p.id}
+                      className="max-w-[200px] truncate rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-300/90"
+                      title={p.title}
+                    >
+                      {p.title}
+                    </span>
+                  ))}
+                  {carriedPlans.length > 5 ? (
+                    <span className="text-[10px] text-amber-500/70">+{carriedPlans.length - 5}</span>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {/* 项目趋势：活跃项目任务完成率 + 上线倒计时 */}
+              {projectTrend.length > 0 ? (
+                <div className="mb-2 flex flex-col gap-1">
+                  <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-600">项目趋势</span>
+                  {projectTrend.map((p) => (
+                    <div key={p.id} className="flex items-center gap-2 px-1">
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: p.color }} />
+                      <span className="w-[132px] shrink-0 truncate text-[11px] text-slate-300">{p.name}</span>
+                      <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--surface-2)' }}>
+                        {p.pct != null ? (
+                          <div className="h-full rounded-full" style={{ width: `${p.pct}%`, background: p.color }} />
+                        ) : null}
+                      </div>
+                      <span className="w-[76px] shrink-0 text-right text-[10px] tabular-nums text-slate-500">
+                        {p.pct != null ? `${p.done}/${p.total} · ${p.pct}%` : '未拆任务'}
+                      </span>
+                      {p.daysLeft != null ? (
+                        <span
+                          className={`w-[46px] shrink-0 text-right text-[10px] tabular-nums ${
+                            p.daysLeft < 0 ? 'text-red-400' : p.daysLeft <= 3 ? 'text-amber-400' : 'text-slate-500'
+                          }`}
+                        >
+                          {p.daysLeft < 0 ? '已逾期' : `剩${p.daysLeft}d`}
+                        </span>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              {/* 计划清单 / 空态 */}
+              {plans.length === 0 ? (
+                <div className="flex items-center gap-3 py-2">
+                  <span className="text-[12px] text-slate-500">今天还没有计划</span>
+                  <button
+                    type="button"
+                    className="glass-btn primary !px-3 !py-1 !text-[11px]"
+                    onClick={() => useAppStore.getState().setView('plan')}
+                  >
+                    排一下今天 →
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col">
+                    {shown.map((p) => (
+                      <div
+                        key={p.id}
+                        className="flex items-center gap-2.5 rounded-lg px-2 py-1.5"
+                        style={isNow(p) ? { background: 'var(--accent-softer)' } : undefined}
+                      >
+                        <span className="w-[84px] shrink-0 text-[11px] tabular-nums text-slate-500">
+                          {p.startMin != null ? `${fmtHHMM(p.startMin)}${p.endMin != null ? `–${fmtHHMM(p.endMin)}` : ''}` : '全天'}
+                        </span>
+                        <button
+                          type="button"
+                          title={p.status === 'done' ? '标记为待办' : '标记完成'}
+                          onClick={() => void window.api?.setPlanStatus?.(p.id, p.status === 'done' ? 'planned' : 'done')}
+                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[9px] leading-none transition-colors ${
+                            p.status === 'done'
+                              ? 'border-emerald-400/60 bg-emerald-400/15 text-emerald-300'
+                              : 'border-white/20 text-transparent hover:border-emerald-400/60 hover:text-emerald-300/70'
+                          }`}
+                        >
+                          ✓
+                        </button>
+                        <span
+                          className={`min-w-0 flex-1 truncate text-[12px] ${
+                            p.status === 'done' || p.status === 'cancelled'
+                              ? 'text-slate-500 line-through'
+                              : isNow(p)
+                                ? 'font-medium text-slate-100'
+                                : 'text-slate-300'
+                          }`}
+                        >
+                          {p.title}
+                        </span>
+                        {p.carried ? <span className="shrink-0 text-[10px] text-amber-400">顺延</span> : null}
+                        {isNow(p) ? (
+                          <span className="shrink-0 text-[10px]" style={{ color: 'var(--accent)' }}>进行中</span>
+                        ) : null}
+                      </div>
+                    ))}
+                    {sortedPlans.length > shown.length ? (
+                      <button
+                        type="button"
+                        className="mt-0.5 self-start rounded-md px-2 py-1 text-[11px] text-slate-500 transition-colors hover:bg-[var(--surface-2)] hover:text-slate-300"
+                        onClick={() => useAppStore.getState().setView('plan')}
+                      >
+                        +{sortedPlans.length - shown.length} 项 · 去计划页 →
+                      </button>
+                    ) : null}
+                  </div>
+              )}
             </section>
           )
         }
         if (slot.key === 'insight') {
           return (
-      <div key="insight">
+      <div key="insight" style={hideStyle}>
       {/* 今日洞察 */}
       <section className="glass-card hoverable">
         <div className="mb-2.5 flex items-center gap-2.5">
@@ -1295,7 +1556,7 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
         }
         if (slot.key === 'timeline') {
           return (
-      <div key="timeline">
+      <div key="timeline" style={hideStyle}>
       <PinnedWidgets trail={trail} />
       {/* 时间轴 — 水平泳道 */}
       <section className="glass-card">
@@ -1350,7 +1611,6 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
                 onPointerMove={onRulerPointerMove}
                 onPointerUp={onRulerPointerUp}
                 onPointerCancel={onRulerPointerUp}
-                onWheel={onRulerWheel}
                 title="按住拖动平移时间轴 · 滚轮缩放">
                 <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2" style={{ height: 0.5, background: 'var(--tl-ruler-line)' }} />
                 {halfHourTicks.map(t => (
@@ -1695,7 +1955,7 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
         }
         if (slot.key === 'starmap') {
           return (
-      <div key="starmap">
+      <div key="starmap" style={hideStyle}>
       {/* v6 应用星图：星空画布 + 双星团（左=工作 / 右=摸鱼）+ 切换连线（近 7 天聚合） */}
       <section className="glass-card hoverable">
         <div className="flex items-center justify-between mb-2 px-1">

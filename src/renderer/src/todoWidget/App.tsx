@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Project, ProjectTask, PlanItem, WidgetDisplayOptions } from '@shared/types'
 import { DEFAULT_WIDGET_DISPLAY } from '@shared/types'
 import type { AiAssistItem } from '@shared/aiAssistWatch'
+import { PRIO_META, prioW } from '@shared/priority'
 import { AiAssistStrip } from '../components/AiAssistStrip'
 import { useTerm } from '../i18n/useTerm'
 
@@ -128,6 +129,10 @@ function todayKey(): string {
 
 export default function TodoWidgetApp() {
   const t = useTerm()
+  // 跨窗口同步：托盘/设置页改穿透时，👁 状态跟随
+  useEffect(() => {
+    window.api.onTodoPenetration?.((v: unknown) => setPenetrated(!!v))
+  }, [])
   const [projects, setProjects] = useState<Project[]>([])
   const [tasks, setTasks] = useState<Record<string, ProjectTask[]>>({})
   const [plans, setPlans] = useState<PlanItem[]>([])
@@ -163,7 +168,7 @@ export default function TodoWidgetApp() {
   const refresh = async (): Promise<void> => {
     try {
       const ps = ((await window.api?.listProjects?.()) as Project[]) ?? []
-      const active = ps.filter((p) => p.status === 'active')
+      const active = ps.filter((p) => p.status === 'active').sort((a, b) => prioW(a.priority) - prioW(b.priority))
       setProjects(active)
       const map: Record<string, ProjectTask[]> = {}
       // 与展示同集：全部活跃项目都拉任务，避免第 7+ 假「暂无任务」
@@ -486,7 +491,7 @@ export default function TodoWidgetApp() {
           margin: 4,
         }}
       >
-        <div className="flex cursor-move items-center justify-end gap-1.5 pb-1" style={APP_NO_DRAG}>
+        <div className="flex cursor-move items-center justify-end gap-1.5 pb-1" style={APP_DRAG}>
           <button
             type="button"
             className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
@@ -494,6 +499,7 @@ export default function TodoWidgetApp() {
                 ? 'bg-[var(--teal-soft)] text-[var(--teal-deep)]'
                 : 'text-slate-500 hover:text-slate-200'
             }`}
+            style={APP_NO_DRAG}
             onClick={() => setEditMode((m) => !m)}
           >
             {editMode ? '完成' : '⚙ 分区'}
@@ -501,6 +507,7 @@ export default function TodoWidgetApp() {
           <button
             type="button"
             className={`text-[11px] transition-colors ${penetrated ? 'text-[#fbbf24]' : 'text-slate-500 hover:text-slate-200'}`}
+            style={APP_NO_DRAG}
             title={penetrated ? '关闭穿透（恢复交互）' : '开启穿透（纯查看，不挡操作）'}
             onClick={() => {
               const next = !penetrated
@@ -511,6 +518,7 @@ export default function TodoWidgetApp() {
           <button
             type="button"
             className="text-[11px] text-slate-500 transition-colors hover:text-slate-200"
+            style={APP_NO_DRAG}
             onClick={() => setCollapsed(true)}
             title="收起"
           >−</button>
@@ -563,6 +571,7 @@ export default function TodoWidgetApp() {
                   <div key={p.id} className="mb-2">
                     <div className="flex cursor-pointer items-center gap-1.5 py-[3px]" onClick={() => setExpanded((e) => ({ ...e, [p.id]: !open }))}>
                       <span className="text-[10px] text-slate-500">{open ? '▾' : '▸'}</span>
+                      <span className="shrink-0 text-[9px]" style={{ color: PRIO_META[p.priority ?? 'medium'].color }} title={`优先级：${PRIO_META[p.priority ?? 'medium'].label}`}>{PRIO_META[p.priority ?? 'medium'].mark}</span>
                       <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-slate-100">{p.name}</span>
                       {combinedTotal > 0 ? (
                         <span className="flex shrink-0 items-center gap-1.5">

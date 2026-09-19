@@ -412,6 +412,7 @@ export default function PrivacyView() {
       <Section title="不采集名单" icon="eye" delay={30}>
         <div className="py-2.5">
           <p className="mb-2.5 text-[12px] text-slate-500">打开开关的类别完全停止采集：不截屏、不 OCR、不记标题、不产生活动记录。</p>
+          <p className="mb-2.5 text-[11px] text-slate-600">未标记的聊天应用（微信 / QQ / 钉钉 / 飞书等）按<b className="text-slate-400">会话对象</b>细分记录：窗口标题每换一个联系人或群，时间轴与报表都会切成独立时段。</p>
           <DoNotCollectGrid excluded={excludedApps} onToggle={(k, v) => toggleExcludedApp(k, v)} />
         </div>
       </Section>

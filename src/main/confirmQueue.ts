@@ -8,6 +8,7 @@
 import { presence } from './presence'
 import { bus } from './state'
 import { getFocusChainState } from './focusChain'
+import { recordFeedback } from './qa/questionGenerator'
 import { genId } from '@shared/types'
 
 export interface QueuedAsk {
@@ -22,10 +23,12 @@ let lastDispatch = 0
 let deliveredCount = 0
 let deliveredDay = ''
 const DAILY_DELIVER_LIMIT = 2
-const QUESTION_TTL_MS = 10 * 60_000
+const QUESTION_TTL_MS = 5 * 60_000
+/** 已弹出问题无人应答的展示上限：超时自动结案，不再挂着挡路 */
+const QUESTION_DISPLAY_MS = 8 * 60_000
 
-/** 是否处于可打扰时刻 */
-function canInterrupt(): boolean {
+/** 是否处于可打扰时刻（也供轻问诊轮询复用：专注时段一律不弹） */
+export function canInterrupt(): boolean {
   const snap = presence.getSnapshot() as { focusLevel?: number; state?: string }
   const state = snap.state ?? 'idle'
   const lowStates = new Set(['slack', 'relax', 'break', 'lunch', 'idle'])
@@ -47,6 +50,14 @@ export function dispatchConfirmQueue(): void {
   const now = Date.now()
   if (now - lastDispatch < 45_000) return
   lastDispatch = now
+  // 已弹出但超过展示上限无人应答 → 自动结案；非归属类记 ignored 反馈防 30min 轮询重弹同题
+  const shown = bus.question
+  if (shown && now - (shown.ts ?? 0) > QUESTION_DISPLAY_MS) {
+    bus.setQuestion(null)
+    if (shown.ctx && !shown.ctx.startsWith('attrib:') && shown.question) {
+      recordFeedback(shown.id, shown.ctx, shown.question, 'no')
+    }
+  }
   if (queue.size === 0 || !canInterrupt()) return
   if (bus.question) return // 上一条还没答，不连环弹
   // 每日配额：最多弹 2 条打断式确认，超出转静默

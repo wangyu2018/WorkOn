@@ -6,6 +6,7 @@
  * 注意：只用 BrowserWindow.getNativeWindowHandle()，不要 GetAncestor 爬到更外层——
  * 会把 Electron 宿主壳挂走，表现为「待办打开了但看不见」。
  */
+import { screen } from 'electron'
 import type { BrowserWindow } from 'electron'
 import koffi from 'koffi'
 
@@ -223,10 +224,19 @@ export function attachWindowToDesktop(win: BrowserWindow): boolean {
   }
 
   const bounds = win.getBounds()
+  // 关键：Electron bounds 是 DIP，Win32 SetWindowPos/ScreenToClient 是物理像素。
+  // 高 DPI 屏（如 200%）不换算会把窗口钉到左上四分之一区（恰好 ÷scale）。
+  const scale = screen.getDisplayMatching(bounds).scaleFactor || 1
+  const physBounds = {
+    x: Math.round(bounds.x * scale),
+    y: Math.round(bounds.y * scale),
+    width: Math.round(bounds.width * scale),
+    height: Math.round(bounds.height * scale)
+  }
 
   if (attached.has(win)) {
     const parent = findDesktopIconHost()
-    restackAndShow(a, child, bounds, parent)
+    restackAndShow(a, child, physBounds, parent)
     try { win.showInactive() } catch { win.show() }
     return electronLooksAlive(win)
   }
@@ -242,7 +252,7 @@ export function attachWindowToDesktop(win: BrowserWindow): boolean {
     a.SetParent(child, parent)
     attached.add(win)
     // 只用客户区坐标摆位，勿再 setBounds(屏幕坐标) 否则会再次偏移
-    restackAndShow(a, child, bounds, parent)
+    restackAndShow(a, child, physBounds, parent)
     try { win.showInactive() } catch { win.show() }
 
     const nativeOk = !!a.IsWindowVisible(child)
