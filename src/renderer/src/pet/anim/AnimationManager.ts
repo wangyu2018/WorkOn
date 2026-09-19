@@ -12,6 +12,7 @@
  *   - VRM0 四元数 x/z 预翻转，抵消库内对旧模型的坐标约定转换
  */
 import * as THREE from 'three'
+import { PET_FEATURES } from '../flags'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import {
   VRMAnimationLoaderPlugin,
@@ -162,6 +163,8 @@ export class AnimationManager {
     this.animator = animator
     this.mixer = new THREE.AnimationMixer(char.vrm.scene)
     this.mixer.addEventListener('finished', this.onClipFinished)
+    // 动作总开关关闭：不注册任何 clip（程序化/VRMA/工坊全不进），纯静态立绘
+    if (!PET_FEATURES.clips) return
     this.buildProcedural()
     void this.loadVrmaAssets()
   }
@@ -253,6 +256,17 @@ export class AnimationManager {
           const anims = gltf.userData.vrmAnimations as VRMAnimation[] | undefined
           if (!anims?.length) continue
           const clip = createVRMAnimationClip(anims[0], this.char.vrm)
+          // 护栏：状态循环位要求全量身体动画。部分身体 clip（如只有手臂/表情）一旦接管
+          // 状态循环，clipMode 会停掉骨骼写入 → 全身冻结只剩局部摆动（sample.vrma 教训）。
+          const stateIds = new Set(Object.values(STATE_CLIP))
+          if (stateIds.has(item.id)) {
+            const tracks = clip.tracks.map((x) => x.name.toLowerCase())
+            const bodyHits = ['hips', 'spine', 'upperleg'].filter((k) => tracks.some((n) => n.includes(k))).length
+            if (bodyHits < 2) {
+              console.warn(`[anim] VRMA ${item.id} 缺少躯干/腿轨道，不接管状态循环（可作为 one-shot 动作另注册）`)
+              continue
+            }
+          }
           this.registerClip(item.id, clip, item.loop ?? true, 'vrma')
           this.vrmaCount++
         } catch (e) {
@@ -276,6 +290,14 @@ export class AnimationManager {
     const action = this.mixer.clipAction(clip)
     action.clampWhenFinished = !loop
     this.clips.set(id, { clip, action, loop, source })
+    this.syncLookAtExternal(id)
+  }
+
+  /** VRMA 自带 lookAt 轨道播放期间，视线由动作驱动（挂起 char 的 gaze target 写入） */
+  private syncLookAtExternal(id: string | null): void {
+    const entry = id ? this.clips.get(id) : null
+    const active = !!entry && entry.source === 'vrma' && entry.clip.tracks.some((x) => x.name.toLowerCase().includes('lookat'))
+    this.char.lookAtExternal = active
   }
 
   hasClip(id: string): boolean {
@@ -338,6 +360,7 @@ export class AnimationManager {
     const prev = this.currentId ? this.clips.get(this.currentId) : null
     this.currentId = null
     this.animator.clipMode = false
+    this.syncLookAtExternal(null)
     if (!prev) return
     if (this.pendingStop?.action === prev.action) {
       clearTimeout(this.pendingStop.timer)

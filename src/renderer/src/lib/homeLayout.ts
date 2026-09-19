@@ -4,7 +4,7 @@
 import type { MonitorSectionKey } from '../views/MonitorView'
 import { DEFAULT_MONITOR_SECTIONS, MONITOR_SECTION_META } from '../views/MonitorView'
 
-export type HomeCoreKey = 'dayplan' | 'insight' | 'timeline' | 'starmap' | 'quote' | 'soup' | 'almanac' | 'countdown'
+export type HomeCoreKey = 'dayplan' | 'insight' | 'timeline' | 'starmap' | 'quote' | 'soup' | 'almanac' | 'countdown' | 'festival' | 'habit' | 'planahead' | 'goal'
 export type HomeBlockKey = HomeCoreKey | MonitorSectionKey
 
 export type HomeWidgets = Record<HomeBlockKey, boolean>
@@ -23,7 +23,11 @@ export const HOME_CORE_META: {
   { key: 'quote', label: '每日一句', desc: '按天换一句，可手动换', size: '整行', group: '首页' },
   { key: 'soup', label: '毒鸡汤', desc: '按天一碗，可手动换', size: '整行', group: '首页' },
   { key: 'almanac', label: '今日黄历', desc: '宜忌五行冲煞（本地规则，图一乐）', size: '整行', group: '首页' },
-  { key: 'countdown', label: '倒数日', desc: '自定义事件倒数（本地存储）', size: '整行', group: '首页' }
+  { key: 'countdown', label: '倒数日', desc: '自定义事件倒数（本地存储）', size: '整行', group: '首页' },
+  { key: 'festival', label: '节日倒数', desc: '传统节日（农历自动算）+自定义事件', size: '整行', group: '首页' },
+  { key: 'habit', label: '习惯打卡', desc: '连击计数，今天不打就断', size: '整行', group: '首页' },
+  { key: 'planahead', label: '计划倒数', desc: '未来 7 天排期（接计划数据）', size: '整行', group: '首页' },
+  { key: 'goal', label: '目标进度', desc: '盯一条主线的任务完成率与下一步', size: '整行', group: '首页' }
 ]
 
 export const HOME_BLOCK_META: {
@@ -46,7 +50,11 @@ export const DEFAULT_HOME_ORDER: HomeBlockKey[] = [
   'quote',
   'soup',
   'almanac',
-  'countdown'
+  'countdown',
+  'festival',
+  'habit',
+  'planahead',
+  'goal'
 ]
 
 export function isMonitorBlockKey(k: string): k is MonitorSectionKey {
@@ -63,6 +71,10 @@ export function defaultHomeWidgets(): HomeWidgets {
     soup: true,
     almanac: true,
     countdown: true,
+    festival: true,
+    habit: true,
+    planahead: true,
+    goal: true,
     ...DEFAULT_MONITOR_SECTIONS
   }
 }

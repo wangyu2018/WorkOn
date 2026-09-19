@@ -168,6 +168,15 @@ export async function detectHardware(): Promise<HardwareInfo> {
       // 自动设置帧率档位（用户在设置里手动改过档位后不再接管）
       ...(settings.petFpsTierAuto === false ? {} : { petFpsTier: config.petFpsTier })
     } as Partial<typeof settings>)
+    // 分级变更即时推送（桌宠/模型懒加载完才探测完毕——首启不再等第二次启动）
+    void (async () => {
+      try {
+        const { sendTo } = await import('./windows')
+        const after = getSettings()
+        sendTo('pet', 'pet:settings', { petFpsTier: after.petFpsTier ?? config.petFpsTier })
+        if (!settings.petVrmPath) sendTo('pet', 'pet:reloadVrm')
+      } catch { /* 窗口未就绪忽略 */ }
+    })()
   }
 
   return cachedInfo

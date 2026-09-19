@@ -211,8 +211,8 @@ export class MicroBehaviors {
     if (this.locomotion) {
       this.locomotionRamp = Math.min(1, this.locomotionRamp + dt * 2.5)
       const run = this.locomotion === 'run'
-      const freq = (run ? 3.2 : 2.0) * this.moveSpeedFactor
-      this.locomotionPhase += dt * freq * Math.PI * 2
+      // 相位只由位移驱动（SpatialController.setWalkPhase，34px=π）；这里再叠时间相位 = 双驱动滑步
+      void run
       const p = this.locomotionPhase
       const amp = (run ? 38 : 24) * this.locomotionRamp
       const swing = Math.sin(p)

@@ -86,6 +86,7 @@ function setupBusForwarding(): void {
   bus.on('question', (q) => {
     sendTo('widget', 'question:update', q)
     sendTo('main', 'question:update', q)
+    sendTo('pet', 'question:update', q)
   })
 }
 
@@ -318,7 +319,13 @@ app.whenReady().then(() => {
           try { mw.moveTop() } catch { /* ignore */ }
           console.log('[startup] main window shown')
         }
-        if (getSettings().petEnabled) createPetWindow()
+        // 桌宠延迟创建：让主窗口先独占资源把首页加载完（首页卡顿投诉），
+        // 主窗 ready-to-show 后再等 20s，且创建时桌宠开关仍为开才创建
+        if (getSettings().petEnabled) {
+          setTimeout(() => {
+            if (getSettings().petEnabled) createPetWindow()
+          }, 20_000)
+        }
       },
       showSplash ? Math.max(800, 2000 - (Date.now() - splashAt)) : 0
     )

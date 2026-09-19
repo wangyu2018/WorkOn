@@ -120,7 +120,10 @@ class VrmFace {
     }
     open *= 1 + e.eyeWide * 0.18 - e.squint * 0.25
     this.set('blink', 1 - THREE.MathUtils.clamp(open, 0, 1))
-    this.set('happy', e.smile)
+    // 门限映射：动漫模型的 happy 表情自带笑眼（眯眼/闭眼）。默认微扬（smile 0.25）
+    // 不应触发——否则角色常驻眯眼像在打瞌睡。只有明确的笑容（脉冲推高）才点亮笑眼。
+    const happyV = Math.max(0, (e.smile - 0.35) / 0.65)
+    this.set('happy', THREE.MathUtils.clamp(happyV, 0, 1))
     this.set('sad', e.frown)
     this.set('angry', Math.max(0, -e.browRaise) * 0.7)
     this.set('surprised', e.eyeWide * 0.6)
@@ -144,6 +147,8 @@ export class VrmCharacter {
   private restQuats = new Map<string, THREE.Quaternion>()
   private materials: THREE.Material[] = []
   private lookTarget = new THREE.Object3D()
+  /** VRMA 自带 lookAt 轨道播放中：挂起 gaze target，视线交给动作 */
+  lookAtExternal = false
   private charHeight: number
   private moving = false
   private time = 0
@@ -318,9 +323,10 @@ export class VrmCharacter {
 
   update(dt: number): void {
     this.time += dt
-    // 视线：头部世界坐标 + 朝向偏移 + gaze 偏移
+    // 视线：头部世界坐标 + 朝向偏移 + gaze 偏移（VRMA lookAt 轨道接管时挂起，避免每帧被 target 重算覆盖）
+    if (this.vrm.lookAt) this.vrm.lookAt.target = this.lookAtExternal ? null : this.lookTarget
     const head = this.vrm.humanoid?.getNormalizedBoneNode('head')
-    if (head && this.lookTarget.parent) {
+    if (!this.lookAtExternal && head && this.lookTarget.parent) {
       head.getWorldPosition(_v1)
       this.root.getWorldQuaternion(_q)
       _v2.set(this.face.gazeX * 40, this.face.gazeY * 30, 160).applyQuaternion(_q)
@@ -340,6 +346,24 @@ export class VrmCharacter {
   /** 移动标记（行走时头发/裙摆物理已在 VRM springBone 内，保留接口） */
   get isMoving(): boolean {
     return this.moving
+  }
+
+  /**
+   * 头发/发饰 SpringBone 物理开关。关闭 = 立即 reset 到造型静止位（无缓慢沉降），
+   * 并跳过每帧物理积分（省 CPU）。实现：vrm.update 会调 springBoneManager.update，
+   * 无法单独禁用时以空函数替换之（保留引用以便恢复）。
+   */
+  setSpringBones(on: boolean): void {
+    const m = (this.vrm as unknown as { springBoneManager?: { update: (dt: number) => void; reset?: () => void; _origUpdate?: (dt: number) => void } }).springBoneManager
+    if (!m) return
+    if (!on) {
+      if (!m._origUpdate) m._origUpdate = m.update
+      m.update = () => undefined
+      try { m.reset?.() } catch { /* ignore */ }
+    } else if (m._origUpdate) {
+      m.update = m._origUpdate
+      delete m._origUpdate
+    }
   }
 
   /** 释放 Three.js 资源（切换角色时调用，防止内存泄漏） */

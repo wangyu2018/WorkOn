@@ -18,7 +18,7 @@ export const PERSPECTIVE_NAV: Record<Perspective, ViewKey[]> = {
  * 晨=计划布局（时间轴）；昼=干活反馈（时间轴/实时状态/监控摘要）；晚=全部对账组件。
  */
 export const PERSPECTIVE_HOME: Record<Perspective, HomeBlockKey[] | null> = {
-  architect: ['dayplan', 'timeline', 'quote', 'soup', 'almanac', 'countdown'],
-  worker: ['dayplan', 'timeline', 'presence', 'trail', 'quote', 'soup', 'almanac', 'countdown'],
+  architect: ['dayplan', 'timeline', 'quote', 'soup', 'almanac', 'countdown', 'festival', 'habit', 'planahead', 'goal'],
+  worker: ['dayplan', 'timeline', 'presence', 'trail', 'quote', 'soup', 'almanac', 'countdown', 'festival', 'habit', 'planahead', 'goal'],
   manager: null
 }

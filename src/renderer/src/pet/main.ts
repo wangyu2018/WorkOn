@@ -2,6 +2,7 @@
  * 桌宠入口：组装 Stage / VRM 角色 / 空间控制 / 交互 / 特效 / 桥接
  */
 import * as THREE from 'three'
+import { PET_FEATURES } from './flags'
 import { Stage } from './scene/Stage'
 import { Lighting } from './scene/Lighting'
 import { VrmCharacter } from './character/VrmCharacter'
@@ -19,27 +20,6 @@ import { Bridge } from './bridge'
 import { pickChatter, SCENE_MIN_INTERVAL, getActiveRole, type ChatterScene } from './character/chatter'
 import type { SpatialStateName } from './spatial/stateTable'
 
-/** 创建轻量加载提示 sprite（VRM 加载期间窗口不再是空白） */
-function makeLoadingHint(scene: THREE.Scene): THREE.Sprite {
-  const canvas = document.createElement('canvas')
-  canvas.width = 512
-  canvas.height = 128
-  const ctx = canvas.getContext('2d')!
-  ctx.font = '56px "Microsoft YaHei", sans-serif'
-  ctx.fillStyle = '#9CA3AF'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText('姵儿正在赶来…', 256, 64)
-  const texture = new THREE.CanvasTexture(canvas)
-  texture.colorSpace = THREE.SRGBColorSpace
-  const material = new THREE.SpriteMaterial({ map: texture, transparent: true })
-  const sprite = new THREE.Sprite(material)
-  sprite.scale.set(220, 55, 1)
-  sprite.position.set(0, -20, 10)
-  scene.add(sprite)
-  return sprite
-}
-
 /** 互动开关（桌搭页可配，关闭即注销对应行为降低开销） */
 interface Interactions {
   click: boolean
@@ -52,48 +32,27 @@ interface Interactions {
 }
 
 async function boot(): Promise<void> {
-  // ── Phase 1：基础场景 + 光照（立即可见，不再是空白窗） ──
+  // ── Phase 1：基础场景 + 光照（加载期窗口保持透明，模型就绪直接入场） ──
   const stage = new Stage()
   const lighting = new Lighting(stage.scene, null)
   lighting.attachRenderer(stage.renderer) // 昼夜系统需要调整 toneMappingExposure
-  const loadingHint = makeLoadingHint(stage.scene)
-
-  // 诊断色块：验证窗口渲染通路（绿=正常加载 / 红=加载失败）
-  const diagEl = document.createElement('div')
-  diagEl.style.cssText = 'position:fixed;right:20px;top:20px;width:40px;height:40px;border-radius:8px;background:#22c55e;z-index:999;pointer-events:none;box-shadow:0 0 12px rgba(34,197,94,0.5)'
-  document.body.appendChild(diagEl)
-  window.setTimeout(() => diagEl.remove(), 15000)
   stage.start()
   console.warn(`[pet] boot: stage started ${stage.width}x${stage.height}`)
 
-  // ── Phase 2：VRM 加载（期间有占位提示） ──
+  // ── Phase 2：VRM 加载 ──
   // 从设置读取自定义 VRM 路径，无则用默认姵儿
   const s = (await window.api?.getSettings?.()) as { petVrmPath?: string } | undefined
   // 默认加载 Draco 压缩版（9.6MB vs 21.9MB），加载时间约减半
   const vrmPath = s?.petVrmPath || './vrm/peier-compressed.vrm'
-  // DOM 进度条（比 3D sprite 更清晰）：下载 0-85%，解析/归一化 85-100%
-  const progressEl = document.createElement('div')
-  progressEl.id = 'pet-progress'
-  progressEl.style.cssText =
-    'position:fixed;left:50%;bottom:18%;transform:translateX(-50%);width:180px;height:5px;' +
-    'border-radius:3px;background:rgba(140,140,170,0.25);overflow:hidden;z-index:50;pointer-events:none'
-  const barEl = document.createElement('div')
-  barEl.style.cssText = 'height:100%;width:0%;border-radius:3px;background:linear-gradient(90deg,#8B5CF6,#22D3EE);transition:width 0.15s ease'
-  progressEl.appendChild(barEl)
-  document.body.appendChild(progressEl)
-  const reportProgress = (p: number): void => {
-    barEl.style.width = `${Math.round(p * 100)}%`
-  }
   let char: VrmCharacter
   try {
-    char = await VrmCharacter.load(vrmPath, reportProgress)
+    char = await VrmCharacter.load(vrmPath)
   } catch (err) {
     console.warn('[pet] VRM 加载失败，回退默认角色:', err)
     try {
-      char = await VrmCharacter.load('./vrm/peier.vrm', reportProgress)
+      char = await VrmCharacter.load('./vrm/peier.vrm')
     } catch (err2) {
       console.error('[pet] 默认角色也加载失败:', err2)
-      progressEl.remove()
       const errEl = document.createElement('div')
       errEl.style.cssText =
         'position:fixed;left:50%;top:45%;transform:translateX(-50%);color:#F87171;' +
@@ -103,11 +62,8 @@ async function boot(): Promise<void> {
       return
     }
   }
-  reportProgress(1)
-  window.setTimeout(() => progressEl.remove(), 250)
-  stage.scene.remove(loadingHint)
-  stage.scene.add(char.root)
-  char.attachLookTarget(stage.scene)
+  // 角色暂不入场：先装配姿态系统并收敛到站立姿态，再挂场景——
+  // 否则挂载到首次姿态写入之间会以 VRM 原始 T-pose（抬手）亮相一闪
 
   // 清晰度：VRM 贴图各向异性过滤延迟到首帧之后（避免阻塞第一帧渲染）
   window.setTimeout(() => {
@@ -122,40 +78,48 @@ async function boot(): Promise<void> {
     })
   }, 0)
 
-  // ── Phase 3：子系统组装 ──
+  // ── Phase 3：子系统组装（姿态先收敛，再挂场景入场） ──
   lighting.attachCharacterRoot(char.root)
   const anim = new Animator(char)
   anim.emotionEnabled = false // 与互动开关默认一致（settings 就绪后由 applyInteractions 覆盖）
   const animMgr = new AnimationManager(char, anim)
+  anim.update(0) // 立即写一次站立姿态：首个渲染帧就是垂手状态，无 T-pose 闪现
+  stage.scene.add(char.root)
+  char.attachLookTarget(stage.scene)
   anim.attachClipManager(animMgr)
   const micro = new MicroBehaviors(char, anim)
   const spatial = new SpatialController(char, anim, micro)
+  if (!PET_FEATURES.roam) spatial.setRoamEnabled(false)
   const particles = new ParticleSystem(stage.scene)
   // 天气系统：根据时段自动选择天气效果
   const weather = new WeatherSystem(stage.scene, stage.width, stage.height)
   weather.setWeather(autoWeatherForPhase(lighting.getPhase()))
   // 单气泡实例：任何时刻最多一个气泡（角色/user 变体切换），物理上不可能重叠
-  const bubble = new Bubble(stage.scene, 'character')
-
-  // SpringBone 预热：模型加载后弹簧骨（头发/发卡）尚未收敛，
-  // 不预热首次可见会看见头发从脚底缓慢上移。先模拟 ~1.5s 物理再亮相。
-  stage.scene.updateMatrixWorld(true)
-  await new Promise<void>((resolve) => {
-    let done = 0
-    const step = (): void => {
-      for (let i = 0; i < 15 && done < 90; i++, done++) char.update(1 / 60)
-      if (done < 90) requestAnimationFrame(step)
-      else resolve()
-    }
-    requestAnimationFrame(step)
+  const bubble = new Bubble(stage.scene, 'character', {
+    onModal: (open) => { try { window.api.petModal?.(open) } catch { /* ignore */ } }
   })
+
+  // SpringBone：拆掉（关）= 直接静止在造型位，无沉降动画；开 = 预热 90 帧再亮相
+  char.setSpringBones(PET_FEATURES.springBone)
+  if (PET_FEATURES.springBone) {
+    stage.scene.updateMatrixWorld(true)
+    await new Promise<void>((resolve) => {
+      let done = 0
+      const step = (): void => {
+        for (let i = 0; i < 15 && done < 90; i++, done++) char.update(1 / 60)
+        if (done < 90) requestAnimationFrame(step)
+        else resolve()
+      }
+      requestAnimationFrame(step)
+    })
+  }
   // shader 预编译：避免首帧/首次姿态变化时因编译着色器掉帧
   void stage.renderer.compileAsync(stage.scene, stage.camera).catch(() => stage.renderer.compile(stage.scene, stage.camera))
 
   // ── 首次启动 CG：只播一次（introPlayed），可跳过；播完角色归位进入常态 ──
   try {
     const s0 = (await window.api?.getSettings?.()) as { introPlayed?: boolean } | undefined
-    if (!s0?.introPlayed) {
+    if (PET_FEATURES.intro && !s0?.introPlayed) {
       const { playIntroCG } = await import('./intro')
       spatial.setRoamEnabled(false) // CG 期间游荡会拉起 clip 打断分镜
       await playIntroCG({ stage, char, anim, micro, spatial, particles, bubble, animMgr })
@@ -261,8 +225,10 @@ async function boot(): Promise<void> {
     stage.setFpsTier(s?.petFpsTier ?? 'smooth')
     if (s?.petInteractions) applyInteractions(s.petInteractions)
     spatial.setReturnMin(s?.petReturnMin ?? 30)
-    // 位置记忆：恢复上次拖拽放置的位置（保留期内不被状态切换搬走）
-    if (s?.petRememberPos && (s.petPosX ?? -1) >= 0 && (s.petPosY ?? -1) >= 0) {
+    // 位置记忆：恢复上次拖拽放置的位置（须在任一屏内，防拔屏丢窗；保留期内不被状态切换搬走）
+    const posOnScreen = (x: number, y: number): boolean =>
+      window.innerWidth > 100 && x > -60 && y > -20 && x < window.innerWidth - 80 && y < window.innerHeight - 60
+    if (s?.petRememberPos && (s.petPosX ?? -1) >= 0 && (s.petPosY ?? -1) >= 0 && posOnScreen(s.petPosX!, s.petPosY!)) {
       spatial.markUserPlaced({ x: s.petPosX!, y: s.petPosY! })
     }
   } catch {
@@ -274,6 +240,8 @@ async function boot(): Promise<void> {
     void window.api?.setSettings?.({ petPosX: Math.round(p.x), petPosY: Math.round(p.y) })
   }
   window.api?.onPetSettings?.((s) => {
+    const ps = s as { aiStreaming?: boolean } | undefined
+    if (ps && ps.aiStreaming !== undefined) aiStreaming = ps.aiStreaming
     const p = s as { petScale?: number; petRoam?: boolean; petFpsTier?: 'eco' | 'standard' | 'smooth' | 'ultra'; petInteractions?: Partial<Interactions>; petReturnMin?: number }
     if (p.petScale !== undefined) spatial.setUserScale(p.petScale)
     if (p.petRoam !== undefined) spatial.setRoamEnabled(p.petRoam)
@@ -311,14 +279,13 @@ async function boot(): Promise<void> {
   window.api?.onPetIntroReplay?.(() => {
     void (async () => {
       const { playIntroCG } = await import('./intro')
-      await playIntroCG({ stage, char, anim, micro, spatial, particles, bubble })
+      await playIntroCG({ stage, char, anim, micro, spatial, particles, bubble, animMgr })
     })()
   })
   window.api?.onPageSwitch?.(() => {
     if (interactions.follow) spatial.notePageSwitch(2000)
   })
   // 桌搭「对桌宠说点什么」→ 用户气泡（侧下）
-  window.api?.onPetUserSay?.((text) => bubble.show(String(text), 3.5, 'user'))
   const clickFx = new ClickFeedback(
     anim,
     micro,
@@ -338,9 +305,11 @@ async function boot(): Promise<void> {
   let downAt = 0
   /** 首次拖拽提示（每次启动只提示一次） */
   let dragTipped = false
-  hit.onFrame((r) => {
-    hoverPart = r.hit ? r.part : null
-  })
+  if (PET_FEATURES.drag) {
+    hit.onFrame((r) => {
+      hoverPart = r.hit ? r.part : null
+    })
+  }
 
   window.addEventListener('mousemove', (e) => {
     hit.setMouse(e.clientX, e.clientY)
@@ -398,6 +367,7 @@ async function boot(): Promise<void> {
             // 免打扰 1 小时（关怀调度静默，工作提醒不受影响）
             void window.api?.getSettings?.().then((s) => {
               void window.api?.setSettings?.({ ...(s ?? {}), petDndUntilTs: Date.now() + 3600_000 })
+      refreshDnd()
             })
             bubble.show('好，1 小时后见～', 2.5, 'character')
           }
@@ -446,6 +416,14 @@ async function boot(): Promise<void> {
   let meetingQuiet = false
   let meetingAssistSince = 0
   let meetingNoticeLast = 0
+  /** 免打扰截止（DND）：chatter 与会议辅助一起静音 */
+  let dndUntil = 0
+  const refreshDnd = (): void => {
+    void window.api?.getSettings?.().then((s) => {
+      dndUntil = (s as { petDndUntilTs?: number } | undefined)?.petDndUntilTs ?? 0
+    }).catch(() => undefined)
+  }
+  refreshDnd()
   window.api?.onPetMeeting?.((p) => {
     const payload = p as { mode: string; active: boolean }
     meetingQuiet = payload.active && payload.mode === 'quiet'
@@ -482,15 +460,17 @@ async function boot(): Promise<void> {
     return null
   }
   stage.onFrame((dt) => {
+    if (!PET_FEATURES.chatter) return
     chatterNext -= dt
     if (chatterNext > 0) return
     chatterNext = 20 // 每 20s 评估一次
     if (bubble.visible || drag.active || spatial.docked) return
-    // 会议模式：免打扰静默；会议辅助每 15min 报时
+    // 会议模式：免打扰静默；DND 全静音（此前只管 care 不管闲聊——半接线的坑）
     if (meetingQuiet) return
+    if (Date.now() < dndUntil) return
     if (meetingAssistSince && Date.now() - meetingNoticeLast > 900_000) {
       meetingNoticeLast = Date.now()
-      bubble.show(`会议已进行 ${Math.round((Date.now() - meetingAssistSince) / 60000)} 分钟，加油~`, undefined, 'character')
+      bubble.show(`会议已进行 ${Math.round((Date.now() - meetingAssistSince) / 60000)} 分钟，加油~`, undefined, 'character', { priority: 'care' })
       return
     }
     const scene = detectScene()
@@ -499,7 +479,55 @@ async function boot(): Promise<void> {
     const line = pickChatter(scene, chatterRecent, getActiveRole())
     chatterRecent.push(line)
     if (chatterRecent.length > 10) chatterRecent.shift()
-    bubble.show(line, undefined, 'character')
+    bubble.show(line, undefined, 'character', { priority: 'chatter' })
+  })
+
+  // ── 真流式问答（aiStreaming 开启时走 petAskStream，chunk 逐字喂气泡） ──
+  let aiStreaming = !!(await window.api?.getSettings?.())?.aiStreaming
+  let streamSeq = 0
+  let streamSeqSeen = 0
+  /** 情绪/动作标签解析：[emotion:x] [action:y] → 表情脉冲 + one-shot clip；返回清理后的回答 */
+  const applyReplyTags = (raw: string): string => {
+    let answer = raw
+    const emo = answer.match(/\[emotion:([a-z_]+)\]/i)
+    const act = answer.match(/\[action:([a-z_]+)\]/i)
+    answer = answer.replace(/\s*\[(emotion|action):[a-z_]+\]/gi, '').trim()
+    if (emo) {
+      const map: Record<string, Partial<Parameters<typeof anim.expressionImpulse>[0]>> = {
+        happy: { smile: 0.45 }, sad: { frown: 0.4 }, angry: { browRaise: -0.4, squint: 0.3 },
+        surprised: { eyeWide: 0.6, mouthOpen: 0.35 }, sleepy: { squint: 0.45, eyeOpen: -0.2 },
+        shy: { blush: 0.5, smile: 0.2 }
+      }
+      const imp = map[emo[1].toLowerCase()]
+      if (imp) anim.expressionImpulse(imp, 1.6)
+    }
+    if (act && PET_FEATURES.aiActionClips) {
+      const ok = animMgr.playClip(act[1].toLowerCase(), { loop: false })
+      if (!ok) console.warn('[pet] 回复动作 id 未注册:', act[1])
+    }
+    return answer
+  }
+  window.api.onAIStreamChunk?.((payload: unknown) => {
+    const d = payload as { full?: string } | undefined
+    if (!d || streamSeqSeen !== streamSeq) return
+    bubble.streamChunk(String(d.full ?? ''))
+  })
+  window.api.onAIStreamReset?.((payload: unknown) => {
+    if (streamSeqSeen !== streamSeq) return
+    void payload
+    bubble.streamReset()
+  })
+  window.api.onAIStreamDone?.((answer: unknown) => {
+    if (streamSeqSeen !== streamSeq) return
+    streamSeqSeen++
+    const cleaned = applyReplyTags(String(answer ?? ''))
+    bubble.finishStream(cleaned || '…')
+    anim.expressionImpulse({ smile: 0.3 }, 1)
+  })
+  window.api.onAIStreamError?.(() => {
+    if (streamSeqSeen !== streamSeq) return
+    streamSeqSeen++
+    bubble.show('出了一点小问题，晚点再聊吧~', 4, 'character', { priority: 'ai' })
   })
 
   // ── 右键「对桌宠说点什么」：玻璃面板（精简输入行） ──
@@ -535,6 +563,7 @@ async function boot(): Promise<void> {
   /** AI 思考守卫：思考期间禁止新输入 */
   let thinking = false
   window.addEventListener('contextmenu', (e) => {
+    if (!PET_FEATURES.chat) { e.preventDefault(); return }
     e.preventDefault()
     if (!interactions.chat) return
     spatial.noteInteraction()
@@ -596,24 +625,17 @@ async function boot(): Promise<void> {
           // 微表情 + 占位气泡（合并到同一个气泡，不闪跳）
           anim.expressionImpulse({ browRaise: 0.25, squint: 0.12 }, 1.2)
           bubble.show('嗯…让我想想…', 8, 'character')
-          let answer = (await window.api.petAsk(m)) as string
-          // 情绪/动作标签解析：[emotion:happy] [action:idle_greet] → 驱动表情与动画
-          const emo = answer.match(/\[emotion:([a-z_]+)\]/i)
-          const act = answer.match(/\[action:([a-z_]+)\]/i)
-          answer = answer.replace(/\s*\[(emotion|action):[a-z_]+\]/gi, '').trim()
-          if (emo) {
-            const map: Record<string, Partial<Parameters<typeof anim.expressionImpulse>[0]>> = {
-              happy: { smile: 0.45 }, sad: { frown: 0.4 }, angry: { browRaise: -0.4, squint: 0.3 },
-              surprised: { eyeWide: 0.6, mouthOpen: 0.35 }, sleepy: { squint: 0.45, eyeOpen: -0.2 },
-              shy: { blush: 0.5, smile: 0.2 }
-            }
-            const imp = map[emo[1].toLowerCase()]
-            if (imp) anim.expressionImpulse(imp, 1.6)
+          if (aiStreaming) {
+            // 真流式：chunk 事件驱动气泡逐字；Done 里做标签解析与定格
+            streamSeq++
+            await window.api.petAskStream(m)
+          } else {
+            let answer = (await window.api.petAsk(m)) as string
+            answer = applyReplyTags(answer)
+            // 打字机流式显现（LLM 一次性返回时也有逐字说话感）
+            bubble.show(answer || '…', undefined, 'character', { stream: true, priority: 'ai' })
+            anim.expressionImpulse({ smile: 0.3 }, 1)
           }
-          if (act) animMgr.playClip(act[1].toLowerCase(), { loop: false })
-          // 打字机流式显现（LLM 一次性返回时也有逐字说话感）
-          bubble.show(answer || '…', undefined, 'character', { stream: true })
-          anim.expressionImpulse({ smile: 0.3 }, 1)
         } catch {
           bubble.show('出了一点小问题，晚点再聊吧~', 4, 'character')
         } finally {
@@ -793,19 +815,21 @@ async function boot(): Promise<void> {
       )
     }
     spatial.update(dt)
-    drag.update(dt)
-    clickFx.update(dt)
+    if (PET_FEATURES.drag) {
+      drag.update(dt)
+      clickFx.update(dt)
+    }
     // 闲置减负：静止（无拖拽/无过渡/无气泡）时 Animator 走收敛快路径（内部判定）
     anim.update(dt)
     animMgr.update(dt)
-    micro.update(dt)
+    if (PET_FEATURES.microLife) micro.update(dt)
     char.update(dt)
-    lighting.update(dt)
-    weather.update(dt)
+    if (PET_FEATURES.dayNight) lighting.update(dt)
+    if (PET_FEATURES.weather) weather.update(dt)
 
     // 时段变化时自动切换天气（每 60s 检查一次）
     phaseWeatherTimer += dt
-    if (phaseWeatherTimer >= 60) {
+    if (PET_FEATURES.weather && phaseWeatherTimer >= 60) {
       phaseWeatherTimer = 0
       const curPhase = lighting.getPhase()
       if (curPhase !== lastPhase) {
@@ -835,7 +859,7 @@ async function boot(): Promise<void> {
     const p = spatial.position
     const w = stage.screenToWorld(p.x, p.y)
     const scale = spatial.currentScale // 含用户缩放：气泡锚点与偏移都正确
-    particles.update(dt, w.x, w.y, spatial.stateScale) // 粒子密度不受用户缩放影响
+    if (PET_FEATURES.particles) particles.update(dt, w.x, w.y, spatial.stateScale) // 粒子密度不受用户缩放影响
     // 单气泡：按当前变体选锚点（character=头顶，user=侧下让位），任何时刻只有一个气泡
     if (bubble.visible) {
       if (bubble.currentVariant === 'user') {
@@ -849,7 +873,7 @@ async function boot(): Promise<void> {
       spatial.noteBubbleVisible()
     }
 
-    hit.update(dt)
+    if (PET_FEATURES.drag) hit.update(dt)
 
     // 资源占用统计（每 3s 推送一次到主窗口）
     if (Math.floor(performance.now() / 3000) !== Math.floor((performance.now() - dt * 1000) / 3000)) {

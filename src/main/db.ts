@@ -143,6 +143,7 @@ export function loadActivitiesDeferred(): Promise<void> {
         return
       }
       const retainDays = Math.max(7, getSettings().activityRetentionDays || 60)
+      const loadStart = Date.now()
       const cutoff = Date.now() - retainDays * 86400000
       const readline = require('readline') as typeof import('readline')
       const stream = fs.createReadStream(actFile, { encoding: 'utf-8' })
@@ -185,6 +186,7 @@ export function loadActivitiesDeferred(): Promise<void> {
         flushBatch()
         activitiesReady = true
         activitiesLoading = false
+        console.log(`[db] activities 加载耗时 ${Date.now() - loadStart}ms（${kept} 条）`)
         if (pruned) {
           try {
             fs.writeFileSync(

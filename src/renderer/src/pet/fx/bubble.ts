@@ -1,11 +1,13 @@
 /**
- * 气泡 v5：DOM overlay 实现（替换旧 canvas sprite 版）
- * - 玻璃拟态卡片 + 指向角色的尾巴，视觉规格对齐 VPet/Open-LLM-VTuber 的气泡
- * - 支持打字机流式渲染（AI 回复逐字显现）
- * - 屏幕边缘自动避让；hover 暂停消失计时（监听窗口级 mousemove，穿透窗下也可用）
- * - 对外 API 与旧版完全一致（show/update/hide/visible/worldWidth/...），消费方零改动
+ * 气泡 v6：DOM overlay（v5 基础上增强）
+ * - 优先级队列：ai(3) > care(2) > chatter(1)——AI 回答播放中，关怀/闲聊排队不打断
+ * - 真流式消费：streamChunk 直接喂 LLM 增量（reveal 打字机追赶），streamReset 重置 tool 轮次
+ * - 工作区感知：下边界避开任务栏；钳制后尾巴跟随锚点（不再指向空气）
+ * - 悬停展开：长回答折叠 150px，悬停 0.7s 自动展开（petModal 接管点击，文本可选中复制），移开自动收起
+ * - 对外 API 向后兼容：show/hide/update/hide/visible/worldWidth/visibleHeight/hitTest/setHovered
  */
 import type * as THREE from 'three'
+import { TASKBAR_HEIGHT } from '../spatial/stateTable'
 
 const FONT_FAMILY = '"Microsoft YaHei", "PingFang SC", sans-serif'
 const MAX_W = 300
@@ -15,8 +17,14 @@ const PAD_Y = 12
 const TAIL = 10
 /** 打字机速度（字符/秒） */
 const TYPE_CPS = 32
+/** 超过此高度折叠；悬停 0.7s 展开 */
+const COLLAPSE_H = 150
+const EXPAND_HOVER_S = 0.7
 
 export type BubbleVariant = 'character' | 'user'
+export type BubblePriority = 'ai' | 'care' | 'chatter'
+
+const PRECEDENCE: Record<BubblePriority, number> = { ai: 3, care: 2, chatter: 1 }
 
 const PALETTE: Record<BubbleVariant, { bg: string; border: string; text: string; shadow: string }> = {
   character: {
@@ -33,9 +41,18 @@ const PALETTE: Record<BubbleVariant, { bg: string; border: string; text: string;
   }
 }
 
+interface ShowRequest {
+  text: string
+  duration?: number
+  variant?: BubbleVariant
+  priority: BubblePriority
+  stream?: boolean
+}
+
 export class Bubble {
   private el: HTMLDivElement
   private textEl: HTMLSpanElement
+  private footerEl: HTMLDivElement | null = null
   private timer = 0
   private showT = 0 // 入场淡入独立计时（不被打字机清零）
   private duration = 0
@@ -47,22 +64,33 @@ export class Bubble {
   private fullText = ''
   private revealed = 0
   private streaming = false
+  private priority: BubblePriority = 'chatter'
+  /** 低优先级消息队列（当前气泡结束自动放出；cap 2，超出丢最旧） */
+  private pending: ShowRequest[] = []
+  /** 悬停展开状态 */
+  private expanded = false
+  private collapsible = false
+  private hoverMs = 0
+  private leaveMs = 0
+  private onModal: ((open: boolean) => void) | null
   /** 窗口级鼠标位置（穿透窗 forward 模式下仍可收到 mousemove） */
   private mouse: { x: number; y: number } | null = null
   private mouseHandler = (e: MouseEvent): void => {
     this.mouse = { x: e.clientX, y: e.clientY }
   }
+  private tailEl: HTMLElement
 
-  constructor(_scene?: unknown, variant: BubbleVariant = 'character') {
+  constructor(_scene?: unknown, variant: BubbleVariant = 'character', hooks?: { onModal?: (open: boolean) => void }) {
     this.variant = variant
+    this.onModal = hooks?.onModal ?? null
     this.el = document.createElement('div')
     this.el.className = 'pet-bubble'
     this.textEl = document.createElement('span')
     this.textEl.className = 'pet-bubble-text'
-    const tail = document.createElement('i')
-    tail.className = 'pet-bubble-tail'
+    this.tailEl = document.createElement('i')
+    this.tailEl.className = 'pet-bubble-tail'
     this.el.appendChild(this.textEl)
-    this.el.appendChild(tail)
+    this.el.appendChild(this.tailEl)
     this.applyStyle()
     this.el.style.opacity = '0'
     this.el.style.display = 'none'
@@ -98,7 +126,7 @@ export class Bubble {
     s.transition = 'opacity 0.18s ease, transform 0.18s ease'
     s.transformOrigin = 'bottom center'
     // 尾巴（向下指角色；user 变体在顶部向上指）
-    const tail = this.el.querySelector('.pet-bubble-tail') as HTMLElement
+    const tail = this.tailEl
     tail.style.position = 'absolute'
     tail.style.left = '50%'
     tail.style.width = '0'
@@ -146,19 +174,39 @@ export class Bubble {
     return this.hovered
   }
 
+  /** v6：优先级入口。低优先级在 AI/关怀播放中排队，不打断 */
   show(
     text: string,
     duration?: number,
     variant?: BubbleVariant,
-    opts?: { stream?: boolean }
+    opts?: { stream?: boolean; priority?: BubblePriority }
+  ): void {
+    const priority = opts?.priority ?? 'chatter'
+    if (this.visibleFlag && PRECEDENCE[priority] < PRECEDENCE[this.priority]) {
+      // 排队（cap 2，丢最旧）；正在打字机的 ai 永不被闲聊覆盖
+      if (this.pending.length >= 2) this.pending.shift()
+      this.pending.push({ text, duration, variant, priority })
+      return
+    }
+    this.display(text, duration, variant, opts, priority)
+  }
+
+  private display(
+    text: string,
+    duration: number | undefined,
+    variant: BubbleVariant | undefined,
+    opts: { stream?: boolean } | undefined,
+    priority: BubblePriority
   ): void {
     if (variant) {
       this.variant = variant
       this.applyStyle()
     }
+    this.priority = priority
     this.fullText = text
     this.revealed = opts?.stream ? 0 : text.length
     this.streaming = !!opts?.stream
+    if (this.expanded) this.expand(false)
     this.textEl.textContent = text.slice(0, this.revealed)
 
     // 内容变化后量宽：先以隐藏可见性挂出 DOM（display:none 时 scrollWidth 恒 0）
@@ -171,6 +219,7 @@ export class Bubble {
     this.el.style.display = prevDisplay
     this.el.style.visibility = prevVis
     this.textEl.textContent = this.fullText.slice(0, this.revealed)
+    this.applyCollapse()
 
     this.el.style.display = 'block'
     this.el.style.opacity = '0'
@@ -191,6 +240,34 @@ export class Bubble {
         : text.length <= 15
           ? Math.min(6, Math.max(3, text.length * 0.25))
           : Math.max(8, Math.min(20, text.length * 0.35)))
+  }
+
+  /** v6 真流式：LLM 增量喂入。已在播的 ai 气泡只推全文、打字机追赶；否则新开 */
+  streamChunk(full: string, variant: BubbleVariant = 'character'): void {
+    if (!this.visibleFlag || this.priority !== 'ai') {
+      this.display(full, undefined, variant, { stream: true }, 'ai')
+      return
+    }
+    this.fullText = full
+    if (this.revealed > full.length) this.revealed = full.length
+    this.textEl.textContent = full.slice(0, this.revealed)
+  }
+
+  /** v6：tool 轮次重置——丢弃已显的中间文本，等最终回答重新吐字 */
+  streamReset(): void {
+    if (this.priority !== 'ai') return
+    this.fullText = ''
+    this.revealed = 0
+    this.textEl.textContent = ''
+  }
+
+  /** v6：流式收尾——全文定格（不重新打字），随后消息队列放出下一条 */
+  finishStream(final: string): void {
+    this.fullText = final
+    this.revealed = final.length
+    this.streaming = false
+    this.textEl.textContent = final
+    this.duration = Math.max(this.duration, this.timer + Math.min(14, 4 + final.length * 0.1))
   }
 
   hide(): void {
@@ -214,19 +291,79 @@ export class Bubble {
     this.setHovered(inside)
   }
 
+  /** 悬停展开：长内容折叠 150px，悬停 0.7s 展开（可选中复制），移开 0.35s 收起 */
+  private updateExpand(dt: number): void {
+    if (!this.collapsible || !this.visibleFlag) return
+    if (this.hovered) {
+      this.leaveMs = 0
+      if (!this.expanded) {
+        this.hoverMs += dt
+        if (this.hoverMs >= EXPAND_HOVER_S) this.expand(true)
+      }
+    } else if (this.expanded) {
+      this.leaveMs += dt
+      if (this.leaveMs > 0.35) this.expand(false)
+    } else {
+      this.hoverMs = 0
+    }
+  }
+
+  private expand(open: boolean): void {
+    if (this.expanded === open) return
+    this.expanded = open
+    this.el.style.maxHeight = open ? 'none' : `${COLLAPSE_H}px`
+    this.el.style.overflow = open ? 'visible' : 'hidden'
+    this.el.style.userSelect = open ? 'text' : 'none'
+    this.el.style.pointerEvents = open ? 'auto' : 'none'
+    this.el.style.cursor = open ? 'text' : ''
+    if (this.footerEl) this.footerEl.textContent = open ? '收起 ▴' : '… 展开 ▾'
+    try { this.onModal?.(open) } catch { /* ignore */ }
+  }
+
+  /** 折叠判定 + 底部提示条（长回答才可展开） */
+  private applyCollapse(): void {
+    this.expanded = false
+    this.hoverMs = 0
+    this.leaveMs = 0
+    const h = this.el.offsetHeight
+    this.collapsible = h > COLLAPSE_H && this.variant === 'character'
+    if (this.collapsible) {
+      this.el.style.maxHeight = `${COLLAPSE_H}px`
+      this.el.style.overflow = 'hidden'
+      this.el.style.userSelect = 'none'
+      this.el.style.pointerEvents = 'none'
+      if (!this.footerEl) {
+        this.footerEl = document.createElement('div')
+        this.footerEl.style.cssText =
+          'margin-top:6px;padding-top:4px;border-top:1px solid rgba(255,255,255,0.12);' +
+          'text-align:center;font-size:10px;opacity:0.65;pointer-events:none'
+        this.el.appendChild(this.footerEl)
+      }
+      this.footerEl.textContent = '… 展开 ▾'
+      this.footerEl.style.display = 'block'
+    } else if (this.footerEl) {
+      this.footerEl.style.display = 'none'
+      this.el.style.maxHeight = 'none'
+      this.el.style.overflow = ''
+      this.el.style.userSelect = ''
+      this.el.style.pointerEvents = 'none'
+    }
+  }
+
   /** 世界坐标锚点 → 屏幕像素（世界原点 = 屏幕中心，y 向上）。
    *  角色：气泡底沿悬在头顶上方 ~40px，尾巴向下指头；贴近屏幕顶时翻转尾巴挂到头下。
    *  用户：气泡在锚点侧上方，尾巴朝上。 */
   update(dt: number, anchorWorldX: number, anchorWorldY: number, charScale = 1): void {
     if (!this.visibleFlag) return
     this.updateHover()
+    this.updateExpand(dt)
     this.showT += dt
     // 打字机：先吐字，吐完才开始计时消失
     if (this.revealed < this.fullText.length) {
       this.revealed = Math.min(this.fullText.length, this.revealed + Math.ceil(dt * TYPE_CPS))
       this.textEl.textContent = this.fullText.slice(0, this.revealed)
       this.timer = 0
-    } else if (!this.hovered) {
+    } else if (!this.hovered && !this.expanded) {
       this.timer += dt
     }
     const fadeIn = Math.min(1, this.showT / 0.18)
@@ -239,6 +376,8 @@ export class Bubble {
     const anchorScreenY = window.innerHeight / 2 - anchorWorldY
     const w = this.el.offsetWidth
     const h = this.el.offsetHeight
+    // 工作区下界：避开任务栏
+    const workBottom = window.innerHeight - TASKBAR_HEIGHT
 
     let top: number
     if (this.variant === 'character') {
@@ -255,15 +394,23 @@ export class Bubble {
       this.setTailTop(true)
       top = anchorScreenY - h - TAIL
     }
-    top = Math.max(8, Math.min(window.innerHeight - h - 8, top))
+    top = Math.max(8, Math.min(workBottom - h - 8, top))
     const x = Math.max(10, Math.min(window.innerWidth - w - 10, sx - w / 2))
     this.el.style.left = `${x}px`
     this.el.style.top = `${top}px`
     this.lastBox = { x, y: top, w, h }
 
+    // 尾巴跟随锚点：盒子被边缘钳制后，尾巴滑向锚点一侧而不是指向空气
+    const tailX = Math.max(14, Math.min(w - 14, sx - x))
+    this.tailEl.style.left = `${tailX}px`
+
     if (remain <= 0 && this.revealed >= this.fullText.length) {
       this.visibleFlag = false
       this.el.style.display = 'none'
+      if (this.expanded) this.expand(false)
+      // 队列放出下一条（低优先级排队不打断的意义所在）
+      const next = this.pending.shift()
+      if (next) this.display(next.text, next.duration, next.variant, { stream: next.stream }, next.priority)
     }
   }
 
@@ -271,8 +418,7 @@ export class Bubble {
   private setTailTop(top: boolean): void {
     if (this.tailIsTop === top) return
     this.tailIsTop = top
-    const tail = this.el.querySelector('.pet-bubble-tail') as HTMLElement | null
-    if (!tail) return
+    const tail = this.tailEl
     const pal = PALETTE[this.variant]
     if (top) {
       tail.style.bottom = 'auto'

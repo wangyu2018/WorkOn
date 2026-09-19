@@ -5,6 +5,7 @@
  * - onPet.intent → INTENT_FEEDBACK 查表播 clip（短时打断空间态底噪）
  */
 import type { PetState, PresenceSnapshot, WorkState } from '@shared/types'
+import { PET_FEATURES } from './flags'
 import { INTENT_FEEDBACK } from '@shared/petIntent'
 import type { SpatialController } from './spatial/SpatialController'
 import { SPATIAL_STATE_TABLE, type SpatialStateName } from './spatial/stateTable'
@@ -32,6 +33,9 @@ export class Bridge {
   private lastWorkState: WorkState | null = null
   private lastPresence: PresenceSnapshot | null = null
   private debounceId: ReturnType<typeof setTimeout> | null = null
+  /** 状态驻留迟滞：当前非紧急态至少停留 MIN_DWELL 才允许切走（识别层 coding/aidev/focus 秒级抖动 → 桌宠乱跳+缩放泵动） */
+  private currentEnteredAt = 0
+  private static MIN_DWELL_MS = 20_000
 
   constructor(deps: BridgeDeps) {
     this.deps = deps
@@ -55,12 +59,18 @@ export class Bridge {
   /** 状态切换防抖：紧急态立即执行；bottom 类互切 300ms；其余 800ms */
   private scheduleTransition(target: { name: SpatialStateName; pose?: string }): void {
     if (this.deps.spatial.docked) return
-    if (this.debounceId) clearTimeout(this.debounceId)
+    if (!PET_FEATURES.autoSpatial) return // 排障基线：固定锚点，不做自动迁移
+    if (target.name === this.deps.spatial.current) return
+    const curCfg = SPATIAL_STATE_TABLE[this.deps.spatial.current]
     const cfg = SPATIAL_STATE_TABLE[target.name]
     if (cfg?.urgent) {
       this.deps.spatial.transitionTo(target.name, target.pose)
+      this.currentEnteredAt = Date.now()
       return
     }
+    // 驻留迟滞：非紧急态未住够最低时长就无视切换提案（下一轮 presence 再评估）
+    if (Date.now() - this.currentEnteredAt < Bridge.MIN_DWELL_MS) return
+    if (this.debounceId) clearTimeout(this.debounceId)
     const bottomClass = (n: SpatialStateName) => {
       const c = SPATIAL_STATE_TABLE[n]
       return c && (c.defaultPos.y === 'bottom' || c.defaultPos.y === 'peek')
@@ -69,6 +79,7 @@ export class Bridge {
     this.debounceId = setTimeout(() => {
       this.debounceId = null
       this.deps.spatial.transitionTo(target.name, target.pose)
+      this.currentEnteredAt = Date.now()
     }, ms)
   }
 
@@ -162,7 +173,7 @@ export class Bridge {
     e.browRaise = pet.emotion.dominance * 0.5
     // 仅在无姿态表情覆盖时平滑跟随（避免与姿态表情打架，权重 0.5 近似）
     this.deps.anim.setExpression(e, 0.5)
-    this.deps.micro.arousal = Math.abs(pet.emotion.arousal)
+    if (PET_FEATURES.microLife) this.deps.micro.arousal = Math.abs(pet.emotion.arousal)
 
     // 开心跃升（pleasure 快速升到 0.6+）→ 挥一次手
     const prevP = prev?.emotion.pleasure ?? 0
@@ -170,20 +181,20 @@ export class Bridge {
       this.deps.micro.triggerWave()
     }
 
-    // 能量变化触发 overworked 重评估
+    // 能量变化 → 仅重评估 overworked（此前用半截假快照重进 onPresence：
+    // 每次都清空避让矩形 + 污染场景快照，是「乱跳」的共犯）
     if (prev && prev.energy !== pet.energy && this.lastWorkState) {
-      this.onPresence({
-        state: this.lastWorkState
-      } as PresenceSnapshot)
+      const restState = ['away', 'break', 'lunch'].includes(this.lastWorkState)
+      if (pet.energy < 0.3 && !restState) this.scheduleTransition({ name: 'overworked' })
     }
 
     // 消息气泡（3-6s）
-    if (pet.message && pet.message !== prev?.message) {
-      this.deps.bubble.show(pet.message, undefined, 'character')
+    if (PET_FEATURES.care && pet.message && pet.message !== prev?.message) {
+      this.deps.bubble.show(pet.message, undefined, 'character', { priority: 'care' })
     }
 
     // 意图 → clip（intentAt 变化才播，同意图可连发）
-    if (pet.intent && pet.intentAt && pet.intentAt !== prev?.intentAt) {
+    if (PET_FEATURES.intentClips && pet.intent && pet.intentAt && pet.intentAt !== prev?.intentAt) {
       const fb = INTENT_FEEDBACK[pet.intent]
       if (fb) {
         const ok = this.deps.animMgr.playClip(fb.clip, {

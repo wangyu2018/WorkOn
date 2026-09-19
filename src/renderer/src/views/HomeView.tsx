@@ -30,6 +30,7 @@ import {
 } from '../lib/homeLayout'
 import { usePerspective } from '../lib/usePerspective'
 import { DailyLineCard, AlmanacCard, CountdownCard } from '../components/homeWidgets/LifeWidgets'
+import { FestivalCard, HabitCard, PlanAheadCard, GoalProgressCard } from '../components/homeWidgets/MoreLifeWidgets'
 import { PERSPECTIVE_HOME } from '../lib/perspective'
 import { PERSPECTIVE_META } from '@shared/perspective'
 import { prioW } from '@shared/priority'
@@ -1195,6 +1196,10 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
         if (slot.key === 'soup') return <div key="soup"><DailyLineCard kind="soup" /></div>
         if (slot.key === 'almanac') return <div key="almanac"><AlmanacCard /></div>
         if (slot.key === 'countdown') return <div key="countdown"><CountdownCard /></div>
+        if (slot.key === 'festival') return <div key="festival"><FestivalCard /></div>
+        if (slot.key === 'habit') return <div key="habit"><HabitCard /></div>
+        if (slot.key === 'planahead') return <div key="planahead"><PlanAheadCard /></div>
+        if (slot.key === 'goal') return <div key="goal"><GoalProgressCard /></div>
         if (slot.key === 'dayplan') {
           // 定时项按时刻排；无时刻项按所属项目优先级排（高优先项目的排入今日任务浮到上面）
           const sortedPlans = [...plans].sort(

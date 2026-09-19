@@ -213,6 +213,7 @@ export function registerIpc(): void {
       patch.petInteractions !== undefined ||
       patch.petReturnMin !== undefined
     ) {
+      if (patch.aiStreaming !== undefined) sendTo('pet', 'pet:settings', { aiStreaming: next.aiStreaming })
       sendTo('pet', 'pet:settings', {
         petScale: next.petScale,
         petRoam: next.petRoam,
@@ -392,7 +393,10 @@ export function registerIpc(): void {
     const today = dateKey(Date.now())
     const hit = trailCache.get(d)
     if (hit && (d !== today || Date.now() - hit.ts < TRAIL_TODAY_TTL_MS)) return hit.data
+    const aggStart = Date.now()
     const data = buildMergedTrail(listActivities(d), d)
+    const aggMs = Date.now() - aggStart
+    if (aggMs > 80) console.warn(`[trail] 慢聚合 ${d}: ${aggMs}ms`)
     if (trailCache.size >= 120) trailCache.delete(trailCache.keys().next().value as string)
     trailCache.set(d, { data, ts: Date.now() })
     return data
@@ -848,9 +852,7 @@ export function registerIpc(): void {
   ipcMain.on('pet:hide', () => {
     if (petWindow && !petWindow.isDestroyed()) petWindow.hide()
   })
-  ipcMain.on('pet:undock', () => sendTo('pet', 'pet:undock'))
   ipcMain.on('pet:modal', (_e, active: boolean) => setPetModal(active))
-  ipcMain.on('pet:hide', () => { if (petWindow) petWindow.hide() })
   ipcMain.on('pet:show', () => { if (petWindow) { createPetWindow(); petWindow.show() } })
   ipcMain.on('pet:restore', () => sendTo('pet', 'pet:restore'))
   ipcMain.on('pet:introReplay', () => sendTo('pet', 'pet:introReplay'))
@@ -870,7 +872,8 @@ export function registerIpc(): void {
       const answer = await petAskShortStream(
         question,
         (delta, full) => sendTo('pet', 'ai:streamChunk', { delta, full }),
-        habitsOfUser()
+        habitsOfUser(),
+        (fullSoFar) => sendTo('pet', 'ai:streamReset', { full: fullSoFar })
       )
       sendTo('pet', 'ai:streamDone', answer)
       return answer
@@ -891,7 +894,6 @@ export function registerIpc(): void {
     }
   })
 
-  ipcMain.on('pet:userSay', (_e, text: string) => sendTo('pet', 'pet:userSay', String(text).slice(0, 200)))
   ipcMain.on('pet:stats', (_e, stats: unknown) => sendTo('main', 'pet:stats', stats))
 
   // ── VRM 角色上传（L1：用户上传自定义 .vrm 文件） ──
@@ -1138,8 +1140,9 @@ export function registerIpc(): void {
     }
     sendTo('pet', 'pet:meeting', payload)
   })
-  // 点击桌宠加好感：每 10 次亲密度 +1（上限 5），并小幅提升愉悦度
-  let affectionClicks = 0
+  // 点击桌宠加好感：每 10 次亲密度 +1（上限 5），并小幅提升愉悦度。
+  // 计数与亲密度落盘（此前纯内存，重启清零白点）。
+  let affectionClicks = getSettings().petAffectionClicks ?? 0
   ipcMain.handle('pet:affection', () => {
     affectionClicks++
     const patch: Partial<PetState> = {}
@@ -1149,6 +1152,7 @@ export function registerIpc(): void {
     }
     const p = bus.pet.emotion.pleasure
     patch.emotion = { ...bus.pet.emotion, pleasure: Math.min(1, p + 0.03) }
+    setSettings({ petAffectionClicks: affectionClicks })
     return bus.setPet(patch)
   })
 

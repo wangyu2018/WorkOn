@@ -81,6 +81,12 @@ export class Animator {
 
   constructor(char: VrmCharacter) {
     this.char = char
+    // 构造即收敛到默认站姿：首帧写出的就是垂手状态（不经过 T-pose 起点 lerp）
+    this.fromPose = DEFAULT_POSE
+    this.toPose = DEFAULT_POSE
+    this.poseT = 1
+    this.hipsFrom = this.hipsTo = DEFAULT_POSE.hipsY ?? DEFAULT_HIPS_Y
+    this.currentPoseName = 'stand_idle'
   }
 
   /** 接入动画管理器（main.ts 装配时调用） */
@@ -212,19 +218,7 @@ export class Animator {
     // clip 模式：骨骼由 AnimationMixer 接管，这里只推进表情混合
     if (this.clipMode) {
       this.additive.clear() // 防止退出 clip 首帧消费进 clip 前的陈旧偏移
-      const et = this.ease(this.exprT)
-      const expr = lerpExpression(this.fromExpr, this.toExpr, et)
-      this.exprImpulses = this.exprImpulses.filter((imp) => {
-        imp.t += dt
-        if (imp.t >= imp.dur) return false
-        const env = Math.sin((imp.t / imp.dur) * Math.PI)
-        for (const [k, v] of Object.entries(imp.delta)) {
-          const key = k as keyof Expression
-          expr[key] = THREE.MathUtils.clamp(expr[key] + (v ?? 0) * env, -1, 1.5)
-        }
-        return true
-      })
-      this.char.face.apply(expr)
+      this.updateExpression(dt)
       return
     }
 
@@ -251,7 +245,11 @@ export class Animator {
     this.char.bone('hips').position.y = this.currentHipsY()
     this.additive.clear()
 
-    // 表情混合 + 脉冲
+    this.updateExpression(dt)
+  }
+
+  /** 表情混合 + 脉冲（clip 模式与姿态模式共用的唯一实现） */
+  private updateExpression(dt: number): void {
     const et = this.ease(this.exprT)
     const expr = lerpExpression(this.fromExpr, this.toExpr, et)
     this.exprImpulses = this.exprImpulses.filter((imp) => {

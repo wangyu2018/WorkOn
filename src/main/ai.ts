@@ -452,7 +452,9 @@ export async function chatWithToolLoopStream(
   tools: typeof WORKON_TOOLS,
   onChunk: StreamCallback,
   onToolCall?: (toolName: string) => void,
-  maxToolRounds = 3
+  maxToolRounds = 3,
+  /** tool 轮次重置回调：已流式的中间文本作废（渲染端清空重排） */
+  onReset?: (fullSoFar: string) => void
 ): Promise<string | null> {
   const s = getSettings()
   if (!s.aiEnabled || !s.aiApiKey) return null
@@ -501,7 +503,8 @@ export async function chatWithToolLoopStream(
       // 实际上 OpenAI 在有 tool_calls 时通常不返回 content，所以 streamedAny 通常为 false
       if (streamedAny) {
         // 发送重置信号：让渲染端知道之前的文本是中间过程
-        onChunk('\n', content || '')
+        if (onReset) onReset(content || '')
+        else onChunk('\n', content || '')
       }
 
       // 追加 assistant 消息
@@ -943,6 +946,8 @@ export async function petAskShort(question: string, habits?: UserHabits | null):
         content:
           '你是桌宠姵儿，猫耳耳机少女，用可爱简洁的中文回答，控制在 50 字以内，可带少量 emoji。' +
           '工作相关问题给实用建议；闲聊就陪她聊。' +
+          '可以在回复末尾附加一个情绪或动作标记（二选一，正文里不要写出来）：' +
+          '[emotion:happy|sad|angry|surprised|sleepy|shy] 或 [action:idle_greet|relax_sway|doze_loop]。' +
           '你可以通过工具查看用户当前状态、帮用户添加备忘、显示气泡消息。' +
           '用户问"我在干嘛"时调用 get_presence，说"帮我记"时调用 add_memo。' +
           '天气问题请调用 get_weather 工具查询（默认查设置中的城市）；新闻、股价等其他实时问题，可爱地说明"我查不了实时信息哦"。' +
@@ -980,7 +985,9 @@ export async function petAskShort(question: string, habits?: UserHabits | null):
 export async function petAskShortStream(
   question: string,
   onChunk: StreamCallback,
-  habits?: UserHabits | null
+  habits?: UserHabits | null,
+  /** tool 轮次重置回调（渲染端清空气泡重排） */
+  onReset?: (fullSoFar: string) => void
 ): Promise<string> {
   const s = getSettings()
   if (!s.aiEnabled || !s.aiApiKey) {
@@ -996,6 +1003,8 @@ export async function petAskShortStream(
         content:
           '你是桌宠姵儿，猫耳耳机少女，用可爱简洁的中文回答，控制在 50 字以内，可带少量 emoji。' +
           '工作相关问题给实用建议；闲聊就陪她聊。' +
+          '可以在回复末尾附加一个情绪或动作标记（二选一，正文里不要写出来）：' +
+          '[emotion:happy|sad|angry|surprised|sleepy|shy] 或 [action:idle_greet|relax_sway|doze_loop]。' +
           '你可以通过工具查看用户当前状态、帮用户添加备忘、显示气泡消息。' +
           '用户问"我在干嘛"时调用 get_presence，说"帮我记"时调用 add_memo。' +
           `你和用户的亲密度 ${bus.pet.intimacy}/5，${bus.pet.intimacy >= 3 ? '可以亲昵一点' : '礼貌一点'}。` +
@@ -1009,7 +1018,8 @@ export async function petAskShortStream(
     PET_TOOLS,
     onChunk,
     undefined,
-    2
+    2,
+    onReset
   )
   insertInto('qa', {
     id: genId('qa'),

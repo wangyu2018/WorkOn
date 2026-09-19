@@ -1024,6 +1024,8 @@ export interface AppSettings {
   reportAutoRefreshMin?: number // 报表自动刷新间隔分钟，0=关闭，默认 120
   /** 日视角手动锁：null/未设置=按时钟自动（晨架构师/昼工作者/晚管理者），设值=锁死 */
   perspectiveLock?: Perspective | null
+  /** 桌宠点击好感计数（亲密度升级进度，落盘防重启清零） */
+  petAffectionClicks?: number
   /** 待办小组件窗口位置（拖动后记忆；非法/离屏时回落默认右下角） */
   todoWidgetPos?: { x: number; y: number }
   

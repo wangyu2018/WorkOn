@@ -8,7 +8,7 @@ import { PageHeader } from '../components/PageHeader'
 import { Toggle } from '../components/Toggle'
 import { MotionLab } from '../components/MotionLab'
 import { AutomationLab } from '../components/AutomationLab'
-import { VrmUploader } from '../components/VrmUploader'
+// import { VrmUploader } from '../components/VrmUploader' // 角色自定义暂时下架
 import {
   DEFAULT_WIDGET_DISPLAY,
   type DockRingContent,
@@ -565,10 +565,11 @@ export default function BuddyStage() {
 
           <div className="text-[10px] uppercase text-slate-600 pt-3">显示参数</div>
           <div className="flex flex-col gap-2.5 border-t border-white/[0.06] pt-2">
+            {/* 角色自定义（VRM 换装）暂时下架，回头再加：还原此行 + 顶部 VrmUploader import
             <div className="flex items-center justify-between text-[12px] text-slate-300">
               <span>角色</span>
               <VrmUploader petVrmPath={settings.petVrmPath} />
-            </div>
+            </div> */}
             <div className="flex items-center justify-between gap-3 text-[12px] text-slate-300">
               <span>
                 缩放 <span className="tabular-nums text-neon-cyan">{(settings.petScale * 100).toFixed(0)}%</span>
@@ -609,6 +610,15 @@ export default function BuddyStage() {
                   </button>
                 ))}
               </div>
+            </div>
+            <div className="flex items-center justify-between text-[12px] text-slate-300">
+              <span title="硬件分级（GPU/显存）自动选择帧率档位；手动选档会关闭它">
+                跟随硬件自动调档{settings.petFpsTierAuto === false ? '（已手动）' : ''}
+              </span>
+              <Toggle
+                checked={settings.petFpsTierAuto !== false}
+                onChange={(v) => void patch({ petFpsTierAuto: v, ...(v ? {} : {}) })}
+              />
             </div>
             <div className="flex items-center justify-between text-[12px] text-slate-300">
               <span title="人物区域外鼠标事件穿透到桌面">区域外点击穿透</span>
