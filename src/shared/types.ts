@@ -221,6 +221,8 @@ export interface PlanItem {
   projectTaskId?: string
   /** 子待办父级（粘贴分拣 / AI 拆解生成子待办）；桌面待办窗会挂在父项下 */
   parentPlanId?: string
+  /** 完成时刻（毫秒）：转入 done 时写入，同步给 Oner */
+  completedAt?: number
   /** 跨日顺延标记：今日视图收纳近几日未完成项时附带（计算字段，不落库） */
   carried?: boolean
   carriedFrom?: string
@@ -1024,6 +1026,8 @@ export interface AppSettings {
   reportAutoRefreshMin?: number // 报表自动刷新间隔分钟，0=关闭，默认 120
   /** 日视角手动锁：null/未设置=按时钟自动（晨架构师/昼工作者/晚管理者），设值=锁死 */
   perspectiveLock?: Perspective | null
+  /** 桌宠旋转角度（弧度）：用户 360° 拖拽旋转的习惯朝向，重启恢复 */
+  petRotY?: number
   /** 桌宠点击好感计数（亲密度升级进度，落盘防重启清零） */
   petAffectionClicks?: number
   /** 待办小组件窗口位置（拖动后记忆；非法/离屏时回落默认右下角） */

@@ -45,22 +45,12 @@ class StateBus extends EventEmitter {
     }
     presence.on('update', (snap: PresenceSnapshot) => {
       this.lastPresence = snap
-      // 工作状态驱动桌宠情感（v2.4 双向共振：状态→PAD 基线）
-      const pad = PAD_BY_STATE[snap.state] ?? { p: 0.2, a: 0.2, d: 0 }
-      let emotion: PADEmotion = { pleasure: pad.p, arousal: pad.a, dominance: pad.d }
-      // v2.6 评分驱动桌宠策略（scorePetAdapt）：按今日评分档叠加 PAD 偏移（§4.2）
-      if (getSettings().scorePetAdapt) {
-        const { padOffset } = getScoreStrategy()
-        emotion = {
-          pleasure: clamp1(emotion.pleasure + padOffset.p),
-          arousal: clamp1(emotion.arousal + padOffset.a),
-          dominance: clamp1(emotion.dominance + padOffset.d)
-        }
-      }
+      // PAD 基线已卸载（排障模式）：emotion 固定中性值，不随工作状态/评分波动。
+      // 回头恢复：还原此处 PAD_BY_STATE 查表 + scorePetAdapt 偏移逻辑
       this.pet = {
         ...this.pet,
         workState: snap.state,
-        emotion
+        emotion: { pleasure: 0.3, arousal: 0.2, dominance: 0.2 }
       }
       this.emit('presence', snap)
       this.emit('desktop-state', this.desktopState())

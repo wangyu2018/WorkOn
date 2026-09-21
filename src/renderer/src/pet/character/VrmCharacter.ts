@@ -208,7 +208,7 @@ export class VrmCharacter {
     if (vrm.lookAt) vrm.lookAt.target = this.lookTarget
 
     // 命中代理：包裹身体的矮圆柱（opacity=0，精检时被 opacity>0.1 过滤，不参与渲染）
-    const proxyGeo = new THREE.CylinderGeometry(modelHeightPx * 0.2, modelHeightPx * 0.22, modelHeightPx, 8)
+    const proxyGeo = new THREE.CylinderGeometry(modelHeightPx * 0.3, modelHeightPx * 0.34, modelHeightPx, 8)
     const proxyMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
     proxyMat.visible = false
     this.hitProxy = new THREE.Mesh(proxyGeo, proxyMat)

@@ -3,6 +3,8 @@
  * 抓起 scale×1.05 + 腿下垂 + 惊讶表情 → 拖动跟随 → 松手按速度抛掷
  * 抛物线 + 落地弹跳 1-2 次 + 落地坐姿 1s 后恢复原空间态
  */
+import * as THREE from 'three'
+import { PET_FEATURES } from '../flags'
 import type { VrmCharacter } from '../character/VrmCharacter'
 import type { Animator } from '../anim/Animator'
 import type { MicroBehaviors } from '../anim/microBehaviors'
@@ -10,6 +12,9 @@ import type { SpatialController } from '../spatial/SpatialController'
 import { TASKBAR_HEIGHT } from '../spatial/stateTable'
 
 type DragPhase = 'idle' | 'grab' | 'drag' | 'thrown' | 'landed'
+
+/** 自动旋转速度（弧度/秒）：约 4 秒一圈 */
+const SPIN_SPEED = 1.6
 
 export class DragPhysics {
   private char: VrmCharacter
@@ -53,14 +58,21 @@ export class DragPhysics {
     this.phase = 'grab'
     this.grabOffset.x = pos.x - mouseX
     this.grabOffset.y = pos.y - mouseY
+    if (this.physicsEnabled && PET_FEATURES.scruffLift) {
+      // 后脖颈手感：把角色向上提 60% 身高——光标正落在后脖颈位置，身体垂在下面（真·拎猫）
+      this.grabOffset.y += this.char.topY * this.spatial.currentScale * 0.6
+      this.anim.setPose('grab_dangle', 0.12)
+      this.anim.expressionImpulse({ eyeWide: 0.5, mouthOpen: 0.28, browRaise: 0.25 }, 0.9)
+      this.micro.ringBells(0.6)
+    }
     this.lastMouse = { x: mouseX, y: mouseY }
     this.lastMouseT = performance.now()
     this.vel = { x: 0, y: 0 }
     this.bounces = 0
-    this.baseScale = this.spatial.currentScale
+    this.baseScale = this.spatial.stateScale // 状态缩放：不含用户缩放，防止 ×userScale 复利
     this.spatial.beginOverride()
     this.spatial.noteInteraction()
-    this.anim.setPose('stand_idle', 0.15)
+    if (!this.physicsEnabled) this.anim.setPose('stand_idle', 0.15) // 物理关：维持原站姿
     this.onCursor?.('grabbing')
     this.onFpsBoost?.()
   }
@@ -88,15 +100,11 @@ export class DragPhysics {
       this.onCursor?.('grab')
       return
     }
-    this.phase = 'thrown'
-    this.thrownPos = {
-      x: this.lastMouse.x + this.grabOffset.x,
-      y: this.lastMouse.y + this.grabOffset.y
-    }
-    // 限制抛出速度
-    const maxV = 2500
-    this.vel.x = Math.max(-maxV, Math.min(maxV, this.vel.x))
-    this.vel.y = Math.max(-maxV, Math.min(maxV, this.vel.y))
+    // 松手 = 角度定格 + 卡哇伊反馈（抬腿小跳 + 眯眼笑 + 铃铛），不屁股蹲
+    this.phase = 'landed'
+    this.landedTimer = 0.5
+    this.anim.expressionImpulse({ smile: 0.5, blush: 0.45, squint: 0.3, eyeWide: 0.22, mouthOpen: 0.18 }, 1.3)
+    this.micro.ringBells(0.9)
     this.onCursor?.('grab')
   }
 
@@ -108,12 +116,19 @@ export class DragPhysics {
         const tx = this.lastMouse.x + this.grabOffset.x
         const ty = this.lastMouse.y + this.grabOffset.y
         this.spatial.setPosition({ x: tx, y: ty })
-        // 抓手感：scale ×1.05（仅物理开启时）
-        if (this.physicsEnabled) this.spatial.setScale(this.baseScale * 1.05)
+        if (this.physicsEnabled) this.spatial.rotateBy(SPIN_SPEED * dt) // 长按展示：自动原地转圈
+        if (PET_FEATURES.scruffLift) {
+          // 拽脖颈拎猫（暂缓体验）：放大 + 身体随移动晃
+          this.spatial.setScale(this.baseScale * 1.05)
+          const sway = THREE.MathUtils.clamp(-this.vel.x * 0.00012, -0.16, 0.16)
+          this.anim.add('spine_02', 0, 0, sway)
+          this.anim.add('thigh_L', 0, 0, THREE.MathUtils.clamp(-this.vel.x * 0.00008, -0.1, 0.1))
+          this.anim.add('thigh_R', 0, 0, THREE.MathUtils.clamp(-this.vel.x * 0.00008, -0.1, 0.1))
+        }
         break
       }
       case 'thrown': {
-        // 抛物线
+        // 抛物线（下落中保持悬垂姿态，由 grab 已设置）
         this.vel.y += 4200 * dt // 屏幕坐标 y 向下为正
         this.thrownPos.x += this.vel.x * dt
         this.thrownPos.y += this.vel.y * dt
@@ -134,8 +149,11 @@ export class DragPhysics {
             this.bounces++
           } else {
             this.phase = 'landed'
-            this.landedTimer = 1.0
-            this.anim.setPose('stand_idle', 0.2)
+            this.landedTimer = 0.9
+            // 屁股蹲：坐地缓冲（眯眼 + 微张嘴），带一点下坠顿挫
+            this.anim.setPose('land_butt', 0.06)
+            this.anim.expressionImpulse({ squint: 0.4, mouthOpen: 0.2 }, 0.6)
+            this.micro.ringBells(1.2)
           }
         }
         this.spatial.setPosition({ ...this.thrownPos })
@@ -145,6 +163,9 @@ export class DragPhysics {
         this.landedTimer -= dt
         if (this.landedTimer <= 0) {
           this.phase = 'idle'
+          // 展示结束：恢复原尺寸 + 回站立姿态（保持用户选定的朝向不变）
+          this.spatial.setScale(this.baseScale)
+          this.anim.setPose('stand_idle', 0.3)
           // 拖拽放定后不回弹：停在落点（闲置超时由 SpatialController 自动回位）
           this.spatial.endOverride()
           this.spatial.noteInteraction()

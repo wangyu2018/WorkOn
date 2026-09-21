@@ -43,6 +43,7 @@ async function boot(): Promise<void> {
   // 从设置读取自定义 VRM 路径，无则用默认姵儿
   const s = (await window.api?.getSettings?.()) as { petVrmPath?: string } | undefined
   // 默认加载 Draco 压缩版（9.6MB vs 21.9MB），加载时间约减半
+  const devMode = !!(s as unknown as { devMode?: boolean } | undefined)?.devMode
   const vrmPath = s?.petVrmPath || './vrm/peier-compressed.vrm'
   let char: VrmCharacter
   try {
@@ -83,9 +84,14 @@ async function boot(): Promise<void> {
   const anim = new Animator(char)
   anim.emotionEnabled = false // 与互动开关默认一致（settings 就绪后由 applyInteractions 覆盖）
   const animMgr = new AnimationManager(char, anim)
-  anim.update(0) // 立即写一次站立姿态：首个渲染帧就是垂手状态，无 T-pose 闪现
+  // 姿态写完还不够：蒙皮骨骼要经 char.update 内的 vrm.update 才会同步。
+  // 入场前先隐藏 → 写姿态 → 同步蒙皮 → 挂场景 → 揭幕，任何一帧都不会露出 T-pose。
+  char.root.visible = false
+  anim.update(0)
   stage.scene.add(char.root)
   char.attachLookTarget(stage.scene)
+  char.update(0)
+  char.root.visible = true
   anim.attachClipManager(animMgr)
   const micro = new MicroBehaviors(char, anim)
   const spatial = new SpatialController(char, anim, micro)
@@ -142,7 +148,7 @@ async function boot(): Promise<void> {
   const bridge = new Bridge({ spatial, lighting, anim, animMgr, micro, particles, bubble: bubble })
 
   // 互动开关（默认：点击/拖拽/右键聊天开，物理/页面跟随/换装/表情关；游荡走 petRoam）
-  const interactions: Interactions = { click: true, drag: true, dragPhysics: false, follow: false, costume: false, emotion: false, chat: true }
+  const interactions: Interactions = { click: true, drag: true, dragPhysics: true, follow: false, costume: false, emotion: false, chat: true }
   const applyInteractions = (p: Partial<Interactions>): void => {
     Object.assign(interactions, p)
     anim.emotionEnabled = interactions.emotion
@@ -218,6 +224,7 @@ async function boot(): Promise<void> {
           petReturnMin?: number
           petPosX?: number
           petPosY?: number
+          petRotY?: number
         }
       | undefined
     spatial.setUserScale(s?.petScale ?? 1)
@@ -231,14 +238,29 @@ async function boot(): Promise<void> {
     if (s?.petRememberPos && (s.petPosX ?? -1) >= 0 && (s.petPosY ?? -1) >= 0 && posOnScreen(s.petPosX!, s.petPosY!)) {
       spatial.markUserPlaced({ x: s.petPosX!, y: s.petPosY! })
     }
+    // 旋转角度记忆：用户 360° 转出的习惯朝向，重启恢复
+    if (typeof s?.petRotY === 'number' && Number.isFinite(s.petRotY)) {
+      spatial.setYaw(s.petRotY)
+    }
   } catch {
     /* 设置未就绪时用默认 */
   }
   // 拖拽落地：持久化放置位置（重启后恢复）
   drag.onDrop = () => {
     const p = spatial.position
-    void window.api?.setSettings?.({ petPosX: Math.round(p.x), petPosY: Math.round(p.y) })
+    void window.api?.setSettings?.({
+      petPosX: Math.round(p.x),
+      petPosY: Math.round(p.y),
+      petRotY: +spatial.yaw.toFixed(3)
+    })
   }
+  // 骨架态帧率基线：全部动态功能关闭时强制 eco（静态场景 10fps 足够，120s 后仍会降至 1fps）
+  const skeletonStatic =
+    !PET_FEATURES.microLife && !PET_FEATURES.autoSpatial && !PET_FEATURES.roam &&
+    !PET_FEATURES.drag && !PET_FEATURES.clips && !PET_FEATURES.particles && !PET_FEATURES.weather
+  // 拖拽需要流畅跟手：骨架 eco 基线不适用于拖拽态（拖拽本身有 boostFps ultra 叠加）
+  if (skeletonStatic) stage.setFpsTier('eco')
+
   window.api?.onPetSettings?.((s) => {
     const ps = s as { aiStreaming?: boolean } | undefined
     if (ps && ps.aiStreaming !== undefined) aiStreaming = ps.aiStreaming
@@ -314,10 +336,12 @@ async function boot(): Promise<void> {
   window.addEventListener('mousemove', (e) => {
     hit.setMouse(e.clientX, e.clientY)
     spatial.setMouse(e.clientX, e.clientY)
-    micro.setGazeTarget(
-      (e.clientX / window.innerWidth) * 2 - 1,
-      -((e.clientY / window.innerHeight) * 2 - 1)
-    )
+    if (PET_FEATURES.microLife) {
+      micro.setGazeTarget(
+        (e.clientX / window.innerWidth) * 2 - 1,
+        -((e.clientY / window.innerHeight) * 2 - 1)
+      )
+    }
     // 按下后移动超阈值才进入拖拽（避免点击被当成微抛掷；拖拽开关关闭则不抓起）
     if (pressedOnChar && !drag.active && interactions.drag) {
       const moved = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y)
@@ -700,8 +724,9 @@ async function boot(): Promise<void> {
     requestAnimationFrame(() => qconfirm.classList.add('open'))
   }
 
-  // 轻问诊（去重 + null 自动关闭）
+  // 轻问诊（去重 + null 自动关闭）；排障模式：chat 拆除时同步关闭
   window.api?.onQuestion?.((q) => {
+    if (!PET_FEATURES.chat) return
     if (!q) { hideQConfirm(); return }
     const p = q as { question: string; id: string; ctx: string }
     if (p.id === lastAnsweredQid) return
@@ -802,26 +827,16 @@ async function boot(): Promise<void> {
   // ── 主循环 ──
   let lastPhase = lighting.getPhase()
   let phaseWeatherTimer = 0
-  let heartbeatAcc = 0
   stage.onFrame((dt) => {
-    // 诊断心跳：10s 一条（warn 级别才转发到主进程日志），确认渲染循环存活
-    heartbeatAcc += dt
-    if (heartbeatAcc > 10) {
-      heartbeatAcc = 0
-      const hp = spatial.position
-      console.warn(
-        `[pet] alive ${Math.round(performance.now() / 1000)}s pos=(${Math.round(hp.x)},${Math.round(hp.y)}) ` +
-          `tier=${stage.fpsTier} docHidden=${document.hidden}`
-      )
-    }
-    spatial.update(dt)
+
+    spatial.update(dt) // 位置/姿态写入 3D 场景的唯一通道；自动迁移/漫游已在上游关死
     if (PET_FEATURES.drag) {
       drag.update(dt)
       clickFx.update(dt)
     }
     // 闲置减负：静止（无拖拽/无过渡/无气泡）时 Animator 走收敛快路径（内部判定）
     anim.update(dt)
-    animMgr.update(dt)
+    if (PET_FEATURES.clips) animMgr.update(dt)
     if (PET_FEATURES.microLife) micro.update(dt)
     char.update(dt)
     if (PET_FEATURES.dayNight) lighting.update(dt)
@@ -875,8 +890,8 @@ async function boot(): Promise<void> {
 
     if (PET_FEATURES.drag) hit.update(dt)
 
-    // 资源占用统计（每 3s 推送一次到主窗口）
-    if (Math.floor(performance.now() / 3000) !== Math.floor((performance.now() - dt * 1000) / 3000)) {
+    // 资源占用统计：仅开发者模式推送（普通用户无消费方）
+    if (devMode && Math.floor(performance.now() / 3000) !== Math.floor((performance.now() - dt * 1000) / 3000)) {
       window.api?.petStats?.(stage.getStats())
     }
   })
@@ -884,8 +899,7 @@ async function boot(): Promise<void> {
   // ── 主进程状态桥接 ──
   void bridge.init()
 
-  // 调试探针（CDP 诊断用）
-  ;(window as unknown as Record<string, unknown>).__pet = { stage, spatial, char, anim }
+
 
   // ── VRM 角色动态切换：收到 reload 信号时重载窗口（最可靠的全量重建方式） ──
   if (window.api?.onReloadVrm) {

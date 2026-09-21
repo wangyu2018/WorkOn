@@ -152,7 +152,7 @@ export function registerIpc(): void {
     if (patch.monitorInterval || patch.monitorSmart !== undefined) restartMonitor()
     if (patch.deepMode !== undefined) restartMonitor()
     if (patch.wsEnabled !== undefined || patch.wsPort) startIntegration()
-    if (patch.onerAutoSyncMin !== undefined) startOnerAutoSync()
+    if (patch.onerAutoSyncMin !== undefined || patch.onerToken !== undefined || patch.onerEndpoint !== undefined) startOnerAutoSync()
     if (patch.petCharacter) bus.setPet({ characterId: patch.petCharacter })
     if (patch.widgetOpacity !== undefined) applyWidgetOpacity()
     if (patch.widgetPenetration !== undefined) {
@@ -471,7 +471,7 @@ export function registerIpc(): void {
     return r
   })
   ipcMain.handle('plans:setStatus', async (_e, id: string, status: PlanStatus) => {
-    const updated = updateIn<PlanItem>('plans', id, { status })
+    const updated = updateIn<PlanItem>('plans', id, { status, ...(status === 'done' ? { completedAt: Date.now() } : {}) })
     // 核心闭环：挂了项目任务的待办，完成状态反哺 projectTasks
     if (updated?.projectTaskId) {
       const map: Record<string, ProjectTask['status']> = { done: 'done', in_progress: 'in_progress', partial: 'in_progress', planned: 'todo', delayed: 'blocked', cancelled: 'todo' }
@@ -894,7 +894,7 @@ export function registerIpc(): void {
     }
   })
 
-  ipcMain.on('pet:stats', (_e, stats: unknown) => sendTo('main', 'pet:stats', stats))
+  ipcMain.on('pet:stats', (_e, stats: unknown) => { if (getSettings().devMode) sendTo('main', 'pet:stats', stats) })
 
   // ── VRM 角色上传（L1：用户上传自定义 .vrm 文件） ──
   // VRM 方案一：选择 → 返回文件缓冲给渲染层体检，确认后再应用

@@ -7,6 +7,7 @@ import type { VrmCharacter } from '../character/VrmCharacter'
 import type { Animator } from '../anim/Animator'
 import type { MicroBehaviors } from '../anim/microBehaviors'
 import { RoamFSM } from '../anim/fsm'
+import { PET_FEATURES } from '../flags'
 import {
   SPATIAL_STATE_TABLE,
   Z_LAYER_RENDER,
@@ -466,7 +467,10 @@ export class SpatialController {
     // ── 闲置回位：交互锁（气泡可见/刚拖拽）不触发；用户放置位置 10min 内不弹回 ──
     if (this._docked) {
       // 收纳中：不触发任何自动操作
-    } else if (performance.now() - this.lastInteract > this.returnMin * 60_000) {
+    } else if (
+      PET_FEATURES.autoSpatial && // 排障模式：自动迁移关闭时闲置回位一并停用（桌宠不自己动）
+      performance.now() - this.lastInteract > this.returnMin * 60_000
+    ) {
       this.lastInteract = performance.now()
       if (this.interactionLockTimer > 0) {
         // 交互锁生效中：什么都不做
@@ -537,25 +541,48 @@ export class SpatialController {
     this.char.root.position.set(wx, wy + bob, 0)
     this.char.root.scale.setScalar(this.scale * this.userScale)
 
-    // 朝向：游荡行走时面向移动方向（连续偏航）；其余按屏幕位置分区
-    // rotation.y 负 = 面朝屏幕左，正 = 面朝屏幕右
-    const ratio = this.pos.x / this.screenW
-    let target: number
+    // 朝向策略 v4（看向用户）：朝向只被两种事件改变——
+    //   1) 用户拖拽水平位移 → rotateBy 360° 自由旋转
+    //   2) 漫游行走 → 面向移动方向
+    // 站立/放下后：脸看向用户——桌宠在屏幕左右边缘时转向屏幕中心，中间正对
     if (this.owner === 'drag') {
-      target = this.facing * -0.85 // 拖拽中保持速度朝向
+      this.char.root.rotation.y = this.facingCur // 拖拽中 rotateBy 直写，绕过平滑
     } else if (this.roamMoving) {
-      target = this.yawTarget ?? (this.facing * -0.85) // 面朝移动方向（横着走根治）
+      const target = this.yawTarget ?? this.facingCur
+      let diff = target - this.facingCur
+      while (diff > Math.PI) diff -= Math.PI * 2
+      while (diff < -Math.PI) diff += Math.PI * 2
+      const k = dt > 0 ? 1 - Math.exp(-dt / 0.45) : 1
+      this.facingCur += diff * k
+      this.char.root.rotation.y = this.facingCur
     } else {
-      target = ratio < 0.33 ? 0.6 : ratio > 0.66 ? -0.6 : 0
-      // 底部停靠（贴任务栏/冒头）：幅度减半，避免侧脸过于明显
-      if (this.pos.y > this.screenH - 150) target *= 0.5
+      // 边缘微转向中心（看向用户）；中间正对
+      let target: number
+      const ratio = this.pos.x / this.screenW
+      target = ratio < 0.25 ? 0.55 : ratio > 0.75 ? -0.55 : 0
+      let diff = target - this.facingCur
+      while (diff > Math.PI) diff -= Math.PI * 2
+      while (diff < -Math.PI) diff += Math.PI * 2
+      const k = dt > 0 ? 1 - Math.exp(-dt / 0.45) : 1
+      this.facingCur += diff * k
+      this.char.root.rotation.y = this.facingCur
     }
-    // 最短角度路径平滑（避免 ±π 绕远）
-    let diff = target - this.facingCur
-    while (diff > Math.PI) diff -= Math.PI * 2
-    while (diff < -Math.PI) diff += Math.PI * 2
-    const k = dt > 0 ? 1 - Math.exp(-dt / 0.45) : 1
-    this.facingCur += diff * k
+  }
+
+  /** 当前朝向（弧度）——持久化用 */
+  get yaw(): number {
+    return this.facingCur
+  }
+
+  /** 恢复持久化的朝向（重启时），直接生效 */
+  setYaw(rad: number): void {
+    this.facingCur = rad
+    this.char.root.rotation.y = rad
+  }
+
+  /** 用户拖拽旋转（360° 自由）：水平位移 → 偏航角，直接生效无平滑 */
+  rotateBy(dRad: number): void {
+    this.facingCur += dRad
     this.char.root.rotation.y = this.facingCur
   }
 }

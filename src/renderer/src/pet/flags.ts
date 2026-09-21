@@ -25,8 +25,10 @@ export const PET_FEATURES = {
   care: false,
   /** 首次 CG + 重播 */
   intro: false,
+  /** 拽脖颈拎猫完整体验（光标捏领+身体悬垂+被动晃动）：暂缓优化中，开启即恢复 */
+  scruffLift: false,
   /** 拖拽+命中测试（关=整窗纯穿透纯展示，省每帧射线检测；不可拖不可点） */
-  drag: false,
+  drag: true,
   /** 气泡+右键聊天（关=无对话入口，桌宠纯看） */
   chat: false,
   /** 动作总开关：程序化 clip + VRMA + 工坊动作全不注册（关=纯静态立绘，连呼吸摆动都无） */

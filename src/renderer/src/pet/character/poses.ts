@@ -51,6 +51,40 @@ export const DEFAULT_POSE: PoseEntry = {
 }
 
 export const POSES: Record<string, PoseEntry> = {
+  /** 拎起悬垂：被拎在半空的被动姿态——腿微弯自然下垂，手臂微张，交给物理摆动 */
+  grab_dangle: {
+    bones: {
+      upperarm_L: [0, 10, 70],
+      upperarm_R: [0, -10, -70],
+      forearm_L: [0, 6, 4],
+      forearm_R: [0, -6, -4],
+      thigh_L: [3, 0, 5],
+      thigh_R: [3, 0, -5],
+      calf_L: [-4, 0, 0],
+      calf_R: [-4, 0, 0],
+      spine_02: [3, 0, 0],
+      head: [-5, 0, 0]
+    },
+    expression: { eyeWide: 0.55, mouthOpen: 0.3, browRaise: 0.3 }
+  },
+  /** 屁股蹲：落地坐地——胯部下沉，腿向前伸，上身微后仰，眯眼缓冲 */
+  land_butt: {
+    hipsY: 78,
+    bones: {
+      spine_02: [-4, 0, 0],
+      spine_01: [-3, 0, 0],
+      thigh_L: [78, 0, 10],
+      thigh_R: [78, 0, -10],
+      calf_L: [-72, 0, 0],
+      calf_R: [-72, 0, 0],
+      upperarm_L: [0, 8, 60],
+      upperarm_R: [0, -8, -60],
+      forearm_L: [-10, 6, 4],
+      forearm_R: [-10, -6, -4],
+      head: [4, 0, 0]
+    },
+    expression: { squint: 0.45, mouthOpen: 0.25, eyeWide: 0.1 }
+  },
   /** 站立（默认） */
   stand_idle: DEFAULT_POSE,
 

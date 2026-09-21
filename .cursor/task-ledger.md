@@ -2,6 +2,65 @@
 
 > Agent 自动维护。只保留最新 10 条。状态：`待开始` | `进行中` | `部分完成` | `已完成` | `已取消`
 
+## REQ-20260921-02 · 2026-09-21
+
+**原话**：做一个 blog 的地方——每天在社媒发的功能模块内容这里也一并发，用户能看到怎么用
+
+**状态**：`进行中`
+
+**拆解**
+
+- [x] posts 表 + 迁移（slug/title/excerpt/content/关联产品/封面/发布时间）
+- [x] 轻量 Markdown 渲染器（标题/列表/图片/链接/强调，无原生 HTML）
+- [x] 公开页：`/blog` 列表 + `/blog/[slug]` 详情
+- [x] 后台：`/admin/posts` 列表 + 新建/编辑/发布开关/删除
+- [x] nav/footer 加博客入口；build + 冒烟
+
+**结果摘要**：博客区上线。/blog 卡片列表（日期+关联产品徽标+标签+封面），/blog/slug 详情页（Markdown 渲染 + 底部挂关联产品卡）。后台 /admin/posts 可写文/编辑/发布开关/删除，正文支持 ## 标题、列表、代码块、图片(/media/)、链接、**粗体**、==高亮==。种子带示例文 hello-on。冒烟：/blog、详情、后台三页全 200。注意：重启服务时若旧进程占 3100 需先 `kill $(ss -tlnp | grep 3100)` 查 PID。
+
+【追加·Oner 接入】按 Oner 侧方案落地：on-web `next.config.ts` 加 rewrites——`/oner/:path*`→`ONER_APP_URL`(默认:5173)、`/api/:path*`→`ONER_API_URL`(默认:3000)；修正其双 CSP 建议（同名头叠加取交集不生效，改为把 fonts.googleapis/gstatic、img https、blob、connect ws 并进唯一全局 CSP）；oner 产品 ctaHref→/oner 且详情页 wxEntry 与 CTA 可共存；.env.example + DEPLOY.md 同步。本机 Oner 未起，/oner 与 /api 返回 500 代理错=接线已通；联调需三进程（Oner 后端:3000、前端 `VITE_BASE=/oner/` :5173、on-web dev 换 3001 避 3000）。
+
+---
+
+## REQ-20260921-01 · 2026-09-21
+
+**原话**：你帮我看下 jev 的决断模型 对我的 workon 有什么优化建议 跟采纳 → 澄清后：调研 TypeSafe Jev 决策模型本身
+
+**状态**：`已完成`
+
+**拆解**
+
+- [x] 定位材料：`D:\AI\workon小模型训练\`（OPTIMIZATION_PLAN.md 场景三级识别方案 + REVIEW_WORKON.md 既有评审 + 11810 增强样本/9844 action_data/映射表等数据资产）
+- [x] 对照 workon 现有识别链路（decision.ts 融合决策层 / featureBuilder 9 特征 / XGBoost sidecar / APP_RULES 兜底 / recognition_log 影子记账）
+- [x] 输出评审结论 + 分级采纳清单（用户已确认范围：先不改代码，只要结论）
+- [-] 落地实施：用户选择「先不改」，待后续指令（候选已列：APP_RULES 补 ~30 进程 / decision.ts state 直通 bug 修复 / action_data 词表归一）
+
+**结果摘要**：【第一轮误读为本地方案，评审结论仍有效】可采纳=① APP_RULES 进程缺口 ~30 个（远程桌面/企业微信/邮箱/网盘/截图/虚拟机/阅读器等，jev 映射表可直接反哺规则层）② 顺带发现现存 bug——v3_real 模型输出已是 WorkState 标签，decision.ts 仍按 8 动作类查 MODEL_LABEL_TO_STATE，导致 model_first 下模型永不生效且 other 被误映射为 focus。不采纳=action_data 直接混训（词表 28/60/10 vs workon 9/11/3 不对齐）、MiniLM 场景模型（端侧偏重）、OCR/layout 进特征（隐私口径）、ActivityWatch 对接（产品偏离）。用户拍板「先不改」，代码未动。
+
+【第二轮·调研 Jev 本体】Jev = TypeSafe AI 的 System 1 决策模型（2026-09 公开，闭源云 API）：非自回归并行采样，输入 state + 并行问题，输出 Choice（≤255 选项+分布+置信度）/ Score（2-10 级评分）/ Noul（二元 P(yes)）；RLCD 校准训练让概率可建 fallback；定位「带语义的 if-else」。对 workon 的启发在输出协议而非换引擎：① 单标签→多路判定（Choice 状态 + Noul 会议/摸鱼 + Score 专注度）② sidecar 回传分布/熵，按 top1−top2 边际做三级 fallback（现为 0.75 一刀切）③ recognition_log 已有 prob+纠偏金标，可离线算校准曲线。不采纳：云 API（隐私+中文+RTT）、LLM 约束解码（XGBoost 够用）。代码未动。
+
+---
+
+## REQ-20260920-01 · 2026-09-20
+
+**原话**：ON 官网 V2（Demo.html + 升级提示词）从纯 HTML 改成可管理的系统——能管理、能浏览、不同地址访问不同产品、有登录认证、要安全
+
+**状态**：`进行中`
+
+**拆解**（已与用户确认：Next.js 全栈重写 / 管理员+访客注册 / 路径式 oner.uno/p/oner / 后台管产品信息+页面文案+图片+访问数据）
+
+- [x] 新建 Next.js 项目 `workonv0.2-6/on-web`（TS + App Router + SQLite）
+- [x] 移植 V2 Demo 视觉到首页（kernel/matrix/link/server/CTA/footer，保留 ICP 备案）
+- [x] `/p/[slug]` 产品页（DB 驱动，oner/workon/peton/ondesign）
+- [x] 认证：注册/登录/登出，scrypt 密码哈希 + httpOnly 会话 Cookie + 限流
+- [x] `/admin` 后台：产品管理 / 文案管理 / 图片上传 / 访问统计
+- [x] 安全头 + 输入校验 + 上传校验
+- [x] typecheck + build + 冒烟验证；写部署说明（nginx 反代 + HTTPS）
+
+**结果摘要**：`on-web/` Next.js 全栈站建成。前台=Demo V2 视觉全量移植且数据全部走 SQLite（blocks/products 表）；`/p/slug` 产品页 4 个已上线；注册/登录/改密 scrypt+DB 会话+IP 限流；`/admin` 仪表盘/产品/文案/媒体四个模块；安全头(CSP/HSTS/nosniff)+中间件路由守卫+requireAdmin 双保险；媒体按白名单路由回源。tsc ✅ build ✅；HTTP 冒烟：全路由状态码、未登录跳 /login、普通用户进 /admin 被弹回 /、action 管线 303+清 Cookie 均实测通过。部署文档 deploy/DEPLOY.md + oner.uno.conf（反代 127.0.0.1:3000 + 双层限流）。剩：真机走一遍注册→登录→后台改文案（预览已开 :3100）。
+
+---
+
 ## REQ-20260915-13 · 2026-09-15
 
 **原话**：找不到完成计划的入口，只能绕到主线-查看-对接里点
@@ -119,59 +178,5 @@
 - [x] typecheck ✅，渲染层 HMR 生效
 
 **结果摘要**：项目优先级成为全局排序因子——凡出现项目列表/计划列表的地方，高优先级项目及其任务一律浮前并带颜色标记。
-
----
-
-## REQ-20260915-06 · 2026-09-15
-
-**原话**：主线的项目优先级也可以增加一个；拆解任务后点「排入今日」没有效果
-
-**状态**：`已完成`
-
-**拆解**
-
-- [x] 排入今日诊断：链路本身正常（savePlan→plan-updated 广播→首页/计划页刷新），但反馈只有 3s flash 且任务行无已排标记 → 观感"没效果"
-- [x] ProjectModal 加载今日计划构建 pushedIds；已排任务行常驻「✓ 已排今日」徽标替代按钮；成功后 flash 提示「去计划页可见」
-- [x] 主线行头加优先级 chip（▲高/●中/▽低），点击循环切换并 saveProject 落库——不用进弹窗
-- [x] typecheck ✅，渲染层 HMR 生效
-
-**结果摘要**：排入今日后任务行留常驻标记不再"点了像没点"；主线列表可直接看/改优先级。
-
----
-
-## REQ-20260915-05 · 2026-09-15
-
-**原话**：悬浮窗 full 态确认卡不能自动扩充高度，按钮拖不出来
-
-**状态**：`已完成`
-
-**拆解**
-
-- [x] 定位：动态高度 effect 里 `mode==='full'` 直接 return（原作者怕抽动刻意跳过）→ 确认卡被 overflow-hidden 裁掉
-- [x] full 态改实测溢出撑高：fullRootRef + scrollHeight-clientHeight 差值 → widgetResizeTransient，只增不减尊重手拖尺寸，上限 900
-- [x] windows.ts resizeWidgetWindow 高度夹到工作区（防向上撑到顶后底边溢出屏幕）
-- [x] typecheck ✅，重启 dev 生效
-
-**结果摘要**：full 态确认/通知出现时按实测内容自动撑高，确认按钮不再被裁；永不自动缩小。
-
----
-
-## REQ-20260915-04 · 2026-09-15
-
-**原话**：反复确认一定不要重复，尤其程序名变了但还是一个程序的情况
-
-**状态**：`已完成`
-
-**拆解**
-
-- [x] 新增 canonAppKey 程序归一键（appDisplayName.ts）：别名表折叠 weixin≡wechat≡微信、idea64≡ideaIU、code≡vscode（补 code→VS Code 映射）
-- [x] 确认指纹换归一键：unattr 指纹 pathKey→`unattr:日:程序键`（同程序换窗口标题不再换新题）；drift 指纹→`drift:项目:日`（同项目一天最多确认一次）
-- [x] unattrAppSet 按归一键去重（列表不再出现 weixin+wechat 两条）
-- [x] appNameMatch 先归一键精确命中再 fuzzyMatch 兜底（绑了 weixin.exe 跑 WeChat.exe 也命中）
-- [x] 作业链路 trackAppSwitch/isKnownChain/matchKnownChain/saveWorkChain 全按归一键比较
-- [x] 入队即写 confirmMemory 'asked'：忽略的问题跨重启也不重弹
-- [x] typecheck ✅，重启 dev 生效
-
-**结果摘要**：「同程序不同名」全链路归一——绑定匹配、确认指纹、作业链路都按 canonAppKey 判定；问过的题（答过/忽略）当天不重复弹。
 
 ---

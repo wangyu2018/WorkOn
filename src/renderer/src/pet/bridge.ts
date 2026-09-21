@@ -134,8 +134,7 @@ export class Bridge {
   private onPresence(p: PresenceSnapshot): void {
     this.lastWorkState = p.state
     this.lastPresence = p
-    // 前台窗口矩形 → 漫游避让（漫游时不在用户正在用的窗口上踩来踩去）
-    this.deps.spatial.setAvoidRect(p.winRect ?? null)
+    // 前台窗口避让已卸载（排障模式：漫游/避让整体关闭）
     const energy = this.lastPet?.energy ?? 1
     let target = this.mapWorkState(p.state)
 
@@ -145,34 +144,14 @@ export class Bridge {
     }
     this.scheduleTransition(target)
 
-    // 状态灯 + 粒子情绪
-    const mood: StatusMood =
-      p.state === 'focus'
-        ? 'focus'
-        : p.state === 'slack' || p.state === 'relax'
-          ? 'slack'
-          : p.state === 'break' || p.state === 'lunch' || p.state === 'away'
-            ? 'rest'
-            : 'idle'
-    this.deps.lighting.setMood(mood)
-    this.deps.particles.setMood(
-      p.state === 'away' ? 'sleeping' : p.state === 'relax' || p.state === 'break' ? 'relax' : 'normal'
-    )
+    // 状态灯/粒子情绪已卸载（排障模式：光照恒定、粒子关闭）
   }
 
   private onPet(pet: PetState): void {
     const prev = this.lastPet
     this.lastPet = pet
 
-    // PAD → 表情映射：P→嘴笑程度/腮红，A→身体摆动/眼睛睁大，D→眉毛高度
-    const e = cloneExpression(NEUTRAL_EXPRESSION)
-    e.smile = 0.25 + pet.emotion.pleasure * 0.4
-    e.blush = Math.max(0.1, 0.25 + pet.emotion.pleasure * 0.35)
-    e.eyeWide = Math.max(0, pet.emotion.arousal) * 0.4
-    // 注意：不写 eyeOpen——PAD 情绪无权覆盖眼睑，否则睡觉/困倦姿态的闭眼会被周期性睁开
-    e.browRaise = pet.emotion.dominance * 0.5
-    // 仅在无姿态表情覆盖时平滑跟随（避免与姿态表情打架，权重 0.5 近似）
-    this.deps.anim.setExpression(e, 0.5)
+    // PAD → 表情映射已卸载（排障模式）：表情恒为中性睁眼，仅剩明确脉冲（点击/AI情绪标签）
     if (PET_FEATURES.microLife) this.deps.micro.arousal = Math.abs(pet.emotion.arousal)
 
     // 开心跃升（pleasure 快速升到 0.6+）→ 挥一次手

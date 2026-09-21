@@ -151,8 +151,8 @@ export class HitTest {
       this.hitStreak = 0
     }
     if (this.cursorState !== 'grabbing') {
-      // 迟滞加强（3 帧进 / 6 帧出）：边缘命中抖动不再引发光标抽搐
-      if (r.hit && this.cursorState === 'hidden' && this.hitStreak >= 3) {
+      // 迟滞（2 帧进 / 6 帧出）：快速划过也能抓住，出仍要求稳定离开
+      if (r.hit && this.cursorState === 'hidden' && this.hitStreak >= 2) {
         this.setCursorState('grab')
       } else if (!r.hit && this.cursorState === 'grab' && this.missStreak >= 6) {
         this.setCursorState('hidden')
