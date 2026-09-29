@@ -2,11 +2,62 @@
 
 > Agent 自动维护。只保留最新 10 条。状态：`待开始` | `进行中` | `部分完成` | `已完成` | `已取消`
 
+## REQ-20260922-03 · 2026-09-22
+
+**原话**：整个浅色模式 跟深色模式
+
+**状态**：`已完成`
+
+**拆解**
+
+- [x] globals.css 抽出浅色变量组（[data-theme=light] 覆盖 + 硬编码色改走变量）
+- [x] 主题切换组件（cookie 持久化 + 跟随系统兜底）— 用 cookie+SSR 而非 localStorage+内联脚本，无闪烁且不破坏 CSP
+- [x] nav 接入开关；typecheck+build+冒烟两态渲染
+
+**结果摘要**：全站深浅色完成。机制：layout 读 `theme` cookie → `<html data-theme>` SSR 直出（无闪烁、零内联脚本、CSP 不破）；未选过时按 `prefers-color-scheme` 跟随系统（媒体查询 `:root:not([data-theme])` 兜底）。新增变量 --nav-bg/--hero-bg/--grid-line/--veil/--border-strong/--card-shadow，浅色下卡片带柔和投影、产品主题色整体加深一档保可读性；设备截图框保留深色边框（物理真实感）。切换组件 theme-toggle.tsx 写 cookie+即时翻转 data-theme，图标由 CSS 按主题显隐（日/月）。验证：无 cookie→无属性跟系统、light/dark cookie→SSR 直出正确属性、tsc/build 通过。
+
+---
+
+## REQ-20260922-02 · 2026-09-22
+
+**原话**：另外一个模型做的主页很丑。功能介绍要带上产品的核心图（截图/mockup）和交互逻辑，类似截图里那种移动端展示风格或其他风格
+
+**状态**：`已完成`
+
+**拆解**
+
+- [x] products 表 + shots（截图:src/caption/device）+ steps（交互流程）字段与迁移
+- [x] Shot 组件：手机框/桌面窗框 + 无图时 CSS mock 屏幕；详情页「界面一览」「使用流程」两区
+- [x] 首页产品卡加截图预览
+- [x] 后台产品表单可编辑 shots/steps（JSON）
+- [x] seed/存量数据补示例 steps+shots；typecheck+build+冒烟
+
+**结果摘要**：产品展示升级完成。products 加 shots/steps 两 JSON 列（迁移 0002，已手工执行并补记 __drizzle_migrations 防启动重跑）。新组件 components/shot.tsx：手机框（圆角+胶囊刘海）/桌面窗框（三点栏）双形态，src 为空时渲染主题色 CSS mock 屏（图标+骨架条）。详情页新增「界面一览」shot-grid、「使用流程」flow-steps（自动编号）；首页 p-card 顶部加 168px 截图预览条（渐变遮罩）。后台产品表单加两个 JSON 编辑域（shots 校验媒体文件名白名单）。seed 4 产品全部补齐示例 steps+mock shots，存量库已回填。tsc✅ build✅ /p/oner 与首页渲染验证通过。换真截图：/admin/media 上传→产品 shots 的 src 填文件名。
+
+---
+
+## REQ-20260922-01 · 2026-09-22
+
+**原话**：admin / OnAdmin2026test → /adm 用这个用户登录不进去呢
+
+**状态**：`已完成`
+
+**拆解**
+
+- [x] 定位根因：`next start` 生产模式下会话 Cookie 恒带 `Secure`，本地 `http://localhost:3100` 浏览器拒存 → 登录成功但会话丢失
+- [x] 修复：`src/lib/auth.ts` `secure` 改为按请求协议判定（x-forwarded-proto / origin 为 https 才 true），本地 http 放行、线上 nginx 反代 HTTPS 自动恢复 Secure
+- [x] 重建 + 重启 :3100，验证：密码哈希校验 MATCH、手工造会话行带 cookie 访问 /admin /admin/products 均 200、无 cookie 307 回登录页
+- [x] 清理测试会话行
+
+**结果摘要**：登录失败根因=Secure Cookie 在 http 下被浏览器丢弃（非密码错误，密码校验通过）。已改协议自适应并重启生效。服务器端会话+中间件+权限链全通。浏览器实际点击登录待用户复测；注意如浏览器存了旧的坏 cookie 可先清 localhost 站点数据。
+
+---
+
 ## REQ-20260921-02 · 2026-09-21
 
 **原话**：做一个 blog 的地方——每天在社媒发的功能模块内容这里也一并发，用户能看到怎么用
 
-**状态**：`进行中`
+**状态**：`已完成`
 
 **拆解**
 

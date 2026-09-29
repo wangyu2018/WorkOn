@@ -575,6 +575,84 @@ async function boot(): Promise<void> {
   `
   document.body.appendChild(actions)
 
+  // ── 桌面控制栏：悬停角色时浮现，聚合常用操作（青瓷风格） ──
+  const ctlBar = document.createElement('div')
+  ctlBar.id = 'pet-ctl-bar'
+  ctlBar.innerHTML = `
+    <button data-ctl="chat" title="和姵儿聊天">💬</button>
+    <button data-ctl="dock" title="收到任务栏，托盘唤回">🏠</button>
+    <button data-ctl="spin" title="转一圈看看">🔄</button>
+    <button data-ctl="lie" title="趴在任务栏上，只露头">😪</button>
+    <button data-ctl="hide" title="先藏起来">👁️</button>
+    <button data-ctl="settings" title="桌搭设置">⚙️</button>
+  `
+  document.body.appendChild(ctlBar)
+
+  let ctlBarVisible = false
+  const showCtlBar = (): void => {
+    if (ctlBarVisible) return
+    ctlBarVisible = true
+    const p = spatial.position
+    const scale = spatial.currentScale
+    const barW = ctlBar.offsetWidth || 220
+    const x = Math.max(8, Math.min(window.innerWidth - barW - 8, p.x - barW / 2))
+    const y = Math.min(window.innerHeight - 44, p.y + 8)
+    ctlBar.style.left = `${x}px`
+    ctlBar.style.top = `${y}px`
+    ctlBar.style.display = 'flex'
+    requestAnimationFrame(() => ctlBar.classList.add('open'))
+  }
+  const hideCtlBar = (): void => {
+    ctlBarVisible = false
+    ctlBar.classList.remove('open')
+    window.setTimeout(() => { if (!ctlBarVisible) ctlBar.style.display = 'none' }, 200)
+  }
+
+  ctlBar.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('[data-ctl]') as HTMLElement | null
+    if (!btn) return
+    const action = btn.dataset.ctl
+    spatial.noteInteraction()
+    resetIdle()
+    if (action === 'chat' && PET_FEATURES.chat) {
+      // 打开右键聊天输入框
+      const evt = new MouseEvent('contextmenu', { clientX: spatial.position.x, clientY: spatial.position.y - 120 })
+      window.dispatchEvent(evt)
+    } else if (action === 'dock') {
+      spatial.dock()
+      bubble.show('收好啦，托盘唤我~', 2, 'character')
+      window.setTimeout(() => window.api?.petHide?.(), 950)
+    } else if (action === 'spin') {
+      // 原地转一圈（1.6rad/s × 4s ≈ 一整圈）
+      const dur = 4
+      let elapsed = 0
+      const spinStep = (dt: number): void => {
+        elapsed += dt
+        spatial.rotateBy(1.6 * dt)
+        if (elapsed < dur) stage.onFrame(spinStep)
+      }
+      stage.onFrame(spinStep)
+    } else if (action === 'lie') {
+      // 趴任务栏：切到 sleeping 空间态（peek 锚点=脚底沉入屏幕下方，露头+肩），
+      // 睡姿 + 闭眼，不打扰也不失踪；点角色唤醒
+      spatial.transitionTo('sleeping')
+      bubble.show('我先趴一会儿…', 2.5, 'character')
+      resetIdle()
+    } else if (action === 'hide') {
+      bubble.show('先藏起来，托盘唤我~', 2, 'character')
+      window.setTimeout(() => window.api?.petHide?.(), 800)
+    } else if (action === 'settings') {
+      openMain()
+    }
+    hideCtlBar()
+  })
+
+  const openMain = (): void => {
+    window.api?.openMain?.()
+    // 主窗打开后切到桌搭视图
+    setTimeout(() => { try { window.api?.setSettings?.({} as never) } catch { /* ignore */ } }, 800)
+  }
+
   const hideSaybox = (): void => {
     saybox.classList.remove('open')
     actions.classList.remove('open')

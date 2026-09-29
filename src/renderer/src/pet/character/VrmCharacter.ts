@@ -119,6 +119,10 @@ class VrmFace {
       this.blinkOverride = -1
     }
     open *= 1 + e.eyeWide * 0.18 - e.squint * 0.25
+    // 最低睁眼保底：非主动眨眼时眼睑不低于 70%（防 happy/relaxed morph 残留压眼）
+    if (this.blinkOverride < 0) {
+      open = Math.max(open, 0.7)
+    }
     this.set('blink', 1 - THREE.MathUtils.clamp(open, 0, 1))
     // 门限映射：动漫模型的 happy 表情自带笑眼（眯眼/闭眼）。默认微扬（smile 0.25）
     // 不应触发——否则角色常驻眯眼像在打瞌睡。只有明确的笑容（脉冲推高）才点亮笑眼。

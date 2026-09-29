@@ -1249,7 +1249,7 @@ export default function ProfileView() {
   const selMeta = PERSONA_LAYERS.find((l) => l.key === sel)
 
   return (
-    <div className="view-enter flex h-full flex-col gap-4 overflow-hidden">
+    <div className="view-enter flex min-h-full flex-col gap-4 overflow-y-auto">
       {/* 顶部摘要卡 */}
       <header className="glass-card hoverable anim-fade-up shrink-0">
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3">

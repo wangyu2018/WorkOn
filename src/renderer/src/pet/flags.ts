@@ -17,8 +17,10 @@ export const PET_FEATURES = {
   weather: false,
   /** 昼夜光照相位（关=恒定中性光） */
   dayNight: false,
-  /** 微行为整包（呼吸/眨眼/凝视/挥手机/耳抖/铃铛/行走摆动） */
-  microLife: false,
+  /** 微行为整包：眨眼/耳抖/呼吸起伏/挥手触发/偶发小动作/铃铛（走路腿摆随漫游走） */
+  microLife: true,
+  /** 眼神跟随鼠标（独立开关，关=视线朝前不动） */
+  microGaze: true,
   /** 场景闲聊（20s 评估的主动说话） */
   chatter: false,
   /** 主进程关怀/通知消息气泡（bus.message） */
