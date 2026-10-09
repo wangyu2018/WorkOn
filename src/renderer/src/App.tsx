@@ -28,6 +28,7 @@ import { PasteInboxModal } from './components/PasteInboxModal'
 import { usePerspective } from './lib/usePerspective'
 import { PERSPECTIVE_NAV } from './lib/perspective'
 import { PERSPECTIVES, PERSPECTIVE_META } from '@shared/perspective'
+import V10Surface from './v10/V10Surface'
 
 interface NavItem {
   key: ViewKey
@@ -271,6 +272,18 @@ export default function App() {
   // memo 化当前视图：presence 每 2s 更新时不再整页重渲染（修复时间轴/星图卡顿）
   const ActiveView = useMemo(() => memo(VIEWS[view]), [view])
 
+  // v10「一面一角色」新表面：URL 参数 ?v10=1 开（写入 localStorage 持久），
+  // ?v10=0 关；开关切换即整面替换，旧版 16 视图结构零改动（docs/UI-DESIGN-SPEC-v10.md）
+  const [v10Surface, setV10Surface] = useState((): boolean => {
+    try {
+      const q = new URLSearchParams(window.location.search).get('v10')
+      if (q === '1') { window.localStorage.setItem('v10surface', '1'); return true }
+      if (q === '0') { window.localStorage.removeItem('v10surface'); return false }
+      return window.localStorage.getItem('v10surface') === '1'
+    } catch { return false }
+  })
+  if (v10Surface) return <V10Surface onExit={() => setV10Surface(false)} />
+
   return (
     <div className="flex h-screen w-screen overflow-hidden text-slate-200" style={{ background: 'var(--bg-deep)' }}>
       <PasteInboxModal open={pasteInboxOpen} onClose={() => setPasteInboxOpen(false)} />
@@ -378,6 +391,17 @@ export default function App() {
 
         <div className="flex-1" />
 
+        {/* v10「一面一角色」新表面入口（数据互通，随时切回） */}
+        <button
+          className="mb-1 w-full rounded-lg border border-white/10 px-3 py-1.5 text-left text-[11.5px] text-zinc-400 transition hover:bg-white/5 hover:text-zinc-200"
+          onClick={() => {
+            window.localStorage.setItem('v10surface', '1')
+            window.location.reload()
+          }}
+          title="切换到 v10 一面一角色版面（左问右表）"
+        >
+          ✦ 体验 v10 版面
+        </button>
         <NavButton item={{ key: 'settings', label: '设置', icon: 'settings' }} active={view === 'settings'} onClick={() => setView('settings')} />
       </aside>
 

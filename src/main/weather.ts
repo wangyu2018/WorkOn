@@ -2,7 +2,7 @@
  * 天气模块（v3.4）：基于和风天气（QWeather）按城市名查询，本地维护城市，不采集经纬度
  *
  * 设计：
- *  - 用户需在设置里填：城市名（settings.city）+ 和风 API Key（settings.weatherApiKey）+ API Host（settings.weatherApiHost）
+ *  - 城市：用户在设置里填（settings.city）；API Key：用户自填优先，未填回退内置混淆 key（builtinKeys.ts）
  *  - 新版和风 API：每个账号有独立 host（形如 xxxxx.qweatherapi.com），认证用请求头 X-QW-Api-Key
  *  - 城市名 → 城市搜索 API 拿 LocationID → 实时/逐小时/3天预报 API
  *  - 结果本地缓存 30 分钟，避免频繁请求（和风免费版有 QPS 限制）
@@ -10,6 +10,7 @@
  *  - 提供三档数据：实时（getWeather）、今晚+明天摘要（getWeatherBrief）、未来逐小时（getWeatherNextHours）
  */
 import { getSettings } from './settings'
+import { builtinWeatherKey } from './builtinKeys'
 
 /** 单个时间点的天气（和风 24h 预报每 1 小时一条） */
 export interface WeatherHour {
@@ -146,7 +147,8 @@ function parseQweather(nowJson: any, hourlyJson: any, dailyJson: any, city: stri
 export async function getWeather(city?: string): Promise<WeatherInfo | { error: string }> {
   const s = getSettings()
   const target = (city ?? s.city ?? '').trim()
-  const key = (s.weatherApiKey ?? '').trim()
+  // 用户自填 key 优先；未填时回退内置混淆 key（防包体明文扫描，见 builtinKeys.ts）
+  const key = (s.weatherApiKey ?? '').trim() || builtinWeatherKey()
   const host = (s.weatherApiHost ?? '').trim().replace(/^https?:\/\//, '')
   if (!target) {
     return { error: '未设置城市，请在「我的位置」中填写城市名' }

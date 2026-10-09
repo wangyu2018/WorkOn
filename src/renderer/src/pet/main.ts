@@ -371,7 +371,10 @@ async function boot(): Promise<void> {
         window.clearTimeout(ctlShowTimer)
         ctlShowTimer = 0
       }
-      const br = ctlBar.getBoundingClientRect()
+      // ctlBar 在下方才声明（TDZ）：按 id 惰性现查，天然晚绑定
+      const bar = document.getElementById('pet-ctl-bar')
+      if (!bar) return
+      const br = bar.getBoundingClientRect()
       const onBar =
         e.clientX >= br.left && e.clientX <= br.right &&
         e.clientY >= br.top && e.clientY <= br.bottom

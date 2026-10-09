@@ -1,0 +1,306 @@
+/* ───────────────────────────────────────────────────────────
+   WorkOn v10「一面一角色」· 视觉 tokens（继承 v7 规格 §1）
+   纸与墨的浅色体系；与旧版深色共存，作用域全部收敛在 .v10 下
+   ─────────────────────────────────────────────────────────── */
+.v10 {
+  /* 纸 */
+  --paper: #F7F4EE;
+  --paper-2: #F1EDE3;
+  --hairline: #E2DCCF;
+  --hairline-2: #CFC8B6;
+  /* 青瓷（已确认的物） */
+  --celadon-1: #E9F1EC;
+  --celadon-2: #E2ECE5;
+  --celadon-3: #DAE7DF;
+  /* 墨 */
+  --ink: #2B2B28;
+  --ink-2: #6B675D;
+  --ink-3: #A39D8F;
+  /* 琥珀（需要你看） */
+  --amber: #D98E2B;
+  --amber-bg: #F6EBD6;
+  /* 青（数据/确认） */
+  --teal: #0FB5A4;
+  --teal-ink: #0A7C72;
+  /* 灵（AI 生成的活物） */
+  --aura: linear-gradient(135deg, #7C6FF0, #0FB5A4);
+  --r-lg: 14px;
+  --r-md: 10px;
+  --r-sm: 6px;
+  --font-ui: 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif;
+  --font-num: 'Songti SC', 'Noto Serif SC', serif;
+
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+/* ── 左栏：问（流） ─────────────────────────────── */
+.v10-ask {
+  width: 360px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--hairline);
+  background: var(--paper);
+}
+.v10-ask-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 18px 10px;
+}
+/* 你的话 = 2px 墨竖线引文，无气泡 */
+.v10-msg-user {
+  border-left: 2px solid var(--ink-3);
+  padding: 2px 0 2px 12px;
+  margin: 10px 0;
+  color: var(--ink);
+  line-height: 1.65;
+}
+/* AI 答 = ◇ aura kick + prose */
+.v10-msg-ai {
+  margin: 10px 0;
+  line-height: 1.75;
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+.v10-msg-ai::before {
+  content: '◇';
+  display: inline-block;
+  background: var(--aura);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-right: 7px;
+  font-size: 11px;
+}
+.v10-ask-inputbar {
+  padding: 10px 14px 14px;
+}
+.v10-chiprow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.v10-chip {
+  border: none;
+  border-radius: 999px;
+  background: var(--amber-bg);
+  color: var(--amber);
+  font-size: 11.5px;
+  padding: 4px 11px;
+  cursor: pointer;
+  font-family: var(--font-ui);
+}
+.v10-chip:hover { filter: brightness(0.96); }
+.v10-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  outline: none;
+  border-radius: var(--r-md);
+  background: var(--celadon-1);
+  padding: 10px 13px;
+  font-size: 13px;
+  color: var(--ink);
+  font-family: var(--font-ui);
+  resize: none;
+}
+.v10-input:focus { background: var(--celadon-2); }
+.v10-input::placeholder { color: var(--ink-3); }
+
+/* ── 右栏：表（活页） ───────────────────────────── */
+.v10-paper {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  background: var(--paper);
+}
+/* 报头：唯一永久物，sticky 双态 */
+.v10-masthead {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--celadon-3);
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  padding: 14px 26px 12px;
+  box-shadow: 0 1px 0 var(--hairline-2);
+}
+.v10-masthead .mh-title {
+  font-family: var(--font-num);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.v10-masthead .mh-sub {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mh-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--teal);
+  display: inline-block;
+}
+.mh-dot.warn { background: var(--amber); }
+
+/* 折上：你的版面 */
+.v10-fold-above {
+  padding: 20px 26px 8px;
+}
+.v10-fold-label {
+  font-size: 10.5px;
+  color: var(--ink-3);
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+}
+
+/* 栏目三段式：无框，发丝线分隔 */
+.v10-block {
+  padding: 12px 0 14px;
+  border-bottom: 1px solid var(--hairline);
+}
+.v10-block-kick {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-bottom: 8px;
+}
+.v10-block-kick .aura-mark {
+  background: var(--aura);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.v10-block-kick .acts { margin-left: auto; display: flex; gap: 8px; }
+.v10-block-kick button {
+  border: none; background: none; color: var(--ink-3);
+  font-size: 11px; cursor: pointer; padding: 0; font-family: var(--font-ui);
+}
+.v10-block-kick button:hover { color: var(--teal-ink); }
+.v10-block-hero {
+  font-family: var(--font-num);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.v10-block-hero small { font-size: 13px; color: var(--ink-2); font-weight: 400; margin-left: 6px; }
+.v10-block-meta {
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin-top: 6px;
+}
+
+/* 待办行 */
+.v10-plan-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 2px;
+  border-bottom: 1px solid var(--hairline);
+}
+.v10-plan-row:last-child { border-bottom: none; }
+.v10-plan-check {
+  width: 15px; height: 15px;
+  border: 1.5px dashed var(--amber);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+  flex: none;
+  padding: 0;
+}
+.v10-plan-check.done { border-style: solid; border-color: var(--teal); background: var(--teal); }
+.v10-plan-check.done::after { content: '✓'; color: #fff; font-size: 10px; display: block; text-align: center; line-height: 13px; }
+.v10-plan-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v10-plan-title.done { color: var(--ink-3); text-decoration: line-through; }
+.v10-plan-time { font-family: var(--font-num); font-size: 11.5px; color: var(--ink-2); flex: none; }
+
+/* 时间线（轨道段行：共享竖轨 + 彩点） */
+.v10-tl-row {
+  display: flex;
+  gap: 12px;
+  padding: 5px 0;
+  align-items: baseline;
+}
+.v10-tl-time { font-family: var(--font-num); font-size: 11px; color: var(--ink-2); width: 72px; flex: none; }
+.v10-tl-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex: none;
+  position: relative;
+  top: -0.5px;
+}
+.v10-tl-app { font-size: 12px; color: var(--ink); min-width: 88px; flex: none; }
+.v10-tl-title { font-size: 11.5px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v10-tl-row.glance { opacity: 0.45; }
+
+/* 折线 */
+.v10-foldline {
+  margin: 18px 26px 4px;
+  border-top: 1.5px dashed var(--hairline-2);
+  position: relative;
+}
+.v10-foldline .fl-label {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--paper);
+  padding: 0 12px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  letter-spacing: 2px;
+  white-space: nowrap;
+}
+
+/* 折下：新落推送区（TTL 视觉演示） */
+.v10-fold-below { padding: 14px 26px 40px; }
+.v10-aura-card {
+  border-radius: var(--r-md);
+  padding: 12px 16px;
+  background: var(--paper-2);
+  border-left: 3px solid transparent;
+  border-image: linear-gradient(180deg, #7C6FF0, #0FB5A4) 0 0 0 3;
+  margin-bottom: 10px;
+}
+.v10-aura-card .ttl {
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin-top: 6px;
+  display: flex;
+  justify-content: space-between;
+}
+.ttl-bar {
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--amber) 62%, var(--hairline) 62%);
+  margin-top: 5px;
+}
+
+/* 滚动条（纸面收敛样式） */
+.v10-ask-scroll::-webkit-scrollbar,
+.v10-paper::-webkit-scrollbar { width: 8px; }
+.v10-ask-scroll::-webkit-scrollbar-thumb,
+.v10-paper::-webkit-scrollbar-thumb {
+  background: var(--hairline-2);
+  border-radius: 4px;
+  border: 2px solid var(--paper);
+}
+
+/* 加载/空态 */
+.v10-empty {
+  color: var(--ink-3);
+  font-size: 12px;
+  padding: 8px 0;
+}

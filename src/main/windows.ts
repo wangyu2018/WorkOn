@@ -321,7 +321,9 @@ function appIcon(): Electron.NativeImage | undefined {
 }
 
 function rendererUrl(page: string): string {
-  return `${process.env.ELECTRON_RENDERER_URL}/${page}.html`
+  // WORKON_V10=1 时主窗直接带 v10 参数启动（预览/截图用；日常入口在旧版侧栏「体验 v10 版面」）
+  const v10 = process.env.WORKON_V10 === '1' && page === 'index' ? '?v10=1' : ''
+  return `${process.env.ELECTRON_RENDERER_URL}/${page}.html${v10}`
 }
 
 function rendererFile(page: string): string {
