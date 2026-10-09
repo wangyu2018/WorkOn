@@ -73,15 +73,14 @@
 
 ## 8. ML 训练线 / jev 调研
 
-> 📌 **完整方案见 `docs/JEV-PLAN.md`**（协议层 + 四阶段路线 + LLM 融合 + 不做清单），本节只留执行项。
+> 📌 **完整方案见 `docs/JEV-PLAN.md`**；**2026-10-09 重大更新：jev 模型已由 DeepSeek 侧训好并交付**（`~/Documents/DeepSeekHarness/workon-jev/`，适配器包 `workon-jev-model-adapter.zip`），本方案 P0-P3 大部分已被超越，以交付物为准。
 
-- 📌 **已拍板**：TypeSafe 云 API 不进产品；采「输出协议 + 校准方法论 + 小模型形态」
-- ✅ 两轮调研（2026-09-21 账本）+ 开源复刻谱系梳理（2026-10-09）
-- **P0 修地基**：⬜ 修 decision.ts MODEL_LABEL_TO_STATE 8/13 错位 bug（见 §2）｜⬜ top-K 分布全链路回传｜⬜ recognition_log 补 top1/top2/margin 字段
-- **P1 校准**：⬜ 13 态重训（mac 可做）｜⬜ calibration.py 可靠性图 + ECE｜⬜ 曲线定 m1/m2 三级 fallback（shadow 先行）
-- **P2 语义头**：⬜ 多语种小编码器 A/B（MiniLM→Laya，中文标题刚需；planAnalysis 词库是首个替代目标）
-- **P3 Jev 复刻**：⬜ NanoJev 0.6B + 纠正账本 LoRA（或 LLM2Jev 免训练 4B，L2 档用户）——纠正账本攒够后启动
-- ⬜ （可选·离线）TypeSafe 云 API 当标注 oracle 批测中文样本，结论只进 EXPERIMENTS.md
+- ✅ **模型已训好**：Qwen3-0.6B + LoRA(r16)，5 题（scene_l1/l2/l3 + action + work_state），真实测试集 0.953 / ECE 0.035，逐题温度校准，ONNX int8 756MB 单题 196ms，与 torch 决策 100% 一致
+- ✅ 对照结论：XGBoost 准确率更高（0.990，33 组合查表到顶）但 Jev macro-F1 略高且**能吃标题/OCR 文本 + 答场景三级**——分工不是替换
+- ✅ WorkOn 接入 4 文件补丁已备（stateMeta 修 bug / modelClient 换 sidecar / types / decision 场景旁路），在 DeepSeekHarness/workon-jev/integration/
+- ⬜ 按 v0.9 节奏上线：shadow 只记账 → 修 MODEL_LABEL_TO_STATE 后 model_first → 场景题先只做展示（合成数据对措辞敏感，测试集 0.951 是分布内成绩）
+- ⬜ 数据飞轮：recognition_log 补 7 列（jev_top3/llm_label/llm_conf/source/user_from/user_to/context_hash）；source 权重分层；Jev 高置信输出**不训自己**
+- ⬜ 上线三道坎：模型随包分发（extraResources）/ 推理去 Python 化（onnxruntime-node + TS 移植 ~500 行）/ 诊断页+导出诊断包
 
 ## 9. 工程与环境
 
@@ -92,8 +91,20 @@
 - ⬜ 从 Windows 带资产：on-web 仓库、`D:\AI\workon小模型训练\`（OPTIMIZATION_PLAN / 11810 增强样本 / 映射表）
 - ⬜ MediaPipe wasm + 姿态模型补齐（不入库：`@mediapipe/tasks-vision/wasm` → `src/renderer/public/mediapipe/wasm/`；pose_landmarker_lite.task）
 
+## 10. 产品重做线（2026-10-09 立，前端+后端都要改，不急但方向已定）
+
+> 设计资产在 `~/AI/workon/`（v7 index.html 原型 + DESIGN.md + map* 能力图 + repo-docs/ v8/v9/MODULE-v9.1/SIGNALS）；jev 模型资产在 `~/Documents/DeepSeekHarness/workon-jev/`。
+
+- 📌 目标四条（用户原话）：一人一面 · 简单入手 · 个性化 · 辅助 AI agent 能力
+- 📌 竞品锚点：Dayflow / Screenpipe / Reyn（AI 工作日志赛道），比较结论见 2026-10-09 会话
+- ⬜ 设计裁决：v7「左问右表」与 v9「对话即界面」统一（建议：首启=v9 零卡片，成长=v7 活页，底座=v8/9.1 模块注册表）
+- ⬜ 新前端：从 index.html v7 原型 → React 单表面实现（16 视图坍缩为栏目类型）
+- ⬜ 后端改造：L1-L3 引擎保留；L5 按新交互契约重写（视图路由→栏目数据契约）；Ollama/LM Studio 本地模型适配
+- ⬜ signals 层按文档顺序：音乐 → Everything → 文件夹 → 天气 → 消息 → 会议
+
 ---
 
 ## 更新日志
 
+- **2026-10-09（晚）** 两条重大状态入账：① jev 模型已训好交付（DeepSeek 侧，Qwen3-0.6B+LoRA，真实集 0.953/ECE 0.035，含接入补丁）② 产品重做线立项（前端 v7/v9 统一 + 后端 L5 重写），设计资产在 ~/AI/workon/。竞品比较完成（Dayflow/Screenpipe/Reyn）。
 - **2026-10-09** 环境迁移完成；任务板建立（合并交接文档 §8 + Cursor 账本 + jev 调研线 + 工程项）；mac 试跑通过（typecheck ✅ / dev 冒烟 ✅，Windows 探针报错被兜住）；electron mac 安装坑修法存档。
