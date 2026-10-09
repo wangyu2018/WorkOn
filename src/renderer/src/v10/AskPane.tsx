@@ -1,9 +1,10 @@
 /**
- * 左栏「问」：对话流（无气泡排版）+ 建议 chips + 输入场
+ * 左栏「问」：对话流（无气泡排版）+ 建议 chips + 输入场 + 对象芯片（块进化）
  * 你的话 = 2px 墨竖线引文；AI = ◇ aura kick + prose（v10 §3.2）
  * 快捷回复协议（v10 §7）：带选项的消息渲染 ①② 大按钮，输入框回数字即答
+ * 块进化（v10 §4.C）：右页组件拖入输入场 → 挂对象芯片 → 一句话调参数
  */
-import { useState, type RefObject } from 'react'
+import { useState, type RefObject, type DragEvent } from 'react'
 import type { PresenceSnapshot, WorkState } from '@shared/types'
 import { STATE_LABEL } from '@shared/stateMeta'
 
@@ -16,20 +17,45 @@ export interface ChatMsg {
   picked?: string
 }
 
+/** 块进化对象芯片：从右页拖入的组件描述 */
+export interface ObjectChipData {
+  blockKey: string
+  label: string
+  current: string
+}
+
 export function AskPane(props: {
   chat: ChatMsg[]
   asking: boolean
   onSend: (text: string) => void
   scrollRef: RefObject<HTMLDivElement>
   presence: PresenceSnapshot | null
+  objectChip?: ObjectChipData | null
+  onClearChip?: () => void
 }): JSX.Element {
   const [draft, setDraft] = useState('')
+  const [dropHot, setDropHot] = useState(false)
   const state: WorkState | undefined = props.presence?.state
 
   const submit = (): void => {
     if (!draft.trim()) return
     props.onSend(draft)
     setDraft('')
+  }
+
+  const handleDrop = (e: DragEvent<HTMLTextAreaElement>): void => {
+    e.preventDefault()
+    setDropHot(false)
+    try {
+      const raw = e.dataTransfer.getData('application/x-workon-block')
+      if (raw) {
+        const data = JSON.parse(raw) as ObjectChipData
+        if (props.onClearChip !== undefined) {
+          // 挂芯片（覆盖旧的）
+          props.onSend(`__chip__${JSON.stringify(data)}`)
+        }
+      }
+    } catch { /* 非块拖拽忽略 */ }
   }
 
   return (
@@ -59,6 +85,14 @@ export function AskPane(props: {
         {props.asking ? <div className="v10-msg-ai">…</div> : null}
       </div>
       <div className="v10-ask-inputbar">
+        {props.objectChip ? (
+          <div className="v10-objchip">
+            <span className="chip-mark">◆</span>
+            <span className="chip-label">{props.objectChip.label}</span>
+            <span className="chip-current">{props.objectChip.current}</span>
+            <button className="chip-x" onClick={() => props.onClearChip?.()}>×</button>
+          </div>
+        ) : null}
         <div className="v10-chiprow">
           <button className="v10-chip" onClick={() => props.onSend('我今天干了什么')}>
             我今天干了什么
@@ -73,11 +107,19 @@ export function AskPane(props: {
           ) : null}
         </div>
         <textarea
-          className="v10-input"
+          className={`v10-input${dropHot ? ' drop-hot' : ''}`}
           rows={2}
-          placeholder="问点什么 / 说「晚上9点提醒我…」/ 回 ①② 编号…"
+          placeholder={props.objectChip ? `调整「${props.objectChip.label}」：最近 7 天 / 换回来…` : '问点什么 / 说「晚上9点提醒我…」/ 回 ①② 编号…'}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onDragOver={(e) => {
+            if (e.dataTransfer.types.includes('application/x-workon-block')) {
+              e.preventDefault()
+              setDropHot(true)
+            }
+          }}
+          onDragLeave={() => setDropHot(false)}
+          onDrop={handleDrop}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault()

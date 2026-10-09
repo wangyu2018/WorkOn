@@ -4,6 +4,18 @@
  */
 import { useState } from 'react'
 import type { PlanItem, TrailSegment, PresenceSnapshot } from '@shared/types'
+import type { BlockParams } from './V10Surface'
+import type { ObjectChipData } from './AskPane'
+
+/** 折下数据流：真实 notify 卡 + 提醒事件（v10 §5 消息总线的 v10 侧呈现） */
+export interface FeedItem {
+  kind: 'notify'
+  id: string
+  title: string
+  body: string
+  time: number
+  ttlSec: number
+}
 import { WORK_STATES, STATE_LABEL } from '@shared/stateMeta'
 import { displayApp } from '@shared/appDisplayName'
 
@@ -69,17 +81,29 @@ function NowBlock(props: { presence: PresenceSnapshot | null }): JSX.Element {
   )
 }
 
-function TimelineBlock(props: { trail: TrailSegment[] }): JSX.Element {
-  const segs = props.trail.filter((t) => !t.glance).slice(-14).reverse()
+function TimelineBlock(props: { trail: TrailSegment[]; days: number }): JSX.Element {
+  const days = props.days
+  const cutoff = Date.now() - days * 24 * 3600_000
+  const segs = props.trail.filter((t) => !t.glance && t.startTs >= cutoff).slice(-20).reverse()
   return (
-    <section className="v10-block">
+    <section
+      className="v10-block"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData(
+          'application/x-workon-block',
+          JSON.stringify({ blockKey: 'timeline', label: '今日轨迹', current: days === 1 ? '今天' : `最近 ${days} 天` } as ObjectChipData)
+        )
+      }}
+    >
       <div className="v10-block-kick">
-        <span>◆ 今日轨迹</span>
+        <span>◆ {days === 1 ? '今日轨迹' : `近 ${days} 天轨迹`}</span>
         <span>· 最近 {segs.length} 段</span>
+        {days !== 1 ? <span className="aura-mark">◇ 已调</span> : null}
         <span className="acts"><button>留住</button><button>×</button></span>
       </div>
       {segs.length === 0 ? (
-        <div className="v10-empty">轨迹会随着采集自动长出来（此平台不支持窗口采集时这里保持空白）。</div>
+        <div className="v10-empty">{days === 1 ? '轨迹会随着采集自动长出来（此平台不支持窗口采集时这里保持空白）。' : `${days} 天内没有轨迹记录。`}</div>
       ) : (
         segs.map((t, i) => (
           <div className={`v10-tl-row${t.glance ? ' glance' : ''}`} key={`${t.startTs}-${i}`}>
@@ -150,7 +174,12 @@ export function PaperPane(props: {
   onExit?: () => void
   onboardStep?: 0 | 1 | 2
   onOnboardFinish?: (payload: { evening?: boolean }) => void
+  feed?: FeedItem[]
+  blockParams?: BlockParams
+  onDropBlock?: (b: ObjectChipData) => void
 }): JSX.Element {
+  const feed = props.feed ?? []
+  const days = props.blockParams?.timelineDays ?? 1
   return (
     <main className="v10-paper">
       <header className="v10-masthead">
@@ -181,7 +210,7 @@ export function PaperPane(props: {
         <div className="v10-fold-label">折 上 · 你 的 版 面</div>
         <NowBlock presence={props.presence} />
         <TodayPlansBlock plans={props.plans} onToggle={props.onTogglePlan} />
-        <TimelineBlock trail={props.trail} />
+        <TimelineBlock trail={props.trail} days={days} />
       </div>
 
       <div className="v10-foldline">
@@ -189,16 +218,31 @@ export function PaperPane(props: {
       </div>
 
       <div className="v10-fold-below">
-        <div className="v10-aura-card">
-          <div style={{ fontSize: 12.5, color: 'var(--ink)' }}>
-            下午的专注比上午长了 18 分钟——继续保持，晚间的今日章会记录这段趋势。
+        {feed.length === 0 ? (
+          <div className="v10-aura-card">
+            <div style={{ fontSize: 12.5, color: 'var(--ink)' }}>
+              新来的会落在这里——报表、观察、提醒到点。不碰会自己消，拖到折线上归你。
+            </div>
+            <div className="ttl">
+              <span>◇ 折下 · 推送区</span>
+              <span>等待新来件</span>
+            </div>
           </div>
-          <div className="ttl">
-            <span>◇ 观察 · 自动生成</span>
-            <span>约 4 分钟后自动收起</span>
-          </div>
-          <div className="ttl-bar" />
-        </div>
+        ) : (
+          feed.map((f) => (
+            <div className="v10-aura-card" key={f.id}>
+              <div style={{ fontSize: 12.5, color: 'var(--ink)' }}>
+                <strong style={{ marginRight: 6 }}>{f.title}</strong>
+                {f.body}
+              </div>
+              <div className="ttl">
+                <span>◇ 通知 · {new Date(f.time).getHours()}:{String(new Date(f.time).getMinutes()).padStart(2, '0')}</span>
+                <span>{f.ttlSec}s 后自动收起</span>
+              </div>
+              <div className="ttl-bar" />
+            </div>
+          ))
+        )}
       </div>
     </main>
   )
