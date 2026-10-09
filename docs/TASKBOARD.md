@@ -90,7 +90,7 @@
 - ✅ 2026-10-09 Windows→macOS 迁移：解压 + GBK 文件名修复 351 个 docs 文件 + 补漏 94 个（ml 模型/devOcr.ts/eng.traineddata 等）；git 历史完整
 - ✅ 2026-10-09 mac 试跑通过：typecheck 双 tsconfig 全绿；dev 冒烟 70s（结论见 L1）
 - ⚠️ **electron 二进制坑（mac 重装依赖时会再遇到）**：npm 装包时 extract-zip 会静默只解半截（Frameworks 缺失）；修法 = 清 `~/Library/Caches/electron` → `node node_modules/electron/install.js` 下载 → 若仍半截，直接 `unzip ~/Library/Caches/electron/*/electron-v*-darwin-arm64.zip -d node_modules/electron/dist` → `printf 'Electron' > node_modules/electron/path.txt`（**不能带换行**）→ `ln -sf Electron.app/Contents/MacOS/Electron node_modules/electron/dist/Electron`
-- ⬜ 77 个未推送提交推远端备份（daily 提交习惯保持）
+- ✅ 2026-10-09 远端备份完成：**gitee.com/wang-yu1995/workon**（main，98 提交，SSH 推送，tracking 已设）；github origin 保留待网络好再推
 - ⬜ 从 Windows 带资产：on-web 仓库、`D:\AI\workon小模型训练\`（OPTIMIZATION_PLAN / 11810 增强样本 / 映射表）
 - ⬜ MediaPipe wasm + 姿态模型补齐（不入库：`@mediapipe/tasks-vision/wasm` → `src/renderer/public/mediapipe/wasm/`；pose_landmarker_lite.task）
 
