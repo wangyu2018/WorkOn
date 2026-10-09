@@ -296,6 +296,7 @@ export const AWAY_AFTER_SEC = 300
  * communicate→remote 等模糊项先按保守值映射，待影子数据回来后调
  */
 export const MODEL_LABEL_TO_STATE: Record<string, WorkState> = {
+  // ── 旧口径：ml/models/action_model_v1 的 8 类动作标签 ──
   code: 'coding',
   write: 'writing',
   data_entry: 'writing',
@@ -303,5 +304,22 @@ export const MODEL_LABEL_TO_STATE: Record<string, WorkState> = {
   browse: 'focus',
   manage: 'focus',
   communicate: 'remote',
+  // ── 现口径：action_model_v2/v3 与 ml/jev 直接输出 WorkState key ──
+  //   修复前这里缺 WorkState key，model_first 模式下
+  //   MODEL_LABEL_TO_STATE['coding'] === undefined，模型结果永远被丢弃。
+  focus: 'focus',
+  coding: 'coding',
+  aidev: 'aidev',
+  aiqa: 'aiqa',
+  writing: 'writing',
+  meeting: 'meeting',
+  slack: 'slack',
+  relax: 'relax',
+  idle: 'idle',
+  break: 'break',
+  lunch: 'lunch',
+  remote: 'remote',
+  away: 'away',
+  // 'other' 仍按原口径归入 focus（规则层兜底也是 focus）
   other: 'focus'
 }

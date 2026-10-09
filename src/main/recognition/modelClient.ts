@@ -1,10 +1,18 @@
 /**
  * 小模型推理客户端 —— Python 常驻子进程（NDJSON over stdio）
  *
- * 协议：
+ * 协议（与旧 ml/predict_server.py 完全兼容，额外字段老调用方会忽略）：
  *   服务端加载完模型后输出  {"event":"ready"}
  *   请求：{"id":1,"features":{...9字段}}\n
- *   响应：{"id":1,"label":"code","prob":0.87}\n 或 {"id":1,"error":"..."}\n
+ *   响应：{"id":1,"label":"coding","prob":0.87,"scene":{...},"answers":{...}}\n
+ *        或 {"id":1,"error":"..."}\n
+ *
+ * 【本次改动：接入 Jev 决策模型 ml/jev】
+ *   1. 后端换成 ml/jev/jev/serve/sidecar.py（Qwen3-0.6B + LoRA，输出校准概率）
+ *   2. 模型目录判定改为 ml/jev/model（识别 model.int8.onnx / model.onnx）
+ *   3. 超时放宽：0.6B 比 XGBoost 慢两个数量级，500ms 会稳定降级
+ *   4. 新增 predictScene()：窗口切换时异步取场景三级 + 动作
+ *   5. 保留了"任何失败一律 resolve(null)、崩溃自动重启、连续失败停用"的降级口径
  *
  * 可靠性：任何失败（未启动/超时/崩溃/坏行）一律 resolve(null)，
  * 由 decision 层无感降级到规则；崩溃自动重启，连续失败达上限后停用直到下次成功。
@@ -14,10 +22,14 @@ import type { ChildProcessWithoutNullStreams } from 'child_process'
 import { app } from 'electron'
 import fs from 'fs'
 import path from 'path'
-import type { ActionFeatures, ModelPrediction } from './types'
+import type { ActionFeatures, JevFullPrediction, JevScenePrediction, ModelPrediction } from './types'
 
-const REQUEST_TIMEOUT_MS = 500 // 单条推理 ~10ms，留足 pandas 预处理余量
-const READY_TIMEOUT_MS = 15_000 // 冷启动含 python+xgboost+pandas 导入
+/** 单条 fast 推理（只问 work_state）M4 ~0.2s / Windows CPU ~1s，留足冷启动与 GC 抖动 */
+const REQUEST_TIMEOUT_MS = Number(process.env.WORKON_JEV_TIMEOUT_MS ?? 3000)
+/** full 推理（场景三级 + 动作 + 状态，5 次前向）约 3 倍耗时 */
+const REQUEST_TIMEOUT_FULL_MS = Number(process.env.WORKON_JEV_TIMEOUT_FULL_MS ?? 8000)
+/** 冷启动含 python + onnxruntime/torch + 0.6B 权重载入 */
+const READY_TIMEOUT_MS = Number(process.env.WORKON_JEV_READY_MS ?? 90_000)
 const RESTART_COOLDOWN_MS = 5_000
 const MAX_CONSECUTIVE_FAILURES = 3
 
@@ -26,9 +38,15 @@ interface Pending {
   timer: ReturnType<typeof setTimeout>
 }
 
+interface PendingFull {
+  resolve: (p: JevFullPrediction | null) => void
+  timer: ReturnType<typeof setTimeout>
+}
+
 class PythonSidecarClient {
   private proc: ChildProcessWithoutNullStreams | null = null
   private pending = new Map<number, Pending>()
+  private pendingFull = new Map<number, PendingFull>()
   private reqSeq = 0
   private ready = false
   private starting = false
@@ -36,26 +54,31 @@ class PythonSidecarClient {
   private lastExitAt = 0
   private buffer = ''
 
-  /** 推理脚本与模型目录：dev 取项目根 ml/，打包环境取 resources */
+  /** Jev 侧车脚本：dev 取项目根 ml/jev/，打包环境取 resources */
   private resolveServerScript(): string | null {
     const candidates: string[] = []
-    if (process.env.WORKON_PREDICT_SERVER) candidates.push(process.env.WORKON_PREDICT_SERVER)
-    candidates.push(path.join(app.getAppPath(), 'ml', 'predict_server.py'))
-    if (process.resourcesPath) candidates.push(path.join(process.resourcesPath, 'ml', 'predict_server.py'))
+    if (process.env.WORKON_JEV_SERVER) candidates.push(process.env.WORKON_JEV_SERVER)
+    candidates.push(path.join(app.getAppPath(), 'ml', 'jev', 'jev', 'serve', 'sidecar.py'))
+    candidates.push(path.join(app.getAppPath(), 'ml', 'jev', 'sidecar.py'))
+    if (process.resourcesPath) {
+      candidates.push(path.join(process.resourcesPath, 'ml', 'jev', 'sidecar.py'))
+    }
     for (const c of candidates) {
       try { if (fs.existsSync(c)) return c } catch { /* ignore */ }
     }
     return null
   }
 
+  /** Jev 模型目录：含 model.int8.onnx 或 model.onnx（并带 tokenizer.json） */
   private resolveModelDir(): string | null {
     const candidates: string[] = []
-    if (process.env.WORKON_MODEL_DIR) candidates.push(process.env.WORKON_MODEL_DIR)
-    candidates.push(path.join(app.getAppPath(), 'ml', 'models'))
-    if (process.resourcesPath) candidates.push(path.join(process.resourcesPath, 'ml', 'models'))
+    if (process.env.WORKON_JEV_MODEL_DIR) candidates.push(process.env.WORKON_JEV_MODEL_DIR)
+    candidates.push(path.join(app.getAppPath(), 'ml', 'jev', 'model'))
+    if (process.resourcesPath) candidates.push(path.join(process.resourcesPath, 'ml', 'jev', 'model'))
     for (const c of candidates) {
       try {
-        if (fs.existsSync(path.join(c, 'action_model_v2.json'))) return c
+        const hasModel = fs.existsSync(path.join(c, 'model.int8.onnx')) || fs.existsSync(path.join(c, 'model.onnx'))
+        if (hasModel && fs.existsSync(path.join(c, 'tokenizer.json'))) return c
       } catch { /* ignore */ }
     }
     return null
@@ -72,7 +95,12 @@ class PythonSidecarClient {
       p.resolve(null)
     }
     this.pending.clear()
-    if (reason) console.warn('[model]', reason)
+    for (const [, p] of this.pendingFull) {
+      clearTimeout(p.timer)
+      p.resolve(null)
+    }
+    this.pendingFull.clear()
+    if (reason) console.warn('[jev]', reason)
   }
 
   private handleLine(line: string): void {
@@ -82,37 +110,48 @@ class PythonSidecarClient {
     try {
       msg = JSON.parse(trimmed)
     } catch {
-      console.warn('[model] 非 JSON 行已忽略:', trimmed.slice(0, 80))
+      console.warn('[jev] 非 JSON 行已忽略:', trimmed.slice(0, 80))
       return
     }
     if (msg.event === 'ready') {
       this.ready = true
       this.consecutiveFailures = 0
-      console.log('[model] python 推理服务就绪')
+      console.log('[jev] 决策模型服务就绪:', msg.model ?? '', msg.device ?? '', msg.mode ?? '')
       return
     }
     const id = typeof msg.id === 'number' ? msg.id : -1
-    const pending = this.pending.get(id)
-    if (!pending) return
-    this.pending.delete(id)
-    clearTimeout(pending.timer)
+    const full = this.pendingFull.get(id)
+    const simple = this.pending.get(id)
+    if (!full && !simple) return
+    if (full) { this.pendingFull.delete(id); clearTimeout(full.timer) }
+    if (simple) { this.pending.delete(id); clearTimeout(simple.timer) }
+
     if (typeof msg.error === 'string') {
-      console.warn('[model] 推理错误:', msg.error as string)
-      pending.resolve(null)
+      console.warn('[jev] 推理错误:', msg.error as string)
+      full?.resolve(null)
+      simple?.resolve(null)
       return
     }
     if (typeof msg.label === 'string' && typeof msg.prob === 'number') {
-      pending.resolve({ label: msg.label, prob: msg.prob })
+      simple?.resolve({ label: msg.label, prob: msg.prob })
+      full?.resolve({
+        label: msg.label,
+        prob: msg.prob,
+        scene: (msg.scene as JevScenePrediction | undefined) ?? null,
+        answers: (msg.answers as JevFullPrediction['answers']) ?? null,
+        latencyMs: typeof msg.latency_ms === 'number' ? msg.latency_ms : null
+      })
       return
     }
-    pending.resolve(null)
+    full?.resolve(null)
+    simple?.resolve(null)
   }
 
   private start(): void {
     const script = this.resolveServerScript()
     const modelDir = this.resolveModelDir()
     if (!script || !modelDir) {
-      console.warn('[model] 找不到 predict_server.py 或模型目录，模型管道停用')
+      console.warn('[jev] 找不到 sidecar.py 或 ml/jev/model，决策模型管道停用')
       this.consecutiveFailures = MAX_CONSECUTIVE_FAILURES
       return
     }
@@ -121,9 +160,10 @@ class PythonSidecarClient {
       this.starting = true
       this.ready = false
       this.buffer = ''
-      const proc = spawn(exe, [script, '--model-dir', modelDir], {
+      const proc = spawn(exe, [script, '--model-dir', modelDir, '--mode', 'fast', '--quiet'], {
         stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: true
+        windowsHide: true,
+        env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' }
       })
       try {
         const os = require('os') as typeof import('os')
@@ -131,10 +171,9 @@ class PythonSidecarClient {
       } catch { /* ignore */ }
       this.proc = proc
 
-      // 启动失败兜底：READY 超时视为本轮失败
       const readyTimer = setTimeout(() => {
         if (!this.ready) {
-          this.failPending('python 推理服务 READY 超时')
+          this.failPending('jev 侧车 READY 超时')
           proc.kill()
         }
       }, READY_TIMEOUT_MS)
@@ -152,7 +191,7 @@ class PythonSidecarClient {
       proc.stderr.setEncoding('utf-8')
       proc.stderr.on('data', (d: string) => {
         const s = d.trim()
-        if (s) console.warn('[model][py]', s.slice(0, 200))
+        if (s) console.warn('[jev][py]', s.slice(0, 200))
       })
       proc.on('exit', (code) => {
         clearTimeout(readyTimer)
@@ -161,31 +200,34 @@ class PythonSidecarClient {
         this.proc = null
         this.starting = false
         this.consecutiveFailures++
-        this.failPending(`python 推理服务退出 code=${code}`)
+        this.failPending(`jev 侧车退出 code=${code}`)
         if (this.consecutiveFailures < MAX_CONSECUTIVE_FAILURES) {
           setTimeout(() => { if (!this.proc && !this.starting) this.start() }, RESTART_COOLDOWN_MS)
         } else {
-          console.warn('[model] 连续失败达上限，模型管道停用（本轮运行不再重试）')
+          console.warn('[jev] 连续失败达上限，决策模型管道停用（本轮运行不再重试）')
         }
       })
     } catch (e) {
       this.starting = false
       this.proc = null
       this.consecutiveFailures++
-      console.warn('[model] python 子进程启动失败:', e)
+      console.warn('[jev] python 子进程启动失败:', e)
     }
   }
 
-  async predict(features: ActionFeatures): Promise<ModelPrediction | null> {
-    if (this.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES && !this.proc) return null
+  private ensureStarted(): boolean {
+    if (this.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES && !this.proc) return false
     if (!this.proc && !this.starting) {
-      // 刚崩别立刻重启，等冷却
-      if (Date.now() - this.lastExitAt < RESTART_COOLDOWN_MS) return null
+      if (Date.now() - this.lastExitAt < RESTART_COOLDOWN_MS) return false
       this.start()
     }
-    const proc = this.proc
-    if (!proc) return null
+    return !!this.proc
+  }
 
+  /** fast 通道：只问 work_state（每个采样点调用） */
+  async predict(features: ActionFeatures): Promise<ModelPrediction | null> {
+    const proc = this.ensureStarted() ? this.proc : null
+    if (!proc) return null
     const id = ++this.reqSeq
     return new Promise<ModelPrediction | null>((resolve) => {
       const timer = setTimeout(() => {
@@ -199,7 +241,29 @@ class PythonSidecarClient {
         this.pending.delete(id)
         clearTimeout(timer)
         resolve(null)
-        console.warn('[model] 写入推理请求失败:', e)
+        console.warn('[jev] 写入推理请求失败:', e)
+      }
+    })
+  }
+
+  /** full 通道：场景三级 + 动作 + 工作状态（窗口切换时异步调用，不要放进每轮采样） */
+  async predictFull(context: Record<string, unknown>, questions?: string[]): Promise<JevFullPrediction | null> {
+    const proc = this.ensureStarted() ? this.proc : null
+    if (!proc) return null
+    const id = ++this.reqSeq
+    return new Promise<JevFullPrediction | null>((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingFull.delete(id)
+        resolve(null)
+      }, REQUEST_TIMEOUT_FULL_MS)
+      this.pendingFull.set(id, { resolve, timer })
+      try {
+        proc.stdin.write(JSON.stringify({ id, context, questions }) + '\n')
+      } catch (e) {
+        this.pendingFull.delete(id)
+        clearTimeout(timer)
+        resolve(null)
+        console.warn('[jev] 写入 full 推理请求失败:', e)
       }
     })
   }

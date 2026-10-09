@@ -1,0 +1,8 @@
+# WorkOn-Jev 端侧推理依赖（不含 torch/transformers，约 25MB）
+onnxruntime>=1.17
+tokenizers>=0.20
+numpy>=1.24
+# 只有跑 HTTP 服务时才需要下面三个；只用 stdio 侧车可以去掉
+fastapi>=0.110
+uvicorn>=0.27
+pydantic>=2.5

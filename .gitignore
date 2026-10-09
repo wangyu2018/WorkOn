@@ -22,3 +22,6 @@ ml/models_noleak/
 screenshots/
 dev-live.log
 src/renderer/public/mediapipe/
+
+# jev 模型权重（756MB，随包分发另行处理）
+ml/jev/model/

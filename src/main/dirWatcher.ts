@@ -9,6 +9,7 @@ import path from 'path'
 import { insertInto, updateIn, col } from './db'
 import { listBindings } from './attributions'
 import { dateKey } from '@shared/trail'
+import { recordFileChange } from './fileAggregator'
 
 export interface DirActivity {
   id: string // projectId:date
@@ -45,6 +46,7 @@ function bucket(projectId: string): DirActivity {
 
 function recordChange(projectId: string, absPath: string, isNew: boolean): void {
   if (IGNORE.test(absPath)) return
+  recordFileChange(projectId, absPath, isNew) // v10 §8.1：jev 训练对聚合
   const b = bucket(projectId)
   b.changedFiles++
   if (isNew) b.newFiles++

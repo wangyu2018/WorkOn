@@ -1,0 +1,57 @@
+--- base/decision.ts	2026-10-08 22:47:04
++++ new/decision.ts	2026-10-08 22:47:36
+@@ -18,7 +18,7 @@
+ import { col, insertRecognitionLog } from '../db'
+ import { getSettings } from '../settings'
+ import type {
+-  ActionFeatures, ModelPrediction, RecognitionInput,
++  ActionFeatures, JevFullPrediction, ModelPrediction, RecognitionInput,
+   RecognitionResult, RecognitionSource
+ } from './types'
+ import { buildFeatures } from './featureBuilder'
+@@ -28,6 +28,37 @@
+ /** model_first 下模型置信度门槛（低于此值不覆盖规则） */
+ export const MODEL_PROB_THRESHOLD = 0.75
+ 
++// ───────────────────── WorkOn-Jev：场景识别旁路缓存 ─────────────────────
++// work_state 走每个采样点的快通道；场景三级（scene_l1/l2/l3）只在窗口上下文
++// 变化时异步刷新，不阻塞采样主链路。UI / 报表通过 getLatestScene() 读取。
++
++let latestScene: JevFullPrediction | null = null
++let latestSceneKey = ''
++let latestSceneAt = 0
++/** 场景刷新的最小间隔，避免在窗口标题频繁抖动时反复推理 */
++const SCENE_REFRESH_MIN_MS = 5_000
++
++/** 最近一次场景识别结果（可能为 null：模型未就绪/未触发） */
++export function getLatestScene(): JevFullPrediction | null {
++  return latestScene
++}
++
++export function resetSceneCache(): void {
++  latestScene = null
++  latestSceneKey = ''
++  latestSceneAt = 0
++}
++
++function refreshScene(input: RecognitionInput, features: ActionFeatures): void {
++  const key = `${input.screen}|${input.app}|${input.title.slice(0, 80)}`
++  if (key === latestSceneKey || Date.now() - latestSceneAt < SCENE_REFRESH_MIN_MS) return
++  latestSceneKey = key
++  latestSceneAt = Date.now()
++  void getModelClient().predictFull({ ...features }).then((res) => {
++    if (res) latestScene = res
++  })
++}
++
+ /** 纠偏规则（与 monitor 原实现一致：三条件全满足才命中，宁漏勿误） */
+ function applyCorrectionRules(
+   screen: number, app: string, title: string
+@@ -100,6 +131,7 @@
+   // ── 激活屏 × shadow / model_first：进模型管道（特征只构建一次；注入行为聚合） ──
+   const features = buildFeatures({ ...input, behavior: getBehaviorWindow() })
+   const client = getModelClient()
++  refreshScene(input, features)
+ 
+   if (mode === 'shadow') {
+     // 异步要答案，拿到后补记账；本轮状态仍由规则决定，即时返回

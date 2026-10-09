@@ -19,6 +19,12 @@ const api = {
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (patch: Partial<AppSettings>) => ipcRenderer.invoke('settings:set', patch),
   setConsent: (v: 'granted' | 'declined') => ipcRenderer.invoke('consent:set', v),
+  // 提醒中心（v10）
+  listReminders: () => ipcRenderer.invoke('reminders:list'),
+  addReminder: (input: { title: string; recurring: 'daily' | 'once'; atHHMM?: string; atTs?: number }) =>
+    ipcRenderer.invoke('reminders:add', input),
+  removeReminder: (id: string) => ipcRenderer.invoke('reminders:remove', id),
+  onReminderFired: on<{ id: string; title: string; recurring: 'daily' | 'once'; atHHMM?: string }>('reminder:fired'),
 
   // 实时状态
   getPresence: () => ipcRenderer.invoke('presence:get'),

@@ -34,6 +34,7 @@ import { presence } from './presence'
 import { genQuestion, analyzeDay, deriveHabits } from './ai'
 import { genPersonaGapQuestion } from './qa/questionGenerator'
 import { canInterrupt } from './confirmQueue'
+import { initReminders, addReminder, listReminders, removeReminder } from './reminders'
 import { aiDevAdvice } from './projects'
 import { listActivities, listActivitiesRange, insertInto, col, updateIn } from './db'
 import type { UserHabits, PlanItem } from '@shared/types'
@@ -396,6 +397,19 @@ app.whenReady().then(() => {
     setSettings({ privacyConsent: v })
     if (v === 'granted') startCollection()
     return true
+  })
+  // 提醒中心（v10 §5）：应用内呈现，不走 OS 通知；用户自设提醒不受注意力预算扣减
+  ipcMain.handle('reminders:list', () => listReminders())
+  ipcMain.handle('reminders:add', (_e, input: { title: string; recurring: 'daily' | 'once'; atHHMM?: string; atTs?: number }) =>
+    addReminder(input)
+  )
+  ipcMain.handle('reminders:remove', (_e, id: string) => removeReminder(id))
+  initReminders((r) => {
+    const payload = { id: r.id, title: r.title, recurring: r.recurring, atHHMM: r.atHHMM }
+    sendTo('main', 'reminder:fired', payload)
+    sendTo('pet', 'reminder:fired', payload)
+    // 桌宠气泡：走近级打扰只留给用户自设的提醒（正是这类）
+    emitPetIntent('chat_open', { message: `时间到了：${r.title}`, workState: bus.pet.workState })
   })
   setImmediate(() => {
     void loadActivitiesDeferred()

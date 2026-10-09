@@ -10,7 +10,7 @@ export const PET_FEATURES = {
   /** presence → 空间态自动迁移（peek/bottom 跳转与缩放泵动的来源） */
   autoSpatial: false,
   /** 自由漫步 FSM */
-  roam: false,
+  roam: true, // v10 §6：走近=最高级打扰的 locomotion 基础
   /** 粒子（尘埃/星星/Zzz/音符） */
   particles: false,
   /** 全窗天气（雨雪花瓣落叶） */
@@ -21,10 +21,10 @@ export const PET_FEATURES = {
   microLife: true,
   /** 眼神跟随鼠标（独立开关，关=视线朝前不动） */
   microGaze: true,
-  /** 场景闲聊（20s 评估的主动说话） */
-  chatter: false,
-  /** 主进程关怀/通知消息气泡（bus.message） */
-  care: false,
+  /** 场景闲聊（20s 评估的主动说话）——气泡通道载体（v10 §6） */
+  chatter: true,
+  /** 主进程关怀/通知消息气泡（bus.message）——主动消息源（v10 §6） */
+  care: true,
   /** 首次 CG + 重播 */
   intro: false,
   /** 拽脖颈拎猫完整体验（光标捏领+身体悬垂+被动晃动）：暂缓优化中，开启即恢复 */
@@ -34,7 +34,7 @@ export const PET_FEATURES = {
   /** 气泡+右键聊天（关=无对话入口，桌宠纯看） */
   chat: false,
   /** 动作总开关：程序化 clip + VRMA + 工坊动作全不注册（关=纯静态立绘，连呼吸摆动都无） */
-  clips: false,
+  clips: true, // v10 §6：姿态语言载体
   /** SpringBone 头发/发饰物理（关=直接静止在造型位置，无沉降动画，省每帧物理） */
   springBone: false,
   /** AI 回复 [action:x] 驱动动作 clip（情绪表情不受此控） */

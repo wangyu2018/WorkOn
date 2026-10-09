@@ -2,6 +2,7 @@
  * 右栏「表」：活页结构（v10 §3.3）
  * 报头 sticky（唯一永久物）→ 折上（你的版面，栏目三段式）→ 折线 → 折下（TTL 推送区）
  */
+import { useState } from 'react'
 import type { PlanItem, TrailSegment, PresenceSnapshot } from '@shared/types'
 import { WORK_STATES, STATE_LABEL } from '@shared/stateMeta'
 import { displayApp } from '@shared/appDisplayName'
@@ -93,6 +94,53 @@ function TimelineBlock(props: { trail: TrailSegment[] }): JSX.Element {
   )
 }
 
+/** 首启三步卡（v10 §2 指引式首启）：工作类型 → 提醒意愿+协议启蒙 */
+function OnboardCard(props: {
+  step: 0 | 1 | 2
+  onFinish: (payload: { evening?: boolean }) => void
+}): JSX.Element {
+  const [occ, setOcc] = useState<string | null>(null)
+  if (props.step === 0) {
+    const pick = (o: string): void => {
+      setOcc(o)
+      try { window.localStorage.setItem('v10occupation', o) } catch { /* ignore */ }
+    }
+    return (
+      <div className="v10-onboard">
+        <div className="ob-title">开始之前，一句就好——你主要做什么工作？</div>
+        <div className="ob-row">
+          {['开发', '创作', '学生', '管理', '其他'].map((o) => (
+            <button key={o} className={`ob-pick${occ === o ? ' picked' : ''}`} onClick={() => pick(o)}>{o}</button>
+          ))}
+        </div>
+        <button className="ob-next" onClick={() => props.onFinish({})}>下一步 →</button>
+      </div>
+    )
+  }
+  if (props.step === 1) {
+    return (
+      <div className="v10-onboard">
+        <div className="ob-title">右页就是你的版面。折上三块已备好；生活块（毒鸡汤/黄历/打卡）要吗？</div>
+        <div className="ob-row">
+          <button className="ob-pick" onClick={() => { try { window.localStorage.setItem('v10lifeblocks','1') } catch { /* ignore */ } window.dispatchEvent(new CustomEvent('v10:lifeblocks', { detail: true })) }}>要，加点生活气</button>
+          <button className="ob-pick" onClick={() => { try { window.localStorage.setItem('v10lifeblocks','0') } catch { /* ignore */ } }}>先不用，保持干净</button>
+        </div>
+        <button className="ob-next" onClick={() => props.onFinish({})}>下一步 →</button>
+      </div>
+    )
+  }
+  return (
+    <div className="v10-onboard">
+      <div className="ob-title">要每晚 21:00 送一份今日章吗？（应用内提醒，不打扰预算）</div>
+      <div className="ob-row">
+        <button className="ob-pick" onClick={() => props.onFinish({ evening: true })}>要，每晚 21:00</button>
+        <button className="ob-pick" onClick={() => props.onFinish({})}>不用了</button>
+      </div>
+      <div className="ob-hint">这也是快捷回复的演示——以后我说话带 ①②，回数字就行。</div>
+    </div>
+  )
+}
+
 export function PaperPane(props: {
   dateLabel: string
   plans: PlanItem[]
@@ -100,6 +148,8 @@ export function PaperPane(props: {
   presence: PresenceSnapshot | null
   onTogglePlan: (p: PlanItem) => void
   onExit?: () => void
+  onboardStep?: 0 | 1 | 2
+  onOnboardFinish?: (payload: { evening?: boolean }) => void
 }): JSX.Element {
   return (
     <main className="v10-paper">
@@ -116,10 +166,16 @@ export function PaperPane(props: {
             onClick={() => props.onExit?.()}
             title="回到旧版界面（数据完全互通）"
           >
-            v10 骨架 · 返回旧版 →
+            v10 · 返回旧版 →
           </button>
         </div>
       </header>
+
+      {props.onboardStep !== undefined && props.onboardStep < 3 && props.onOnboardFinish ? (
+        <div className="v10-fold-above" style={{ paddingBottom: 0 }}>
+          <OnboardCard step={props.onboardStep} onFinish={props.onOnboardFinish} />
+        </div>
+      ) : null}
 
       <div className="v10-fold-above">
         <div className="v10-fold-label">折 上 · 你 的 版 面</div>
