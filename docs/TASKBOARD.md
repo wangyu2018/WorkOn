@@ -17,6 +17,7 @@
 - ⚠️ 采集层为 Windows 专属实现（winInfo=PowerShell / systemOcr=Windows.Media.Ocr 链 / koffi=Win32 interop / uiohook）；mac 上跑需守卫降级，主进程采集逻辑的改动仍需回 Windows 真机验证
 - 📌 **mac 试跑结论（2026-10-09 冒烟 70s）**：应用整体可跑——主窗口、桌宠渲染（2560x1440）、agent-hook :18790、integration WS :18765、负载管理全部正常。Windows 专属探针失败但被兜住：GPU 检测/窗口信息 `spawn powershell.exe ENOENT`（启动时一次 uncaughtException 被 [fatal] 兜底处理器接住，之后无复发）；OCR 深度模式自动停用
 - ⬜ mac 守卫补丁（按需）：winInfo/hardwareDetect 在 `process.platform==='darwin'` 下直接跳过 PowerShell spawn，消掉启动期的 [fatal] 噪音
+  - ✅ 2026-10-09 winInfo 已加 IS_WIN 平台门 + spawn error 兜底（startServer/getForegroundWindow/getDisplayTopWindows）；desktopPin 原本就有守卫；aiAssistWatch 的 execFile 回调式安全。复测 50s 零 fatal
 
 ## 2. L2 判断引擎
 
@@ -72,13 +73,15 @@
 
 ## 8. ML 训练线 / jev 调研
 
-- 📌 **已拍板**：TypeSafe 云 API 不进产品（隐私/中文/RTT）；采纳的是「输出协议」不是引擎
-- ✅ 两轮调研完成（2026-09-21，账本 REQ-20260921-01）：Choice/Noul/Score 三路判定 + 分布回传 + 校准
-- ✅ 开源 Jev 复刻谱系梳理（2026-10-09）：NanoJev 0.6B / Kev 0.8-9B / Laya 322-421M 多语种 / Von ~395M / Rizzo Flow / Nimble；基准 JevBench；LLM2Jev 论文（arXiv 2610.02076）免训练配方 + 树分解列表式微调
-- ⬜ mac 上起 13 态重训 + 校准曲线（与 L2 重训为同一项，实验记录继续写 `ml/EXPERIMENTS.md`）
-- ⬜ 标题语义头 A/B：关键词特征 vs 多语种小编码器（Laya 类 mmBERT，中文标题必需多语种）
-- ⬜ 数据量够后：NanoJev(Qwen3 0.6B) + 纠正账本 LoRA 微调（= 判断资产化 P3 的升级形态）
-- ⬜ （可选·离线）TypeSafe 云 API 当标注 oracle 批测中文样本，验证语义头价值（成本极低）
+> 📌 **完整方案见 `docs/JEV-PLAN.md`**（协议层 + 四阶段路线 + LLM 融合 + 不做清单），本节只留执行项。
+
+- 📌 **已拍板**：TypeSafe 云 API 不进产品；采「输出协议 + 校准方法论 + 小模型形态」
+- ✅ 两轮调研（2026-09-21 账本）+ 开源复刻谱系梳理（2026-10-09）
+- **P0 修地基**：⬜ 修 decision.ts MODEL_LABEL_TO_STATE 8/13 错位 bug（见 §2）｜⬜ top-K 分布全链路回传｜⬜ recognition_log 补 top1/top2/margin 字段
+- **P1 校准**：⬜ 13 态重训（mac 可做）｜⬜ calibration.py 可靠性图 + ECE｜⬜ 曲线定 m1/m2 三级 fallback（shadow 先行）
+- **P2 语义头**：⬜ 多语种小编码器 A/B（MiniLM→Laya，中文标题刚需；planAnalysis 词库是首个替代目标）
+- **P3 Jev 复刻**：⬜ NanoJev 0.6B + 纠正账本 LoRA（或 LLM2Jev 免训练 4B，L2 档用户）——纠正账本攒够后启动
+- ⬜ （可选·离线）TypeSafe 云 API 当标注 oracle 批测中文样本，结论只进 EXPERIMENTS.md
 
 ## 9. 工程与环境
 

@@ -15,6 +15,9 @@ import path from 'path'
 import { screen } from 'electron'
 import type { ForegroundWindowInfo } from '@shared/types'
 
+/** 窗口采集仅 Windows 实现（PowerShell + user32）；其他平台全部返回空，monitor 自动降级为无轨迹模式 */
+const IS_WIN = process.platform === 'win32'
+
 const DISPLAY_HINT_PATH = path.join(os.tmpdir(), 'workon-wininfo-displays.json')
 
 const PS_SCRIPT = `
@@ -387,7 +390,7 @@ export function getWinInfoSleepMs(): number {
 }
 
 function startServer(): void {
-  if (stopped || server || serverStarting) return
+  if (!IS_WIN || stopped || server || serverStarting) return
   if (serverFailures >= MAX_SERVER_FAILURES) return
   ensureDisplayHooks()
   serverStarting = true
@@ -409,6 +412,14 @@ function startServer(): void {
       } catch { /* ignore */ }
     }
     lowerPriority(proc.pid)
+    proc.on('error', (e) => {
+      // spawn 失败是异步 error 事件（如 powershell 缺失），没有监听器会升级成 uncaughtException
+      server = null
+      serverAlive = false
+      serverStarting = false
+      serverFailures++
+      console.warn('[winInfo] 常驻进程 spawn 失败:', e.message)
+    })
     proc.stdout.setEncoding('utf-8')
     proc.stdout.on('data', (chunk: string) => {
       buffer += chunk
@@ -453,7 +464,7 @@ function startServer(): void {
 
 /** 获取当前前台窗口（含屏幕索引）；失败返回 null */
 export async function getForegroundWindow(): Promise<ForegroundWindowInfo | null> {
-  if (stopped) return null
+  if (!IS_WIN || stopped) return null
   if (!server && !serverStarting && serverFailures < MAX_SERVER_FAILURES) startServer()
   if (server) {
     const deadline = Date.now() + 2000
@@ -481,7 +492,7 @@ export async function getForegroundWindow(): Promise<ForegroundWindowInfo | null
  * 各显示器上当前视觉顶层窗口（非过期记忆）。
  */
 export async function getDisplayTopWindows(): Promise<ForegroundWindowInfo[]> {
-  if (stopped) return []
+  if (!IS_WIN || stopped) return []
   await getForegroundWindow()
   if (topsCache.length) return topsCache
   if (!server || !serverAlive) {
