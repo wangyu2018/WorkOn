@@ -79,11 +79,11 @@
 
 - ✅ **模型已训好**：Qwen3-0.6B + LoRA(r16)，5 题（scene_l1/l2/l3 + action + work_state），真实测试集 0.953 / ECE 0.035，逐题温度校准，ONNX int8 756MB 单题 196ms，与 torch 决策 100% 一致
 - ✅ 对照结论：XGBoost 准确率更高（0.990，33 组合查表到顶）但 Jev macro-F1 略高且**能吃标题/OCR 文本 + 答场景三级**——分工不是替换
-- ✅ WorkOn 接入 4 文件补丁已备（stateMeta 修 bug / modelClient 换 sidecar / types / decision 场景旁路），在 DeepSeekHarness/workon-jev/integration/
+- ✅ **shadow 接入已落地（2026-10-09，eb067a7）**：4 文件补丁覆盖（stateMeta 8/13 错位 bug 已修）+ ml/jev 交付物入库（model/ 756MB 已 gitignore）；shadow 默认，sidecar 起不来自动崩3停降级规则
 - ⬜ 按 v0.9 节奏上线：shadow 只记账 → 修 MODEL_LABEL_TO_STATE 后 model_first → 场景题先只做展示（合成数据对措辞敏感，测试集 0.951 是分布内成绩）
 - ⬜ 数据飞轮：recognition_log 补 7 列（jev_top3/llm_label/llm_conf/source/user_from/user_to/context_hash）；source 权重分层；Jev 高置信输出**不训自己**
 - ⬜ 上线三道坎：模型随包分发（extraResources）/ 推理去 Python 化（onnxruntime-node + TS 移植 ~500 行）/ 诊断页+导出诊断包
-- ⬜ **文件监控 jev 化**（2026-10-09 立项，方案见 v10 §8.1）：合并器（每项目 60s 窗口变更摘要）→ jev 题组（file_class 9 类 / work_activity 6 类 / is_deliverable noul / project_match）→ 路由产出闭环；**训练数据用 git 历史自动生成金标**（commit diff→摘要文本，message→标签，零人工标注）；先规则后模型
+- 🔧 **文件监控 jev 化**：✅ 合并器已落地（fileAggregator.ts，60s 窗口→file_windows.jsonl 攒训练对）；⬜ git 历史生成金标 → 训 file_class/work_activity → shadow → 接管；⬜ jev questions.json 扩题组
 
 ## 9. 工程与环境
 
@@ -94,7 +94,20 @@
 - ⬜ 从 Windows 带资产：on-web 仓库、`D:\AI\workon小模型训练\`（OPTIMIZATION_PLAN / 11810 增强样本 / 映射表）
 - ⬜ MediaPipe wasm + 姿态模型补齐（不入库：`@mediapipe/tasks-vision/wasm` → `src/renderer/public/mediapipe/wasm/`；pose_landmarker_lite.task）
 
-## 10. 产品重做线（2026-10-09 立，前端+后端都要改，不急但方向已定）
+## 10. 产品重做线（v10 落地中）
+
+**已落地（2026-10-09，d650d25 + eb067a7，全链 E2E 验证）**：
+- ✅ P2 骨架：左问右表新表面（?v10=1 / 旧版侧栏入口 / WORKON_V10=1），数据单一事实源
+- ✅ P2 首启三步卡（职业/生活块/提醒意愿+协议启蒙）
+- ✅ P3 提醒中心全链：对话「明天晚上8点提醒我X」→ nlu 解析（时段修饰已修）→ reminders.json → 到点对话流 amber 卡+桌宠气泡；不走 OS 通知；用户自设不扣预算
+- ✅ P3 桌宠三级打扰载体放回：clips/chatter/care/roam
+- ✅ P7 快捷回复协议：①② 选项按钮+回数字即答（确认/取消/延后 10 分钟三语义）
+- ✅ P4 jev shadow（见 §8）
+- ✅ P5 合并器攒训练对（jev 分类接管待数据）
+- 截图存档：/tmp/v10shots/（s1 首启卡 / s2 建提醒 / s3 协议 / v10-main）
+- ⬜ 待做：消息总线全量收口（三头蛇合流）· 拆件路由 UI · 记忆 moodboard · 例程清单 · 块进化拖入对话 · signals 层（Windows 依赖大半）· 悬浮窗正式退役切换
+
+---
 
 > 设计资产在 `~/AI/workon/`（v7 index.html 原型 + DESIGN.md + map* 能力图 + repo-docs/ v8/v9/MODULE-v9.1/SIGNALS）；jev 模型资产在 `~/Documents/DeepSeekHarness/workon-jev/`。
 
