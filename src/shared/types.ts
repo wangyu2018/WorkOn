@@ -1020,7 +1020,9 @@ export interface AppSettings {
   city?: string // v3.1 用户城市（天气/通勤提醒用）
   weatherEnabled?: boolean // 已废弃：天气为默认能力，UI 不再有开关（字段保留兼容旧数据）
   weatherHours?: number // v3.2 右上角天气显示时间范围（小时），默认 3
-  weatherApiKey?: string // v3.2 和风天气 API Key（免费版，控制台申请）
+  weatherApiKey?: string // v3.2 和风天气 API Key（免费版，控制台申请）；不再内置共享 Key（隐私与配额）
+  /** 隐私同意门：granted 才启动窗口采集/键鼠探针/目录监控 */
+  privacyConsent: 'pending' | 'granted' | 'declined'
   weatherApiHost?: string // v3.4 和风天气 API Host（形如 xxxxx.qweatherapi.com，控制台设置页查看）
   widgetCompact?: boolean // 浮窗紧凑模式，默认 false
   reportAutoRefreshMin?: number // 报表自动刷新间隔分钟，0=关闭，默认 120
@@ -1134,8 +1136,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   city: '',
   weatherEnabled: true,
   weatherHours: 3,
-  weatherApiKey: '07b9e0e0e70342b794728af1ccb5641d',
+  weatherApiKey: '',
   weatherApiHost: 'jv6r7339hc.re.qweatherapi.com',
+  /** 隐私同意门：新装首次启动需用户明确同意后才开始采集；老用户迁移为 granted */
+  privacyConsent: 'pending' as 'pending' | 'granted' | 'declined',
   widgetCompact: false,
   perspectiveLock: null,
   reportAutoRefreshMin: 120

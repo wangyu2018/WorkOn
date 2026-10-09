@@ -18,6 +18,7 @@ const api = {
   // 设置
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: (patch: Partial<AppSettings>) => ipcRenderer.invoke('settings:set', patch),
+  setConsent: (v: 'granted' | 'declined') => ipcRenderer.invoke('consent:set', v),
 
   // 实时状态
   getPresence: () => ipcRenderer.invoke('presence:get'),

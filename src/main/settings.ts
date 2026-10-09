@@ -35,6 +35,16 @@ export function initSettings(): AppSettings {
   // Windows：半透明整窗会透出灰矩。用户滑条仍可调；建窗用实色面板+opacity。
   // 不再在启动时强制改回 1（否则设置/托盘透明度永久失效）。
   let dirty = false
+  // 迁移①：清掉历史版本内置的和风共享 Key（已从默认值移除；存量 settings.json 里可能还存着）
+  if (current.weatherApiKey === '07b9e0e0e70342b794728af1ccb5641d') {
+    current.weatherApiKey = ''
+    dirty = true
+  }
+  // 迁移②：隐私同意门——老用户（已有 settings.json）不回弹同意卡，视为已同意
+  if (raw && raw.privacyConsent === undefined) {
+    current.privacyConsent = 'granted'
+    dirty = true
+  }
   if (current.darkTone !== 'void' && current.darkTone !== 'navy') {
     current.darkTone = 'void'
     dirty = true

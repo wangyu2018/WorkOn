@@ -131,8 +131,13 @@ export default function App() {
   const mainScreen = presence?.screens?.find((s) => s.screen === presence.mainScreen)
   const mainApp = mainScreen?.app
   const mainCat: AppCategory | null = mainApp ? categoryOfWithOverride(mainApp, appCategoryOverride) : null
-  /** 右上角当前应用标签 */
-  const currentAppLabel = mainApp ? displayApp(mainApp) : '等待采集…'
+  /** 右上角当前应用标签；mac 等平台窗口采集不可用时明说（审计 F3：静默「等待采集…」= 看不懂的坏） */
+  const isUnsupportedPlatform = typeof navigator !== 'undefined' && /Mac|Linux/i.test(navigator.platform)
+  const currentAppLabel = mainApp
+    ? displayApp(mainApp)
+    : isUnsupportedPlatform
+      ? '此平台暂不支持窗口采集（Windows 完整支持）'
+      : '等待采集…'
 
   // 日视角：晨·架构师 / 昼·工作者 / 晚·管理者（手动锁 ∥ 时钟自动）
   const { perspective, locked, lock } = usePerspective()
@@ -221,6 +226,14 @@ export default function App() {
     })
     return off
   }, [])
+
+  // 首启隐私同意门（审计 F1）：pending 时弹欢迎+告知卡，选择后写入并按需启动采集
+  const [consentDismissed, setConsentDismissed] = useState(false)
+  const showConsent = settings.privacyConsent === 'pending' && !consentDismissed
+  const answerConsent = (v: 'granted' | 'declined'): void => {
+    void window.api?.setConsent?.(v)
+    setConsentDismissed(true)
+  }
 
   // 托盘快速问答等外部跳转请求
   useEffect(() => {
@@ -437,6 +450,34 @@ export default function App() {
       {errorBanner ? (
         <div className="anim-fade-in fixed left-1/2 top-3 z-[80] -translate-x-1/2 rounded-xl border border-red-500/30 bg-red-500/15 px-4 py-2 text-[12px] text-red-300 shadow-glass backdrop-blur">
           ⚠️ {errorBanner}
+        </div>
+      ) : null}
+
+      {/* 首启隐私同意门（审计 F1）：同意后主进程才启动窗口/键鼠/目录采集 */}
+      {showConsent ? (
+        <div className="anim-fade-in fixed inset-0 z-[90] flex items-center justify-center bg-black/55 backdrop-blur-sm">
+          <div className="w-[540px] rounded-2xl border border-white/10 bg-[#131b2b] p-6 shadow-glass">
+            <div className="mb-1 text-[17px] font-semibold text-zinc-100">欢迎使用 WorkOn</div>
+            <div className="mb-4 text-[12.5px] leading-relaxed text-zinc-400">
+              这是一台<strong className="text-zinc-200">本地优先</strong>的工作陪伴器。允许采集后，它会记录：前台窗口标题、键鼠活动计数（只计数，不记录内容）、项目目录变动——
+              <strong className="text-zinc-200">全部数据只存在你的电脑上</strong>；云端 AI 需要你自己配置 Key 才会启用，发送前经过脱敏。
+              你也可以先不采集，待办、报表、桌宠等手动功能照常可用，之后随时在设置里更改。
+            </div>
+            <div className="flex gap-3">
+              <button
+                className="flex-1 rounded-lg bg-emerald-500/90 px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-emerald-500"
+                onClick={() => answerConsent('granted')}
+              >
+                开始使用，允许采集
+              </button>
+              <button
+                className="flex-1 rounded-lg border border-white/15 px-4 py-2.5 text-[13px] text-zinc-300 transition hover:bg-white/5"
+                onClick={() => answerConsent('declined')}
+              >
+                先不采集（仅手动功能）
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>

@@ -327,11 +327,12 @@ async function boot(): Promise<void> {
   let downAt = 0
   /** 首次拖拽提示（每次启动只提示一次） */
   let dragTipped = false
-  if (PET_FEATURES.drag) {
-    hit.onFrame((r) => {
-      hoverPart = r.hit ? r.part : null
-    })
-  }
+  /** 控制栏悬停浮现计时器（审计 D2：控制栏原本无任何触发点） */
+  let ctlShowTimer = 0
+  // hover 追踪独立于拖拽开关：控制栏悬停显示也依赖它
+  hit.onFrame((r) => {
+    hoverPart = r.hit ? r.part : null
+  })
 
   window.addEventListener('mousemove', (e) => {
     hit.setMouse(e.clientX, e.clientY)
@@ -356,6 +357,26 @@ async function boot(): Promise<void> {
       }
     }
     if (drag.active) drag.move(e.clientX, e.clientY)
+
+    // 桌面控制栏：悬停角色 600ms 浮现；移开且不在栏上则收起（审计 D2 修复）
+    if (hoverPart && !drag.active) {
+      if (!ctlShowTimer) {
+        ctlShowTimer = window.setTimeout(() => {
+          ctlShowTimer = 0
+          if (hoverPart && !drag.active) showCtlBar()
+        }, 600)
+      }
+    } else {
+      if (ctlShowTimer) {
+        window.clearTimeout(ctlShowTimer)
+        ctlShowTimer = 0
+      }
+      const br = ctlBar.getBoundingClientRect()
+      const onBar =
+        e.clientX >= br.left && e.clientX <= br.right &&
+        e.clientY >= br.top && e.clientY <= br.bottom
+      if (!onBar) hideCtlBar()
+    }
   })
 
   window.addEventListener('mousedown', (e) => {

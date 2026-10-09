@@ -112,7 +112,7 @@ export async function onerPull(): Promise<{ pulled: number; error?: string }> {
         stopOnerAutoSync()
         pushNotify('generic', 'Oner 同步已暂停', 'Oner Token 已失效（刷新也失败）。到 设置 → Oner 同步 更新 Token 后自动恢复', [
           { label: '知道了', action: 'dismiss' }
-        ], 0)
+        ], 45)
       }
       return { pulled: 0, error: '401 Token 失效' }
     }

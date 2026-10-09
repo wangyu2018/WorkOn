@@ -79,8 +79,8 @@ function buildMenu(): void {
       checked: !!s.widgetVisible,
       registerAccelerator: false,
       click: () => {
-        setSettings({ widgetVisible: !getSettings().widgetVisible })
-        refreshTray()
+        // toggleWidget 统一负责显隐+设置写入+托盘刷新（修复托盘勾选无效，审计 D1）
+        toggleWidget()
       }
     },
     {

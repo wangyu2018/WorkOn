@@ -62,20 +62,26 @@ export function isMonitorBlockKey(k: string): k is MonitorSectionKey {
 }
 
 export function defaultHomeWidgets(): HomeWidgets {
+  // 默认精简（审计 A1）：核心三件套 + 监控三块，共 6 块；其余进编辑抽屉按需开。
+  // 概览/评分与「今日洞察」重复、监控时间轴与「工作时间轴」重复，默认去重关闭。
   return {
     dayplan: true,
     insight: true,
     timeline: true,
-    starmap: true,
-    quote: true,
-    soup: true,
-    almanac: true,
-    countdown: true,
-    festival: true,
-    habit: true,
-    planahead: true,
-    goal: true,
-    ...DEFAULT_MONITOR_SECTIONS
+    starmap: false,
+    quote: false,
+    soup: false,
+    almanac: false,
+    countdown: false,
+    festival: false,
+    habit: false,
+    planahead: false,
+    goal: false,
+    ...DEFAULT_MONITOR_SECTIONS,
+    overview: false,
+    attention: false,
+    screens: false,
+    trail: false
   }
 }
 

@@ -2,8 +2,8 @@
  * WorkOn 主进程入口
  * 启动顺序：设置 → 存储 → 窗口 → 监控 → 集成服务 → 托盘 → 快捷键 → 周期任务
  */
-import { app, BrowserWindow, Notification } from 'electron'
-import { initSettings, getSettings } from './settings'
+import { app, BrowserWindow, Notification, ipcMain } from 'electron'
+import { initSettings, getSettings, setSettings } from './settings'
 import { initDb, flushNow, loadActivitiesDeferred } from './db'
 import { createMainWindow, createWidgetWindow, createPetWindow, createSplashWindow, closeSplash, sendTo, broadcast, widgetWindow, mainWindow, createTodoWidgetWindow } from './windows'
 import { createTray } from './tray'
@@ -319,12 +319,12 @@ app.whenReady().then(() => {
           try { mw.moveTop() } catch { /* ignore */ }
           console.log('[startup] main window shown')
         }
-        // 桌宠延迟创建：让主窗口先独占资源把首页加载完（首页卡顿投诉），
-        // 主窗 ready-to-show 后再等 20s，且创建时桌宠开关仍为开才创建
+        // 桌宠延迟创建：让主窗口先加载首页（首页卡顿投诉）。
+        // 20s→6s：产品的"脸"不能在第一印象窗口缺席（审计 F4），资源让位保留但缩短
         if (getSettings().petEnabled) {
           setTimeout(() => {
             if (getSettings().petEnabled) createPetWindow()
-          }, 20_000)
+          }, 6_000)
         }
       },
       showSplash ? Math.max(800, 2000 - (Date.now() - splashAt)) : 0
@@ -375,15 +375,33 @@ app.whenReady().then(() => {
   console.log('[startup] 窗口/托盘已就绪')
 
   // 延后：先加载活动日志（分块），再启动监控/探针
+  // 隐私同意门：未同意（pending/declined）前不启动任何采集类模块（窗口采样/键鼠探针/
+  // 目录监控/OCR 收集）；本地处理与外部同步服务不受影响。同意后由 consent:set 补启动。
+  let collectionStarted = false
+  const startCollection = (): void => {
+    if (collectionStarted) return
+    collectionStarted = true
+    try {
+      if (getSettings().inputProbeEnabled) startInputProbe()
+      startMonitor()
+      startAllWatchers()
+      startOcrCollector()
+      startFolderWatch()
+      console.log('[startup] 采集已启动（隐私同意 granted）')
+    } catch (e) {
+      console.warn('[startup] 采集启动失败', e)
+    }
+  }
+  ipcMain.handle('consent:set', (_e, v: 'granted' | 'declined') => {
+    setSettings({ privacyConsent: v })
+    if (v === 'granted') startCollection()
+    return true
+  })
   setImmediate(() => {
     void loadActivitiesDeferred()
       .then(() => {
         try {
-          if (getSettings().inputProbeEnabled) startInputProbe()
-          startMonitor()
-  startAllWatchers()
-          startOcrCollector()
-          startFolderWatch()
+          if (getSettings().privacyConsent === 'granted') startCollection()
           startAgentHookServer()
           if (getSettings().loadGuardEnabled !== false) {
             void import('./loadGuard').then((m) => m.startLoadGuard())
