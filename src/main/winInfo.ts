@@ -14,9 +14,18 @@ import os from 'os'
 import path from 'path'
 import { screen } from 'electron'
 import type { ForegroundWindowInfo } from '@shared/types'
+import {
+  macStartServer,
+  macStop,
+  macGetForegroundWindow as macFG,
+  macGetPointerWindow,
+  macGetTopWindows,
+  macCheckPermissions
+} from './winInfoMac'
 
-/** 窗口采集仅 Windows 实现（PowerShell + user32）；其他平台全部返回空，monitor 自动降级为无轨迹模式 */
+/** Windows 走 PowerShell 常驻服务器；macOS 走 winInfoMac（Swift 采集器）；其余平台返回空 */
 const IS_WIN = process.platform === 'win32'
+const IS_MAC = process.platform === 'darwin'
 
 const DISPLAY_HINT_PATH = path.join(os.tmpdir(), 'workon-wininfo-displays.json')
 
@@ -464,6 +473,7 @@ function startServer(): void {
 
 /** 获取当前前台窗口（含屏幕索引）；失败返回 null */
 export async function getForegroundWindow(): Promise<ForegroundWindowInfo | null> {
+  if (IS_MAC) return macFG()
   if (!IS_WIN || stopped) return null
   if (!server && !serverStarting && serverFailures < MAX_SERVER_FAILURES) startServer()
   if (server) {
@@ -492,6 +502,7 @@ export async function getForegroundWindow(): Promise<ForegroundWindowInfo | null
  * 各显示器上当前视觉顶层窗口（非过期记忆）。
  */
 export async function getDisplayTopWindows(): Promise<ForegroundWindowInfo[]> {
+  if (IS_MAC) return macGetTopWindows()
   if (!IS_WIN || stopped) return []
   await getForegroundWindow()
   if (topsCache.length) return topsCache
@@ -516,6 +527,17 @@ export async function getAttentionWindow(): Promise<{
   fg: ForegroundWindowInfo | null
   tops: ForegroundWindowInfo[]
 }> {
+  if (IS_MAC) {
+    const fg = await macFG()
+    let attention = macGetPointerWindow() ?? fg
+    if (attention && isSelfOverlayApp(attention.app)) {
+      const alt = macGetTopWindows().find((t) => t.screen === attention!.screen && !isSelfOverlayApp(t.app))
+      if (alt) attention = alt
+      else if (fg && !isSelfOverlayApp(fg.app)) attention = fg
+    }
+    if (!attention?.app) attention = fg
+    return { attention: attention?.app ? attention : null, fg, tops: macGetTopWindows() }
+  }
   const fg = await getForegroundWindow()
   const tops = await getDisplayTopWindows()
   // 保鲜：缓存超过 10s 视为过期（PS 静默失败时不拿旧窗口充数）
@@ -532,6 +554,10 @@ export async function getAttentionWindow(): Promise<{
 
 /** 应用退出时关闭常驻进程 */
 export function stopWinInfoServer(): void {
+  if (IS_MAC) {
+    macStop()
+    return
+  }
   stopped = true
   if (server) {
     try { server.kill() } catch { /* ignore */ }

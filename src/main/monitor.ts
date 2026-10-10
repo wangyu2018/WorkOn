@@ -40,7 +40,7 @@ const planAskedAt = new Map<string, number>()
 const PLAN_ASK_COOLDOWN = 30 * 60_000
 
 /** 会议检测：会议软件消失 60s 判定会议结束 */
-const MEETING_APPS = /^(teams|zoom|腾讯会议|wemeet|voov meeting|feishu|lark|dingtalk)\.exe$/i
+const MEETING_APPS = /^(teams|zoom|腾讯会议|wemeet|voov meeting|feishu|lark|dingtalk)(\.exe)?$/i // .exe 可选（mac 无后缀）
 let meetingSince = 0
 let lastMeetingSeen = 0
 

@@ -36,6 +36,7 @@ import { genPersonaGapQuestion } from './qa/questionGenerator'
 import { canInterrupt } from './confirmQueue'
 import { initReminders, addReminder, listReminders, removeReminder } from './reminders'
 import { initLifeGoalJobs } from './lifeGoal'
+import { macCheckPermissions } from './winInfoMac'
 import { aiDevAdvice } from './projects'
 import { listActivities, listActivitiesRange, insertInto, col, updateIn } from './db'
 import type { UserHabits, PlanItem } from '@shared/types'
@@ -417,6 +418,18 @@ app.whenReady().then(() => {
       .then(() => {
         try {
           if (getSettings().privacyConsent === 'granted') startCollection()
+          if (process.platform === 'darwin') {
+            // mac 权限引导（审计 F3 同源思想：能力缺失要说话，不静默）
+            const perms = macCheckPermissions()
+            if (!perms.ax && !perms.screen) {
+              pushNotify('generic', '需要一次授权，采集才能开始', '到 系统设置 → 隐私与安全性 → 辅助功能（或屏幕录制），勾选 Electron 后重启应用。没有授权也能用手动功能。', [
+                { label: '知道了', action: 'dismiss' }
+              ], 120)
+              console.warn('[startup] mac 权限未授予：辅助功能/屏幕录制 均未开，窗口标题将缺失')
+            } else {
+              console.info(`[startup] mac 权限就绪 ax=${perms.ax} screen=${perms.screen}`)
+            }
+          }
           startAgentHookServer()
           if (getSettings().loadGuardEnabled !== false) {
             void import('./loadGuard').then((m) => m.startLoadGuard())
