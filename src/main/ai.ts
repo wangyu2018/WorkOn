@@ -770,7 +770,7 @@ function localAnswer(question: string, facts: Record<string, unknown> | null, tr
     dualWorkSlackMin: number; topApps: [string, number][]; bestHours: number[]; mainState: string
   }
   const q = question.toLowerCase()
-  const topList = f.topApps.slice(0, 5).map(([a, m]) => `${a}（${m}分钟）`).join('、')
+  const topList = f.topApps.slice(0, 5).map(([a, m]) => `${a}（${Math.round(m)}分钟）`).join('、')
   if (/专注|focus|效率/.test(q)) {
     const pct = f.totalMin > 0 ? Math.round((f.workMin / f.totalMin) * 100) : 0
     return `今日工作 ${f.workMin} 分钟 / 墙钟 ${f.totalMin} 分钟（专注占比 ${pct}%）。${f.bestHours.length ? `高效时段：${f.bestHours.map((h) => `${h}:00`).join(' / ')}。` : ''}`

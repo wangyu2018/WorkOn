@@ -7,6 +7,32 @@
 import { useState, type RefObject, type DragEvent } from 'react'
 import type { PresenceSnapshot, WorkState, ChatSession } from '@shared/types'
 import { STATE_LABEL } from '@shared/stateMeta'
+import { renderMarkdown } from './md'
+import { detectStructured, StructuredCard } from './structured'
+
+/** AI 回答富呈现（v10）：结构化答卡优先（KPI/条形）→ markdown → 长文折叠 */
+function RichAnswer(props: { text: string }): JSX.Element {
+  const [expanded, setExpanded] = useState(false)
+  const s = detectStructured(props.text)
+  const long = props.text.length > 420
+  if (s) {
+    return (
+      <div className="v10-rich">
+        <StructuredCard s={s} />
+      </div>
+    )
+  }
+  const body = renderMarkdown(props.text)
+  if (long && !expanded) {
+    return (
+      <div className="v10-rich">
+        <div className="v10-clamp">{body}</div>
+        <button className="v10-more" onClick={() => setExpanded(true)}>展开全文（{props.text.length} 字）▾</button>
+      </div>
+    )
+  }
+  return <div className="v10-rich">{body}</div>
+}
 
 export interface ChatMsg {
   role: 'user' | 'ai'
@@ -219,9 +245,13 @@ export function AskPane(props: {
           const i = expanded || HIDE_COUNT <= 0 ? vi : HIDE_COUNT + vi
           return (
           <div key={i} className={m.role === 'user' ? 'v10-msg-user' : 'v10-msg-ai-wrap'}>
-            <div className={m.role === 'user' ? undefined : 'v10-msg-ai'} style={m.role === 'user' ? undefined : { display: 'inline' }}>
-              {m.role === 'ai' ? <span style={{ display: 'inline' }}>{m.text}</span> : m.text}
-            </div>
+            {m.role === 'ai' ? (
+              <div className="v10-msg-ai" style={{ display: 'block' }}>
+                <RichAnswer text={m.text} />
+              </div>
+            ) : (
+              <div className="v10-msg-user">{m.text}</div>
+            )}
             <MsgActions
               idx={i}
               open={menuIdx === i}

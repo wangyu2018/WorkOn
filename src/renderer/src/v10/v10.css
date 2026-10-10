@@ -561,3 +561,55 @@
 }
 .v10-sesstop .ses-del:hover { color: var(--danger, #C4553B); }
 .v10-sesstop .ses-del.armed { color: #C4553B; font-weight: 600; }
+
+/* ── AI 回答富呈现（markdown/结构化/折叠） ─────────────── */
+.v10-md-p { margin: 4px 0; line-height: 1.75; }
+.v10-md-h { font-weight: 600; color: var(--ink); margin: 10px 0 4px; font-family: var(--font-ui); }
+.v10-md-h1 { font-size: 15px; } .v10-md-h2 { font-size: 14px; } .v10-md-h3, .v10-md-h4 { font-size: 12.5px; }
+.v10-md-ul, .v10-md-ol { margin: 4px 0; padding-left: 18px; line-height: 1.8; }
+.v10-md-ul li::marker { color: var(--teal); }
+.v10-md-ol li::marker { color: var(--teal-ink); font-family: var(--font-num); }
+.v10-md-table { border-collapse: collapse; margin: 8px 0; width: 100%; font-size: 11.5px; }
+.v10-md-table th {
+  text-align: left; color: var(--ink-2); font-weight: 500;
+  border-bottom: 1.5px solid var(--hairline-2); padding: 4px 10px 4px 0; font-family: var(--font-ui);
+}
+.v10-md-table td { border-bottom: 1px solid var(--hairline); padding: 4px 10px 4px 0; color: var(--ink); }
+.v10-md-table tr:last-child td { border-bottom: none; }
+.v10-md-pre {
+  background: #2B2B28; color: #E8E4D8; border-radius: var(--r-sm);
+  padding: 10px 12px; overflow-x: auto; font-size: 11px; line-height: 1.6; margin: 6px 0;
+}
+.v10-md code {
+  background: var(--celadon-1); color: var(--teal-ink);
+  border-radius: 4px; padding: 1px 5px; font-size: 11px;
+}
+.v10-md-pre code { background: none; color: inherit; padding: 0; }
+.v10-md-hr { border: none; border-top: 1px solid var(--hairline); margin: 8px 0; }
+.v10-clamp { max-height: 220px; overflow: hidden; position: relative; }
+.v10-clamp::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 44px;
+  background: linear-gradient(transparent, var(--paper));
+}
+.v10-more {
+  border: none; background: none; color: var(--teal-ink); font-size: 11px;
+  cursor: pointer; padding: 2px 0; font-family: var(--font-ui);
+}
+.v10-more:hover { text-decoration: underline; }
+
+/* ── 结构化答卡 ─────────────────────────────────────── */
+.v10-scard { margin: 4px 0; }
+.sc-kpis { display: flex; gap: 8px; margin-bottom: 8px; }
+.sc-kpi {
+  flex: 1; background: var(--celadon-1); border-radius: var(--r-md);
+  padding: 8px 6px; text-align: center;
+}
+.sc-kv { font-family: var(--font-num); font-size: 17px; font-weight: 600; color: var(--ink); }
+.sc-kl { font-size: 10px; color: var(--ink-3); margin-top: 2px; }
+.sc-bars { display: flex; flex-direction: column; gap: 5px; }
+.sc-bar { display: flex; align-items: center; gap: 8px; font-size: 11px; }
+.sc-bl { width: 64px; flex: none; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-btrack { flex: 1; height: 10px; background: var(--hairline); border-radius: 5px; overflow: hidden; }
+.sc-bfill { display: block; height: 100%; border-radius: 5px; transition: width 320ms var(--ease, ease); }
+.sc-bv { width: 44px; flex: none; text-align: right; font-family: var(--font-num); color: var(--ink-2); }
+.sc-note { font-size: 11px; color: var(--amber); margin-top: 6px; }
