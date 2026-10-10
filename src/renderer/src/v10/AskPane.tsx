@@ -98,6 +98,8 @@ export function AskPane(props: {
   activeSessionId?: string | null
   onEnterSession?: (id: string | null) => void
   onAddToSession?: (msgIndex: number, sessionId: string | null, topic?: 'project' | 'life' | 'general') => void
+  onSessionRenamed?: (id: string, title: string) => void
+  onSessionRemoved?: (id: string) => void
 }): JSX.Element {
   const [draft, setDraft] = useState('')
   const [dropHot, setDropHot] = useState(false)
@@ -133,13 +135,45 @@ export function AskPane(props: {
   const active = props.sessions?.find((x) => x.id === props.activeSessionId) ?? null
 
   // 会话视图：进入某会话后左栏显示其消息 + 继续追问
+  const [renameMode, setRenameMode] = useState(false)
+  const [delArm, setDelArm] = useState(false)
   if (active) {
     return (
       <aside className="v10-ask">
         <div className="v10-sesstop">
           <button className="ses-back" onClick={() => props.onEnterSession?.(null)}>← 对话</button>
-          <span className="ses-title">{active.title}</span>
+          {renameMode ? (
+            <input
+              className="ses-rename"
+              autoFocus
+              defaultValue={active.title}
+              onBlur={(e) => {
+                void window.api?.renameSession?.(active.id, e.target.value.trim() || active.title)
+                if (props.onSessionRenamed) props.onSessionRenamed(active.id, e.target.value.trim() || active.title)
+                setRenameMode(false)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+              }}
+            />
+          ) : (
+            <span className="ses-title" style={{ cursor: 'pointer' }} onClick={() => setRenameMode(true)} title="点击改名">
+              {active.title}
+            </span>
+          )}
           <span className="ses-topic">{active.topic === 'project' ? '项目' : active.topic === 'life' ? '生活' : '通用'}</span>
+          <button
+            className={`ses-del${delArm ? ' armed' : ''}`}
+            onClick={() => {
+              if (!delArm) { setDelArm(true); window.setTimeout(() => setDelArm(false), 2500); return }
+              void window.api?.removeSession?.(active.id)
+              if (props.onSessionRemoved) props.onSessionRemoved(active.id)
+              props.onEnterSession?.(null)
+            }}
+            title={delArm ? '再点一次确认删除' : '删除会话（两次点击确认）'}
+          >
+            {delArm ? '确认删?' : '✕'}
+          </button>
         </div>
         <div className="v10-ask-scroll" ref={props.scrollRef}>
           {active.items.map((m, i) => (

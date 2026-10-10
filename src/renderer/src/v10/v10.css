@@ -546,3 +546,18 @@
 }
 .v10-seslist button:hover { background: var(--celadon-1); color: var(--teal-ink); }
 .v10-seslist .ses-n { color: var(--ink-3); font-size: 10px; flex: none; }
+.v10-srcnote {
+  font-size: 10.5px; color: var(--ink-3); background: var(--paper-2);
+  border-radius: var(--r-sm); padding: 6px 10px; margin: 4px 0 2px; line-height: 1.6;
+}
+.v10-sesstop .ses-rename {
+  border: 1px solid var(--teal); background: #fff; color: var(--ink);
+  font-size: 12px; padding: 2px 8px; border-radius: var(--r-sm); outline: none;
+  font-family: var(--font-ui); width: 180px;
+}
+.v10-sesstop .ses-del {
+  margin-left: auto; border: none; background: none; color: var(--ink-3);
+  font-size: 11px; cursor: pointer; padding: 2px 6px; font-family: var(--font-ui);
+}
+.v10-sesstop .ses-del:hover { color: var(--danger, #C4553B); }
+.v10-sesstop .ses-del.armed { color: #C4553B; font-weight: 600; }

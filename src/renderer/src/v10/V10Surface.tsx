@@ -53,6 +53,15 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const [showFlowMap, setShowFlowMap] = useState(false)
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  /** 会话中所有 AI 回复统一走这里（纯数据入参；IPC 绝不放 setChat updater——StrictMode 双调用会双写） */
+  const pushAI = useCallback((msgs: ChatMsg[]) => {
+    setChat((c) => [...c, ...msgs])
+    if (activeSessionId) {
+      for (const m of msgs) {
+        if (m.role === 'ai') void window.api?.addSessionItem?.(activeSessionId, { role: 'ai', text: m.text, time: Date.now() })
+      }
+    }
+  }, [activeSessionId])
 
   const reloadPlans = useCallback(() => {
     void window.api?.listPlans?.().then((p) => setPlans((p as PlanItem[]) ?? []))
@@ -224,7 +233,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
               })
               .then(() => {
                 reloadGoals()
-                setChat((c) => [...c, { role: 'ai', text: `立了。右页「人生预期」开始盯轨——「${draft.event}」，${draft.deadline} 见分晓。` }])
+                pushAI([{ role: 'ai', text: `立了。右页「人生预期」开始盯轨——「${draft.event}」，${draft.deadline} 见分晓。` }])
               })
           } else if (picked.includes('重新拆')) {
             setAsking(true)
@@ -287,7 +296,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         const field = FIELD[kw]
         if (field) {
           void window.api?.setSettings?.({ [field]: on } as never)
-          setChat((c) => [...c, { role: 'ai', text: `${on ? '开' : '关'}了${kw} ✦（生效即可见，桌宠/悬浮窗的开关会即时创建或收起窗口）` }])
+          pushAI([{ role: 'ai', text: `${on ? '开' : '关'}了${kw} ✦（生效即可见，桌宠/悬浮窗的开关会即时创建或收起窗口）` }])
           return
         }
       }
@@ -344,15 +353,10 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           ?.addReminder?.({ title: intent.title, recurring: intent.recurring, atHHMM: intent.atHHMM, atTs: intent.atTs })
           .then((r) => {
             setReminders((list) => [...list, r as { id: string; title: string; atHHMM?: string }])
-            setChat((c) => {
-              const opts = ['就这么定', '不用了']
-              const next = [
-                ...c,
-                { role: 'ai' as const, text: `好——${intent.whenLabel}提醒你「${intent.title}」。`, options: opts }
-              ]
-              optionsRef.current = { msgIndex: next.length - 1, options: opts }
-              return next
-            })
+            // optionsRef 赋值是幂等 ref 写，安全；IPC 一律走 pushAI 纯数据
+            const opts = ['就这么定', '不用了']
+            pushAI([{ role: 'ai', text: `好——${intent.whenLabel}提醒你「${intent.title}」。`, options: opts }])
+            optionsRef.current = { msgIndex: chat.length, options: opts }
           })
         return
       }
@@ -377,15 +381,14 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         .then((r) => {
           const content =
             typeof r === 'string' ? r : ((r as { content?: string })?.content ?? '（没有回答）')
-          if (activeSessionId) void window.api?.addSessionItem?.(activeSessionId, { role: 'ai', text: content, time: Date.now() })
-          setChat((c) => [...c, { role: 'ai', text: content }])
+          pushAI([{ role: 'ai', text: content }])
         })
         .catch(() => {
-          setChat((c) => [...c, { role: 'ai', text: '这个问题暂时答不上来（AI 未配置或网络异常）。' }])
+          pushAI([{ role: 'ai', text: '这个问题暂时答不上来（AI 未配置或网络异常）。' }])
         })
         .finally(() => setAsking(false))
     },
-    [asking, reminders, objectChip, blockParams, reloadGoals]
+    [asking, reminders, objectChip, blockParams, reloadGoals, pushAI, activeSessionId]
   )
 
   const markAnchor = useCallback(
@@ -422,6 +425,8 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         onClearChip={() => setObjectChip(null)}
         sessions={sessions}
         activeSessionId={activeSessionId}
+        onSessionRenamed={(id, title) => setSessions((list) => list.map((x) => (x.id === id ? { ...x, title } : x)))}
+        onSessionRemoved={(id) => setSessions((list) => list.filter((x) => x.id !== id))}
         onEnterSession={(id) => {
           if (id === '__list__') {
             // 会话列表视图：临时用 null 但显示列表——简化：开抽屉提示

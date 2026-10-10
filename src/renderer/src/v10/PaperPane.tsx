@@ -32,6 +32,7 @@ function hhmm(ts: number): string {
 function TodayPlansBlock(props: { plans: PlanItem[]; onToggle: (p: PlanItem) => void }): JSX.Element {
   const today = new Date()
   const [expanded, setExpanded] = useState(false)
+  const [showSrc, setShowSrc] = useState(false)
   const key = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
   const list = props.plans.filter((p) => p.date === key && p.status !== 'cancelled')
   const done = list.filter((p) => p.status === 'done').length
@@ -42,8 +43,14 @@ function TodayPlansBlock(props: { plans: PlanItem[]; onToggle: (p: PlanItem) => 
       <div className="v10-block-kick">
         <span>◆ 今日计划</span>
         <span>· {done}/{list.length}</span>
-        <span className="acts"><button>留住</button><button>×</button></span>
+        <span className="acts">
+          <button onClick={() => setShowSrc(!showSrc)} title="数据源">源</button>
+          <button>留住</button><button>×</button>
+        </span>
       </div>
+      {showSrc ? (
+        <div className="v10-srcnote">数据源：plans 表（单一事实源）· 手动/来件拆路/Oner 同步/AI 生成 四类 source 同库</div>
+      ) : null}
       {!expanded && sortedAll.length > 8 ? (
         <button className="v10-foldmore" onClick={() => setExpanded(true)}>展开其余 {sortedAll.length - 8} 件 ▾</button>
       ) : null}
@@ -71,6 +78,7 @@ function TodayPlansBlock(props: { plans: PlanItem[]; onToggle: (p: PlanItem) => 
 }
 
 function NowBlock(props: { presence: PresenceSnapshot | null }): JSX.Element {
+  const [showSrc, setShowSrc] = useState(false)
   const s = props.presence?.state
   const main = props.presence?.screens?.find((x) => x.screen === props.presence?.mainScreen)
   const focusMin = Math.round((props.presence?.continuousFocusSec ?? 0) / 60)
@@ -78,8 +86,14 @@ function NowBlock(props: { presence: PresenceSnapshot | null }): JSX.Element {
     <section className="v10-block">
       <div className="v10-block-kick">
         <span>◆ 此刻</span>
-        <span className="acts"><button>留住</button><button>×</button></span>
+        <span className="acts">
+          <button onClick={() => setShowSrc(!showSrc)} title="数据源">源</button>
+          <button>留住</button><button>×</button>
+        </span>
       </div>
+      {showSrc ? (
+        <div className="v10-srcnote">数据源：presence 引擎（窗口采样 5s + winInfo/winInfoMac）· 状态判定 13 态</div>
+      ) : null}
       <div className="v10-block-hero">
         {s ? `${STATE_LABEL[s]}` : '—'}
         <small>{focusMin > 0 ? `今日专注 ${Math.round(focusMin)} 分钟` : '还没有采集到活动'}</small>
@@ -94,6 +108,7 @@ function NowBlock(props: { presence: PresenceSnapshot | null }): JSX.Element {
 function TimelineBlock(props: { trail: TrailSegment[]; days: number }): JSX.Element {
   const days = props.days
   const [expanded, setExpanded] = useState(false)
+  const [showSrc, setShowSrc] = useState(false)
   const cutoff = Date.now() - days * 24 * 3600_000
   const all = props.trail.filter((t) => !t.glance && t.startTs >= cutoff)
   const segs = (expanded ? all : all.slice(-8)).reverse()
@@ -112,8 +127,14 @@ function TimelineBlock(props: { trail: TrailSegment[]; days: number }): JSX.Elem
         <span>◆ {days === 1 ? '今日轨迹' : `近 ${days} 天轨迹`}</span>
         <span>· 最近 {segs.length} 段</span>
         {days !== 1 ? <span className="aura-mark">◇ 已调</span> : null}
-        <span className="acts"><button>留住</button><button>×</button></span>
+        <span className="acts">
+          <button onClick={() => setShowSrc(!showSrc)} title="数据源">源</button>
+          <button>留住</button><button>×</button>
+        </span>
       </div>
+      {showSrc ? (
+        <div className="v10-srcnote">数据源：activities.jsonl → buildMergedTrail 聚合 · 窗口采集 winInfo/winInfoMac</div>
+      ) : null}
       {!expanded && all.length > 8 ? (
         <button className="v10-foldmore" onClick={() => setExpanded(true)}>展开更早的 {all.length - 8} 段 ▾</button>
       ) : null}
