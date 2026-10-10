@@ -3,7 +3,7 @@
  * 报头 sticky（唯一永久物）→ 折上（你的版面，栏目三段式）→ 折线 → 折下（TTL 推送区）
  */
 import { useState } from 'react'
-import type { PlanItem, TrailSegment, PresenceSnapshot } from '@shared/types'
+import type { PlanItem, TrailSegment, PresenceSnapshot, GoalView } from '@shared/types'
 import type { BlockParams } from './V10Surface'
 import type { ObjectChipData } from './AskPane'
 
@@ -118,6 +118,120 @@ function TimelineBlock(props: { trail: TrailSegment[]; days: number }): JSX.Elem
   )
 }
 
+/** 人生预期轨迹块（v10 人生规划模拟）：计划 vs 实际投入 + 锚点轴 + 高度预估 */
+function GoalCard(props: {
+  v: GoalView
+  onMarkAnchor: (goalId: string, anchorId: string, status: 'hit' | 'pending') => void
+  onGoalPatch: (goalId: string, patch: unknown) => void
+}): JSX.Element {
+  const { v } = props
+  const [adding, setAdding] = useState(false)
+  const [aTitle, setATitle] = useState('')
+  const [aDate, setADate] = useState('')
+  const pct = Math.min(100, Math.round((v.cumMin / Math.max(1, v.totalTargetMin)) * 100))
+  const planPct = Math.min(100, Math.round((v.plannedCumMin / Math.max(1, v.totalTargetMin)) * 100))
+  const behind = v.paceRatio < 0.6
+  const f = v.forecast
+
+  const submitAnchor = (): void => {
+    if (!aTitle.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(aDate)) return
+    props.onGoalPatch(v.goal.id, { addAnchor: { title: aTitle.trim(), targetDate: aDate } })
+    setATitle('')
+    setADate('')
+    setAdding(false)
+  }
+
+  return (
+    <div className="v10-goal">
+      <div className="v10-goal-head">
+        <span className="v10-goal-title">{v.goal.event}</span>
+        <span className="v10-goal-dday">D-{v.remainingDays} · {v.goal.deadline.slice(5)}</span>
+      </div>
+      <div className="v10-goal-bar" title={`已投 ${Math.round(v.cumMin)} 分钟 / 预算 ${Math.round(v.totalTargetMin)} 分钟`}>
+        <i style={{ width: `${pct}%` }} />
+        <em className="v10-goal-plan" style={{ left: `${planPct}%` }} />
+      </div>
+      <div className="v10-goal-anchors">
+        {v.goal.anchors.map((a) => (
+          <span key={a.id} className="v10-goal-anchor-wrap">
+            <button
+              className={`v10-goal-anchor ${a.status}`}
+              title={`${a.targetDate} · 累计刻度 ${Math.round(a.cumTargetMin / 60)}h — 点一下标记达成/还原，长按×删除`}
+              onClick={() => props.onMarkAnchor(v.goal.id, a.id, a.status === 'hit' ? 'pending' : 'hit')}
+            >
+              {a.status === 'hit' ? '●' : a.status === 'missed' ? '✕' : '○'} {a.title}
+            </button>
+            <button
+              className="v10-goal-anchor-x"
+              title="删除锚点"
+              onClick={() => props.onGoalPatch(v.goal.id, { removeAnchorId: a.id })}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        <button className="v10-goal-anchor-add" title="手动加锚点" onClick={() => setAdding(!adding)}>
+          + 锚点
+        </button>
+      </div>
+      {adding ? (
+        <div className="v10-goal-addrow">
+          <input
+            type="date"
+            value={aDate}
+            onChange={(e) => setADate(e.target.value)}
+            min={new Date().toISOString().slice(0, 10)}
+            max={v.goal.deadline}
+          />
+          <input
+            type="text"
+            value={aTitle}
+            placeholder="锚点名（如 MVP 原型跑通）"
+            onChange={(e) => setATitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') submitAnchor()
+            }}
+          />
+          <button onClick={submitAnchor}>加</button>
+        </div>
+      ) : null}
+      <div className="v10-goal-meta">
+        <span>{behind ? '⚠ 偏离' : '在轨'} · 今日 +{Math.round(v.investedTodayMin)} 分钟</span>
+        {v.alerts.length ? <span className="v10-goal-alert">{v.alerts[0]}</span> : null}
+      </div>
+      {f ? (
+        <div className="v10-goal-forecast">
+          按近 14 天节奏到期预计 <b>{Math.round(f.completionPct * 100)}%</b>
+          {f.projectedAnchorTitle ? ` · 落点「${f.projectedAnchorTitle}」` : ''}
+          {f.levers[0] ? ` · 若${f.levers[0].label} → ${Math.round(f.levers[0].newCompletionPct * 100)}%` : ''}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function GoalsBlock(props: {
+  goals: GoalView[]
+  onMarkAnchor: (goalId: string, anchorId: string, status: 'hit' | 'pending') => void
+  onGoalPatch: (goalId: string, patch: unknown) => void
+}): JSX.Element {
+  const actives = props.goals.filter((v) => v.goal.status === 'active')
+  return (
+    <section className="v10-block">
+      <div className="v10-block-kick">
+        <span>◆ 人生预期</span>
+        <span>· {actives.length} 条在轨</span>
+        <span className="acts"><button>留住</button><button>×</button></span>
+      </div>
+      {actives.length === 0 ? (
+        <div className="v10-empty">还没有预期——去左栏说一句「我想在年底前把 X 做到 Y」，我拆成锚点轨迹替你盯。</div>
+      ) : (
+        actives.map((v) => <GoalCard key={v.goal.id} v={v} onMarkAnchor={props.onMarkAnchor} onGoalPatch={props.onGoalPatch} />)
+      )}
+    </section>
+  )
+}
+
 /** 首启三步卡（v10 §2 指引式首启）：工作类型 → 提醒意愿+协议启蒙 */
 function OnboardCard(props: {
   step: 0 | 1 | 2
@@ -168,6 +282,9 @@ function OnboardCard(props: {
 export function PaperPane(props: {
   dateLabel: string
   plans: PlanItem[]
+  goals?: GoalView[]
+  onMarkAnchor?: (goalId: string, anchorId: string, status: 'hit' | 'pending') => void
+  onGoalPatch?: (goalId: string, patch: unknown) => void
   trail: TrailSegment[]
   presence: PresenceSnapshot | null
   onTogglePlan: (p: PlanItem) => void
@@ -210,6 +327,9 @@ export function PaperPane(props: {
         <div className="v10-fold-label">折 上 · 你 的 版 面</div>
         <NowBlock presence={props.presence} />
         <TodayPlansBlock plans={props.plans} onToggle={props.onTogglePlan} />
+        {props.onMarkAnchor ? (
+          <GoalsBlock goals={props.goals ?? []} onMarkAnchor={props.onMarkAnchor} onGoalPatch={props.onGoalPatch ?? (() => {})} />
+        ) : null}
         <TimelineBlock trail={props.trail} days={days} />
       </div>
 

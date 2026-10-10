@@ -95,6 +95,13 @@ const api = {
   planVsActual: (date?: string) => ipcRenderer.invoke('plans:vsActual', date),
   dedupeBurstPlans: () => ipcRenderer.invoke('plans:dedupeBurst'),
 
+  // 人生预期轨迹（v10 人生规划模拟）
+  listGoals: () => ipcRenderer.invoke('goals:list'),
+  decomposeGoal: (sourceText: string, hint?: string) => ipcRenderer.invoke('goals:decompose', sourceText, hint),
+  createGoal: (input: unknown) => ipcRenderer.invoke('goals:create', input),
+  updateGoal: (id: string, patch: unknown) => ipcRenderer.invoke('goals:update', id, patch),
+  removeGoal: (id: string) => ipcRenderer.invoke('goals:remove', id),
+
   // 粘贴分拣
   peekClipboard: () => ipcRenderer.invoke('clipboard:peek'),
   writeClipboard: (text: string) => ipcRenderer.invoke('clipboard:write', text),

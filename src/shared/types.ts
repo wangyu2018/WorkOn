@@ -1434,3 +1434,97 @@ export interface WeeklyGeneratedReport {
   coverage: number // 全部条目字段覆盖率 0-1
   pendingReview: ReportEntry[] // 低置信度待确认条目（7 天合并）
 }
+
+// ───────────────────────── 人生预期轨迹（v10 人生规划模拟） ─────────────────────────
+
+/** 轨迹锚点：预期拆解出的中间里程碑 */
+export interface GoalAnchor {
+  id: string
+  idx: number // 1-based 轨迹位置序号
+  title: string // 「MVP 原型跑通」
+  targetDate: string // YYYY-MM-DD
+  /** 到该锚点累计应投入分钟数（轨迹上的位置刻度） */
+  cumTargetMin: number
+  status: 'pending' | 'hit' | 'missed'
+  doneAt?: number
+}
+
+export type LifeGoalStatus = 'active' | 'achieved' | 'paused'
+
+/** 人生预期：用户声明「什么时间什么事件算达成」，轨迹引擎持续对轨 */
+export interface LifeGoal {
+  id: string
+  sourceText: string // 用户原话
+  event: string // 结构化事件描述（「X 产品上线」）
+  deadline: string // YYYY-MM-DD 预期达成日
+  /** 归因规则：哪些桌面行为算在这条轨迹上 */
+  attribution: {
+    projectIds: string[] // 绑定既有项目（吃项目软绑定+当日归类）
+    keywords: string[] // 窗口标题/应用关键词
+  }
+  anchors: GoalAnchor[]
+  /** 计划轨迹斜率：每天应投入分钟数 */
+  dailyTargetMin: number
+  status: LifeGoalStatus
+  /** 已发预警去重（key → 触发日），避免同警连发 */
+  alertsSent?: Record<string, string>
+  /** 上次高度预估推送时间（周期建议节流） */
+  lastForecastNotifyAt?: number
+  createdAt: number
+  updatedAt: number
+}
+
+/** 每日归因结算（goalId:date 唯一，幂等覆盖） */
+export interface GoalDayState {
+  id: string // `${goalId}:${date}`
+  goalId: string
+  date: string
+  investedMin: number // 当日归因到该目标的分钟数
+  cumMin: number // 创建至今累计投入
+  ts: number
+}
+
+/** 工作流改善杠杆：what-if 模拟「把可转化时间投进来能到什么高度」 */
+export interface GoalLever {
+  label: string // 「摸鱼时段转化一半」
+  gainMinPerDay: number // 等效每天多出的可归因分钟
+  newCompletionPct: number // 0-1 改善后预计完成度
+}
+
+/** 高度预估：按近期真实速率外推到期落点（不持久化，现算） */
+export interface GoalForecast {
+  goalId: string
+  computedAt: number
+  paceMinPerDay: number // 近 14 天实际速率
+  requiredMinPerDay: number // 到期达标还需的日投入
+  projectedCumMin: number // 到期预计累计投入
+  completionPct: number // 0-1 = projectedCum/totalTarget
+  projectedAnchorIdx: number // 预计最后能到的锚点 idx（0=一个都到不了）
+  projectedAnchorTitle: string // 「预计落在 A3：公测」的锚点名
+  levers: GoalLever[]
+}
+
+/** 预期拆解草稿（goals:decompose 返回；确认后走 goals:create 落库） */
+export interface GoalDraft {
+  event: string
+  deadline: string
+  dailyTargetMin: number
+  keywords: string[]
+  /** 事件/关键词与既有项目名模糊命中的绑定建议 */
+  projectIds: string[]
+  anchors: { title: string; targetDate: string; cumTargetMin: number }[]
+  source: 'ai' | 'local'
+}
+
+/** v10 块渲染用聚合视图（goals:list 返回） */
+export interface GoalView {
+  goal: LifeGoal
+  cumMin: number
+  investedTodayMin: number
+  plannedCumMin: number // 按斜率到今日应投入
+  totalTargetMin: number // 到期总预算
+  paceRatio: number // cumMin/plannedCumMin（>1 超前）
+  remainingDays: number
+  forecast: GoalForecast | null
+  alerts: string[] // 当前活动中的偏离描述
+}

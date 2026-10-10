@@ -230,7 +230,8 @@ export default function App() {
 
   // 首启隐私同意门（审计 F1）：pending 时弹欢迎+告知卡，选择后写入并按需启动采集
   const [consentDismissed, setConsentDismissed] = useState(false)
-  const showConsent = settings.privacyConsent === 'pending' && !consentDismissed
+  const settingsLoaded = useSettingsStore((s) => s.loaded)
+  const showConsent = settingsLoaded && settings.privacyConsent === 'pending' && !consentDismissed
   const answerConsent = (v: 'granted' | 'declined'): void => {
     void window.api?.setConsent?.(v)
     setConsentDismissed(true)

@@ -5,10 +5,10 @@
  * 详见 docs/UI-DESIGN-SPEC-v10.md
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { PlanItem, TrailSegment, PresenceSnapshot } from '@shared/types'
+import type { PlanItem, TrailSegment, PresenceSnapshot, GoalView, GoalDraft } from '@shared/types'
 import { AskPane, type ChatMsg, type ObjectChipData } from './AskPane'
 import { PaperPane, type FeedItem } from './PaperPane'
-import { parseReminderIntent } from './nlu'
+import { parseReminderIntent, parseGoalIntent } from './nlu'
 import './v10.css'
 
 /** 首启三步卡状态（v10 §2：指引式首启，两分钟） */
@@ -28,6 +28,7 @@ export interface BlockParams {
 
 export default function V10Surface(props: { onExit?: () => void }): JSX.Element {
   const [plans, setPlans] = useState<PlanItem[]>([])
+  const [goals, setGoals] = useState<GoalView[]>([])
   const [trail, setTrail] = useState<TrailSegment[]>([])
   const [presence, setPresence] = useState<PresenceSnapshot | null>(null)
   const [reminders, setReminders] = useState<Array<{ id: string; title: string; atHHMM?: string }>>([])
@@ -41,11 +42,16 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const scrollRef = useRef<HTMLDivElement>(null)
   /** 快捷回复协议：最近一条带选项的消息 index → 选项数组；回 1/2 即答 */
   const optionsRef = useRef<{ msgIndex: number; options: string[] } | null>(null)
+  /** 待确认的预期拆解草稿（确认创建/重新拆解/算了） */
+  const pendingGoalRef = useRef<{ msgIndex: number; sourceText: string; draft: GoalDraft } | null>(null)
   /** 块进化：挂在输入场的对象芯片 */
   const [objectChip, setObjectChip] = useState<ObjectChipData | null>(null)
 
   const reloadPlans = useCallback(() => {
     void window.api?.listPlans?.().then((p) => setPlans((p as PlanItem[]) ?? []))
+  }, [])
+  const reloadGoals = useCallback(() => {
+    void window.api?.listGoals?.().then((g) => setGoals((g as GoalView[]) ?? []))
   }, [])
   const reloadTrail = useCallback(() => {
     void window.api?.getTrail?.().then((t) => {
@@ -56,6 +62,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
 
   useEffect(() => {
     reloadPlans()
+    reloadGoals()
     reloadTrail()
     void window.api?.listReminders?.().then((r) => setReminders((r as typeof reminders) ?? []))
     const offP = window.api?.onPlanUpdated?.(() => reloadPlans())
@@ -80,7 +87,10 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       ])
     })
     void window.api?.getPresence?.().then((p) => setPresence((p as PresenceSnapshot) ?? null))
-    const timer = window.setInterval(reloadTrail, 60_000)
+    const timer = window.setInterval(() => {
+      reloadTrail()
+      reloadGoals()
+    }, 60_000)
     return () => {
       offP?.()
       offS?.()
@@ -154,12 +164,65 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       }
 
       // ── 快捷回复协议：回数字 = 应答最近一条带选项的消息 ──
-      const num = /^[12]$/.exec(text)
+      const num = /^[1-4]$/.exec(text)
       if (num && optionsRef.current) {
         const pending = optionsRef.current
         const picked = pending.options[parseInt(num[1], 10) - 1]
+        if (!picked) return
         optionsRef.current = null
         setChat((c) => c.map((m, i) => (i === pending.msgIndex ? { ...m, options: undefined, picked } : m)))
+        // 预期拆解确认卡
+        if (pendingGoalRef.current && pendingGoalRef.current.msgIndex === pending.msgIndex) {
+          const { sourceText, draft } = pendingGoalRef.current
+          pendingGoalRef.current = null
+          if (picked.includes('确认创建')) {
+            void window.api
+              ?.createGoal?.({
+                sourceText,
+                event: draft.event,
+                deadline: draft.deadline,
+                keywords: draft.keywords,
+                projectIds: draft.projectIds,
+                dailyTargetMin: draft.dailyTargetMin,
+                anchors: draft.anchors
+              })
+              .then(() => {
+                reloadGoals()
+                setChat((c) => [...c, { role: 'ai', text: `立了。右页「人生预期」开始盯轨——「${draft.event}」，${draft.deadline} 见分晓。` }])
+              })
+          } else if (picked.includes('重新拆')) {
+            setAsking(true)
+            void window.api
+              ?.decomposeGoal?.(sourceText, '重新拆一版')
+              .then((d) => {
+                const draft = d as GoalDraft | null
+                if (!draft) {
+                  setChat((c) => [...c, { role: 'ai', text: '还是没拆出来——说得再具体点，或者直接说「算了」。' }])
+                  return
+                }
+                const anchorsText = draft.anchors.map((a) => `  · ${a.targetDate} ${a.title}`).join('\n')
+                const kw = draft.keywords.length ? `\n归因关键词：${draft.keywords.join('、')}` : ''
+                const opts = ['确认创建', '重新拆一版', '算了']
+                setChat((c) => {
+                  const next = [
+                    ...c,
+                    {
+                      role: 'ai' as const,
+                      text: `重拆了一版（${draft.source === 'ai' ? 'AI' : '本地'}）：「${draft.event}」→ ${draft.deadline}\n每天应投入约 ${draft.dailyTargetMin} 分钟${kw}\n锚点轨迹：\n${anchorsText}`,
+                      options: opts
+                    }
+                  ]
+                  optionsRef.current = { msgIndex: next.length - 1, options: opts }
+                  pendingGoalRef.current = { msgIndex: next.length - 1, sourceText, draft }
+                  return next
+                })
+              })
+              .finally(() => setAsking(false))
+          } else {
+            setChat((c) => [...c, { role: 'ai', text: '好，不立了。' }])
+          }
+          return
+        }
         if (picked.includes('晚 10 分钟')) {
           void window.api?.addReminder?.({ title: '稍后再提（延后 10 分钟）', recurring: 'once', atTs: Date.now() + 10 * 60_000 })
           setChat((c) => [...c, { role: 'ai', text: '好，10 分钟后再提一次。' }])
@@ -171,6 +234,46 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         } else {
           setChat((c) => [...c, { role: 'ai', text: '好。' }])
         }
+        return
+      }
+
+      // ── 人生预期意图（v10 人生规划模拟）：「我想在X前做到Y」→ AI拆锚点→确认卡 ──
+      const goalIntent = parseGoalIntent(text)
+      if (goalIntent) {
+        setAsking(true)
+        void window.api
+          ?.decomposeGoal?.(text)
+          .then((d) => {
+            const draft = d as GoalDraft | null
+            if (!draft) {
+              setChat((c) => [
+                ...c,
+                { role: 'ai', text: '听着像个目标，但我没听出截止时间——带上「年底前」「三个月后」「6 月前」这类时间锚点再跟我说一次。' }
+              ])
+              return
+            }
+            const anchorsText = draft.anchors.map((a) => `  · ${a.targetDate} ${a.title}`).join('\n')
+            const kw = draft.keywords.length ? `\n归因关键词：${draft.keywords.join('、')}` : ''
+            const pj = draft.projectIds.length ? `\n建议绑定项目：${draft.projectIds.length} 个（按名称命中，可在目标卡上改）` : ''
+            const opts = ['确认创建', '重新拆一版', '算了']
+            setChat((c) => {
+              const next = [
+                ...c,
+                {
+                  role: 'ai' as const,
+                  text: `拆好了（${draft.source === 'ai' ? 'AI' : '本地'}拆解）：「${draft.event}」→ ${draft.deadline}\n每天应投入约 ${draft.dailyTargetMin} 分钟${kw}${pj}\n锚点轨迹：\n${anchorsText}\n确认就开始盯轨（回 1/2/3）。`,
+                  options: opts
+                }
+              ]
+              optionsRef.current = { msgIndex: next.length - 1, options: opts }
+              pendingGoalRef.current = { msgIndex: next.length - 1, sourceText: text, draft }
+              return next
+            })
+          })
+          .catch(() => {
+            setChat((c) => [...c, { role: 'ai', text: '拆解失败——稍后再试，或说得再具体些。' }])
+          })
+          .finally(() => setAsking(false))
         return
       }
 
@@ -208,7 +311,20 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         })
         .finally(() => setAsking(false))
     },
-    [asking, reminders, objectChip, blockParams]
+    [asking, reminders, objectChip, blockParams, reloadGoals]
+  )
+
+  const markAnchor = useCallback(
+    (goalId: string, anchorId: string, status: 'hit' | 'pending') => {
+      void window.api?.updateGoal?.(goalId, { markAnchor: { anchorId, status } }).then(() => reloadGoals())
+    },
+    [reloadGoals]
+  )
+  const patchGoal = useCallback(
+    (goalId: string, patch: unknown) => {
+      void window.api?.updateGoal?.(goalId, patch).then(() => reloadGoals())
+    },
+    [reloadGoals]
   )
 
   const togglePlan = useCallback((p: PlanItem) => {
@@ -234,6 +350,9 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       <PaperPane
         dateLabel={dateLabel}
         plans={plans}
+        goals={goals}
+        onMarkAnchor={markAnchor}
+        onGoalPatch={patchGoal}
         trail={trail}
         presence={presence}
         onTogglePlan={togglePlan}

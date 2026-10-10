@@ -35,6 +35,7 @@ import { genQuestion, analyzeDay, deriveHabits } from './ai'
 import { genPersonaGapQuestion } from './qa/questionGenerator'
 import { canInterrupt } from './confirmQueue'
 import { initReminders, addReminder, listReminders, removeReminder } from './reminders'
+import { initLifeGoalJobs } from './lifeGoal'
 import { aiDevAdvice } from './projects'
 import { listActivities, listActivitiesRange, insertInto, col, updateIn } from './db'
 import type { UserHabits, PlanItem } from '@shared/types'
@@ -423,6 +424,7 @@ app.whenReady().then(() => {
   startIntegration()
           startOnerAutoSync()
           startPeriodicJobs()
+          initLifeGoalJobs()
           setPetNotifier((msg) => bus.setPet({ message: msg }))
           startAttentionEngine()
           // 画像重算会扫全量 activities，放到空闲后再跑，避免堵死主进程 IPC（最小化/点击假死）

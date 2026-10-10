@@ -58,6 +58,7 @@ import {
   buildProcessMergePreview,
   confirmProcessSediment
 } from './processDraft'
+import { listGoalViews, createGoal, updateGoal, removeGoal, decomposeGoal } from './lifeGoal'
 import { bus } from './state'
 import { emitPetIntent } from './petIntent'
 import {
@@ -480,6 +481,17 @@ export function registerIpc(): void {
     if (updated && updated.source === 'oner') await onerPushStatus(updated)
     return updated
   })
+  // ── 人生预期轨迹（v10 人生规划模拟） ──
+  ipcMain.handle('goals:list', () => listGoalViews())
+  ipcMain.handle('goals:decompose', async (_e, sourceText: string, hint?: string) =>
+    decomposeGoal(String(sourceText), hint ? String(hint) : undefined)
+  )
+  ipcMain.handle('goals:create', (_e, input: Parameters<typeof createGoal>[0]) => createGoal(input))
+  ipcMain.handle('goals:update', (_e, id: string, patch: Parameters<typeof updateGoal>[1]) =>
+    updateGoal(String(id), patch)
+  )
+  ipcMain.handle('goals:remove', (_e, id: string) => removeGoal(String(id)))
+
   ipcMain.handle('plans:vsActual', (_e, date?: string) => {
     const d = date ?? dateKey(Date.now())
     const trail = buildMergedTrail(listActivities(d), d)

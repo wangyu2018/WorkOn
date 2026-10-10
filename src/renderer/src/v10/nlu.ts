@@ -17,6 +17,25 @@ const TONIGHT_RE = /(今晚|今天)/
 const TOMORROW_RE = /(明天|明晚|明日)/
 const REMIND_RE = /(提醒|叫我|别忘)/
 
+// ───────────────────────── 人生预期意图 ─────────────────────────
+
+/** 预期声明：「我想在年底前把 X 做到 Y」「目标是三个月内上线」 */
+export interface GoalIntent {
+  sourceText: string
+}
+
+const GOAL_PHRASE_RE = /(我?\s*(想|要|打算|希望|计划|争取|立志)|目标\s*(是|为)?|定个?目标|立个?\s*flag|我的?愿望)/i
+const DEADLINE_HINT_RE =
+  /(年底|明年|今年|后年|\d{4}\s*年|\d{1,2}\s*月|(\d+|十|十一|十二|[一二两三四五六七八九])\s*个?\s*(月|周|天)|半年|一年|\d+\s*岁)/
+
+export function parseGoalIntent(text: string): GoalIntent | null {
+  // 提醒词优先——「提醒我……」归提醒通道，不当预期
+  if (REMIND_RE.test(text)) return null
+  if (!GOAL_PHRASE_RE.test(text)) return null
+  if (!DEADLINE_HINT_RE.test(text)) return null
+  return { sourceText: text }
+}
+
 export function parseReminderIntent(text: string): ReminderIntent | null {
   if (!REMIND_RE.test(text)) return null
   const t = TIME_RE.exec(text)
