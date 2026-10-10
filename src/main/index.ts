@@ -37,6 +37,7 @@ import { canInterrupt } from './confirmQueue'
 import { initReminders, addReminder, listReminders, removeReminder } from './reminders'
 import { initLifeGoalJobs } from './lifeGoal'
 import { macCheckPermissions } from './winInfoMac'
+import { listChatSessions, createChatSession, addChatSessionItem, removeChatSession, renameChatSession } from './chatSessions'
 import { aiDevAdvice } from './projects'
 import { listActivities, listActivitiesRange, insertInto, col, updateIn } from './db'
 import type { UserHabits, PlanItem } from '@shared/types'
@@ -406,6 +407,16 @@ app.whenReady().then(() => {
     addReminder(input)
   )
   ipcMain.handle('reminders:remove', (_e, id: string) => removeReminder(id))
+  // 会话（v10）：消息右键加入会话，可继续追问
+  ipcMain.handle('sessions:list', () => listChatSessions())
+  ipcMain.handle('sessions:create', (_e, input: { title?: string; topic?: 'project' | 'life' | 'general'; first?: { role: 'user' | 'ai'; text: string; time: number } }) =>
+    createChatSession(input)
+  )
+  ipcMain.handle('sessions:addItem', (_e, id: string, item: { role: 'user' | 'ai'; text: string; time: number }) =>
+    addChatSessionItem(id, item)
+  )
+  ipcMain.handle('sessions:remove', (_e, id: string) => removeChatSession(id))
+  ipcMain.handle('sessions:rename', (_e, id: string, title: string) => renameChatSession(id, title))
   initReminders((r) => {
     const payload = { id: r.id, title: r.title, recurring: r.recurring, atHHMM: r.atHHMM }
     sendTo('main', 'reminder:fired', payload)

@@ -5,7 +5,7 @@
  * 详见 docs/UI-DESIGN-SPEC-v10.md
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { PlanItem, TrailSegment, PresenceSnapshot, GoalView, GoalDraft } from '@shared/types'
+import type { PlanItem, TrailSegment, PresenceSnapshot, GoalView, GoalDraft, ChatSession } from '@shared/types'
 import { AskPane, type ChatMsg, type ObjectChipData } from './AskPane'
 import { PaperPane, type FeedItem } from './PaperPane'
 import { parseReminderIntent, parseGoalIntent } from './nlu'
@@ -51,6 +51,8 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const [archived, setArchived] = useState<FeedItem[]>([])
   const [aiOn, setAiOn] = useState<boolean | null>(null)
   const [showFlowMap, setShowFlowMap] = useState(false)
+  const [sessions, setSessions] = useState<ChatSession[]>([])
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
 
   const reloadPlans = useCallback(() => {
     void window.api?.listPlans?.().then((p) => setPlans((p as PlanItem[]) ?? []))
@@ -93,6 +95,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
     })
     void window.api?.getPresence?.().then((p) => setPresence((p as PresenceSnapshot) ?? null))
     void window.api?.getSettings?.().then((st) => setAiOn(!!(st as { aiEnabled?: boolean })?.aiEnabled))
+    void window.api?.listSessions?.().then((x) => setSessions((x as ChatSession[]) ?? []))
     // 秒级 tick：时钟 + 折下 TTL（keep 类到期转归档，fade 类消亡）
     const tick = window.setInterval(() => {
       setNow(Date.now())
@@ -155,6 +158,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       const text = raw.trim()
       if (!text || asking) return
       setChat((c) => [...c, { role: 'user', text }])
+      if (activeSessionId) void window.api?.addSessionItem?.(activeSessionId, { role: 'user', text, time: Date.now() })
 
       // ── 全局撤销（v10 §4.C：块进化的可召回；无需重新拖芯片） ──
       if (/(换回来|撤销|还原)/.test(text)) {
@@ -366,13 +370,14 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         return
       }
 
-      // ── 常规问答走现有 qa 管道 ──
+      // ── 常规问答走现有 qa 管道（会话中：回答同步写回 session） ──
       setAsking(true)
       void window.api
         ?.askQA?.(text)
         .then((r) => {
           const content =
             typeof r === 'string' ? r : ((r as { content?: string })?.content ?? '（没有回答）')
+          if (activeSessionId) void window.api?.addSessionItem?.(activeSessionId, { role: 'ai', text: content, time: Date.now() })
           setChat((c) => [...c, { role: 'ai', text: content }])
         })
         .catch(() => {
@@ -415,6 +420,33 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         presence={presence}
         objectChip={objectChip}
         onClearChip={() => setObjectChip(null)}
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        onEnterSession={(id) => {
+          if (id === '__list__') {
+            // 会话列表视图：临时用 null 但显示列表——简化：开抽屉提示
+            setChat((c) => [...c, { role: 'ai', text: `现有 ${sessions.length} 个会话：${sessions.slice(0, 5).map((x) => `「${x.title}」`).join(' ')}。说会话名可进入（下批做列表视图）。` }])
+            return
+          }
+          setActiveSessionId(id)
+        }}
+        onAddToSession={(msgIndex, sessionId, topic) => {
+          const m = chat[msgIndex]
+          if (!m) return
+          if (sessionId) {
+            void window.api?.addSessionItem?.(sessionId, { role: m.role, text: m.text, time: Date.now() })
+            setChat((c) => [...c, { role: 'ai', text: '收进会话了——在左栏顶部「会话」里可继续追问。' }])
+          } else if (topic) {
+            setArchived((a) => [{ kind: 'notify', id: `mg${Date.now()}`, title: m.text.slice(0, 16) || '归档件', body: m.text, time: Date.now(), ttlSec: 3600, keep: true, topic }, ...a])
+            setChat((c) => [...c, { role: 'ai', text: `归档到「${topic === 'project' ? '项目' : '生活'}」了——右页归档抽屉可查。` }])
+          } else {
+            const s2 = window.api?.createSession?.({ first: { role: m.role, text: m.text, time: Date.now() } })
+            void s2?.then((x) => {
+              setSessions((list) => [x as ChatSession, ...list])
+              setChat((c) => [...c, { role: 'ai', text: `新会话「${(x as ChatSession).title}」建好了。` }])
+            })
+          }
+        }}
       />
       <PaperPane
         dateLabel={dateLabel}
@@ -435,6 +467,14 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         now={now}
         aiOn={aiOn}
         showFlowMap={showFlowMap}
+        onFeedReorder={(from, to) => {
+          setFeed((f) => {
+            const next = [...f]
+            const [m] = next.splice(from, 1)
+            next.splice(to, 0, m)
+            return next
+          })
+        }}
       />
     </div>
   )

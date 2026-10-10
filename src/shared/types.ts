@@ -1517,6 +1517,22 @@ export interface GoalDraft {
 }
 
 /** v10 块渲染用聚合视图（goals:list 返回） */
+/** v10 会话：气泡/消息归档成可继续追问的 session（右键加入会话） */
+export interface ChatSessionItem {
+  role: 'user' | 'ai'
+  text: string
+  time: number
+}
+export interface ChatSession {
+  id: string
+  title: string
+  topic: 'project' | 'life' | 'general'
+  projectId?: string
+  items: ChatSessionItem[]
+  createdAt: number
+  updatedAt: number
+}
+
 export interface GoalView {
   goal: LifeGoal
   cumMin: number

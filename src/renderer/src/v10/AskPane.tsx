@@ -5,7 +5,7 @@
  * 块进化（v10 §4.C）：右页组件拖入输入场 → 挂对象芯片 → 一句话调参数
  */
 import { useState, type RefObject, type DragEvent } from 'react'
-import type { PresenceSnapshot, WorkState } from '@shared/types'
+import type { PresenceSnapshot, WorkState, ChatSession } from '@shared/types'
 import { STATE_LABEL } from '@shared/stateMeta'
 
 export interface ChatMsg {
@@ -26,6 +26,65 @@ export interface ObjectChipData {
   current: string
 }
 
+export function MsgActions(props: {
+  idx: number
+  open: boolean
+  onToggle: () => void
+  sessions: ChatSession[]
+  onAddToSession: (sessionId: string | null, topic?: 'project' | 'life' | 'general') => void
+}): JSX.Element {
+  const [level, setLevel] = useState<'root' | 'pick'>('root')
+  if (!props.open) {
+    return (
+      <button className="v10-msgdots" onClick={props.onToggle} title="加入会话 / 归档">
+        ⋯
+      </button>
+    )
+  }
+  return (
+    <div className="v10-msgmenu">
+      {level === 'root' ? (
+        <>
+          <button onClick={() => props.onAddToSession(null, undefined)}>＋ 新建会话</button>
+          {props.sessions.slice(0, 4).map((x) => (
+            <button key={x.id} onClick={() => props.onAddToSession(x.id)}>{x.title.slice(0, 12)}</button>
+          ))}
+          {props.sessions.length > 0 ? <button onClick={() => setLevel('pick')}>更多会话…</button> : null}
+          <button onClick={() => props.onAddToSession(null, 'project')}>归档 · 项目</button>
+          <button onClick={() => props.onAddToSession(null, 'life')}>归档 · 生活</button>
+        </>
+      ) : (
+        <>
+          {props.sessions.map((x) => (
+            <button key={x.id} onClick={() => props.onAddToSession(x.id)}>{x.title.slice(0, 12)}</button>
+          ))}
+        </>
+      )}
+    </div>
+  )
+}
+
+function SessionInput(props: { onSend: (t: string) => void }): JSX.Element {
+  const [t, setT] = useState('')
+  return (
+    <div className="v10-ask-inputbar">
+      <textarea
+        className="v10-input"
+        rows={2}
+        placeholder="继续这个会话…"
+        value={t}
+        onChange={(e) => setT(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && t.trim()) {
+            props.onSend(t.trim())
+            setT('')
+          }
+        }}
+      />
+    </div>
+  )
+}
+
 export function AskPane(props: {
   chat: ChatMsg[]
   asking: boolean
@@ -34,6 +93,11 @@ export function AskPane(props: {
   presence: PresenceSnapshot | null
   objectChip?: ObjectChipData | null
   onClearChip?: () => void
+  /** 会话（v10）：列表 + 当前进入的会话 + 动作回调 */
+  sessions?: ChatSession[]
+  activeSessionId?: string | null
+  onEnterSession?: (id: string | null) => void
+  onAddToSession?: (msgIndex: number, sessionId: string | null, topic?: 'project' | 'life' | 'general') => void
 }): JSX.Element {
   const [draft, setDraft] = useState('')
   const [dropHot, setDropHot] = useState(false)
@@ -64,19 +128,76 @@ export function AskPane(props: {
     } catch { /* 非块拖拽忽略 */ }
   }
 
+  const [menuIdx, setMenuIdx] = useState<number | null>(null) // 行内动作面板（零浮层：hover ⋯ 展开）
+  const [listOpen, setListOpen] = useState(false) // 会话列表下拉
+  const active = props.sessions?.find((x) => x.id === props.activeSessionId) ?? null
+
+  // 会话视图：进入某会话后左栏显示其消息 + 继续追问
+  if (active) {
+    return (
+      <aside className="v10-ask">
+        <div className="v10-sesstop">
+          <button className="ses-back" onClick={() => props.onEnterSession?.(null)}>← 对话</button>
+          <span className="ses-title">{active.title}</span>
+          <span className="ses-topic">{active.topic === 'project' ? '项目' : active.topic === 'life' ? '生活' : '通用'}</span>
+        </div>
+        <div className="v10-ask-scroll" ref={props.scrollRef}>
+          {active.items.map((m, i) => (
+            <div key={i} className={m.role === 'user' ? 'v10-msg-user' : 'v10-msg-ai'}>
+              {m.text}
+            </div>
+          ))}
+        </div>
+        <SessionInput
+          onSend={(t) => {
+            props.onAddToSession?.(-1, active.id)
+            props.onSend(t)
+          }}
+        />
+      </aside>
+    )
+  }
+
   return (
     <aside className="v10-ask">
+      {props.sessions && props.sessions.length > 0 ? (
+        <div className="v10-sesstop" style={{ position: 'relative' }}>
+          <button className="ses-back" onClick={() => setListOpen(!listOpen)}>会话 {props.sessions.length} ▸</button>
+          {listOpen ? (
+            <div className="v10-seslist">
+              {props.sessions.map((x) => (
+                <button key={x.id} onClick={() => { props.onEnterSession?.(x.id); setListOpen(false) }}>
+                  {x.title.slice(0, 16)}
+                  <span className="ses-n">{x.items.length} 条</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="v10-ask-scroll" ref={props.scrollRef}>
         {!expanded && HIDE_COUNT > 0 ? (
           <button className="v10-chatfold" onClick={() => setExpanded(true)}>
             —— 更早的 {HIDE_COUNT} 条对话 · 点击展开 ——
           </button>
         ) : null}
-        {visible.map((m, i) => (
+        {visible.map((m, vi) => {
+          const i = expanded || HIDE_COUNT <= 0 ? vi : HIDE_COUNT + vi
+          return (
           <div key={i} className={m.role === 'user' ? 'v10-msg-user' : 'v10-msg-ai-wrap'}>
             <div className={m.role === 'user' ? undefined : 'v10-msg-ai'} style={m.role === 'user' ? undefined : { display: 'inline' }}>
               {m.role === 'ai' ? <span style={{ display: 'inline' }}>{m.text}</span> : m.text}
             </div>
+            <MsgActions
+              idx={i}
+              open={menuIdx === i}
+              onToggle={() => setMenuIdx(menuIdx === i ? null : i)}
+              sessions={props.sessions ?? []}
+              onAddToSession={(sid, topic) => {
+                props.onAddToSession?.(i, sid, topic)
+                setMenuIdx(null)
+              }}
+            />
             {m.options ? (
               <div className="v10-optrow">
                 {m.options.map((o, oi) => (
@@ -99,7 +220,8 @@ export function AskPane(props: {
               </div>
             ) : null}
           </div>
-        ))}
+          )
+        })}
         {props.asking ? <div className="v10-msg-ai">…</div> : null}
       </div>
       <div className="v10-ask-inputbar">

@@ -18,7 +18,7 @@ import type {
   RecognitionLogRecord, OcrShot,
   MotionMeta, PointsEntry, ReportEntryPatch,
   AutomationRule, KnowledgeItem, ProcessDraft,
-  LifeGoal, GoalDayState
+  LifeGoal, GoalDayState, ChatSession
 } from '@shared/types'
 import type { ProjectBinding } from './attributions'
 import type { DirActivity } from './dirWatcher'
@@ -66,6 +66,7 @@ interface JsonData {
   processDrafts: ProcessDraft[] // 过程草稿 → 知识库案卷
   lifeGoals: LifeGoal[] // 人生预期目标（轨迹引擎）
   goalDayStates: GoalDayState[] // 目标每日归因结算（goalId:date 唯一）
+  chatSessions: ChatSession[] // v10 会话：消息归档可续问
 }
 
 const EMPTY: JsonData = {
@@ -74,10 +75,8 @@ const EMPTY: JsonData = {
   attentionScores: [], achievements: [], accessLogs: [], personas: [],
   reportTemplates: [], ocrSnapshots: [], chains: [], categoryInferences: [], segmentPlans: [],
   projects: [], projectTasks: [], projectTimeLinks: [], automations: [], projectBindings: [], confirmMemory: [], dirActivity: [], processDrafts: [],
-  lifeGoals: [], goalDayStates: []
-,
-  ocrShots: []
-  ,
+  lifeGoals: [], goalDayStates: [], chatSessions: [],
+  ocrShots: [],
   motions: [],
   pointsLedger: []
   ,

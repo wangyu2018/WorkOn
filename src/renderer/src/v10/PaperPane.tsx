@@ -18,6 +18,8 @@ export interface FeedItem {
   ttlSec: number
   /** 重要性：keep=报表/修正类（到期转归档不消失）；fade=一般通知（到期消亡）——v10 拍板 */
   keep?: boolean
+  /** 主题归档（v10）：项目/生活/通用 */
+  topic?: 'project' | 'life' | 'general'
 }
 import { WORK_STATES, STATE_LABEL } from '@shared/stateMeta'
 import { displayApp } from '@shared/appDisplayName'
@@ -248,19 +250,36 @@ function GoalsBlock(props: {
 /** 归档抽屉（v10 §5）：重要通知到期后落这里，标题=内容总结（首句截断），可展开 */
 function FoldArchive(props: { items: FeedItem[] }): JSX.Element {
   const [open, setOpen] = useState(false)
+  const [topic, setTopic] = useState<'all' | 'project' | 'life' | 'general'>('all')
   const summarize = (b: string): string => (b.length > 22 ? `${b.slice(0, 22)}…` : b)
+  const TOPIC_LABEL: Record<string, string> = { project: '项目', life: '生活', general: '通用' }
+  const shown = topic === 'all' ? props.items : props.items.filter((x) => (x.topic ?? 'general') === topic)
+  const counts = props.items.reduce<Record<string, number>>((m, x) => {
+    const k = x.topic ?? 'general'
+    m[k] = (m[k] ?? 0) + 1
+    return m
+  }, {})
   return (
     <div className="v10-archive">
       <button className="ar-head" onClick={() => setOpen(!open)}>
         归档 · {props.items.length} 条重要件 {open ? '▾' : '▸'}
       </button>
       {open ? (
-        props.items.map((f) => (
-          <div className="ar-row" key={f.id}>
-            <span className="ar-title">{summarize(f.title === f.body ? f.body : `${f.title}｜${f.body}`)}</span>
-            <span className="ar-time">{new Date(f.time).getHours()}:{String(new Date(f.time).getMinutes()).padStart(2, '0')}</span>
+        <>
+          <div className="ar-tabs">
+            {(['all', 'project', 'life', 'general'] as const).map((t) => (
+              <button key={t} className={`ar-tab${topic === t ? ' on' : ''}`} onClick={() => setTopic(t)}>
+                {t === 'all' ? `全部 ${props.items.length}` : `${TOPIC_LABEL[t]} ${counts[t] ?? 0}`}
+              </button>
+            ))}
           </div>
-        ))
+          {shown.map((f) => (
+            <div className="ar-row" key={f.id}>
+              <span className="ar-title">{summarize(f.title === f.body ? f.body : `${f.title}｜${f.body}`)}</span>
+              <span className="ar-time">{new Date(f.time).getHours()}:{String(new Date(f.time).getMinutes()).padStart(2, '0')}</span>
+            </div>
+          ))}
+        </>
       ) : null}
     </div>
   )
@@ -332,6 +351,7 @@ export function PaperPane(props: {
   now?: number
   aiOn?: boolean | null
   showFlowMap?: boolean
+  onFeedReorder?: (from: number, to: number) => void
 }): JSX.Element {
   const feed = props.feed ?? []
   const archived = props.archived ?? []
@@ -413,8 +433,20 @@ export function PaperPane(props: {
             </div>
           </div>
         ) : (
-          feed.map((f) => (
-            <div className="v10-aura-card" key={f.id}>
+          feed.map((f, fi) => (
+            <div
+              className="v10-aura-card"
+              key={f.id}
+              draggable
+              onDragStart={(e) => e.dataTransfer.setData('application/x-workon-feed', String(fi))}
+              onDragOver={(e) => {
+                if (e.dataTransfer.types.includes('application/x-workon-feed')) e.preventDefault()
+              }}
+              onDrop={(e) => {
+                const from = e.dataTransfer.getData('application/x-workon-feed')
+                if (from !== '') props.onFeedReorder?.(Number(from), fi)
+              }}
+            >
               <div style={{ fontSize: 12.5, color: 'var(--ink)' }}>
                 <strong style={{ marginRight: 6 }}>{f.title}</strong>
                 {f.body}
