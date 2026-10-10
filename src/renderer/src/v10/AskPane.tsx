@@ -15,6 +15,8 @@ export interface ChatMsg {
   options?: string[]
   /** 已选择的选项（应答后定格显示） */
   picked?: string
+  /** 答卡可拆件：回答附带的落页件（点按触发） */
+  attach?: 'flowmap'
 }
 
 /** 块进化对象芯片：从右页拖入的组件描述 */
@@ -89,6 +91,13 @@ export function AskPane(props: {
               </div>
             ) : null}
             {m.picked ? <div className="v10-picked">✓ {m.picked}</div> : null}
+            {m.attach ? (
+              <div className="v10-attachrow">
+                <button className="v10-attach" onClick={() => props.onSend(`__${m.attach}__`)}>
+                  ◇ 可拆件：状态导图 → 落右页
+                </button>
+              </div>
+            ) : null}
           </div>
         ))}
         {props.asking ? <div className="v10-msg-ai">…</div> : null}

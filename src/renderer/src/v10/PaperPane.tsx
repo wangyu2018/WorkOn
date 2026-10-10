@@ -6,6 +6,7 @@ import { useState } from 'react'
 import type { PlanItem, TrailSegment, PresenceSnapshot, GoalView } from '@shared/types'
 import type { BlockParams } from './V10Surface'
 import type { ObjectChipData } from './AskPane'
+import { FlowMap } from './FlowMap'
 
 /** 折下数据流：真实 notify 卡 + 提醒事件（v10 §5 消息总线的 v10 侧呈现） */
 export interface FeedItem {
@@ -330,6 +331,7 @@ export function PaperPane(props: {
   onDropBlock?: (b: ObjectChipData) => void
   now?: number
   aiOn?: boolean | null
+  showFlowMap?: boolean
 }): JSX.Element {
   const feed = props.feed ?? []
   const archived = props.archived ?? []
@@ -376,6 +378,17 @@ export function PaperPane(props: {
       <div className="v10-fold-above">
         <div className="v10-fold-label">折 上 · 你 的 版 面</div>
         <NowBlock presence={props.presence} />
+        {props.showFlowMap ? (
+          <section className="v10-block">
+            <div className="v10-block-kick">
+              <span className="aura-mark">◇</span>
+              <span>状态导图</span>
+              <span>· 实线=实际 · 虚线=建议</span>
+              <span className="acts"><button onClick={() => props.onExit?.()}>×</button></span>
+            </div>
+            <FlowMap trail={props.trail} plans={props.plans} goals={props.goals ?? []} />
+          </section>
+        ) : null}
         <TodayPlansBlock plans={props.plans} onToggle={props.onTogglePlan} />
         {props.onMarkAnchor ? (
           <GoalsBlock goals={props.goals ?? []} onMarkAnchor={props.onMarkAnchor} onGoalPatch={props.onGoalPatch ?? (() => {})} />

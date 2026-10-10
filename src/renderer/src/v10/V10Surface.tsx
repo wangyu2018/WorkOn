@@ -9,6 +9,7 @@ import type { PlanItem, TrailSegment, PresenceSnapshot, GoalView, GoalDraft } fr
 import { AskPane, type ChatMsg, type ObjectChipData } from './AskPane'
 import { PaperPane, type FeedItem } from './PaperPane'
 import { parseReminderIntent, parseGoalIntent } from './nlu'
+import { FlowMap } from './FlowMap'
 import './v10.css'
 
 /** 首启三步卡状态（v10 §2：指引式首启，两分钟） */
@@ -49,6 +50,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const [now, setNow] = useState(Date.now())
   const [archived, setArchived] = useState<FeedItem[]>([])
   const [aiOn, setAiOn] = useState<boolean | null>(null)
+  const [showFlowMap, setShowFlowMap] = useState(false)
 
   const reloadPlans = useCallback(() => {
     void window.api?.listPlans?.().then((p) => setPlans((p as PlanItem[]) ?? []))
@@ -139,6 +141,11 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const send = useCallback(
     (raw: string) => {
       // 对象芯片挂载（AskPane drop 转发的内部协议，不上屏）
+      if (raw === '__flowmap__') {
+        setShowFlowMap(true)
+        setChat((c) => [...c, { role: 'ai', text: '状态导图落右页了——实线是你实际走过的，虚线是计划和锚点建议你去的地方。' }])
+        return
+      }
       if (raw.startsWith('__chip__')) {
         try {
           setObjectChip(JSON.parse(raw.slice(8)) as ObjectChipData)
@@ -346,6 +353,19 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         return
       }
 
+      // ── 状态类问句：文字回答 + 「状态导图」可拆件 chip（点一下落右页） ──
+      if (/当前状态|什么状态|在干嘛|在做什么|现在干|状态导图|画个?图/.test(normalized)) {
+        const st = presence?.state
+        const summary = st
+          ? `此刻：${st === 'other' ? '在电脑前（细分识别中）' : `${st}`}${presence?.screens?.[0]?.app ? ` · ${presence.screens[0].app}` : ''}。下面给你拆了张状态导图——实线是实际轨迹，虚线是建议去的地方。`
+          : '采集还没出数据，导图会空一阵。'
+        setChat((c) => {
+          const next = [...c, { role: 'ai' as const, text: summary, attach: 'flowmap' as const }]
+          return next
+        })
+        return
+      }
+
       // ── 常规问答走现有 qa 管道 ──
       setAsking(true)
       void window.api
@@ -414,6 +434,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         onDropBlock={(b) => setObjectChip(b)}
         now={now}
         aiOn={aiOn}
+        showFlowMap={showFlowMap}
       />
     </div>
   )
