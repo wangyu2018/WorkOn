@@ -25,7 +25,8 @@ import {
 
 /** Windows 走 PowerShell 常驻服务器；macOS 走 winInfoMac（Swift 采集器）；其余平台返回空 */
 const IS_WIN = process.platform === 'win32'
-const IS_MAC = process.platform === 'darwin'
+// WORKON_MAC_COLLECT=0 可临时禁用 mac 采集（崩溃排查对照开关）
+const IS_MAC = process.platform === 'darwin' && process.env.WORKON_MAC_COLLECT !== '0'
 
 const DISPLAY_HINT_PATH = path.join(os.tmpdir(), 'workon-wininfo-displays.json')
 

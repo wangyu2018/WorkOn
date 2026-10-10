@@ -141,7 +141,32 @@ func emit(_ p: Payload) {
     }
 }
 
+func emitIcon(_ filePath: String) -> Int32 {
+    let source = NSWorkspace.shared.icon(forFile: filePath)
+    if source.size.width <= 0 { print("{}"); return 1 }
+    // 缩到 32x32（与 appVisuals 缓存口径一致），避免 stdio 传兆级 PNG
+    let target = NSSize(width: 32, height: 32)
+    let sized = NSImage(size: target)
+    sized.lockFocus()
+    source.draw(in: NSRect(origin: .zero, size: target),
+                 from: NSRect(origin: .zero, size: source.size),
+                 operation: .copy, fraction: 1.0)
+    sized.unlockFocus()
+    guard let tiff = sized.tiffRepresentation,
+          let rep = NSBitmapImageRep(data: tiff),
+          let png = rep.representation(using: .png, properties: [:]) else {
+        print("{}")
+        return 1
+    }
+    let b64 = png.base64EncodedString()
+    print("{\"dataUrl\":\"data:image/png;base64,\(b64)\"}")
+    return 0
+}
+
 let args = CommandLine.arguments
+if args.count >= 3 && args[1] == "icon" {
+    exit(emitIcon(args[2]))
+}
 if args.count >= 2 && args[1] == "check" {
     let (ax, screen) = checkPermissions()
     print("{\"ax\":\(ax),\"screen\":\(screen)}")

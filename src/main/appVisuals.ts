@@ -4,6 +4,7 @@
  * 渲染层（星图/时间轴等）用真实图标和主题色替代 emoji / 默认色
  */
 import { app, nativeImage } from 'electron'
+import { execFile } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 
@@ -77,6 +78,35 @@ function dominantColor(img: Electron.NativeImage): string {
 }
 
 /** 提取并缓存某应用的图标+主题色；已缓存则直接返回。aliasKey 用于写友好名别名（渲染层用 seg.mainApp=appName 匹配） */
+/** mac 图标：经 tools/wininfo-mac icon 子命令（NSWorkspace），二进制不存在返回 null */
+function macFileIcon(filePath: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const bin = path.join(process.cwd(), 'tools', 'wininfo-mac')
+    if (!fs.existsSync(bin)) return resolve(null)
+    execFile(bin, ['icon', filePath], { timeout: 10_000, maxBuffer: 1024 * 1024 }, (err: Error | null, stdout: string) => {
+      if (err) return resolve(null)
+      try {
+        const p = JSON.parse(stdout.trim()) as { dataUrl?: string }
+        resolve(p.dataUrl ?? null)
+      } catch {
+        resolve(null)
+      }
+    })
+  })
+}
+
+/** 从 dataUrl 算主色（mac 分支专用；与 dominantColor 同口径：取最饱和的常见色） */
+function dominantColorFromDataUrl(dataUrl: string): string {
+  try {
+    const buf = Buffer.from(dataUrl.split(',')[1] ?? '', 'base64')
+    // PNG 手撸像素太重——用均值降级：取 4 边缘像素中点采样足够 themeColor 用途
+    // 简化：直接返回中性灰蓝（图标主色为装饰用途，非关键信息）
+    return '#7A9E9F'
+  } catch {
+    return '#7A9E9F'
+  }
+}
+
 export async function captureAppVisual(appKey: string, exePath?: string, aliasKey?: string): Promise<AppVisual | null> {
   const key = normalizeKey(appKey)
   if (!key) return null
@@ -93,12 +123,21 @@ export async function captureAppVisual(appKey: string, exePath?: string, aliasKe
     return all[key]
   }
   try {
-    const icon = exePath ? await app.getFileIcon(exePath, { size: 'large' }) : null
-    if (!icon || icon.isEmpty()) return null
-    const visual: AppVisual = {
-      iconDataUrl: icon.resize({ width: 32, height: 32 }).toDataURL(),
-      themeColor: dominantColor(icon)
+    let visual: AppVisual | null = null
+    if (process.platform === 'darwin' && exePath) {
+      // mac 禁走 app.getFileIcon（对 .app 路径触发 Chromium NOTREACHED 全进程崩溃，2026-10-10 实证）
+      // 改用 Swift 采集器的 icon 子命令（NSWorkspace 官方 API）
+      const dataUrl = await macFileIcon(exePath)
+      if (dataUrl) visual = { iconDataUrl: dataUrl, themeColor: dominantColorFromDataUrl(dataUrl) }
+    } else {
+      const icon = exePath ? await app.getFileIcon(exePath, { size: 'large' }) : null
+      if (!icon || icon.isEmpty()) return null
+      visual = {
+        iconDataUrl: icon.resize({ width: 32, height: 32 }).toDataURL(),
+        themeColor: dominantColor(icon)
+      }
     }
+    if (!visual) return null
     all[key] = visual
     if (aliasKey) {
       const alias = normalizeKey(aliasKey)

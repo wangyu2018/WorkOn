@@ -221,7 +221,7 @@ async function tick(): Promise<void> {
     const projectName = isEntertainmentContext(corrected.app, safeTitle, state) ? null : currentProjectName(corrected.app)
     if (!excluded) {
       // 提取/补写图标+主题色（captureAppVisual 命中缓存即返回，仅首次真正提取 exe 图标）
-      void captureAppVisual(corrected.app, win.exePath, identified.appName)
+      if (process.env.WORKON_NO_APPVISUAL !== '1') void captureAppVisual(corrected.app, win.exePath, identified.appName) // 崩溃排查对照开关
       if (!tr || changed) {
         tr = { app: corrected.app, title: safeTitle, startTs: ts, lastTs: ts }
         tracks.set(win.screen, tr)
