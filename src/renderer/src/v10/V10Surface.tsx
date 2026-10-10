@@ -46,6 +46,9 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const pendingGoalRef = useRef<{ msgIndex: number; sourceText: string; draft: GoalDraft } | null>(null)
   /** 块进化：挂在输入场的对象芯片 */
   const [objectChip, setObjectChip] = useState<ObjectChipData | null>(null)
+  const [now, setNow] = useState(Date.now())
+  const [archived, setArchived] = useState<FeedItem[]>([])
+  const [aiOn, setAiOn] = useState<boolean | null>(null)
 
   const reloadPlans = useCallback(() => {
     void window.api?.listPlans?.().then((p) => setPlans((p as PlanItem[]) ?? []))
@@ -80,13 +83,24 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
     })
     // 消息总线（v10 §5 折下接真）：现有 pushNotify 四类卡落折下，TTL 倒计时消亡
     const offN = window.api?.onNotify?.((raw) => {
-      const card = raw as { id: string; title: string; body: string; time: number; ttlSec: number }
+      const card = raw as { id: string; title: string; body: string; time: number; ttlSec: number; kind?: string }
       setFeed((f) => [
-        { kind: 'notify', id: card.id, title: card.title, body: card.body, time: card.time, ttlSec: card.ttlSec },
+        { kind: 'notify', id: card.id, title: card.title, body: card.body, time: card.time, ttlSec: Math.max(card.ttlSec, 25), keep: card.kind === 'report' || card.kind === 'correction' },
         ...f
       ])
     })
     void window.api?.getPresence?.().then((p) => setPresence((p as PresenceSnapshot) ?? null))
+    void window.api?.getSettings?.().then((st) => setAiOn(!!(st as { aiEnabled?: boolean })?.aiEnabled))
+    // 秒级 tick：时钟 + 折下 TTL（keep 类到期转归档，fade 类消亡）
+    const tick = window.setInterval(() => {
+      setNow(Date.now())
+      setFeed((f) => {
+        const expired = f.filter((x) => Date.now() - x.time > x.ttlSec * 1000)
+        if (!expired.length) return f
+        setArchived((a) => [...expired.filter((x) => x.keep), ...a])
+        return f.filter((x) => Date.now() - x.time <= x.ttlSec * 1000)
+      })
+    }, 1000)
     const timer = window.setInterval(() => {
       reloadTrail()
       reloadGoals()
@@ -96,6 +110,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       offS?.()
       offR?.()
       offN?.()
+      window.clearInterval(tick)
       window.clearInterval(timer)
     }
   }, [reloadPlans, reloadTrail])
@@ -163,8 +178,18 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         return
       }
 
-      // ── 快捷回复协议：回数字 = 应答最近一条带选项的消息 ──
-      const num = /^[1-4]$/.exec(text)
+      // ── 快捷回复协议：回数字 = 应答最近一条带选项的消息（全角数字归一：中文输入法 １２３） ──
+      const normalized = text.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).trim()
+      const num = /^([1-4])[．.、，,]?\s*$/.exec(normalized)
+      if (num && !optionsRef.current && pendingGoalRef.current) {
+        // 确认卡被后续通知顶掉时自动复挂（用户回 1 不能石沉大海）
+        const g = pendingGoalRef.current
+        const msg = chat[g.msgIndex]
+        if (msg?.options) {
+          optionsRef.current = { msgIndex: g.msgIndex, options: msg.options }
+          setChat((c) => c.map((m, i) => (i === g.msgIndex ? { ...m, options: msg.options } : m)))
+        }
+      }
       if (num && optionsRef.current) {
         const pending = optionsRef.current
         const picked = pending.options[parseInt(num[1], 10) - 1]
@@ -234,6 +259,30 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         } else {
           setChat((c) => [...c, { role: 'ai', text: '好。' }])
         }
+        return
+      }
+
+      // ── 对话控制台（v10：问答开启任何功能；规则先行，意图判定后续接 jev） ──
+      const cmd = /^(开启|打开|启用|关闭|停用|显示|隐藏)\s*(虚拟角色|桌宠|搭子|悬浮窗|待办树|待办小组件|深度模式|忙时轻档|天气|AI|键鼠|行为探针)\s*$/.exec(normalized)
+      if (cmd) {
+        const on = /^(开启|打开|启用|显示)$/.test(cmd[1])
+        const kw = cmd[2]
+        const FIELD: Record<string, string> = {
+          '虚拟角色': 'petEnabled', '桌宠': 'petEnabled', '搭子': 'petEnabled',
+          '悬浮窗': 'widgetVisible', '待办树': 'todoWidgetVisible', '待办小组件': 'todoWidgetVisible',
+          '深度模式': 'deepMode', '忙时轻档': 'loadGuardEnabled', '天气': 'weatherEnabled',
+          'AI': 'aiEnabled', '键鼠': 'inputProbeEnabled', '行为探针': 'inputProbeEnabled'
+        }
+        const field = FIELD[kw]
+        if (field) {
+          void window.api?.setSettings?.({ [field]: on } as never)
+          setChat((c) => [...c, { role: 'ai', text: `${on ? '开' : '关'}了${kw} ✦（生效即可见，桌宠/悬浮窗的开关会即时创建或收起窗口）` }])
+          return
+        }
+      }
+      if (/^(镜|设置|打开设置)$/.test(normalized)) {
+        void window.api?.openMain?.()
+        setChat((c) => [...c, { role: 'ai', text: '镜开了（旧版设置页）——例程、习惯、隐私都在那边，v10 会逐步把它们搬进来。' }])
         return
       }
 
@@ -360,8 +409,11 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         onboardStep={onboardStep !== 3 ? onboardStep : undefined}
         onOnboardFinish={finishOnboard}
         feed={feed}
+        archived={archived}
         blockParams={blockParams}
         onDropBlock={(b) => setObjectChip(b)}
+        now={now}
+        aiOn={aiOn}
       />
     </div>
   )

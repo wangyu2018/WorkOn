@@ -155,7 +155,8 @@ class PythonSidecarClient {
       this.consecutiveFailures = MAX_CONSECUTIVE_FAILURES
       return
     }
-    const exe = process.env.WORKON_PYTHON || 'python'
+    // mac 无 python 命令（只有 python3）；WORKON_PYTHON 可强制指定
+    const exe = process.env.WORKON_PYTHON || (process.platform === 'darwin' ? 'python3' : 'python')
     try {
       this.starting = true
       this.ready = false
@@ -164,6 +165,16 @@ class PythonSidecarClient {
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
         env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' }
+      })
+      // spawn 失败（ENOENT 等）是异步 error 事件，无监听会升级为 uncaughtException（审计同款坑）
+      proc.on('error', (e) => {
+        console.warn('[jev] sidecar 进程错误（降级规则识别）:', e.message)
+        this.ready = false
+        this.proc = null
+        this.consecutiveFailures++
+        if (this.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+          console.warn('[jev] 连续失败达上限，本轮停用模型通道')
+        }
       })
       try {
         const os = require('os') as typeof import('os')

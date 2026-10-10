@@ -35,7 +35,11 @@ export function AskPane(props: {
 }): JSX.Element {
   const [draft, setDraft] = useState('')
   const [dropHot, setDropHot] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const state: WorkState | undefined = props.presence?.state
+  // 对话自动折叠（v10）：只留最近 20 条活跃，更早的收成一行（点开全量）
+  const HIDE_COUNT = props.chat.length - 20
+  const visible = expanded || HIDE_COUNT <= 0 ? props.chat : props.chat.slice(HIDE_COUNT)
 
   const submit = (): void => {
     if (!draft.trim()) return
@@ -61,7 +65,12 @@ export function AskPane(props: {
   return (
     <aside className="v10-ask">
       <div className="v10-ask-scroll" ref={props.scrollRef}>
-        {props.chat.map((m, i) => (
+        {!expanded && HIDE_COUNT > 0 ? (
+          <button className="v10-chatfold" onClick={() => setExpanded(true)}>
+            —— 更早的 {HIDE_COUNT} 条对话 · 点击展开 ——
+          </button>
+        ) : null}
+        {visible.map((m, i) => (
           <div key={i} className={m.role === 'user' ? 'v10-msg-user' : 'v10-msg-ai-wrap'}>
             <div className={m.role === 'user' ? undefined : 'v10-msg-ai'} style={m.role === 'user' ? undefined : { display: 'inline' }}>
               {m.role === 'ai' ? <span style={{ display: 'inline' }}>{m.text}</span> : m.text}

@@ -15,6 +15,8 @@ export interface FeedItem {
   body: string
   time: number
   ttlSec: number
+  /** 重要性：keep=报表/修正类（到期转归档不消失）；fade=一般通知（到期消亡）——v10 拍板 */
+  keep?: boolean
 }
 import { WORK_STATES, STATE_LABEL } from '@shared/stateMeta'
 import { displayApp } from '@shared/appDisplayName'
@@ -26,10 +28,12 @@ function hhmm(ts: number): string {
 
 function TodayPlansBlock(props: { plans: PlanItem[]; onToggle: (p: PlanItem) => void }): JSX.Element {
   const today = new Date()
+  const [expanded, setExpanded] = useState(false)
   const key = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
   const list = props.plans.filter((p) => p.date === key && p.status !== 'cancelled')
   const done = list.filter((p) => p.status === 'done').length
-  const sorted = [...list].sort((a, b) => (a.startMin ?? 1e9) - (b.startMin ?? 1e9))
+  const sortedAll = [...list].sort((a, b) => (a.startMin ?? 1e9) - (b.startMin ?? 1e9))
+  const sorted = expanded ? sortedAll : sortedAll.slice(0, 8)
   return (
     <section className="v10-block">
       <div className="v10-block-kick">
@@ -37,6 +41,9 @@ function TodayPlansBlock(props: { plans: PlanItem[]; onToggle: (p: PlanItem) => 
         <span>· {done}/{list.length}</span>
         <span className="acts"><button>留住</button><button>×</button></span>
       </div>
+      {!expanded && sortedAll.length > 8 ? (
+        <button className="v10-foldmore" onClick={() => setExpanded(true)}>展开其余 {sortedAll.length - 8} 件 ▾</button>
+      ) : null}
       {sorted.length === 0 ? (
         <div className="v10-empty">今天还没有计划——去左栏说一句「帮我排一下今天」。</div>
       ) : (
@@ -83,8 +90,10 @@ function NowBlock(props: { presence: PresenceSnapshot | null }): JSX.Element {
 
 function TimelineBlock(props: { trail: TrailSegment[]; days: number }): JSX.Element {
   const days = props.days
+  const [expanded, setExpanded] = useState(false)
   const cutoff = Date.now() - days * 24 * 3600_000
-  const segs = props.trail.filter((t) => !t.glance && t.startTs >= cutoff).slice(-20).reverse()
+  const all = props.trail.filter((t) => !t.glance && t.startTs >= cutoff)
+  const segs = (expanded ? all : all.slice(-8)).reverse()
   return (
     <section
       className="v10-block"
@@ -102,6 +111,9 @@ function TimelineBlock(props: { trail: TrailSegment[]; days: number }): JSX.Elem
         {days !== 1 ? <span className="aura-mark">◇ 已调</span> : null}
         <span className="acts"><button>留住</button><button>×</button></span>
       </div>
+      {!expanded && all.length > 8 ? (
+        <button className="v10-foldmore" onClick={() => setExpanded(true)}>展开更早的 {all.length - 8} 段 ▾</button>
+      ) : null}
       {segs.length === 0 ? (
         <div className="v10-empty">{days === 1 ? '轨迹会随着采集自动长出来（此平台不支持窗口采集时这里保持空白）。' : `${days} 天内没有轨迹记录。`}</div>
       ) : (
@@ -232,6 +244,27 @@ function GoalsBlock(props: {
   )
 }
 
+/** 归档抽屉（v10 §5）：重要通知到期后落这里，标题=内容总结（首句截断），可展开 */
+function FoldArchive(props: { items: FeedItem[] }): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const summarize = (b: string): string => (b.length > 22 ? `${b.slice(0, 22)}…` : b)
+  return (
+    <div className="v10-archive">
+      <button className="ar-head" onClick={() => setOpen(!open)}>
+        归档 · {props.items.length} 条重要件 {open ? '▾' : '▸'}
+      </button>
+      {open ? (
+        props.items.map((f) => (
+          <div className="ar-row" key={f.id}>
+            <span className="ar-title">{summarize(f.title === f.body ? f.body : `${f.title}｜${f.body}`)}</span>
+            <span className="ar-time">{new Date(f.time).getHours()}:{String(new Date(f.time).getMinutes()).padStart(2, '0')}</span>
+          </div>
+        ))
+      ) : null}
+    </div>
+  )
+}
+
 /** 首启三步卡（v10 §2 指引式首启）：工作类型 → 提醒意愿+协议启蒙 */
 function OnboardCard(props: {
   step: 0 | 1 | 2
@@ -292,28 +325,45 @@ export function PaperPane(props: {
   onboardStep?: 0 | 1 | 2
   onOnboardFinish?: (payload: { evening?: boolean }) => void
   feed?: FeedItem[]
+  archived?: FeedItem[]
   blockParams?: BlockParams
   onDropBlock?: (b: ObjectChipData) => void
+  now?: number
+  aiOn?: boolean | null
 }): JSX.Element {
   const feed = props.feed ?? []
+  const archived = props.archived ?? []
   const days = props.blockParams?.timelineDays ?? 1
   return (
     <main className="v10-paper">
       <header className="v10-masthead">
-        <div className="mh-title">WorkOn · 一面</div>
+        <div className="mh-row">
+          <div className="mh-title">WorkOn · 一面</div>
+          <span className="mh-statepill">
+            <span className="mh-dot" />
+            {(() => {
+              const st = props.presence?.state
+              const main = props.presence?.screens?.find((x) => x.screen === props.presence?.mainScreen)
+              return st ? `${WORK_STATES[st].emoji} ${STATE_LABEL[st]} · ${main?.app ?? ''}` : '等待采集'
+            })()}
+          </span>
+          <span className="mh-focus">专注 {Math.round((props.presence?.continuousFocusSec ?? 0) / 60)} 分钟</span>
+          <span style={{ marginLeft: 'auto' }} className="mh-clock">
+            {props.now !== undefined ? new Date(props.now).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : ''}
+          </span>
+          <span className={`mh-ai ${props.aiOn ? 'on' : ''}`} title={props.aiOn ? 'AI 已配置' : 'AI 未配置（设置里填 Key）'}>
+            AI
+          </span>
+          <button className="mh-act" onClick={() => { try { window.api?.openMain?.() } catch { /* ignore */ } }} title="镜：设置/例程/习惯/隐私">镜</button>
+          <button className="mh-act" onClick={() => props.onExit?.()} title="回到旧版界面（数据完全互通）">旧版 →</button>
+        </div>
         <div className="mh-sub">
           <span className="mh-dot" />
           <span>{props.dateLabel}</span>
           <span>·</span>
           <span>{props.plans.filter((p) => p.status === 'done').length} 件已完成</span>
           <span>·</span>
-          <button
-            style={{ marginLeft: 'auto', fontSize: 10.5, color: 'var(--ink-3)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-ui)', padding: 0 }}
-            onClick={() => props.onExit?.()}
-            title="回到旧版界面（数据完全互通）"
-          >
-            v10 · 返回旧版 →
-          </button>
+          <span>剩余 {props.plans.filter((p) => p.status === 'planned' || p.status === 'in_progress').length} 件待办</span>
         </div>
       </header>
 
@@ -338,6 +388,7 @@ export function PaperPane(props: {
       </div>
 
       <div className="v10-fold-below">
+        {archived.length > 0 ? <FoldArchive items={archived} /> : null}
         {feed.length === 0 ? (
           <div className="v10-aura-card">
             <div style={{ fontSize: 12.5, color: 'var(--ink)' }}>
@@ -356,8 +407,8 @@ export function PaperPane(props: {
                 {f.body}
               </div>
               <div className="ttl">
-                <span>◇ 通知 · {new Date(f.time).getHours()}:{String(new Date(f.time).getMinutes()).padStart(2, '0')}</span>
-                <span>{f.ttlSec}s 后自动收起</span>
+                <span>◇ {f.keep ? '重要 · 到期转归档' : '通知'} · {new Date(f.time).getHours()}:{String(new Date(f.time).getMinutes()).padStart(2, '0')}</span>
+                <span>{Math.max(0, Math.ceil((f.time + f.ttlSec * 1000 - (props.now ?? Date.now())) / 1000))}s 后自动收起</span>
               </div>
               <div className="ttl-bar" />
             </div>
