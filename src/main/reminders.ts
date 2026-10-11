@@ -106,7 +106,7 @@ export function initReminders(onFired: FiredHandler): void {
   load()
   firedHandler = onFired
   if (timer) clearInterval(timer)
-  timer = setInterval(tick, 30_000)
+  timer = setInterval(tick, 5_000) // 5s 粒度（once 类到点延迟 ≤5s；开销可忽略）
 }
 
 export function listReminders(): Reminder[] {

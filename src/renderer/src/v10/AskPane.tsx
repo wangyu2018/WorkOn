@@ -92,6 +92,12 @@ export interface ChatMsg {
 
 /** 会话框不是主要阅读区（用户拍板）：再结构化件缩略+hover 预览在左栏，完整版落右页 */
 
+/** 引用芯片（v10）：拖消息/折下卡进来，发送时自动附为上下文 */
+export interface QuoteChipData {
+  text: string
+  from: string
+}
+
 /** 块进化对象芯片：从右页拖入的组件描述 */
 export interface ObjectChipData {
   blockKey: string
@@ -166,6 +172,9 @@ export function AskPane(props: {
   presence: PresenceSnapshot | null
   objectChip?: ObjectChipData | null
   onClearChip?: () => void
+  quoteChip?: QuoteChipData | null
+  onClearQuote?: () => void
+  onQuoteDrop?: (q: QuoteChipData) => void
   /** 会话（v10）：列表 + 当前进入的会话 + 动作回调 */
   sessions?: ChatSession[]
   activeSessionId?: string | null
@@ -192,15 +201,16 @@ export function AskPane(props: {
     e.preventDefault()
     setDropHot(false)
     try {
-      const raw = e.dataTransfer.getData('application/x-workon-block')
-      if (raw) {
-        const data = JSON.parse(raw) as ObjectChipData
-        if (props.onClearChip !== undefined) {
-          // 挂芯片（覆盖旧的）
-          props.onSend(`__chip__${JSON.stringify(data)}`)
-        }
+      const block = e.dataTransfer.getData('application/x-workon-block')
+      if (block) {
+        props.onSend(`__chip__${block}`)
+        return
       }
-    } catch { /* 非块拖拽忽略 */ }
+      const quote = e.dataTransfer.getData('application/x-workon-quote')
+      if (quote && props.onQuoteDrop) {
+        props.onQuoteDrop(JSON.parse(quote) as QuoteChipData)
+      }
+    } catch { /* 非法拖拽忽略 */ }
   }
 
   const [menuIdx, setMenuIdx] = useState<number | null>(null) // 行内动作面板（零浮层：hover ⋯ 展开）
@@ -250,7 +260,17 @@ export function AskPane(props: {
         </div>
         <div className="v10-ask-scroll" ref={props.scrollRef}>
           {active.items.map((m, i) => (
-            <div key={i} className={m.role === 'user' ? 'v10-msg-user' : 'v10-msg-ai'}>
+            <div
+              key={i}
+              className={m.role === 'user' ? 'v10-msg-user' : 'v10-msg-ai'}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(
+                  'application/x-workon-quote',
+                  JSON.stringify({ text: m.text, from: `会话·${active.title.slice(0, 10)}` })
+                )
+              }}
+            >
               {m.text}
             </div>
           ))}
@@ -291,7 +311,17 @@ export function AskPane(props: {
         {visible.map((m, vi) => {
           const i = expanded || HIDE_COUNT <= 0 ? vi : HIDE_COUNT + vi
           return (
-          <div key={i} className={m.role === 'user' ? 'v10-msg-user' : 'v10-msg-ai-wrap'}>
+          <div
+            key={i}
+            className={m.role === 'user' ? 'v10-msg-user' : 'v10-msg-ai-wrap'}
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData(
+                'application/x-workon-quote',
+                JSON.stringify({ text: m.text, from: m.role === 'user' ? '我' : 'AI' })
+              )
+            }}
+          >
             {m.role === 'ai' ? (
               <div className="v10-msg-ai" style={{ display: 'block' }}>
                 <RichAnswer
@@ -339,6 +369,14 @@ export function AskPane(props: {
         {props.asking ? <div className="v10-msg-ai">…</div> : null}
       </div>
       <div className="v10-ask-inputbar">
+        {props.quoteChip ? (
+          <div className="v10-objchip quotec">
+            <span className="chip-mark">❝</span>
+            <span className="chip-label">引用 · {props.quoteChip.from}</span>
+            <span className="chip-current">{props.quoteChip.text.slice(0, 26)}…</span>
+            <button className="chip-x" onClick={() => props.onClearQuote?.()}>×</button>
+          </div>
+        ) : null}
         {props.objectChip ? (
           <div className="v10-objchip">
             <span className="chip-mark">◆</span>

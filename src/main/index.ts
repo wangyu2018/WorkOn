@@ -35,6 +35,7 @@ import { genQuestion, analyzeDay, deriveHabits } from './ai'
 import { genPersonaGapQuestion } from './qa/questionGenerator'
 import { canInterrupt } from './confirmQueue'
 import { initReminders, addReminder, listReminders, removeReminder } from './reminders'
+import { listApps, openAppSafe } from './appLauncher'
 import { initLifeGoalJobs } from './lifeGoal'
 import { macCheckPermissions } from './winInfoMac'
 import { listChatSessions, createChatSession, addChatSessionItem, removeChatSession, renameChatSession } from './chatSessions'
@@ -411,6 +412,9 @@ app.whenReady().then(() => {
   // 会话（v10）：消息右键加入会话，可继续追问
   ipcMain.handle('sessions:list', () => listChatSessions())
   // 工作台拆出（v10）：右页独立窗口（吸附+位置记忆）
+  // 应用接管 L1（v10）：对话打开/切到本机应用
+  ipcMain.handle('apps:list', () => listApps())
+  ipcMain.handle('apps:open', (_e, query: string) => openAppSafe(query))
   ipcMain.handle('workbench:detach', () => {
     createWorkbenchWindow()
     return true

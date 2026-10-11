@@ -377,6 +377,7 @@ export function PaperPane(props: {
   mindMapText?: string | null
   onCloseMindMap?: () => void
   onFeedReorder?: (from: number, to: number) => void
+  onQuoteFeed?: (text: string) => void
   /** main=主窗右栏（可拆出）· paper=拆出独立窗（可合回，报头即拖拽区）· detached=已拆出主窗占位 */
   pane?: 'main' | 'paper' | 'detached'
   onAttach?: () => void
@@ -513,7 +514,15 @@ export function PaperPane(props: {
               </div>
               <div className="ttl">
                 <span>◇ {f.keep ? '重要 · 到期转归档' : '通知'} · {new Date(f.time).getHours()}:{String(new Date(f.time).getMinutes()).padStart(2, '0')}</span>
-                <span>{Math.max(0, Math.ceil((f.time + f.ttlSec * 1000 - (props.now ?? Date.now())) / 1000))}s 后自动收起</span>
+                <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <button
+                    style={{ border: 'none', background: 'none', color: 'var(--teal-ink)', cursor: 'pointer', fontSize: 10.5, padding: 0, fontFamily: 'var(--font-ui)' }}
+                    onClick={() => props.onQuoteFeed?.(`${f.title}——${f.body}`)}
+                  >
+                    引用到对话
+                  </button>
+                  <span>{Math.max(0, Math.ceil((f.time + f.ttlSec * 1000 - (props.now ?? Date.now())) / 1000))}s 后自动收起</span>
+                </span>
               </div>
               <div className="ttl-bar" />
             </div>

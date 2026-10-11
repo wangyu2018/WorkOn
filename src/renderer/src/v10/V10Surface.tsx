@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PlanItem, TrailSegment, PresenceSnapshot, GoalView, GoalDraft, ChatSession } from '@shared/types'
-import { AskPane, type ChatMsg, type ObjectChipData } from './AskPane'
+import { AskPane, type ChatMsg, type ObjectChipData, type QuoteChipData } from './AskPane'
 import { PaperPane, type FeedItem } from './PaperPane'
 import { parseReminderIntent, parseGoalIntent, parseScheduleProposal } from './nlu'
 import { FlowMap } from './FlowMap'
@@ -49,6 +49,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const pendingGoalRef = useRef<{ msgIndex: number; sourceText: string; draft: GoalDraft } | null>(null)
   /** 块进化：挂在输入场的对象芯片 */
   const [objectChip, setObjectChip] = useState<ObjectChipData | null>(null)
+  const [quoteChip, setQuoteChip] = useState<QuoteChipData | null>(null)
   const [now, setNow] = useState(Date.now())
   const [archived, setArchived] = useState<FeedItem[]>([])
   const [aiOn, setAiOn] = useState<boolean | null>(null)
@@ -190,6 +191,8 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       }
       const text = raw.trim()
       if (!text || asking) return
+      // 引用芯片：把拖进来的内容作为上下文附给回答（会话框不是主要阅读区，补充要顺手）
+      const quoted = quoteChip ? `（关于我拖进来的内容：「${quoteChip.text.slice(0, 200)}」）\n\n${text}` : text
       setChat((c) => [...c, { role: 'user', text }])
       if (activeSessionId) void window.api?.addSessionItem?.(activeSessionId, { role: 'user', text, time: Date.now() })
 
@@ -221,6 +224,9 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         ])
         return
       }
+
+      // 引用芯片一次性消费：任何真实发送后清掉（结构化分支内部不使用引用）
+      const consumeQuote = (): void => setQuoteChip(null)
 
       // ── 快捷回复协议：回数字 = 应答最近一条带选项的消息（全角数字归一：中文输入法 １２３） ──
       const normalized = text.replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).trim()
@@ -286,7 +292,10 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
                   return next
                 })
               })
-              .finally(() => setAsking(false))
+              .finally(() => {
+          setAsking(false)
+          consumeQuote()
+        })
           } else {
             setChat((c) => [...c, { role: 'ai', text: '好，不立了。' }])
           }
@@ -365,6 +374,22 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           return
         }
       }
+      // ── 应用接管 L1（v10）：打开/切到 本机应用 ──
+      const launchM = /^(打开|启动|切到|切换到)\s*(.+)$/.exec(normalized)
+      if (launchM) {
+        const query = launchM[2].trim()
+        void window.api
+          ?.openApp?.(query)
+          .then((r) => {
+            const res = r as { ok: boolean; name?: string; error?: string }
+            if (res?.ok) {
+              pushAI([{ role: 'ai', text: `开了「${res.name}」✦（已在前台的话就是切过去）` }])
+            } else {
+              pushAI([{ role: 'ai', text: `没找到「${query}」——说应用名（比如「打开 Safari」「切到微信」）。` }])
+            }
+          })
+        return
+      }
       if (/^(镜|设置|打开设置)$/.test(normalized)) {
         void window.api?.openMain?.()
         setChat((c) => [...c, { role: 'ai', text: '镜开了（旧版设置页）——例程、习惯、隐私都在那边，v10 会逐步把它们搬进来。' }])
@@ -407,7 +432,10 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           .catch(() => {
             setChat((c) => [...c, { role: 'ai', text: '拆解失败——稍后再试，或说得再具体些。' }])
           })
-          .finally(() => setAsking(false))
+          .finally(() => {
+          setAsking(false)
+          consumeQuote()
+        })
         return
       }
 
@@ -459,7 +487,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       // ── 常规问答走现有 qa 管道（会话中：回答同步写回 session） ──
       setAsking(true)
       void window.api
-        ?.askQA?.(text)
+        ?.askQA?.(quoted)
         .then((r) => {
           const content =
             typeof r === 'string' ? r : ((r as { content?: string })?.content ?? '（没有回答）')
@@ -468,9 +496,12 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         .catch(() => {
           pushAI([{ role: 'ai', text: '这个问题暂时答不上来（AI 未配置或网络异常）。' }])
         })
-        .finally(() => setAsking(false))
+        .finally(() => {
+          setAsking(false)
+          consumeQuote()
+        })
     },
-    [asking, reminders, objectChip, blockParams, reloadGoals, pushAI, activeSessionId]
+    [asking, reminders, objectChip, blockParams, reloadGoals, pushAI, activeSessionId, quoteChip]
   )
 
   const markAnchor = useCallback(
@@ -537,6 +568,9 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         presence={presence}
         objectChip={objectChip}
         onClearChip={() => setObjectChip(null)}
+        quoteChip={quoteChip}
+        onClearQuote={() => setQuoteChip(null)}
+        onQuoteDrop={(q) => setQuoteChip(q)}
         sessions={sessions}
         activeSessionId={activeSessionId}
         onSessionRenamed={(id, title) => setSessions((list) => list.map((x) => (x.id === id ? { ...x, title } : x)))}

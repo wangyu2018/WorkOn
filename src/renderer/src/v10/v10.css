@@ -646,3 +646,5 @@
   border: none; background: var(--teal); color: #fff;
   font-size: 13px; padding: 9px 22px; border-radius: var(--r-md); cursor: pointer; font-family: var(--font-ui);
 }
+.v10-objchip.quotec { background: var(--celadon-1); }
+.v10-objchip.quotec .chip-mark { background: none; -webkit-background-clip: initial; color: var(--teal-ink); }

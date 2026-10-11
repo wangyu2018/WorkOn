@@ -35,6 +35,8 @@ const api = {
   renameSession: (id: string, title: string) => ipcRenderer.invoke('sessions:rename', id, title),
   // 工作台拆出（v10）
   detachWorkbench: () => ipcRenderer.invoke('workbench:detach'),
+  listApps: () => ipcRenderer.invoke('apps:list'),
+  openApp: (query: string) => ipcRenderer.invoke('apps:open', query),
   attachWorkbench: () => ipcRenderer.invoke('workbench:attach'),
   workbenchState: () => ipcRenderer.invoke('workbench:state'),
   onWorkbenchState: on<{ detached: boolean }>('workbench:state'),
