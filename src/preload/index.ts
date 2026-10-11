@@ -40,6 +40,8 @@ const api = {
   attachWorkbench: () => ipcRenderer.invoke('workbench:attach'),
   workbenchState: () => ipcRenderer.invoke('workbench:state'),
   onWorkbenchState: on<{ detached: boolean }>('workbench:state'),
+  onMessageIncoming: on<{ app: string; unread: number; text: string; ts: number }>('message:incoming'),
+  onMusicChanged: on<{ name: string; artist: string; playing: boolean }>('music:changed'),
 
   // 实时状态
   getPresence: () => ipcRenderer.invoke('presence:get'),

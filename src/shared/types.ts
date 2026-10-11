@@ -1025,6 +1025,10 @@ export interface AppSettings {
   privacyConsent: 'pending' | 'granted' | 'declined'
   /** v10 工作台拆出窗：右页独立窗口的位置尺寸记忆 */
   v10WorkbenchBounds?: { x: number; y: number; width: number; height: number }
+  /** 消息监控（v10 signals·隐私红线）：默认关；开启后 IM 未读上升→截屏 OCR→来件进对话流 */
+  messageWatchEnabled?: boolean
+  /** 音乐信号（v10 signals）：切歌/播放状态变化→折下轻通知 */
+  musicWatchEnabled?: boolean
   weatherApiHost?: string // v3.4 和风天气 API Host（形如 xxxxx.qweatherapi.com，控制台设置页查看）
   widgetCompact?: boolean // 浮窗紧凑模式，默认 false
   reportAutoRefreshMin?: number // 报表自动刷新间隔分钟，0=关闭，默认 120

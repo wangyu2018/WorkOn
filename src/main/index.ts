@@ -36,6 +36,8 @@ import { genPersonaGapQuestion } from './qa/questionGenerator'
 import { canInterrupt } from './confirmQueue'
 import { initReminders, addReminder, listReminders, removeReminder } from './reminders'
 import { listApps, openAppSafe } from './appLauncher'
+import { initMessageWatch, startMessageWatch, stopMessageWatch } from './messageWatch'
+import { startMusicWatch } from './musicWatch'
 import { initLifeGoalJobs } from './lifeGoal'
 import { macCheckPermissions } from './winInfoMac'
 import { listChatSessions, createChatSession, addChatSessionItem, removeChatSession, renameChatSession } from './chatSessions'
@@ -432,6 +434,17 @@ app.whenReady().then(() => {
   )
   ipcMain.handle('sessions:remove', (_e, id: string) => removeChatSession(id))
   ipcMain.handle('sessions:rename', (_e, id: string, title: string) => renameChatSession(id, title))
+  // 消息/音乐信号（v10 signals）：默认关，用户在设置里开
+  initMessageWatch((p) => {
+    sendTo('main', 'message:incoming', p)
+    sendTo('workbench', 'message:incoming', p)
+    pushNotify('ai', `${p.app} 来了新消息（未读 ${p.unread}）`, p.text.slice(0, 80), [
+      { label: '知道了', action: 'dismiss' }
+    ], 60)
+  })
+  startMusicWatch((info: { name: string; artist: string }) => {
+    pushNotify('generic', `♪ 正在播放：${info.name}`, info.artist, [], 20)
+  })
   initReminders((r) => {
     const payload = { id: r.id, title: r.title, recurring: r.recurring, atHHMM: r.atHHMM, origin: r.origin, confirmed: !!r.confirmedAt }
     sendTo('main', 'reminder:fired', payload)
@@ -444,6 +457,8 @@ app.whenReady().then(() => {
       .then(() => {
         try {
           if (getSettings().privacyConsent === 'granted') startCollection()
+          if (getSettings().messageWatchEnabled) startMessageWatch()
+          if (getSettings().musicWatchEnabled) startMusicWatch()
           if (process.platform === 'darwin') {
             // mac 权限引导（审计 F3 同源思想：能力缺失要说话，不静默）
             const perms = macCheckPermissions()

@@ -134,6 +134,13 @@ export function registerIpc(): void {
     }
     // 用户手动改帧率档位 → 硬件分级停止自动接管档位
     if (patch.petFpsTier !== undefined) setSettings({ petFpsTierAuto: false })
+    // 信号层开关即时生效（v10）
+    if (patch.messageWatchEnabled !== undefined) {
+      void import('./messageWatch').then((m) => (patch.messageWatchEnabled ? m.startMessageWatch() : m.stopMessageWatch()))
+    }
+    if (patch.musicWatchEnabled !== undefined) {
+      void import('./musicWatch').then((m) => (patch.musicWatchEnabled ? m.startMusicWatch() : m.stopMusicWatch()))
+    }
     // 行为探针开关即时生效
     if (patch.inputProbeEnabled !== undefined) {
       if (patch.inputProbeEnabled) startInputProbe()

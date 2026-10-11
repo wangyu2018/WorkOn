@@ -113,6 +113,19 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
     void window.api?.getPresence?.().then((p) => setPresence((p as PresenceSnapshot) ?? null))
     void window.api?.getSettings?.().then((st) => setAiOn(!!(st as { aiEnabled?: boolean })?.aiEnabled))
     void window.api?.listSessions?.().then((x) => setSessions((x as ChatSession[]) ?? []))
+    // signals（v10）：消息监控来件 → 对话流来件卡；音乐切歌 → 折下轻通知
+    const offM = window.api?.onMessageIncoming?.((p) => {
+      setChat((c) => [
+        ...c,
+        { role: 'ai', text: `◇ 来件 · ${p.app}（未读 ${p.unread}）\n${p.text.slice(0, 200)}`, options: ['知道了', '引用继续聊'] }
+      ])
+    })
+    const offMu = window.api?.onMusicChanged?.((m) => {
+      setFeed((f) => [
+        { kind: 'notify', id: `mu${Date.now()}`, title: `♪ ${m.name}`, body: m.artist, time: Date.now(), ttlSec: 20, keep: false },
+        ...f
+      ])
+    })
     void window.api?.workbenchState?.().then((d) => setDetached(!!d))
     let wbPoll: number | undefined
     const offW = window.api?.onWorkbenchState?.((d) => {
@@ -141,6 +154,8 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       window.clearInterval(tick)
       window.clearInterval(timer)
       if (wbPoll) clearInterval(wbPoll)
+      offM?.()
+      offMu?.()
       offW?.()
     }
     // 工作台拆出态轮询兜底（事件链验证期；确认无误后可去掉）
@@ -357,7 +372,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       }
 
       // ── 对话控制台（v10：问答开启任何功能；规则先行，意图判定后续接 jev） ──
-      const cmd = /^(开启|打开|启用|关闭|停用|显示|隐藏)\s*(虚拟角色|桌宠|搭子|悬浮窗|待办树|待办小组件|深度模式|忙时轻档|天气|AI|键鼠|行为探针)\s*$/.exec(normalized)
+      const cmd = /^(开启|打开|启用|关闭|停用|显示|隐藏)\s*(虚拟角色|桌宠|搭子|悬浮窗|待办树|待办小组件|深度模式|忙时轻档|天气|AI|键鼠|行为探针|消息监控|微信监控|音乐信号)\s*$/.exec(normalized)
       if (cmd) {
         const on = /^(开启|打开|启用|显示)$/.test(cmd[1])
         const kw = cmd[2]
@@ -365,7 +380,8 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           '虚拟角色': 'petEnabled', '桌宠': 'petEnabled', '搭子': 'petEnabled',
           '悬浮窗': 'widgetVisible', '待办树': 'todoWidgetVisible', '待办小组件': 'todoWidgetVisible',
           '深度模式': 'deepMode', '忙时轻档': 'loadGuardEnabled', '天气': 'weatherEnabled',
-          'AI': 'aiEnabled', '键鼠': 'inputProbeEnabled', '行为探针': 'inputProbeEnabled'
+          'AI': 'aiEnabled', '键鼠': 'inputProbeEnabled', '行为探针': 'inputProbeEnabled',
+          '消息监控': 'messageWatchEnabled', '微信监控': 'messageWatchEnabled', '音乐信号': 'musicWatchEnabled'
         }
         const field = FIELD[kw]
         if (field) {
