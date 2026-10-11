@@ -1023,6 +1023,8 @@ export interface AppSettings {
   weatherApiKey?: string // v3.2 和风天气 API Key（免费版，控制台申请）；不再内置共享 Key（隐私与配额）
   /** 隐私同意门：granted 才启动窗口采集/键鼠探针/目录监控 */
   privacyConsent: 'pending' | 'granted' | 'declined'
+  /** v10 工作台拆出窗：右页独立窗口的位置尺寸记忆 */
+  v10WorkbenchBounds?: { x: number; y: number; width: number; height: number }
   weatherApiHost?: string // v3.4 和风天气 API Host（形如 xxxxx.qweatherapi.com，控制台设置页查看）
   widgetCompact?: boolean // 浮窗紧凑模式，默认 false
   reportAutoRefreshMin?: number // 报表自动刷新间隔分钟，0=关闭，默认 120

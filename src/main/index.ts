@@ -5,7 +5,7 @@
 import { app, BrowserWindow, Notification, ipcMain } from 'electron'
 import { initSettings, getSettings, setSettings } from './settings'
 import { initDb, flushNow, loadActivitiesDeferred } from './db'
-import { createMainWindow, createWidgetWindow, createPetWindow, createSplashWindow, closeSplash, sendTo, broadcast, widgetWindow, mainWindow, createTodoWidgetWindow } from './windows'
+import { createMainWindow, createWidgetWindow, createPetWindow, createSplashWindow, closeSplash, sendTo, broadcast, widgetWindow, mainWindow, createTodoWidgetWindow, createWorkbenchWindow, attachWorkbench, isWorkbenchDetached } from './windows'
 import { createTray } from './tray'
 import { registerShortcuts, unregisterShortcuts } from './globalShortcut'
 import { registerIpc } from './ipc'
@@ -70,6 +70,7 @@ function setupBusForwarding(): void {
     sendTo('main', 'presence:update', snap)
     sendTo('widget', 'presence:update', snap)
     sendTo('pet', 'presence:update', snap)
+    sendTo('workbench', 'presence:update', snap)
 
     // F12：持续摸鱼 > slackHideSec 自动隐身（需启用）；回到工作弹欢迎
     const s = getSettings()
@@ -409,6 +410,16 @@ app.whenReady().then(() => {
   ipcMain.handle('reminders:remove', (_e, id: string) => removeReminder(id))
   // 会话（v10）：消息右键加入会话，可继续追问
   ipcMain.handle('sessions:list', () => listChatSessions())
+  // 工作台拆出（v10）：右页独立窗口（吸附+位置记忆）
+  ipcMain.handle('workbench:detach', () => {
+    createWorkbenchWindow()
+    return true
+  })
+  ipcMain.handle('workbench:attach', () => {
+    attachWorkbench()
+    return true
+  })
+  ipcMain.handle('workbench:state', () => isWorkbenchDetached())
   ipcMain.handle('sessions:create', (_e, input: { title?: string; topic?: 'project' | 'life' | 'general'; first?: { role: 'user' | 'ai'; text: string; time: number } }) =>
     createChatSession(input)
   )

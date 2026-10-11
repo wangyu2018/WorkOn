@@ -787,7 +787,7 @@ export function closePetWindow(): void {
   petWindow = null
 }
 
-export function sendTo(page: 'main' | 'widget' | 'pet' | 'dialog' | 'todoWidget', channel: string, ...args: unknown[]): void {
+export function sendTo(page: 'main' | 'widget' | 'pet' | 'dialog' | 'todoWidget' | 'workbench', channel: string, ...args: unknown[]): void {
   const win =
     page === 'main'
       ? mainWindow
@@ -797,7 +797,9 @@ export function sendTo(page: 'main' | 'widget' | 'pet' | 'dialog' | 'todoWidget'
           ? petWindow
           : page === 'dialog'
             ? dialogWindow
-            : todoWidgetWindow
+            : page === 'workbench'
+              ? workbenchWindow
+              : todoWidgetWindow
   if (win && !win.isDestroyed()) win.webContents.send(channel, ...args)
 }
 
@@ -1081,4 +1083,106 @@ export function broadcast(channel: string, ...args: unknown[]): void {
   sendTo('widget', channel, ...args)
   sendTo('pet', channel, ...args)
   sendTo('todoWidget', channel, ...args)
+}
+
+// ───────────────────────── v10 工作台拆出窗（右页独立：吸附+位置记忆） ─────────────────────────
+
+let workbenchWindow: BrowserWindow | null = null
+
+const WB_DEFAULT_SIZE = { w: 900, h: 700 }
+const WB_DOCK_SNAP = 26 // 距屏边 ≤26px 吸附
+
+export function isWorkbenchDetached(): boolean {
+  return !!workbenchWindow && !workbenchWindow.isDestroyed()
+}
+
+export function createWorkbenchWindow(): BrowserWindow {
+  if (workbenchWindow && !workbenchWindow.isDestroyed()) {
+    workbenchWindow.show()
+    workbenchWindow.focus()
+    return workbenchWindow
+  }
+  const s = getSettings()
+  const display = screen.getPrimaryDisplay()
+  const wa = display.workArea
+  const saved = s.v10WorkbenchBounds
+  const width = saved?.width ?? WB_DEFAULT_SIZE.w
+  const height = saved?.height ?? WB_DEFAULT_SIZE.h
+  let x = saved?.x ?? wa.x + wa.width - width - 24
+  let y = saved?.y ?? wa.y + 40
+  // 边界校验（多屏/分辨率变化回落主屏）
+  if (x < wa.x - 100 || x > wa.x + wa.width - 80) x = wa.x + wa.width - width - 24
+  if (y < wa.y - 20 || y > wa.y + wa.height - 60) y = wa.y + 40
+
+  const win = new BrowserWindow({
+    x,
+    y,
+    width,
+    height,
+    minWidth: 520,
+    minHeight: 400,
+    show: false,
+    frame: false,
+    backgroundColor: '#F7F4EE',
+    title: 'WorkOn · 右页',
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+  if (isDev) void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/index.html?v10=1&pane=paper`)
+  else void win.loadFile(path.join(__dirname, '../renderer/index.html'))
+  win.once('ready-to-show', () => {
+    win.show()
+    console.info('[workbench] 右页已拆出')
+  })
+
+  // 位置记忆 + 边缘吸附（moved 节流）
+  let snapTimer: NodeJS.Timeout | null = null
+  const remember = (): void => {
+    if (win.isDestroyed()) return
+    const b = win.getBounds()
+    setSettings({ v10WorkbenchBounds: { x: b.x, y: b.y, width: b.width, height: b.height } })
+  }
+  win.on('moved', () => {
+    if (snapTimer) clearTimeout(snapTimer)
+    snapTimer = setTimeout(() => {
+      if (win.isDestroyed()) return
+      const b = win.getBounds()
+      // 边缘吸附：左/右/上/下 距 workArea 边 ≤26px
+      const cur = screen.getDisplayMatching(b).workArea
+      let nx = b.x
+      let ny = b.y
+      let snapped = false
+      if (Math.abs(b.x - cur.x) <= WB_DOCK_SNAP) { nx = cur.x; snapped = true }
+      else if (Math.abs(b.x + b.width - (cur.x + cur.width)) <= WB_DOCK_SNAP) { nx = cur.x + cur.width - b.width; snapped = true }
+      if (Math.abs(b.y - cur.y) <= WB_DOCK_SNAP) { ny = cur.y; snapped = true }
+      else if (Math.abs(b.y + b.height - (cur.y + cur.height)) <= WB_DOCK_SNAP) { ny = cur.y + cur.height - b.height; snapped = true }
+      if (snapped) {
+        win.setPosition(nx, ny)
+        console.info('[workbench] 吸附', { nx, ny })
+      }
+      remember()
+    }, 220)
+  })
+  win.on('resized', remember)
+  win.on('closed', () => {
+    workbenchWindow = null
+    sendTo('main', 'workbench:state', { detached: false })
+  })
+  workbenchWindow = win
+  sendTo('main', 'workbench:state', { detached: true })
+  return win
+}
+
+export function attachWorkbench(): void {
+  if (workbenchWindow && !workbenchWindow.isDestroyed()) {
+    workbenchWindow.close()
+    console.info('[workbench] 右页已合回主窗')
+  }
+}
+
+export function getWorkbenchWindow(): BrowserWindow | null {
+  return workbenchWindow && !workbenchWindow.isDestroyed() ? workbenchWindow : null
 }

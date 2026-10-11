@@ -33,6 +33,11 @@ const api = {
     ipcRenderer.invoke('sessions:addItem', id, item),
   removeSession: (id: string) => ipcRenderer.invoke('sessions:remove', id),
   renameSession: (id: string, title: string) => ipcRenderer.invoke('sessions:rename', id, title),
+  // 工作台拆出（v10）
+  detachWorkbench: () => ipcRenderer.invoke('workbench:detach'),
+  attachWorkbench: () => ipcRenderer.invoke('workbench:attach'),
+  workbenchState: () => ipcRenderer.invoke('workbench:state'),
+  onWorkbenchState: on<{ detached: boolean }>('workbench:state'),
 
   // 实时状态
   getPresence: () => ipcRenderer.invoke('presence:get'),

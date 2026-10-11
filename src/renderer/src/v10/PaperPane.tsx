@@ -377,10 +377,27 @@ export function PaperPane(props: {
   mindMapText?: string | null
   onCloseMindMap?: () => void
   onFeedReorder?: (from: number, to: number) => void
+  /** main=主窗右栏（可拆出）· paper=拆出独立窗（可合回，报头即拖拽区）· detached=已拆出主窗占位 */
+  pane?: 'main' | 'paper' | 'detached'
+  onAttach?: () => void
+  onDetach?: () => void
 }): JSX.Element {
   const feed = props.feed ?? []
   const archived = props.archived ?? []
   const days = props.blockParams?.timelineDays ?? 1
+  const pane = props.pane ?? 'main'
+  if (pane === 'detached') {
+    // 已拆出：主窗右栏位置显示占位+合回（真实内容在独立工作台窗）
+    return (
+      <main className="v10-paper" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="v10-detached-card">
+          <div className="dc-title">右页已拆出</div>
+          <div className="dc-sub">它在自己的窗口里活着——数据实时同步，拖到屏幕边缘可吸附停靠。</div>
+          <button className="dc-btn" onClick={() => props.onAttach?.()}>⇲ 合回主窗</button>
+        </div>
+      </main>
+    )
+  }
   return (
     <main className="v10-paper">
       <header className="v10-masthead">
@@ -402,6 +419,11 @@ export function PaperPane(props: {
             AI
           </span>
           <button className="mh-act" onClick={() => { try { window.api?.openMain?.() } catch { /* ignore */ } }} title="镜：设置/例程/习惯/隐私">镜</button>
+          {pane === 'main' ? (
+            <button className="mh-act" onClick={() => props.onDetach?.()} title="把右页拆成独立窗口（可吸附/位置记忆）">⇱ 拆出</button>
+          ) : (
+            <button className="mh-act" onClick={() => props.onAttach?.()} title="合回主窗">⇲ 合回</button>
+          )}
           <button className="mh-act" onClick={() => props.onExit?.()} title="回到旧版界面（数据完全互通）">旧版 →</button>
         </div>
         <div className="mh-sub">

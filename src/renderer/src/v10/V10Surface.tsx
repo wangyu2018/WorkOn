@@ -4,7 +4,7 @@
  * 数据全部来自现有主进程 IPC（单一事实源）：plans / trail / presence / qa / reminders / notify。
  * 详见 docs/UI-DESIGN-SPEC-v10.md
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PlanItem, TrailSegment, PresenceSnapshot, GoalView, GoalDraft, ChatSession } from '@shared/types'
 import { AskPane, type ChatMsg, type ObjectChipData } from './AskPane'
 import { PaperPane, type FeedItem } from './PaperPane'
@@ -54,6 +54,9 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const [aiOn, setAiOn] = useState<boolean | null>(null)
   const [showFlowMap, setShowFlowMap] = useState(false)
   const [mindMapText, setMindMapText] = useState<string | null>(null)
+  // 工作台拆出（v10）：pane=paper=独立右页窗；主窗监听拆出态显示占位
+  const paneMode = useMemo(() => new URLSearchParams(window.location.search).get('pane'), [])
+  const [detached, setDetached] = useState(false)
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   /** 会话中所有 AI 回复统一走这里（纯数据入参；IPC 绝不放 setChat updater——StrictMode 双调用会双写） */
@@ -109,6 +112,12 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
     void window.api?.getPresence?.().then((p) => setPresence((p as PresenceSnapshot) ?? null))
     void window.api?.getSettings?.().then((st) => setAiOn(!!(st as { aiEnabled?: boolean })?.aiEnabled))
     void window.api?.listSessions?.().then((x) => setSessions((x as ChatSession[]) ?? []))
+    void window.api?.workbenchState?.().then((d) => setDetached(!!d))
+    let wbPoll: number | undefined
+    const offW = window.api?.onWorkbenchState?.((d) => {
+      console.info('[v10] workbench:state 事件', d)
+      setDetached(!!d.detached)
+    })
     // 秒级 tick：时钟 + 折下 TTL（keep 类到期转归档，fade 类消亡）
     const tick = window.setInterval(() => {
       setNow(Date.now())
@@ -130,7 +139,13 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       offN?.()
       window.clearInterval(tick)
       window.clearInterval(timer)
+      if (wbPoll) clearInterval(wbPoll)
+      offW?.()
     }
+    // 工作台拆出态轮询兜底（事件链验证期；确认无误后可去掉）
+    wbPoll = window.setInterval(() => {
+      void window.api?.workbenchState?.().then((d) => setDetached(!!d))
+    }, 3000)
   }, [reloadPlans, reloadTrail])
 
   useEffect(() => {
@@ -480,6 +495,38 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const today = new Date()
   const dateLabel = `${today.getMonth() + 1} 月 ${today.getDate()} 日 · ${['周日', '周一', '周二', '周三', '周四', '周五', '周六'][today.getDay()]}`
 
+  if (paneMode === 'paper') {
+    return (
+      <div className="v10 v10-pane">
+        <PaperPane
+          dateLabel={dateLabel}
+          plans={plans}
+          trail={trail}
+          presence={presence}
+          onTogglePlan={togglePlan}
+          onExit={props.onExit}
+          feed={feed}
+          archived={archived}
+          blockParams={blockParams}
+          now={now}
+          aiOn={aiOn}
+          showFlowMap={showFlowMap}
+          mindMapText={mindMapText}
+          onCloseMindMap={() => setMindMapText(null)}
+          onFeedReorder={(from, to) => {
+            setFeed((f) => {
+              const next = [...f]
+              const [m] = next.splice(from, 1)
+              next.splice(to, 0, m)
+              return next
+            })
+          }}
+          pane="paper"
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="v10">
       <AskPane
@@ -541,6 +588,9 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         showFlowMap={showFlowMap}
         mindMapText={mindMapText}
         onCloseMindMap={() => setMindMapText(null)}
+        pane={detached ? 'detached' : 'main'}
+        onAttach={() => void window.api?.attachWorkbench?.()}
+        onDetach={() => void window.api?.detachWorkbench?.()}
         onFeedReorder={(from, to) => {
           setFeed((f) => {
             const next = [...f]

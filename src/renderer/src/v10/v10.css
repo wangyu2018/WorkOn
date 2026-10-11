@@ -632,3 +632,17 @@
   background: var(--paper); border: 1px solid var(--hairline);
   border-radius: 999px; padding: 1px 8px; pointer-events: none;
 }
+
+/* ── 工作台拆出窗 ───────────────────────────────────── */
+.v10-pane { background: var(--paper); }
+.v10-pane .v10-paper { padding: 0 0 20px; }
+.v10-masthead.draggable { -webkit-app-region: drag; }
+.v10-masthead.draggable .mh-act,
+.v10-masthead.draggable button { -webkit-app-region: no-drag; }
+.v10-detached-card { text-align: center; max-width: 380px; padding: 30px; }
+.v10-detached-card .dc-title { font-family: var(--font-num); font-size: 20px; color: var(--ink); margin-bottom: 10px; }
+.v10-detached-card .dc-sub { font-size: 12.5px; color: var(--ink-2); line-height: 1.8; margin-bottom: 18px; }
+.v10-detached-card .dc-btn {
+  border: none; background: var(--teal); color: #fff;
+  font-size: 13px; padding: 9px 22px; border-radius: var(--r-md); cursor: pointer; font-family: var(--font-ui);
+}
