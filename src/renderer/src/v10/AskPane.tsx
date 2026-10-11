@@ -10,6 +10,7 @@ import { STATE_LABEL } from '@shared/stateMeta'
 import { renderMarkdown } from './md'
 import { detectStructured, StructuredCard } from './structured'
 import { MindMap } from './mindmap'
+import { Shrinkable } from './Shrinkable'
 
 /** AI 回答富呈现（v10）：结构化答卡优先（KPI/条形）→ markdown → 长文折叠 */
 function RichAnswer(props: { text: string; onMindmap?: (src: string) => void }): JSX.Element {
@@ -24,7 +25,9 @@ function RichAnswer(props: { text: string; onMindmap?: (src: string) => void }):
   const mapBlock = canMap ? (
     mapped ? (
       <div className="v10-attachrow">
-        <MindMap text={props.text} rootLabel="回答" width={520} />
+        <Shrinkable scale={0.66} hint="思维导图 · 移过放大">
+          <MindMap text={props.text} rootLabel="回答" width={520} />
+        </Shrinkable>
       </div>
     ) : (
       <div className="v10-attachrow">

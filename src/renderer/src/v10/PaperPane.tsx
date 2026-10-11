@@ -7,6 +7,7 @@ import type { PlanItem, TrailSegment, PresenceSnapshot, GoalView } from '@shared
 import type { BlockParams } from './V10Surface'
 import type { ObjectChipData } from './AskPane'
 import { FlowMap } from './FlowMap'
+import { Shrinkable } from './Shrinkable'
 
 /** 折下数据流：真实 notify 卡 + 提醒事件（v10 §5 消息总线的 v10 侧呈现） */
 export interface FeedItem {
@@ -427,7 +428,9 @@ export function PaperPane(props: {
               <span>· 实线=实际 · 虚线=建议</span>
               <span className="acts"><button onClick={() => props.onExit?.()}>×</button></span>
             </div>
-            <FlowMap trail={props.trail} plans={props.plans} goals={props.goals ?? []} />
+            <Shrinkable scale={0.7} hint="状态导图 · 移过放大">
+              <FlowMap trail={props.trail} plans={props.plans} goals={props.goals ?? []} />
+            </Shrinkable>
           </section>
         ) : null}
         <TodayPlansBlock plans={props.plans} onToggle={props.onTogglePlan} />
