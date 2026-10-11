@@ -8,6 +8,7 @@ import type { BlockParams } from './V10Surface'
 import type { ObjectChipData } from './AskPane'
 import { FlowMap } from './FlowMap'
 import { Shrinkable } from './Shrinkable'
+import { MindMap } from './mindmap'
 
 /** 折下数据流：真实 notify 卡 + 提醒事件（v10 §5 消息总线的 v10 侧呈现） */
 export interface FeedItem {
@@ -373,6 +374,8 @@ export function PaperPane(props: {
   now?: number
   aiOn?: boolean | null
   showFlowMap?: boolean
+  mindMapText?: string | null
+  onCloseMindMap?: () => void
   onFeedReorder?: (from: number, to: number) => void
 }): JSX.Element {
   const feed = props.feed ?? []
@@ -420,6 +423,17 @@ export function PaperPane(props: {
       <div className="v10-fold-above">
         <div className="v10-fold-label">折 上 · 你 的 版 面</div>
         <NowBlock presence={props.presence} />
+        {props.mindMapText ? (
+          <section className="v10-block">
+            <div className="v10-block-kick">
+              <span className="aura-mark">◇</span>
+              <span>思维导图</span>
+              <span>· 回答的再结构化</span>
+              <span className="acts"><button onClick={() => props.onCloseMindMap?.()}>×</button></span>
+            </div>
+            <MindMap text={props.mindMapText} rootLabel="回答" width={860} />
+          </section>
+        ) : null}
         {props.showFlowMap ? (
           <section className="v10-block">
             <div className="v10-block-kick">

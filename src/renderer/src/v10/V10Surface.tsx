@@ -53,6 +53,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const [archived, setArchived] = useState<FeedItem[]>([])
   const [aiOn, setAiOn] = useState<boolean | null>(null)
   const [showFlowMap, setShowFlowMap] = useState(false)
+  const [mindMapText, setMindMapText] = useState<string | null>(null)
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   /** 会话中所有 AI 回复统一走这里（纯数据入参；IPC 绝不放 setChat updater——StrictMode 双调用会双写） */
@@ -156,6 +157,11 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const send = useCallback(
     (raw: string) => {
       // 对象芯片挂载（AskPane drop 转发的内部协议，不上屏）
+      if (raw.startsWith('__page__')) {
+        setMindMapText(raw.slice(8))
+        setChat((c) => [...c, { role: 'ai', text: '思维导图落右页了——那边宽，看全貌。' }])
+        return
+      }
       if (raw === '__flowmap__') {
         setShowFlowMap(true)
         setChat((c) => [...c, { role: 'ai', text: '状态导图落右页了——实线是你实际走过的，虚线是计划和锚点建议你去的地方。' }])
@@ -533,6 +539,8 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         now={now}
         aiOn={aiOn}
         showFlowMap={showFlowMap}
+        mindMapText={mindMapText}
+        onCloseMindMap={() => setMindMapText(null)}
         onFeedReorder={(from, to) => {
           setFeed((f) => {
             const next = [...f]

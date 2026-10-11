@@ -25,9 +25,16 @@ function RichAnswer(props: { text: string; onMindmap?: (src: string) => void }):
   const mapBlock = canMap ? (
     mapped ? (
       <div className="v10-attachrow">
-        <Shrinkable scale={0.66} hint="思维导图 · 移过放大">
-          <MindMap text={props.text} rootLabel="回答" width={520} />
-        </Shrinkable>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Shrinkable scale={0.55} hint="预览 · 移过放大">
+              <MindMap text={props.text} rootLabel="回答" width={520} />
+            </Shrinkable>
+          </div>
+          <button className="v10-attach" onClick={() => props.onMindmap?.(`__page__${props.text}`)} title="右页宽度大，可视化更完整">
+            落右页 ▸
+          </button>
+        </div>
       </div>
     ) : (
       <div className="v10-attachrow">
@@ -82,6 +89,8 @@ export interface ChatMsg {
   /** 拆件数据源（mindmap 用：原始回答文本） */
   attachSrc?: string
 }
+
+/** 会话框不是主要阅读区（用户拍板）：再结构化件缩略+hover 预览在左栏，完整版落右页 */
 
 /** 块进化对象芯片：从右页拖入的组件描述 */
 export interface ObjectChipData {
@@ -285,7 +294,10 @@ export function AskPane(props: {
           <div key={i} className={m.role === 'user' ? 'v10-msg-user' : 'v10-msg-ai-wrap'}>
             {m.role === 'ai' ? (
               <div className="v10-msg-ai" style={{ display: 'block' }}>
-                <RichAnswer text={m.text} />
+                <RichAnswer
+                  text={m.text}
+                  onMindmap={(src) => props.onSend(src.startsWith('__') ? src : `__page__${src}`)}
+                />
               </div>
             ) : (
               <div className="v10-msg-user">{m.text}</div>
