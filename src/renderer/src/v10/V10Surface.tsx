@@ -592,7 +592,6 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
               return next
             })
           }}
-          pane="paper"
         />
       </div>
     )
