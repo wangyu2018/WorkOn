@@ -1027,6 +1027,9 @@ export interface AppSettings {
   v10WorkbenchBounds?: { x: number; y: number; width: number; height: number }
   /** 消息监控（v10 signals·隐私红线）：默认关；开启后 IM 未读上升→截屏 OCR→来件进对话流 */
   messageWatchEnabled?: boolean
+  /** v10 玻璃双窗：问/右页 位置尺寸记忆 */
+  v10AskBounds?: { x: number; y: number; width: number; height: number }
+  v10PaperBounds?: { x: number; y: number; width: number; height: number }
   /** 音乐信号（v10 signals）：切歌/播放状态变化→折下轻通知 */
   musicWatchEnabled?: boolean
   weatherApiHost?: string // v3.4 和风天气 API Host（形如 xxxxx.qweatherapi.com，控制台设置页查看）

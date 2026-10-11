@@ -41,6 +41,10 @@ const api = {
   workbenchState: () => ipcRenderer.invoke('workbench:state'),
   onWorkbenchState: on<{ detached: boolean }>('workbench:state'),
   onMessageIncoming: on<{ app: string; unread: number; text: string; ts: number }>('message:incoming'),
+  detachPanes: () => ipcRenderer.invoke('panes:detach'),
+  attachPanes: () => ipcRenderer.invoke('panes:attach'),
+  setPaneIgnore: (ignore: boolean) => ipcRenderer.invoke('panes:setIgnore', ignore),
+  panesState: () => ipcRenderer.invoke('panes:state'),
   onMusicChanged: on<{ name: string; artist: string; playing: boolean }>('music:changed'),
 
   // 实时状态

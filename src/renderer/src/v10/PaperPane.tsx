@@ -421,7 +421,10 @@ export function PaperPane(props: {
           </span>
           <button className="mh-act" onClick={() => { try { window.api?.openMain?.() } catch { /* ignore */ } }} title="镜：设置/例程/习惯/隐私">镜</button>
           {pane === 'main' ? (
-            <button className="mh-act" onClick={() => props.onDetach?.()} title="把右页拆成独立窗口（可吸附/位置记忆）">⇱ 拆出</button>
+            <>
+              <button className="mh-act" onClick={() => props.onDetach?.()} title="右页拆出独立窗口（吸附+位置记忆）">⇱ 拆出</button>
+              <button className="mh-act" onClick={() => { void window.api?.detachPanes?.() }} title="玻璃拆开：问/右页两块穿透玻璃片，拖到一起磁性吸附">◫ 玻璃拆开</button>
+            </>
           ) : (
             <button className="mh-act" onClick={() => props.onAttach?.()} title="合回主窗">⇲ 合回</button>
           )}

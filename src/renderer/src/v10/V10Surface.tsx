@@ -542,10 +542,34 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const today = new Date()
   const dateLabel = `${today.getMonth() + 1} 月 ${today.getDate()} 日 · ${['周日', '周一', '周二', '周三', '周四', '周五', '周六'][today.getDay()]}`
 
+  if (paneMode === 'ask') {
+    // 玻璃片：问（全宽对话流）
+    return (
+      <div className="v10 v10-pane v10-pane-ask" data-interactive>
+        <AskPane
+          chat={chat}
+          asking={asking}
+          onSend={send}
+          scrollRef={scrollRef}
+          presence={presence}
+          objectChip={objectChip}
+          onClearChip={() => setObjectChip(null)}
+          quoteChip={quoteChip}
+          onClearQuote={() => setQuoteChip(null)}
+          onQuoteDrop={(q) => setQuoteChip(q)}
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          onEnterSession={setActiveSessionId}
+        />
+      </div>
+    )
+  }
+
   if (paneMode === 'paper') {
     return (
       <div className="v10 v10-pane">
         <PaperPane
+          pane="paper"
           dateLabel={dateLabel}
           plans={plans}
           trail={trail}

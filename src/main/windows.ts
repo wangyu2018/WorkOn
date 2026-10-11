@@ -1186,3 +1186,143 @@ export function attachWorkbench(): void {
 export function getWorkbenchWindow(): BrowserWindow | null {
   return workbenchWindow && !workbenchWindow.isDestroyed() ? workbenchWindow : null
 }
+
+
+// ───────────────────────── v10 玻璃双窗（拆开=两块穿透玻璃片，磁性吸附合体） ─────────────────────────
+
+let askPaneWindow: BrowserWindow | null = null
+let paperPaneWindow: BrowserWindow | null = null
+
+const PANE_DOCK_SNAP = 42 // 双窗间磁性吸附距离
+
+function paneInteractiveGuard(win: BrowserWindow): void {
+  // 玻璃片：整体穿透+forward，渲染层按命中切回可交互（pet 方案B 同源）
+  win.setIgnoreMouseEvents(true, { forward: true })
+}
+
+function rememberPane(which: 'ask' | 'paper', win: BrowserWindow): void {
+  const b = win.getBounds()
+  setSettings(which === 'ask' ? { v10AskBounds: { x: b.x, y: b.y, width: b.width, height: b.height } } : { v10PaperBounds: { x: b.x, y: b.y, width: b.width, height: b.height } })
+}
+
+/** 磁性吸附：mover 靠近兄弟窗四向 ≤42px → 贴合 */
+function paneMagneticSnap(moved: 'ask' | 'paper'): void {
+  const a = moved === 'ask' ? askPaneWindow : paperPaneWindow
+  const b = moved === 'ask' ? paperPaneWindow : askPaneWindow
+  if (!a || a.isDestroyed() || !b || b.isDestroyed()) return
+  const ra = a.getBounds()
+  const rb = b.getBounds()
+  let nx = ra.x
+  let ny = ra.y
+  let snapped = false
+  // 左右贴合：a 右缘贴 b 左缘 / a 左缘贴 b 右缘（y 对齐上缘）
+  if (Math.abs(ra.x + ra.width - rb.x) <= PANE_DOCK_SNAP) { nx = rb.x - ra.width; snapped = true }
+  else if (Math.abs(rb.x + rb.width - ra.x) <= PANE_DOCK_SNAP) { nx = rb.x + rb.width; snapped = true }
+  // 上下贴合（x 对齐左缘）
+  if (Math.abs(ra.y + ra.height - rb.y) <= PANE_DOCK_SNAP) { ny = rb.y - ra.height; snapped = true }
+  else if (Math.abs(rb.y + rb.height - ra.y) <= PANE_DOCK_SNAP) { ny = rb.y + rb.height; snapped = true }
+  if (snapped) {
+    a.setPosition(nx, ny)
+    console.info(`[v10panes] ${moved} 磁性吸附`, { nx, ny })
+  }
+}
+
+function createPaneWindow(which: 'ask' | 'paper'): BrowserWindow {
+  const s = getSettings()
+  const saved = which === 'ask' ? s.v10AskBounds : s.v10PaperBounds
+  const wa = screen.getPrimaryDisplay().workArea
+  const width = saved?.width ?? (which === 'ask' ? 400 : 880)
+  const height = saved?.height ?? wa.height - 80
+  let x = saved?.x ?? (which === 'ask' ? wa.x + 12 : wa.x + 428)
+  let y = saved?.y ?? wa.y + 36
+  if (x < wa.x - 80 || x > wa.x + wa.width - 60) x = which === 'ask' ? wa.x + 12 : wa.x + 428
+  if (y < wa.y - 10 || y > wa.y + wa.height - 50) y = wa.y + 36
+
+  const win = new BrowserWindow({
+    x,
+    y,
+    width,
+    height,
+    minWidth: 300,
+    minHeight: 320,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    skipTaskbar: false,
+    title: which === 'ask' ? 'WorkOn · 问' : 'WorkOn · 右页',
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+  const pane = which
+  if (isDev) void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/index.html?v10=1&pane=${pane}`)
+  else void win.loadFile(path.join(__dirname, '../renderer/index.html'))
+  win.once('ready-to-show', () => {
+    win.show()
+    paneInteractiveGuard(win)
+  })
+  win.on('blur', () => paneInteractiveGuard(win))
+  let snapTimer: NodeJS.Timeout | null = null
+  win.on('moved', () => {
+    if (snapTimer) clearTimeout(snapTimer)
+    snapTimer = setTimeout(() => {
+      if (win.isDestroyed()) return
+      paneMagneticSnap(which)
+      rememberPane(which, win)
+    }, 200)
+  })
+  win.on('resized', () => rememberPane(which, win))
+  win.on('closed', () => {
+    if (which === 'ask') askPaneWindow = null
+    else paperPaneWindow = null
+    if (!askPaneWindow && !paperPaneWindow) {
+      mainWindow?.show()
+      sendTo('main', 'workbench:state', { detached: false })
+    }
+    sendTo('main', 'v10panes:state', {
+      ask: !!askPaneWindow && !askPaneWindow.isDestroyed(),
+      paper: !!paperPaneWindow && !paperPaneWindow.isDestroyed()
+    })
+  })
+  return win
+}
+
+export function detachPanes(): void {
+  // 玻璃拆开：主窗收起，两块穿透玻璃片上场
+  const s = getSettings()
+  const wa = screen.getPrimaryDisplay().workArea
+  const askB = s.v10AskBounds
+  const paperB = s.v10PaperBounds
+  askPaneWindow = askPaneWindow && !askPaneWindow.isDestroyed() ? askPaneWindow : createPaneWindow('ask')
+  askPaneWindow.setBounds(askB ? askB : { x: wa.x + 12, y: wa.y + 36, width: 400, height: wa.height - 80 })
+  paperPaneWindow = paperPaneWindow && !paperPaneWindow.isDestroyed() ? paperPaneWindow : createPaneWindow('paper')
+  paperPaneWindow.setBounds(paperB ? paperB : { x: wa.x + 428, y: wa.y + 36, width: 880, height: wa.height - 80 })
+  mainWindow?.hide()
+  sendTo('main', 'workbench:state', { detached: true })
+  console.info('[v10panes] 玻璃拆开：问/右页 两块穿透玻璃片')
+}
+
+export function attachPanes(): void {
+  askPaneWindow?.close()
+  paperPaneWindow?.close()
+  mainWindow?.show()
+  mainWindow?.focus()
+  console.info('[v10panes] 合体：恢复一面')
+}
+
+export function setPaneIgnore(ignore: boolean): void {
+  // 渲染层命中切换：从主窗调（当前聚焦的玻璃片）
+  for (const w of [askPaneWindow, paperPaneWindow]) {
+    if (w && !w.isDestroyed()) w.setIgnoreMouseEvents(ignore, ignore ? { forward: true } : undefined)
+  }
+}
+
+export function panesState(): { ask: boolean; paper: boolean } {
+  return {
+    ask: !!askPaneWindow && !askPaneWindow.isDestroyed(),
+    paper: !!paperPaneWindow && !paperPaneWindow.isDestroyed()
+  }
+}

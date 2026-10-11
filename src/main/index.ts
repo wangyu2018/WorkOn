@@ -5,7 +5,7 @@
 import { app, BrowserWindow, Notification, ipcMain } from 'electron'
 import { initSettings, getSettings, setSettings } from './settings'
 import { initDb, flushNow, loadActivitiesDeferred } from './db'
-import { createMainWindow, createWidgetWindow, createPetWindow, createSplashWindow, closeSplash, sendTo, broadcast, widgetWindow, mainWindow, createTodoWidgetWindow, createWorkbenchWindow, attachWorkbench, isWorkbenchDetached } from './windows'
+import { createMainWindow, createWidgetWindow, createPetWindow, createSplashWindow, closeSplash, sendTo, broadcast, widgetWindow, mainWindow, createTodoWidgetWindow, createWorkbenchWindow, attachWorkbench, isWorkbenchDetached, detachPanes, attachPanes, setPaneIgnore, panesState } from './windows'
 import { createTray } from './tray'
 import { registerShortcuts, unregisterShortcuts } from './globalShortcut'
 import { registerIpc } from './ipc'
@@ -426,6 +426,20 @@ app.whenReady().then(() => {
     return true
   })
   ipcMain.handle('workbench:state', () => isWorkbenchDetached())
+  // 玻璃双窗（v10）：拆开=两块穿透玻璃片+磁性吸附
+  ipcMain.handle('panes:detach', () => {
+    detachPanes()
+    return true
+  })
+  ipcMain.handle('panes:attach', () => {
+    attachPanes()
+    return true
+  })
+  ipcMain.handle('panes:setIgnore', (_e, ignore: boolean) => {
+    setPaneIgnore(ignore)
+    return true
+  })
+  ipcMain.handle('panes:state', () => panesState())
   ipcMain.handle('sessions:create', (_e, input: { title?: string; topic?: 'project' | 'life' | 'general'; first?: { role: 'user' | 'ai'; text: string; time: number } }) =>
     createChatSession(input)
   )

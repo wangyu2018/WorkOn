@@ -648,3 +648,32 @@
 }
 .v10-objchip.quotec { background: var(--celadon-1); }
 .v10-objchip.quotec .chip-mark { background: none; -webkit-background-clip: initial; color: var(--teal-ink); }
+
+
+/* ── 玻璃拆开模式（pane 窗）：透明底+内容纸片浮桌面 ── */
+.v10-pane {
+  background: transparent;
+  padding: 10px;
+  box-sizing: border-box;
+}
+.v10-pane-ask .v10-ask {
+  background: rgba(247, 244, 238, 0.96);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  box-shadow: 0 10px 40px rgba(43, 43, 40, 0.14);
+  padding: 10px 0 4px;
+  height: 100%;
+  box-sizing: border-box;
+}
+.v10-pane .v10-paper {
+  background: rgba(247, 244, 238, 0.96);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  box-shadow: 0 10px 40px rgba(43, 43, 40, 0.14);
+  padding: 10px 0 16px;
+  height: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+.v10-pane .v10-masthead { border-radius: var(--r-md); margin: 0 10px 6px; }
+.v10-pane .v10-fold-above, .v10-pane .v10-fold-below, .v10-pane .v10-foldline { margin-left: 12px; margin-right: 12px; }
