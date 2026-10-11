@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PlanItem, TrailSegment, PresenceSnapshot, GoalView, GoalDraft, ChatSession } from '@shared/types'
 import { AskPane, type ChatMsg, type ObjectChipData } from './AskPane'
 import { PaperPane, type FeedItem } from './PaperPane'
-import { parseReminderIntent, parseGoalIntent } from './nlu'
+import { parseReminderIntent, parseGoalIntent, parseScheduleProposal } from './nlu'
 import { FlowMap } from './FlowMap'
 import './v10.css'
 
@@ -43,6 +43,8 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const scrollRef = useRef<HTMLDivElement>(null)
   /** 快捷回复协议：最近一条带选项的消息 index → 选项数组；回 1/2 即答 */
   const optionsRef = useRef<{ msgIndex: number; options: string[] } | null>(null)
+  /** 日程提议待确认（快捷回复 ① 建带确认器的提醒） */
+  const pendingProposalRef = useRef<{ msgIndex: number; proposal: { whenLabel: string; event: string; atHHMM?: string; atTs?: number; isMeeting: boolean } } | null>(null)
   /** 待确认的预期拆解草稿（确认创建/重新拆解/算了） */
   const pendingGoalRef = useRef<{ msgIndex: number; sourceText: string; draft: GoalDraft } | null>(null)
   /** 块进化：挂在输入场的对象芯片 */
@@ -84,11 +86,12 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
     const offP = window.api?.onPlanUpdated?.(() => reloadPlans())
     const offS = window.api?.onPresence?.((p) => setPresence(p as PresenceSnapshot))
     const offR = window.api?.onReminderFired?.((r) => {
+      const tag = r.confirmed ? '✓ 已自动确认' : (r.origin ?? 'user') === 'system' ? '系统记录提醒' : '你的提醒'
       setChat((c) => {
         const opts = ['知道了', '晚 10 分钟再提']
         const next = [
           ...c,
-          { role: 'ai' as const, text: `⏰ 到点了：${r.title}${r.atHHMM ? `（${r.atHHMM}）` : ''}`, options: opts }
+          { role: 'ai' as const, text: `⏰【${tag}】${r.title}${r.atHHMM ? `（${r.atHHMM}）` : ''}`, options: opts }
         ]
         optionsRef.current = { msgIndex: next.length - 1, options: opts }
         return next
@@ -268,6 +271,26 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           }
           return
         }
+        if (pendingProposalRef.current && pendingProposalRef.current.msgIndex === pending.msgIndex) {
+          const { proposal } = pendingProposalRef.current
+          pendingProposalRef.current = null
+          if (picked.includes('提醒我')) {
+            const leadTs = proposal.atTs ? proposal.atTs - 5 * 60_000 : undefined
+            void window.api?.addReminder?.({
+              title: `${proposal.event}（入会）`,
+              recurring: 'daily',
+              atHHMM: proposal.atHHMM,
+              atTs: leadTs ?? proposal.atTs,
+              origin: 'user',
+              confirmKeywords: proposal.isMeeting ? ['meeting'] : undefined
+            })
+            setReminders((list) => [...list, { id: `tmp${Date.now()}`, title: `${proposal.event}（入会）`, atHHMM: proposal.atHHMM }])
+            pushAI([{ role: 'ai', text: `好——${proposal.whenLabel} 的「${proposal.event}」我会提前 5 分钟叫你${proposal.isMeeting ? '；到点若检测到你已入会就自动确认，不打扰' : ''}。` }])
+          } else {
+            pushAI([{ role: 'ai', text: '好，不打扰。' }])
+          }
+          return
+        }
         if (picked.includes('晚 10 分钟')) {
           void window.api?.addReminder?.({ title: '稍后再提（延后 10 分钟）', recurring: 'once', atTs: Date.now() + 10 * 60_000 })
           setChat((c) => [...c, { role: 'ai', text: '好，10 分钟后再提一次。' }])
@@ -279,6 +302,27 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         } else {
           setChat((c) => [...c, { role: 'ai', text: '好。' }])
         }
+        return
+      }
+
+      // ── 日程提议（v10：识别消息里的时间+事件，主动问要不要提前提醒；入会类自动挂行为确认） ──
+      const proposal = parseScheduleProposal(normalized)
+      if (proposal) {
+        const lead = proposal.isMeeting ? '提前 5 分钟' : ''
+        setChat((c) => {
+          const opts = [`${lead}提醒我`, '不用了']
+          const next = [
+            ...c,
+            {
+              role: 'ai' as const,
+              text: `${proposal.whenLabel}有个「${proposal.event}」——${proposal.isMeeting ? '到点我会看你是否已入会，在会里就不打扰；' : ''}要我提醒你吗？`,
+              options: opts
+            }
+          ]
+          optionsRef.current = { msgIndex: next.length - 1, options: opts }
+          pendingProposalRef.current = { msgIndex: next.length - 1, proposal }
+          return next
+        })
         return
       }
 
@@ -346,11 +390,28 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         return
       }
 
+      // ── 我的提醒清单 ──
+      if (/^(我的?提醒|提醒清单|有哪些提醒)$/.test(normalized)) {
+        void window.api?.listReminders?.().then((list) => {
+          const rs = (list as Array<{ id: string; title: string; atHHMM?: string; recurring: string; origin?: string; enabled: boolean }>).filter((x) => x.enabled)
+          if (!rs.length) {
+            pushAI([{ role: 'ai', text: '还没有提醒。说「晚上 9 点提醒我看日报」就能建一条。' }])
+            return
+          }
+          const mine = rs.filter((x) => (x.origin ?? 'user') === 'user')
+          const sys = rs.filter((x) => x.origin === 'system')
+          const fmt = (arr: typeof rs) => arr.map((x) => `  · ${x.atHHMM ?? '定时'} ${x.title}`).join('\n') || '  （无）'
+          pushAI([{ role: 'ai', text: `你的提醒（${mine.length}）：\n${fmt(mine)}\n系统记录提醒（${sys.length}）：\n${fmt(sys)}` }])
+        })
+        return
+      }
+
       // ── 建提醒意图（本地规则，v10 §4 第六去向；歧义判定后续接 jev choice 小题） ──
       const intent = parseReminderIntent(text)
       if (intent) {
+        const isMeeting = /(会|会议|评审|面试|例会)/.test(intent.title) || /(开会|入会|评审|例会|会议)/.test(text)
         void window.api
-          ?.addReminder?.({ title: intent.title, recurring: intent.recurring, atHHMM: intent.atHHMM, atTs: intent.atTs })
+          ?.addReminder?.({ title: intent.title, recurring: intent.recurring, atHHMM: intent.atHHMM, atTs: intent.atTs, origin: 'user', confirmKeywords: isMeeting ? ['meeting'] : undefined })
           .then((r) => {
             setReminders((list) => [...list, r as { id: string; title: string; atHHMM?: string }])
             // optionsRef 赋值是幂等 ref 写，安全；IPC 一律走 pushAI 纯数据

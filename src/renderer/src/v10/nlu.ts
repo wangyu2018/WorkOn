@@ -36,6 +36,46 @@ export function parseGoalIntent(text: string): GoalIntent | null {
   return { sourceText: text }
 }
 
+/** 日程提议（v10）：「明天下午3点有个入职会」——没说提醒，但值得主动问一嘴 */
+export interface ScheduleProposal {
+  whenLabel: string
+  event: string
+  atHHMM?: string
+  atTs?: number
+  /** 会议类 → 建提醒时自动挂入会检测（行为自动确认） */
+  isMeeting: boolean
+}
+
+const EVENT_RE = /(有个?|要开|参加|进行|约定了?)?(入职会|评审会?|例会|周会|月会|晨会|晚会|面试|会议|约会|答辩|复习|复盘|上架|发布|截止|考试)/
+
+export function parseScheduleProposal(text: string): ScheduleProposal | null {
+  if (REMIND_RE.test(text)) return null // 显式提醒走 reminder 通道
+  if (!TIME_RE.test(text)) return null
+  if (!EVENT_RE.test(text)) return null
+  const t = TIME_RE.exec(text)!
+  let hour = Math.min(23, parseInt(t[1], 10))
+  const min = t[2] ? Math.min(59, parseInt(t[2], 10)) : 0
+  const hourPos = t.index
+  const prefix = text.slice(Math.max(0, hourPos - 3), hourPos)
+  if (/(晚上|晚间|夜里|下午|傍晚|午后|今晚)/.test(prefix) && hour >= 1 && hour <= 11) hour += 12
+  const atHHMM = `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}`
+  const eventM = EVENT_RE.exec(text)
+  const event = eventM ? eventM[2] : '日程'
+  const daily = DAY_RE.test(text)
+  const at = new Date()
+  at.setHours(hour, min, 0, 0)
+  if (TOMORROW_RE.test(text)) {
+    const d = new Date()
+    d.setDate(d.getDate() + 1)
+    at.setFullYear(d.getFullYear(), d.getMonth(), d.getDate())
+  } else if (at.getTime() <= Date.now() && !TONIGHT_RE.test(text)) {
+    at.setDate(at.getDate() + 1) // 已过点默认算明天
+  }
+  const whenLabel = `${daily ? '每天 ' : TOMORROW_RE.test(text) ? '明天 ' : '今天 '}${atHHMM}`
+  const atTs = at.getTime()
+  return { whenLabel, event, atHHMM, atTs: daily ? undefined : atTs, isMeeting: /(会|会议|面试|评审)/.test(event) && !daily }
+}
+
 export function parseReminderIntent(text: string): ReminderIntent | null {
   if (!REMIND_RE.test(text)) return null
   const t = TIME_RE.exec(text)

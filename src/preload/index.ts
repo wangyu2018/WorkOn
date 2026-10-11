@@ -21,10 +21,10 @@ const api = {
   setConsent: (v: 'granted' | 'declined') => ipcRenderer.invoke('consent:set', v),
   // 提醒中心（v10）
   listReminders: () => ipcRenderer.invoke('reminders:list'),
-  addReminder: (input: { title: string; recurring: 'daily' | 'once'; atHHMM?: string; atTs?: number }) =>
+  addReminder: (input: { title: string; recurring: 'daily' | 'once'; atHHMM?: string; atTs?: number; origin?: 'user' | 'system'; confirmKeywords?: string[] }) =>
     ipcRenderer.invoke('reminders:add', input),
   removeReminder: (id: string) => ipcRenderer.invoke('reminders:remove', id),
-  onReminderFired: on<{ id: string; title: string; recurring: 'daily' | 'once'; atHHMM?: string }>('reminder:fired'),
+  onReminderFired: on<{ id: string; title: string; recurring: 'daily' | 'once'; atHHMM?: string; origin?: string; confirmed?: boolean }>('reminder:fired'),
   // 会话（v10）
   listSessions: () => ipcRenderer.invoke('sessions:list'),
   createSession: (input: { title?: string; topic?: string; first?: { role: 'user' | 'ai'; text: string; time: number } }) =>

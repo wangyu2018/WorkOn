@@ -403,7 +403,7 @@ app.whenReady().then(() => {
   })
   // 提醒中心（v10 §5）：应用内呈现，不走 OS 通知；用户自设提醒不受注意力预算扣减
   ipcMain.handle('reminders:list', () => listReminders())
-  ipcMain.handle('reminders:add', (_e, input: { title: string; recurring: 'daily' | 'once'; atHHMM?: string; atTs?: number }) =>
+  ipcMain.handle('reminders:add', (_e, input: { title: string; recurring: 'daily' | 'once'; atHHMM?: string; atTs?: number; origin?: 'user' | 'system'; confirmKeywords?: string[] }) =>
     addReminder(input)
   )
   ipcMain.handle('reminders:remove', (_e, id: string) => removeReminder(id))
@@ -418,7 +418,7 @@ app.whenReady().then(() => {
   ipcMain.handle('sessions:remove', (_e, id: string) => removeChatSession(id))
   ipcMain.handle('sessions:rename', (_e, id: string, title: string) => renameChatSession(id, title))
   initReminders((r) => {
-    const payload = { id: r.id, title: r.title, recurring: r.recurring, atHHMM: r.atHHMM }
+    const payload = { id: r.id, title: r.title, recurring: r.recurring, atHHMM: r.atHHMM, origin: r.origin, confirmed: !!r.confirmedAt }
     sendTo('main', 'reminder:fired', payload)
     sendTo('pet', 'reminder:fired', payload)
     // 桌宠气泡：走近级打扰只留给用户自设的提醒（正是这类）
