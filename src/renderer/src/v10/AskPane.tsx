@@ -9,16 +9,43 @@ import type { PresenceSnapshot, WorkState, ChatSession } from '@shared/types'
 import { STATE_LABEL } from '@shared/stateMeta'
 import { renderMarkdown } from './md'
 import { detectStructured, StructuredCard } from './structured'
+import { MindMap } from './mindmap'
 
 /** AI 回答富呈现（v10）：结构化答卡优先（KPI/条形）→ markdown → 长文折叠 */
-function RichAnswer(props: { text: string }): JSX.Element {
+function RichAnswer(props: { text: string; onMindmap?: (src: string) => void }): JSX.Element {
   const [expanded, setExpanded] = useState(false)
+  const [mapped, setMapped] = useState(false)
   const s = detectStructured(props.text)
   const long = props.text.length > 420
+  // 思维导图拆件资格：长回答或含 markdown 结构（标题/列表/表格）——信息的再结构化
+  const mdStructured = /^#{1,3}\s|\n[-*•]\s|\n\s*\|/.test(props.text)
+  const canMap = props.text.length > 120 || mdStructured
+
+  const mapBlock = canMap ? (
+    mapped ? (
+      <div className="v10-attachrow">
+        <MindMap text={props.text} rootLabel="回答" width={520} />
+      </div>
+    ) : (
+      <div className="v10-attachrow">
+        <button
+          className="v10-attach"
+          onClick={() => {
+            setMapped(true)
+            props.onMindmap?.(props.text)
+          }}
+        >
+          ◇ 再结构化：思维导图 ▾
+        </button>
+      </div>
+    )
+  ) : null
+
   if (s) {
     return (
       <div className="v10-rich">
         <StructuredCard s={s} />
+        {mapBlock}
       </div>
     )
   }
@@ -28,10 +55,16 @@ function RichAnswer(props: { text: string }): JSX.Element {
       <div className="v10-rich">
         <div className="v10-clamp">{body}</div>
         <button className="v10-more" onClick={() => setExpanded(true)}>展开全文（{props.text.length} 字）▾</button>
+        {mapBlock}
       </div>
     )
   }
-  return <div className="v10-rich">{body}</div>
+  return (
+    <div className="v10-rich">
+      {body}
+      {mapBlock}
+    </div>
+  )
 }
 
 export interface ChatMsg {
@@ -42,7 +75,9 @@ export interface ChatMsg {
   /** 已选择的选项（应答后定格显示） */
   picked?: string
   /** 答卡可拆件：回答附带的落页件（点按触发） */
-  attach?: 'flowmap'
+  attach?: 'flowmap' | 'mindmap'
+  /** 拆件数据源（mindmap 用：原始回答文本） */
+  attachSrc?: string
 }
 
 /** 块进化对象芯片：从右页拖入的组件描述 */
