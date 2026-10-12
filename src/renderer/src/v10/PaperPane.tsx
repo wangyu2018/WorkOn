@@ -32,9 +32,10 @@ function hhmm(ts: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-function TodayPlansBlock(props: { plans: PlanItem[]; onToggle: (p: PlanItem) => void }): JSX.Element {
+function TodayPlansBlock(props: { plans: PlanItem[]; onToggle: (p: PlanItem) => void; kick?: (p: { blockKey: string; extra?: JSX.Element }) => JSX.Element; pinned?: boolean; hidden?: boolean }): JSX.Element | null {
   const today = new Date()
   const [expanded, setExpanded] = useState(false)
+  if (props.hidden) return null
   const [showSrc, setShowSrc] = useState(false)
   const key = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
   const list = props.plans.filter((p) => p.date === key && p.status !== 'cancelled')
@@ -47,8 +48,7 @@ function TodayPlansBlock(props: { plans: PlanItem[]; onToggle: (p: PlanItem) => 
         <span>◆ 今日计划</span>
         <span>· {done}/{list.length}</span>
         <span className="acts">
-          <button onClick={() => setShowSrc(!showSrc)} title="数据源">源</button>
-          <button>留住</button><button>×</button>
+          {props.kick ? props.kick({ blockKey: 'plans', extra: <button onClick={() => setShowSrc(!showSrc)} title="数据源">源</button> }) : null}
         </span>
       </div>
       {showSrc ? (
@@ -80,18 +80,18 @@ function TodayPlansBlock(props: { plans: PlanItem[]; onToggle: (p: PlanItem) => 
   )
 }
 
-function NowBlock(props: { presence: PresenceSnapshot | null }): JSX.Element {
+function NowBlock(props: { presence: PresenceSnapshot | null; kick?: (p: { blockKey: string; extra?: JSX.Element }) => JSX.Element; pinned?: boolean; hidden?: boolean }): JSX.Element | null {
   const [showSrc, setShowSrc] = useState(false)
+  if (props.hidden) return null
   const s = props.presence?.state
   const main = props.presence?.screens?.find((x) => x.screen === props.presence?.mainScreen)
   const focusMin = Math.round((props.presence?.continuousFocusSec ?? 0) / 60)
   return (
     <section className="v10-block">
       <div className="v10-block-kick">
-        <span>◆ 此刻</span>
+        <span>◆ 此刻{props.pinned ? ' · ◆' : ''}</span>
         <span className="acts">
-          <button onClick={() => setShowSrc(!showSrc)} title="数据源">源</button>
-          <button>留住</button><button>×</button>
+          {props.kick ? props.kick({ blockKey: 'now', extra: <button onClick={() => setShowSrc(!showSrc)} title="数据源">源</button> }) : null}
         </span>
       </div>
       {showSrc ? (
@@ -108,10 +108,11 @@ function NowBlock(props: { presence: PresenceSnapshot | null }): JSX.Element {
   )
 }
 
-function TimelineBlock(props: { trail: TrailSegment[]; days: number }): JSX.Element {
+function TimelineBlock(props: { trail: TrailSegment[]; days: number; kick?: (p: { blockKey: string; extra?: JSX.Element }) => JSX.Element; pinned?: boolean; hidden?: boolean }): JSX.Element | null {
   const days = props.days
   const [expanded, setExpanded] = useState(false)
   const [showSrc, setShowSrc] = useState(false)
+  if (props.hidden) return null
   const cutoff = Date.now() - days * 24 * 3600_000
   const all = props.trail.filter((t) => !t.glance && t.startTs >= cutoff)
   const segs = (expanded ? all : all.slice(-8)).reverse()
@@ -131,8 +132,7 @@ function TimelineBlock(props: { trail: TrailSegment[]; days: number }): JSX.Elem
         <span>· 最近 {segs.length} 段</span>
         {days !== 1 ? <span className="aura-mark">◇ 已调</span> : null}
         <span className="acts">
-          <button onClick={() => setShowSrc(!showSrc)} title="数据源">源</button>
-          <button>留住</button><button>×</button>
+          {props.kick ? props.kick({ blockKey: 'timeline', extra: <button onClick={() => setShowSrc(!showSrc)} title="数据源">源</button> }) : null}
         </span>
       </div>
       {showSrc ? (
@@ -141,6 +141,7 @@ function TimelineBlock(props: { trail: TrailSegment[]; days: number }): JSX.Elem
       {!expanded && all.length > 8 ? (
         <button className="v10-foldmore" onClick={() => setExpanded(true)}>展开更早的 {all.length - 8} 段 ▾</button>
       ) : null}
+      {days === 1 && all.length ? <TimelineBand segs={all} /> : null}
       {segs.length === 0 ? (
         <div className="v10-empty">{days === 1 ? '轨迹会随着采集自动长出来（此平台不支持窗口采集时这里保持空白）。' : `${days} 天内没有轨迹记录。`}</div>
       ) : (
@@ -154,6 +155,78 @@ function TimelineBlock(props: { trail: TrailSegment[]; days: number }): JSX.Elem
         ))
       )}
     </section>
+  )
+}
+
+/** 24h 时间带（v10 轨迹可视化升级）：横带按段时长画色块，hover 看详情 */
+function TimelineBand(props: { segs: TrailSegment[] }): JSX.Element {
+  const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0)
+  const total = 24 * 3600_000
+  return (
+    <div className="v10-tband">
+      <div className="tb-track">
+        {props.segs.map((t, i) => {
+          const left = ((t.startTs - dayStart.getTime()) / total) * 100
+          const width = Math.max(0.6, ((t.endTs - t.startTs) / total) * 100)
+          return (
+            <span
+              key={i}
+              className="tb-seg"
+              style={{ left: `${Math.min(99, left)}%`, width: `${Math.min(100 - left, width)}%`, background: WORK_STATES[t.mainState]?.color ?? '#64748B' }}
+              title={`${hhmm(t.startTs)}–${hhmm(t.endTs)} ${STATE_LABEL[t.mainState]} · ${displayApp(t.mainApp)} · ${Math.round(t.durationMin)} 分钟`}
+            />
+          )
+        })}
+        <span className="tb-now" style={{ left: `${((Date.now() - dayStart.getTime()) / total) * 100}%` }} />
+      </div>
+      <div className="tb-scale">
+        <span>0时</span><span>6时</span><span>12时</span><span>18时</span><span>24时</span>
+      </div>
+    </div>
+  )
+}
+
+/** 里程碑轴（人生预期美化）：起点→锚点（按日期定位）→截止，「你在这里」aura 标记 */
+function GoalAxis(props: {
+  v: GoalView
+  onMark: (goalId: string, anchorId: string, status: 'hit' | 'pending') => void
+  onRemove: (anchorId: string) => void
+}): JSX.Element {
+  const { v } = props
+  const startTs = new Date(v.goal.deadline).getTime() - v.remainingDays * 86_400_000
+  const endTs = new Date(v.goal.deadline).getTime()
+  const nowPct = Math.min(100, Math.max(0, ((Date.now() - startTs) / (endTs - startTs)) * 100))
+  const pctOf = (d: string): number => {
+    const t = new Date(d).getTime()
+    if (Number.isNaN(t)) return 0
+    return Math.min(100, Math.max(0, ((t - startTs) / (endTs - startTs)) * 100))
+  }
+  return (
+    <div className="v10-goal-axis">
+      <div className="ax-line" />
+      <span className="ax-start">始</span>
+      {v.goal.anchors.map((a) => {
+        const p = pctOf(a.targetDate)
+        const cls = a.status === 'hit' ? 'hit' : a.status === 'missed' ? 'missed' : new Date(a.targetDate).getTime() < Date.now() ? 'due' : ''
+        return (
+          <button
+            key={a.id}
+            className={`ax-node ${cls}`}
+            style={{ left: `${p}%` }}
+            title={`${a.targetDate} ${a.title} — 点一下标达成/还原`}
+            onClick={() => props.onMark(v.goal.id, a.id, a.status === 'hit' ? 'pending' : 'hit')}
+          >
+            <i className="ax-dot" />
+            <em className="ax-label">{a.title.slice(0, 6)}</em>
+          </button>
+        )
+      })}
+      <span className="ax-now" style={{ left: `${nowPct}%` }} title="你在这里">
+        <i />
+        <em>现在</em>
+      </span>
+      <span className="ax-end">{v.goal.deadline.slice(5)}</span>
+    </div>
   )
 }
 
@@ -184,18 +257,22 @@ function GoalCard(props: {
     <div className="v10-goal">
       <div className="v10-goal-head">
         <span className="v10-goal-title">{v.goal.event}</span>
-        <span className="v10-goal-dday">D-{v.remainingDays} · {v.goal.deadline.slice(5)}</span>
+        <span className="v10-goal-dday">D-{v.remainingDays}</span>
       </div>
-      <div className="v10-goal-bar" title={`已投 ${Math.round(v.cumMin)} 分钟 / 预算 ${Math.round(v.totalTargetMin)} 分钟`}>
-        <i style={{ width: `${pct}%` }} />
-        <em className="v10-goal-plan" style={{ left: `${planPct}%` }} />
+      {/* 双层进度带：灰底=总预算 · 青瓷填充=实际投入 · 白刻线=计划应达位置 */}
+      <div className="v10-goal-bar2" title={`已投 ${Math.round(v.cumMin)} 分钟 / 预算 ${Math.round(v.totalTargetMin)} 分钟 · 计划应达 ${planPct}%`}>
+        <i className="gb-fill" style={{ width: `${pct}%` }} />
+        <i className="gb-plan" style={{ left: `${planPct}%` }} />
+        <b className="gb-num">{pct}%</b>
       </div>
+      {/* 里程碑轴：锚点按日期比例落在 时间轴 上，你在 aura 点位置 */}
+      <GoalAxis v={v} onMark={props.onMarkAnchor} onRemove={(aid) => props.onGoalPatch(v.goal.id, { removeAnchorId: aid })} />
       <div className="v10-goal-anchors">
         {v.goal.anchors.map((a) => (
           <span key={a.id} className="v10-goal-anchor-wrap">
             <button
               className={`v10-goal-anchor ${a.status}`}
-              title={`${a.targetDate} · 累计刻度 ${Math.round(a.cumTargetMin / 60)}h — 点一下标记达成/还原，长按×删除`}
+              title={`${a.targetDate} · 点一下标记达成/还原`}
               onClick={() => props.onMarkAnchor(v.goal.id, a.id, a.status === 'hit' ? 'pending' : 'hit')}
             >
               {a.status === 'hit' ? '●' : a.status === 'missed' ? '✕' : '○'} {a.title}
@@ -253,13 +330,20 @@ function GoalsBlock(props: {
   goals: GoalView[]
   onMarkAnchor: (goalId: string, anchorId: string, status: 'hit' | 'pending') => void
   onGoalPatch: (goalId: string, patch: unknown) => void
-}): JSX.Element {
+  kick?: (p: { blockKey: string; extra?: JSX.Element }) => JSX.Element
+  pinned?: boolean
+  hidden?: boolean
+}): JSX.Element | null {
   const actives = props.goals.filter((v) => v.goal.status === 'active')
+  if (props.hidden) return null
   return (
     <section className="v10-block">
       <div className="v10-block-kick">
         <span>◆ 人生预期</span>
         <span>· {actives.length} 条在轨</span>
+        <span className="acts">
+          {props.kick ? props.kick({ blockKey: 'goals' }) : null}
+        </span>
         <span className="acts"><button>留住</button><button>×</button></span>
       </div>
       {actives.length === 0 ? (
@@ -425,6 +509,47 @@ export function PaperPane(props: {
   const archived = props.archived ?? []
   const days = props.blockParams?.timelineDays ?? 1
   const pane = props.pane ?? 'main'
+  // 块管理（v10 拍板：「留住/固定」真实化——置顶排序；「×」隐藏可恢复；localStorage 持久）
+  const [blockState, setBlockState] = useState<{ pinned: string[]; hidden: string[] }>(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem('v10blocks') ?? '') ?? { pinned: [], hidden: [] }
+    } catch {
+      return { pinned: [], hidden: [] }
+    }
+  })
+  const setBlocks = (next: { pinned: string[]; hidden: string[] }): void => {
+    setBlockState(next)
+    try { window.localStorage.setItem('v10blocks', JSON.stringify(next)) } catch { /* ignore */ }
+  }
+  const togglePin = (key: string): void => {
+    const pinned = blockState.pinned.includes(key)
+      ? blockState.pinned.filter((x) => x !== key)
+      : [...blockState.pinned, key]
+    setBlocks({ ...blockState, pinned })
+  }
+  const toggleHide = (key: string): void => {
+    const hidden = blockState.hidden.includes(key)
+      ? blockState.hidden.filter((x) => x !== key)
+      : [...blockState.hidden, key]
+    setBlocks({ ...blockState, hidden })
+  }
+  const BLOCK_LABEL: Record<string, string> = { now: '此刻', plans: '今日计划', timeline: '今日轨迹', goals: '人生预期' }
+  const isPinned = (key: string): boolean => blockState.pinned.includes(key)
+  const isHidden = (key: string): boolean => blockState.hidden.includes(key)
+  /** kick 行真实动作组（留住=置顶固定 · ×=隐藏），pinned 时锚实心 */
+  const Kick = (props2: { blockKey: string; extra?: JSX.Element }): JSX.Element => (
+    <span className="acts">
+      {props2.extra}
+      <button
+        className={`blk-pin${isPinned(props2.blockKey) ? ' on' : ''}`}
+        title={isPinned(props2.blockKey) ? '取消固定' : '固定到版面顶部'}
+        onClick={() => togglePin(props2.blockKey)}
+      >
+        {isPinned(props2.blockKey) ? '◆ 已固定' : '◇ 留住'}
+      </button>
+      <button className="blk-hide" title="隐藏（可在下方恢复）" onClick={() => toggleHide(props2.blockKey)}>×</button>
+    </span>
+  )
   if (pane === 'detached') {
     // 已拆出：主窗右栏位置显示占位+合回（真实内容在独立工作台窗）
     return (
@@ -485,8 +610,15 @@ export function PaperPane(props: {
       ) : null}
 
       <div className="v10-fold-above">
-        <div className="v10-fold-label">折 上 · 你 的 版 面</div>
-        <NowBlock presence={props.presence} />
+        <div className="v10-fold-label">折 上 · 你 的 版 面{blockState.pinned.length ? ` · ◆ 已固定 ${blockState.pinned.length}` : ''}</div>
+        {blockState.hidden.length ? (
+          <div className="v10-hiddenrow">
+            已隐藏：{blockState.hidden.map((h) => (
+              <button key={h} className="v10-unhide" onClick={() => toggleHide(h)}>{BLOCK_LABEL[h] ?? h} ↩</button>
+            ))}
+          </div>
+        ) : null}
+        <NowBlock presence={props.presence} kick={Kick} pinned={isPinned('now')} hidden={isHidden('now')} />
         {props.sandboxBlock ? (
           <SandboxView
             piece={props.sandboxBlock}
@@ -518,11 +650,11 @@ export function PaperPane(props: {
             </Shrinkable>
           </section>
         ) : null}
-        <TodayPlansBlock plans={props.plans} onToggle={props.onTogglePlan} />
+        <TodayPlansBlock plans={props.plans} onToggle={props.onTogglePlan} kick={Kick} pinned={isPinned('plans')} hidden={isHidden('plans')} />
         {props.onMarkAnchor ? (
           <GoalsBlock goals={props.goals ?? []} onMarkAnchor={props.onMarkAnchor} onGoalPatch={props.onGoalPatch ?? (() => {})} />
         ) : null}
-        <TimelineBlock trail={props.trail} days={days} />
+        <TimelineBlock trail={props.trail} days={days} kick={Kick} pinned={isPinned('timeline')} hidden={isHidden('timeline')} />
       </div>
 
       <div className="v10-foldline">

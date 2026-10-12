@@ -690,3 +690,94 @@
 .sc-kpi.clickable { cursor: pointer; transition: background 120ms; }
 .sc-kpi.clickable:hover { background: var(--celadon-2); }
 .v10-sandbox { width: 100%; height: 260px; border: 1px solid var(--hairline); border-radius: var(--r-md); background: #F7F4EE; }
+
+/* ── 块管理（留住/隐藏真实化） ─────────────────────────── */
+.acts .blk-pin.on { color: var(--teal-ink); font-weight: 600; }
+.acts .blk-hide:hover { color: #C4553B; }
+.v10-hiddenrow {
+  font-size: 10.5px; color: var(--ink-3); margin-bottom: 8px;
+  display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+}
+.v10-unhide {
+  border: 1px solid var(--hairline-2); background: var(--paper-2); color: var(--ink-2);
+  font-size: 10px; padding: 2px 8px; border-radius: 999px; cursor: pointer; font-family: var(--font-ui);
+}
+.v10-unhide:hover { border-color: var(--teal); color: var(--teal-ink); }
+
+/* ── 24h 时间带（今日轨迹可视化） ─────────────────────── */
+.v10-tband { margin: 2px 0 10px; }
+.tb-track {
+  position: relative; height: 18px; border-radius: 9px;
+  background: var(--paper-2); border: 1px solid var(--hairline); overflow: hidden;
+}
+.tb-seg {
+  position: absolute; top: 2px; bottom: 2px; border-radius: 3px;
+  opacity: 0.85; min-width: 2px;
+}
+.tb-seg:hover { opacity: 1; outline: 1.5px solid var(--ink); }
+.tb-now {
+  position: absolute; top: -2px; bottom: -2px; width: 2px;
+  background: var(--amber); border-radius: 1px;
+}
+.tb-scale {
+  display: flex; justify-content: space-between;
+  font-size: 9px; color: var(--ink-3); margin-top: 3px; font-family: var(--font-num);
+}
+
+/* ── 人生预期：双层进度带 ─────────────────────────────── */
+.v10-goal-bar2 {
+  position: relative; height: 16px; border-radius: 8px;
+  background: var(--paper-2); border: 1px solid var(--hairline); margin: 6px 0 4px;
+  overflow: visible;
+}
+.gb-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg, var(--celadon-2), var(--teal));
+  border-radius: 8px; transition: width 320ms;
+}
+.gb-plan {
+  position: absolute; top: -3px; bottom: -3px; width: 2px;
+  background: var(--ink); opacity: 0.55; border-radius: 1px;
+}
+.gb-num {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  font-family: var(--font-num); font-size: 11px; color: var(--ink);
+}
+
+/* ── 里程碑轴 ───────────────────────────────────────── */
+.v10-goal-axis {
+  position: relative; height: 52px; margin: 10px 6px 2px;
+}
+.ax-line {
+  position: absolute; left: 0; right: 0; top: 26px; height: 1.5px;
+  background: var(--hairline-2);
+}
+.ax-start, .ax-end {
+  position: absolute; top: 32px; font-size: 9.5px; color: var(--ink-3); font-family: var(--font-num);
+}
+.ax-start { left: 0; } .ax-end { right: 0; }
+.ax-node {
+  position: absolute; top: 14px; transform: translateX(-50%);
+  border: none; background: none; cursor: pointer; padding: 0; width: 64px;
+}
+.ax-node .ax-dot {
+  display: block; width: 11px; height: 11px; border-radius: 50%;
+  background: var(--paper); border: 2px solid var(--ink-3); margin: 6px auto 3px;
+  transition: transform 120ms;
+}
+.ax-node:hover .ax-dot { transform: scale(1.3); }
+.ax-node.hit .ax-dot { background: var(--teal); border-color: var(--teal); }
+.ax-node.missed .ax-dot, .ax-node.due .ax-dot { border-color: var(--amber); background: var(--amber-bg); }
+.ax-node .ax-label {
+  display: block; font-size: 9px; color: var(--ink-2); font-style: normal;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-ui);
+}
+.ax-now {
+  position: absolute; top: 2px; transform: translateX(-50%); text-align: center;
+}
+.ax-now i {
+  display: block; width: 9px; height: 9px; margin: 0 auto 2px;
+  background: var(--aura); border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(124, 111, 240, 0.2);
+}
+.ax-now em { font-size: 9px; color: var(--ink-2); font-style: normal; }
