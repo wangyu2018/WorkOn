@@ -62,6 +62,18 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const [sandboxLoading, setSandboxLoading] = useState(false)
   // 工作台拆出（v10）：pane=paper=独立右页窗；主窗监听拆出态显示占位
   const paneMode = useMemo(() => new URLSearchParams(window.location.search).get('pane'), [])
+  // 玻璃片穿透命中：forward 模式下渲染层仍收 mousemove——指针在玻璃片容器内=可交互，片外=穿透
+  useEffect(() => {
+    if (!paneMode) return
+    const onMove = (e: MouseEvent): void => {
+      const el = document.elementFromPoint(e.clientX, e.clientY)
+      // 玻璃片=实体纸片：容器内（含空白背景）一律可交互；只有片外透明区穿透
+      const interactive = !!el?.closest('[data-interactive]')
+      void window.api?.setPaneIgnore?.(!interactive)
+    }
+    window.addEventListener('mousemove', onMove)
+    return () => window.removeEventListener('mousemove', onMove)
+  }, [paneMode])
   const [detached, setDetached] = useState(false)
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
@@ -619,7 +631,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
 
   if (paneMode === 'paper') {
     return (
-      <div className="v10 v10-pane" data-theme={theme}>
+      <div className="v10 v10-pane" data-theme={theme} data-interactive>
         <PaperPane
           pane="paper"
           dateLabel={dateLabel}
