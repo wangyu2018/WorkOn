@@ -589,12 +589,15 @@ export function PaperPane(props: {
           {pane === 'main' ? (
             <>
               <button className="mh-act" onClick={() => props.onDetach?.()} title="右页拆出独立窗口（吸附+位置记忆）">⇱ 拆出</button>
-              <button className="mh-act" onClick={() => { void window.api?.detachPanes?.() }} title="玻璃拆开：问/右页两块穿透玻璃片，拖到一起磁性吸附">◫ 玻璃拆开</button>
+              <button className="mh-act" onClick={() => { void window.api?.detachPanes?.() }} title="玻璃拆开：问/右页两块穿透玻璃片，拖到一起磁性吸附，点吸附固定排布">◫ 玻璃拆开</button>
             </>
-          ) : (
-            <button className="mh-act" onClick={() => props.onAttach?.()} title="合回主窗">⇲ 合回</button>
-          )}
-          <button className="mh-act" onClick={() => props.onExit?.()} title="回到旧版界面（数据完全互通）">旧版 →</button>
+          ) : pane === 'paper' ? (
+            <>
+              <button className="mh-act" onClick={() => { void window.api?.snapPanes?.() }} title="两块玻璃片贴合固定（上下/左右按当前方位）">⎯ 吸附</button>
+              <button className="mh-act" onClick={() => { void window.api?.collapsePane?.('paper') }} title="收起这块玻璃片（托盘玻璃模式唤回）">⇲ 收起</button>
+              <button className="mh-act" onClick={() => props.onAttach?.()} title="合回主窗一面">✕ 合回</button>
+            </>
+          ) : null}
         </div>
         <div className="mh-sub">
           <span className="mh-dot" />

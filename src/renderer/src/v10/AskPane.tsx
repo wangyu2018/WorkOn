@@ -255,6 +255,8 @@ export function AskPane(props: {
   onPrefillConsumed?: () => void
   aiOn?: boolean | null
   onSandboxGen?: (srcText: string) => void
+  /** 玻璃片模式（pane=ask）：控制条按钮 */
+  glassControls?: boolean
 }): JSX.Element {
   const [draft, setDraft] = useState('')
   const [dropHot, setDropHot] = useState(false)
@@ -367,6 +369,14 @@ export function AskPane(props: {
 
   return (
     <aside className="v10-ask">
+      {props.glassControls ? (
+        <div className="v10-sesstop" style={{ paddingBottom: 4 }}>
+          <span className="ses-title" style={{ fontWeight: 600 }}>问 · 玻璃</span>
+          <button className="mh-act" style={{ marginLeft: 'auto' }} onClick={() => { void window.api?.snapPanes?.() }} title="两块玻璃片贴合固定（上下/左右按当前方位）">⎯ 吸附</button>
+          <button className="mh-act" onClick={() => { void window.api?.collapsePane?.('ask') }} title="收起这块玻璃片（托盘玻璃模式唤回）">⇲ 收起</button>
+          <button className="mh-act" onClick={() => { void window.api?.attachPanes?.() }} title="合回主窗一面">✕ 合回</button>
+        </div>
+      ) : null}
       {props.sessions && props.sessions.length > 0 ? (
         <div className="v10-sesstop" style={{ position: 'relative' }}>
           <button className="ses-back" onClick={() => setListOpen(!listOpen)}>会话 {props.sessions.length} ▸</button>

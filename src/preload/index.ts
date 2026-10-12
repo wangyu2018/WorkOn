@@ -46,6 +46,9 @@ const api = {
   attachPanes: () => ipcRenderer.invoke('panes:attach'),
   setPaneIgnore: (ignore: boolean) => ipcRenderer.invoke('panes:setIgnore', ignore),
   panesState: () => ipcRenderer.invoke('panes:state'),
+  snapPanes: () => ipcRenderer.invoke('panes:snap'),
+  collapsePane: (which: 'ask' | 'paper') => ipcRenderer.invoke('panes:collapse', which),
+  expandPane: (which: 'ask' | 'paper') => ipcRenderer.invoke('panes:expand', which),
   onMusicChanged: on<{ name: string; artist: string; playing: boolean }>('music:changed'),
 
   // 实时状态

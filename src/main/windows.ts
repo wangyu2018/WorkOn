@@ -1326,3 +1326,80 @@ export function panesState(): { ask: boolean; paper: boolean } {
     paper: !!paperPaneWindow && !paperPaneWindow.isDestroyed()
   }
 }
+
+/** 吸附固定（v10 拍板）：用户大概摆好位置，点一下「吸附」→ 精确贴合固定。
+ *  按两窗当前相对方位选排布：paper 中心偏下=上下排（ask 上），偏右=左右排；默认上下。 */
+export function snapPanes(): { layout: 'vertical' | 'horizontal' } {
+  const a = askPaneWindow
+  const p = paperPaneWindow
+  if (!a || a.isDestroyed() || !p || p.isDestroyed()) return { layout: 'vertical' }
+  const ra = a.getBounds()
+  const rp = p.getBounds()
+  const cur = screen.getDisplayMatching(
+    { x: Math.min(ra.x, rp.x), y: Math.min(ra.y, rp.y), width: Math.max(ra.x + ra.width, rp.x + rp.width), height: Math.max(ra.y + ra.height, rp.y + rp.height) }
+  ).workArea
+  const aCenter = ra.y + ra.height / 2
+  const pCenter = rp.y + rp.height / 2
+  const aCenterX = ra.x + ra.width / 2
+  const pCenterX = rp.x + rp.width / 2
+  const verticalGap = Math.abs(aCenterY(ra, rp) - pCenter)
+  const horizontalGap = Math.abs(aCenterX - pCenterX)
+  function aCenterY(r1: Electron.Rectangle, r2: Electron.Rectangle): number {
+    void r2
+    return r1.y + r1.height / 2
+  }
+  let layout: 'vertical' | 'horizontal'
+  let nx = ra.x
+  let ny = ra.y
+  let px = rp.x
+  let py = rp.y
+  if (verticalGap <= horizontalGap) {
+    // 上下排：x 对齐，两窗高度均分工作区（总高超屏时自动收缩保证真贴合）
+    layout = 'vertical'
+    const halfH = Math.floor((cur.height - 8) / 2)
+    const alignX = Math.round((ra.x + rp.x) / 2)
+    nx = Math.max(cur.x + 4, Math.min(alignX, cur.x + cur.width - ra.width - 4))
+    px = nx
+    ny = cur.y + 4
+    py = ny + halfH + 2
+    a.setBounds({ x: nx, y: ny, width: ra.width, height: halfH })
+    p.setBounds({ x: px, y: py, width: rp.width, height: cur.height - 8 - halfH })
+  } else {
+    // 左右排：y 对齐，两窗宽度均分工作区
+    layout = 'horizontal'
+    const halfW = Math.floor((cur.width - 12) / 2)
+    const alignY = Math.round((ra.y + rp.y) / 2)
+    ny = Math.max(cur.y + 4, Math.min(alignY, cur.y + cur.height - ra.height - 4))
+    py = ny
+    nx = cur.x + 4
+    px = nx + halfW + 2
+    a.setBounds({ x: nx, y: ny, width: halfW, height: ra.height })
+    p.setBounds({ x: px, y: py, width: cur.width - 12 - halfW, height: rp.height })
+  }
+  a.setPosition(nx, ny)
+  p.setPosition(px, py)
+  rememberPane('ask', a)
+  rememberPane('paper', p)
+  console.info(`[v10panes] 吸附固定：${layout === 'vertical' ? '上下' : '左右'}排布`)
+  return { layout }
+}
+
+/** 单独收起/展开（v10 拍板：拆开后每块能单独收起，统一管理） */
+export function collapsePane(which: 'ask' | 'paper'): void {
+  const w = which === 'ask' ? askPaneWindow : paperPaneWindow
+  if (w && !w.isDestroyed()) w.hide()
+}
+
+export function expandPane(which: 'ask' | 'paper'): void {
+  const w = which === 'ask' ? askPaneWindow : paperPaneWindow
+  if (w && !w.isDestroyed()) {
+    w.show()
+    w.focus()
+  }
+}
+
+/** 托盘/管理入口的收起态 */
+export function paneCollapsed(which: 'ask' | 'paper'): boolean {
+  const w = which === 'ask' ? askPaneWindow : paperPaneWindow
+  return !!w && !w.isDestroyed() && !w.isVisible()
+}

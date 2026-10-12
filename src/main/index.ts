@@ -5,7 +5,7 @@
 import { app, BrowserWindow, Notification, ipcMain } from 'electron'
 import { initSettings, getSettings, setSettings } from './settings'
 import { initDb, flushNow, loadActivitiesDeferred } from './db'
-import { createMainWindow, createWidgetWindow, createPetWindow, createSplashWindow, closeSplash, sendTo, broadcast, widgetWindow, mainWindow, createTodoWidgetWindow, createWorkbenchWindow, attachWorkbench, isWorkbenchDetached, detachPanes, attachPanes, setPaneIgnore, panesState } from './windows'
+import { createMainWindow, createWidgetWindow, createPetWindow, createSplashWindow, closeSplash, sendTo, broadcast, widgetWindow, mainWindow, createTodoWidgetWindow, createWorkbenchWindow, attachWorkbench, isWorkbenchDetached, detachPanes, attachPanes, setPaneIgnore, panesState, snapPanes, collapsePane, expandPane, paneCollapsed } from './windows'
 import { createTray } from './tray'
 import { registerShortcuts, unregisterShortcuts } from './globalShortcut'
 import { registerIpc } from './ipc'
@@ -443,6 +443,10 @@ app.whenReady().then(() => {
     return true
   })
   ipcMain.handle('panes:state', () => panesState())
+  ipcMain.handle('panes:snap', () => snapPanes())
+  ipcMain.handle('panes:collapse', (_e, which: 'ask' | 'paper') => collapsePane(which))
+  ipcMain.handle('panes:expand', (_e, which: 'ask' | 'paper') => expandPane(which))
+  ipcMain.handle('panes:collapsed', (_e, which: 'ask' | 'paper') => paneCollapsed(which))
   ipcMain.handle('sessions:create', (_e, input: { title?: string; topic?: 'project' | 'life' | 'general'; first?: { role: 'user' | 'ai'; text: string; time: number } }) =>
     createChatSession(input)
   )

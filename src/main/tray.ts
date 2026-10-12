@@ -9,7 +9,7 @@
 import { app, Menu, Tray, nativeImage } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import { createMainWindow, toggleWidget, togglePet, sendTo, setWidgetPenetration, petWindow, widgetWindow, toggleTodoWidget, setTodoWidgetPenetration, setTodoWidgetLayer, setWidgetOnTop, setPetOpacity, applyWidgetOpacity } from './windows'
+import { createMainWindow, toggleWidget, togglePet, sendTo, setWidgetPenetration, petWindow, widgetWindow, toggleTodoWidget, setTodoWidgetPenetration, setTodoWidgetLayer, setWidgetOnTop, setPetOpacity, applyWidgetOpacity, detachPanes, attachPanes, expandPane, paneCollapsed, panesState } from './windows'
 import { getSettings, setSettings } from './settings'
 
 let tray: Tray | null = null
@@ -71,6 +71,27 @@ function buildMenu(): void {
     { label: '打开 WorkOn', accelerator: 'CmdOrCtrl+Alt+O', registerAccelerator: false, click: () => openMain() },
     { label: '✦ 生成今日日报', accelerator: 'CmdOrCtrl+Alt+D', registerAccelerator: false, click: () => { void generateTodayReport() } },
     { label: '✦ 问 AI 搭子', accelerator: 'CmdOrCtrl+Alt+K', registerAccelerator: false, click: () => openMain('qa') },
+    sep(),
+    // ── 玻璃模式（v10）：两块穿透玻璃片统一管理 ──
+    {
+      label: '玻璃模式 ▸',
+      submenu: [
+        { label: '拆开（问/右页 两块玻璃片）', click: () => detachPanes() },
+        { label: '合回一面', click: () => attachPanes() },
+        { label: '吸附固定排布', click: () => { void import('./windows').then((m) => m.snapPanes()) } },
+        { type: 'separator' },
+        { label: '问玻璃（显示/唤回）', click: () => expandPane('ask') },
+        { label: '右页玻璃（显示/唤回）', click: () => expandPane('paper') },
+        {
+          label: '收起全部玻璃',
+          click: () => {
+            const { collapsePane } = require('./windows') as typeof import('./windows')
+            collapsePane('ask')
+            collapsePane('paper')
+          }
+        }
+      ]
+    },
     sep(),
     // ── 三个悬浮面（一级开关，一处一个） ──
     {

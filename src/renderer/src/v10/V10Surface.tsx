@@ -611,6 +611,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
     return (
       <div className="v10 v10-pane v10-pane-ask" data-interactive>
         <AskPane
+          glassControls
           chat={chat}
           asking={asking}
           onSend={send}
