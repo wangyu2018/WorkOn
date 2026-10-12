@@ -639,7 +639,7 @@ export function PaperPane(props: {
             ))}
           </div>
         ) : null}
-        <NowBlock presence={props.presence} kick={Kick} pinned={isPinned('now')} hidden={isHidden('now')} />
+        
         {props.sandboxBlock ? (
           <SandboxView
             piece={props.sandboxBlock}
@@ -671,11 +671,18 @@ export function PaperPane(props: {
             </Shrinkable>
           </section>
         ) : null}
-        <TodayPlansBlock plans={props.plans} onToggle={props.onTogglePlan} kick={Kick} pinned={isPinned('plans')} hidden={isHidden('plans')} />
-        {props.onMarkAnchor ? (
+        {/* 置顶排序（v10 拍板）：留住（固定）的块自动排最前 */}
+        {([
+          { key: 'now', pinned: isPinned('now'), node: (<NowBlock presence={props.presence} kick={Kick} pinned={isPinned('now')} hidden={isHidden('now')} />) },
+          { key: 'plans', pinned: isPinned('plans'), node: (<TodayPlansBlock plans={props.plans} onToggle={props.onTogglePlan} kick={Kick} pinned={isPinned('plans')} hidden={isHidden('plans')} />) },
+          { key: 'timeline', pinned: isPinned('timeline'), node: (<TimelineBlock trail={props.trail} days={days} kick={Kick} pinned={isPinned('timeline')} hidden={isHidden('timeline')} />) },
+          { key: 'goals', pinned: isPinned('goals'), node: (props.onMarkAnchor ? (
           <GoalsBlock goals={props.goals ?? []} onMarkAnchor={props.onMarkAnchor} onGoalPatch={props.onGoalPatch ?? (() => {})} />
-        ) : null}
-        <TimelineBlock trail={props.trail} days={days} kick={Kick} pinned={isPinned('timeline')} hidden={isHidden('timeline')} />
+        ) : null) },
+        ] as Array<{ key: string; pinned: boolean; node: JSX.Element }>)
+          .sort((a, b) => Number(b.pinned) - Number(a.pinned))
+          .map(({ node }) => node)}
+
       </div>
 
       <div className="v10-foldline">

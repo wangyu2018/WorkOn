@@ -52,6 +52,7 @@ const api = {
   snapPanes: () => ipcRenderer.invoke('panes:snap'),
   collapsePane: (which: 'ask' | 'paper') => ipcRenderer.invoke('panes:collapse', which),
   expandPane: (which: 'ask' | 'paper') => ipcRenderer.invoke('panes:expand', which),
+  setPaneTop: (which: 'ask' | 'paper', on: boolean) => ipcRenderer.invoke('panes:setTop', which, on),
   onMusicChanged: on<{ name: string; artist: string; playing: boolean }>('music:changed'),
 
   // 实时状态

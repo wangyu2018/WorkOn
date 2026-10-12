@@ -1412,6 +1412,12 @@ export function expandPane(which: 'ask' | 'paper'): void {
 }
 
 /** 托盘/管理入口的收起态 */
+/** 玻璃片窗口置顶（v10：桌面组件常需浮在其他应用上） */
+export function setPaneTop(which: 'ask' | 'paper', on: boolean): void {
+  const w = which === 'ask' ? askPaneWindow : paperPaneWindow
+  if (w && !w.isDestroyed()) w.setAlwaysOnTop(on, 'floating')
+}
+
 export function paneCollapsed(which: 'ask' | 'paper'): boolean {
   const w = which === 'ask' ? askPaneWindow : paperPaneWindow
   return !!w && !w.isDestroyed() && !w.isVisible()

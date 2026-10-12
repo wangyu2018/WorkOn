@@ -371,7 +371,17 @@ export function AskPane(props: {
     <aside className="v10-ask">
       {props.glassControls ? (
         <div className="v10-sesstop" style={{ paddingBottom: 4 }}>
-          <span className="ses-title" style={{ fontWeight: 600 }}>问 · 玻璃</span>
+          <span className="ses-title" style={{ fontWeight: 600 }}>WorkOn · 问</span>
+          <button
+            className="mh-act"
+            title="窗口置顶（浮在其他应用上）"
+            onClick={(e) => {
+              const on = (e.target as HTMLElement).classList.toggle('on')
+              void window.api?.setPaneTop?.('ask', on)
+            }}
+          >
+            📌
+          </button>
           <button className="mh-act" style={{ marginLeft: 'auto' }} onClick={() => { void window.api?.snapPanes?.() }} title="两块玻璃片贴合固定（上下/左右按当前方位）">⎯ 吸附</button>
           <button className="mh-act" onClick={() => { void window.api?.collapsePane?.('ask') }} title="收起这块玻璃片（托盘玻璃模式唤回）">⇲ 收起</button>
           <button className="mh-act" onClick={() => { void window.api?.attachPanes?.() }} title="合回主窗一面">✕ 合回</button>
