@@ -36,6 +36,7 @@ const api = {
   // 工作台拆出（v10）
   detachWorkbench: () => ipcRenderer.invoke('workbench:detach'),
   listApps: () => ipcRenderer.invoke('apps:list'),
+  generateSandbox: (srcText: string, ask?: string) => ipcRenderer.invoke('sandbox:generate', srcText, ask),
   openApp: (query: string) => ipcRenderer.invoke('apps:open', query),
   attachWorkbench: () => ipcRenderer.invoke('workbench:attach'),
   workbenchState: () => ipcRenderer.invoke('workbench:state'),

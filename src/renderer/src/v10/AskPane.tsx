@@ -5,6 +5,7 @@
  * 块进化（v10 §4.C）：右页组件拖入输入场 → 挂对象芯片 → 一句话调参数
  */
 import { useEffect, useState, type RefObject, type DragEvent } from 'react'
+import type { JSX } from 'react'
 import type { PresenceSnapshot, WorkState, ChatSession } from '@shared/types'
 import { STATE_LABEL } from '@shared/stateMeta'
 import { renderMarkdown } from './md'
@@ -12,98 +13,17 @@ import { detectStructured, StructuredCard } from './structured'
 import { MindMap } from './mindmap'
 import { Shrinkable } from './Shrinkable'
 
-/** AI 回答富呈现（v10）：结构化答卡优先（KPI/条形）→ markdown → 长文折叠 */
-function RichAnswer(props: { text: string; onMindmap?: (src: string) => void; onAsk?: (q: string) => void }): JSX.Element {
-  const [copied, setCopied] = useState(false)
-  const copyAll = (): void => {
-    void navigator.clipboard?.writeText(props.text).then(() => {
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 1600)
-    })
-  }
-  const [expanded, setExpanded] = useState(false)
-  const [mapped, setMapped] = useState(false)
-  const s = detectStructured(props.text)
-  const long = props.text.length > 420
-  // 思维导图拆件资格：长回答或含 markdown 结构（标题/列表/表格）——信息的再结构化
-  const mdStructured = /^#{1,3}\s|\n[-*•]\s|\n\s*\|/.test(props.text)
-  const canMap = props.text.length > 120 || mdStructured
-
-  const mapBlock = canMap ? (
-    mapped ? (
-      <div className="v10-attachrow">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <Shrinkable scale={0.55} hint="预览 · 移过放大">
-              <MindMap text={props.text} rootLabel="回答" width={520} />
-            </Shrinkable>
-          </div>
-          <button className="v10-attach" onClick={() => props.onMindmap?.(`__page__${props.text}`)} title="右页宽度大，可视化更完整">
-            落右页 ▸
-          </button>
-        </div>
-      </div>
-    ) : (
-      <div className="v10-attachrow">
-        <button
-          className="v10-attach"
-          onClick={() => {
-            setMapped(true)
-            props.onMindmap?.(props.text)
-          }}
-        >
-          ◇ 再结构化：思维导图 ▾
-        </button>
-      </div>
-    )
-  ) : null
-
-  if (s) {
-    return (
-      <div className="v10-rich">
-        <div className="v10-rich-head">
-          <button className="v10-copybtn" onClick={copyAll}>{copied ? '✓ 已复制' : '复制'}</button>
-        </div>
-        <StructuredCard s={s} onAsk={props.onAsk} />
-        {mapBlock}
-      </div>
-    )
-  }
-  const body = renderMarkdown(props.text)
-  if (long && !expanded) {
-    return (
-      <div className="v10-rich">
-        <div className="v10-clamp">{body}</div>
-        <button className="v10-more" onClick={() => setExpanded(true)}>展开全文（{props.text.length} 字）▾</button>
-        {mapBlock}
-      </div>
-    )
-  }
-  return (
-    <div className="v10-rich">
-      <div className="v10-rich-head">
-        <button className="v10-copybtn" onClick={copyAll}>{copied ? '✓ 已复制' : '复制'}</button>
-      </div>
-      {body}
-      {mapBlock}
-    </div>
-  )
-}
-
+/** 你的话/AI 的话 */
 export interface ChatMsg {
+  /** 流式定位 id（打字机更新用） */
+  id?: string
   role: 'user' | 'ai'
   text: string
-  /** 快捷回复选项（带编号展示，回数字或点按） */
   options?: string[]
-  /** 已选择的选项（应答后定格显示） */
   picked?: string
-  /** 答卡可拆件：回答附带的落页件（点按触发） */
   attach?: 'flowmap' | 'mindmap'
-  /** 拆件数据源（mindmap 用：原始回答文本） */
   attachSrc?: string
 }
-
-/** 会话框不是主要阅读区（用户拍板）：再结构化件缩略+hover 预览在左栏，完整版落右页 */
 
 /** 引用芯片（v10）：拖消息/折下卡进来，发送时自动附为上下文 */
 export interface QuoteChipData {
@@ -118,7 +38,141 @@ export interface ObjectChipData {
   current: string
 }
 
-export function MsgActions(props: {
+/**
+ * 渲染路由表（OpenIntelligentUI 模式）：按内容特征显式路由渲染器。
+ * 现在是规则路由；后续 jev choice 题当路由器（"这个回答该用什么形式呈现"）替换 when 判定。
+ */
+interface RenderRoute {
+  id: string
+  /** 命中判定（按序第一个命中者胜） */
+  when: (text: string) => boolean
+  render: (ctx: {
+    text: string
+    expanded: boolean
+    setExpanded: (v: boolean) => void
+    mapped: boolean
+    setMapped: (v: boolean) => void
+    onMindmap?: (src: string) => void
+    onAsk?: (q: string) => void
+    onSandbox?: (src: string) => void
+    aiOn: boolean | null
+  }) => JSX.Element
+}
+
+const RENDER_ROUTES: RenderRoute[] = [
+  {
+    id: 'structured',
+    when: (t) => !!detectStructured(t),
+    render: (ctx) => (
+      <div className="v10-rich">
+        <div className="v10-rich-head"><CopyBtn text={ctx.text} /></div>
+        <StructuredCard s={detectStructured(ctx.text)!} onAsk={ctx.onAsk} />
+        <MindChip ctx={ctx} />
+      </div>
+    )
+  },
+  {
+    id: 'markdown',
+    when: (t) => t.length > 420 || /^#{1,3}\s|\n[-*•]\s|\n\s*\|/.test(t),
+    render: (ctx) => {
+      const long = ctx.text.length > 420
+      return (
+        <div className="v10-rich">
+          <div className="v10-rich-head"><CopyBtn text={ctx.text} /></div>
+          {long && !ctx.expanded ? (
+            <>
+              <div className="v10-clamp">{renderMarkdown(ctx.text)}</div>
+              <button className="v10-more" onClick={() => ctx.setExpanded(true)}>展开全文（{ctx.text.length} 字）▾</button>
+            </>
+          ) : (
+            renderMarkdown(ctx.text)
+          )}
+          <MindChip ctx={ctx} />
+        </div>
+      )
+    }
+  },
+  {
+    id: 'plain',
+    when: () => true,
+    render: (ctx) => (
+      <div className="v10-rich">
+        <div className="v10-rich-head"><CopyBtn text={ctx.text} /></div>
+        {renderMarkdown(ctx.text)}
+      </div>
+    )
+  }
+]
+
+/** 思维导图拆件 chip（长文/结构化回答的再结构化入口） */
+function MindChip(props: { ctx: { mapped: boolean; setMapped: (v: boolean) => void; onMindmap?: (src: string) => void; onSandbox?: (src: string) => void; text: string; aiOn: boolean | null } }): JSX.Element | null {
+  const { ctx } = props
+  const canMap = ctx.text.length > 120 || /^#{1,3}\s|\n[-*•]\s|\n\s*\|/.test(ctx.text)
+  if (!canMap) return null
+  if (ctx.mapped) {
+    return (
+      <div className="v10-attachrow">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Shrinkable scale={0.55} hint="预览 · 移过放大">
+              <MindMap text={ctx.text} rootLabel="回答" width={520} />
+            </Shrinkable>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <button className="v10-attach" onClick={() => ctx.onMindmap?.(`__page__${ctx.text}`)}>落右页 ▸</button>
+            {ctx.aiOn ? (
+              <button className="v10-attach" style={{ background: 'var(--celadon-2)' }} onClick={() => ctx.onSandbox?.(`__sandbox__${ctx.text}`)}>
+                ◇ 生成可视化
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="v10-attachrow">
+      <button className="v10-attach" onClick={() => ctx.setMapped(true)}>◇ 再结构化：思维导图 ▾</button>
+    </div>
+  )
+}
+
+function CopyBtn(props: { text: string }): JSX.Element {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      className="v10-copybtn"
+      onClick={() => {
+        void navigator.clipboard?.writeText(props.text).then(() => {
+          setCopied(true)
+          window.setTimeout(() => setCopied(false), 1600)
+        })
+      }}
+    >
+      {copied ? '✓ 已复制' : '复制'}
+    </button>
+  )
+}
+
+function RichAnswer(props: { text: string; onMindmap?: (src: string) => void; onAsk?: (q: string) => void; onSandbox?: (src: string) => void; aiOn?: boolean | null }): JSX.Element {
+  const [expanded, setExpanded] = useState(false)
+  const [mapped, setMapped] = useState(false)
+  const ctx = {
+    text: props.text,
+    expanded,
+    setExpanded,
+    mapped,
+    setMapped,
+    onMindmap: props.onMindmap,
+    onAsk: props.onAsk,
+    onSandbox: props.onSandbox,
+    aiOn: props.aiOn ?? null
+  }
+  const route = RENDER_ROUTES.find((r) => r.when(ctx.text)) ?? RENDER_ROUTES[RENDER_ROUTES.length - 1]
+  return route.render(ctx)
+}
+
+function MsgActions(props: {
   idx: number
   open: boolean
   onToggle: () => void
@@ -199,6 +253,8 @@ export function AskPane(props: {
   onSessionRemoved?: (id: string) => void
   prefillText?: string | null
   onPrefillConsumed?: () => void
+  aiOn?: boolean | null
+  onSandboxGen?: (srcText: string) => void
 }): JSX.Element {
   const [draft, setDraft] = useState('')
   const [dropHot, setDropHot] = useState(false)
@@ -350,8 +406,10 @@ export function AskPane(props: {
               <div className="v10-msg-ai" style={{ display: 'block' }}>
                 <RichAnswer
                   text={m.text}
+                  aiOn={props.aiOn}
                   onMindmap={(src) => props.onSend(src.startsWith('__') ? src : `__page__${src}`)}
                   onAsk={(q) => props.onPrefill?.(q)}
+                  onSandbox={(src) => props.onSend(src)}
                 />
               </div>
             ) : (

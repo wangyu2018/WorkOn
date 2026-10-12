@@ -9,6 +9,7 @@ import type { PlanItem, TrailSegment, PresenceSnapshot, GoalView, GoalDraft, Cha
 import { AskPane, type ChatMsg, type ObjectChipData, type QuoteChipData } from './AskPane'
 import { PaperPane, type FeedItem } from './PaperPane'
 import { parseReminderIntent, parseGoalIntent, parseScheduleProposal } from './nlu'
+
 import { FlowMap } from './FlowMap'
 import './v10.css'
 
@@ -49,12 +50,15 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const pendingGoalRef = useRef<{ msgIndex: number; sourceText: string; draft: GoalDraft } | null>(null)
   /** 块进化：挂在输入场的对象芯片 */
   const [objectChip, setObjectChip] = useState<ObjectChipData | null>(null)
+  const [prefillText, setPrefillText] = useState<string | null>(null)
   const [quoteChip, setQuoteChip] = useState<QuoteChipData | null>(null)
   const [now, setNow] = useState(Date.now())
   const [archived, setArchived] = useState<FeedItem[]>([])
   const [aiOn, setAiOn] = useState<boolean | null>(null)
   const [showFlowMap, setShowFlowMap] = useState(false)
   const [mindMapText, setMindMapText] = useState<string | null>(null)
+  const [sandboxBlock, setSandboxBlock] = useState<{ id: string; title: string; html: string; css: string } | null>(null)
+  const [sandboxLoading, setSandboxLoading] = useState(false)
   // 工作台拆出（v10）：pane=paper=独立右页窗；主窗监听拆出态显示占位
   const paneMode = useMemo(() => new URLSearchParams(window.location.search).get('pane'), [])
   const [detached, setDetached] = useState(false)
@@ -129,7 +133,6 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
     void window.api?.workbenchState?.().then((d) => setDetached(!!d))
     let wbPoll: number | undefined
     const offW = window.api?.onWorkbenchState?.((d) => {
-      console.info('[v10] workbench:state 事件', d)
       setDetached(!!d.detached)
     })
     // 秒级 tick：时钟 + 折下 TTL（keep 类到期转归档，fade 类消亡）
@@ -191,6 +194,26 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       if (raw.startsWith('__page__')) {
         setMindMapText(raw.slice(8))
         setChat((c) => [...c, { role: 'ai', text: '思维导图落右页了——那边宽，看全貌。' }])
+        return
+      }
+      if (raw.startsWith('__sandbox__')) {
+        const src = raw.slice(11)
+        setSandboxLoading(true)
+        void window.api
+          ?.generateSandbox?.(src)
+          .then((piece) => {
+            setSandboxLoading(false)
+            if (!piece) {
+              pushAI([{ role: 'ai', text: '可视化没生成出来（AI 未配置或生成失败）。配置 Key 后这个功能就活了。' }])
+              return
+            }
+            setSandboxBlock(piece as { id: string; title: string; html: string; css: string })
+            pushAI([{ role: 'ai', text: `可视化「${(piece as { title: string }).title}」落右页了——里面的按钮点了会回到对话。` }])
+          })
+          .catch(() => {
+            setSandboxLoading(false)
+            pushAI([{ role: 'ai', text: '生成失败了，换个说法再试一次？' }])
+          })
         return
       }
       if (raw === '__flowmap__') {
@@ -500,22 +523,50 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         return
       }
 
-      // ── 常规问答走现有 qa 管道（会话中：回答同步写回 session） ──
+      // ── 常规问答：流式（OpenIntelligentUI 模式——边生成边读）+ 会话写回 ──
       setAsking(true)
-      void window.api
-        ?.askQA?.(quoted)
-        .then((r) => {
-          const content =
-            typeof r === 'string' ? r : ((r as { content?: string })?.content ?? '（没有回答）')
-          pushAI([{ role: 'ai', text: content }])
+      const streamId = `ai${Date.now()}`
+      let acc = ''
+      const offChunk = window.api?.onAIStreamChunk?.((p) => {
+        const { full } = p as { delta: string; full: string }
+        acc = full
+        setChat((c) => {
+          const idx = c.findIndex((m) => m.id === streamId)
+          if (idx < 0) return [...c, { id: streamId, role: 'ai' as const, text: full }]
+          const next = [...c]
+          next[idx] = { ...next[idx], text: full }
+          return next
         })
-        .catch(() => {
-          pushAI([{ role: 'ai', text: '这个问题暂时答不上来（AI 未配置或网络异常）。' }])
+      })
+      const offDone = window.api?.onAIStreamDone?.((raw) => {
+        // payload 兼容：非流式回退=裸字符串；流式=无 payload（用 chunk 累计）
+        const content = (typeof raw === 'string' ? raw : (raw as { content?: string })?.content) || acc || ''
+        setChat((c) => {
+          const idx = c.findIndex((m) => m.id === streamId)
+          if (idx >= 0) {
+            const next = [...c]
+            next[idx] = { ...next[idx], text: content }
+            return next
+          }
+          return [...c, { id: streamId, role: 'ai' as const, text: content }]
         })
-        .finally(() => {
-          setAsking(false)
-          consumeQuote()
-        })
+        if (activeSessionId) void window.api?.addSessionItem?.(activeSessionId, { role: 'ai', text: content, time: Date.now() })
+        offChunk?.()
+        offDone?.()
+        offErr?.()
+        setAsking(false)
+        consumeQuote()
+      })
+      const offErr = window.api?.onAIStreamError?.((p) => {
+        const msg = (p as { error?: string })?.error ?? ''
+        pushAI([{ role: 'ai', text: `回答失败了（${msg.slice(0, 60)}）——已按原样告诉你，不悄悄换答案。` }])
+        offChunk?.()
+        offDone?.()
+        offErr?.()
+        setAsking(false)
+        consumeQuote()
+      })
+      void window.api?.askQAStream?.(quoted)
     },
     [asking, reminders, objectChip, blockParams, reloadGoals, pushAI, activeSessionId, quoteChip]
   )
@@ -610,6 +661,9 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         quoteChip={quoteChip}
         onClearQuote={() => setQuoteChip(null)}
         onQuoteDrop={(q) => setQuoteChip(q)}
+        onPrefill={(q) => setPrefillText(q)}
+        prefillText={prefillText}
+        onPrefillConsumed={() => setPrefillText(null)}
         sessions={sessions}
         activeSessionId={activeSessionId}
         onSessionRenamed={(id, title) => setSessions((list) => list.map((x) => (x.id === id ? { ...x, title } : x)))}

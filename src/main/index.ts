@@ -36,6 +36,7 @@ import { genPersonaGapQuestion } from './qa/questionGenerator'
 import { canInterrupt } from './confirmQueue'
 import { initReminders, addReminder, listReminders, removeReminder } from './reminders'
 import { listApps, openAppSafe } from './appLauncher'
+import { generateSandbox } from './sandbox'
 import { initMessageWatch, startMessageWatch, stopMessageWatch } from './messageWatch'
 import { startMusicWatch } from './musicWatch'
 import { initLifeGoalJobs } from './lifeGoal'
@@ -416,6 +417,8 @@ app.whenReady().then(() => {
   // 工作台拆出（v10）：右页独立窗口（吸附+位置记忆）
   // 应用接管 L1（v10）：对话打开/切到本机应用
   ipcMain.handle('apps:list', () => listApps())
+  // 沙箱可视化拆件（v10，OpenIntelligentUI 模式）：AI 生成轻量 HTML 可视化
+  ipcMain.handle('sandbox:generate', async (_e, srcText: string, ask?: string) => generateSandbox(srcText, ask))
   ipcMain.handle('apps:open', (_e, query: string) => openAppSafe(query))
   ipcMain.handle('workbench:detach', () => {
     createWorkbenchWindow()

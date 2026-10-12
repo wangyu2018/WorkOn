@@ -9,6 +9,7 @@ import type { ObjectChipData } from './AskPane'
 import { FlowMap } from './FlowMap'
 import { Shrinkable } from './Shrinkable'
 import { MindMap } from './mindmap'
+import { useEffect } from 'react'
 
 /** 折下数据流：真实 notify 卡 + 提醒事件（v10 §5 消息总线的 v10 侧呈现） */
 export interface FeedItem {
@@ -270,6 +271,40 @@ function GoalsBlock(props: {
   )
 }
 
+/** 沙箱可视化块（OpenIntelligentUI 模式）：AI 生成 HTML 进隔离 iframe；按钮 postMessage 回宿主追问 */
+function SandboxView(props: {
+  piece: { id: string; title: string; html: string; css: string }
+  onClose: () => void
+  onAsk: (q: string) => void
+}): JSX.Element {
+  // 桥：沙箱内按钮 postMessage {type:'workon-ask', text} → 宿主回填追问
+  useEffect(() => {
+    const onMsg = (e: MessageEvent): void => {
+      const d = e.data as { type?: string; text?: string } | null
+      if (d?.type === 'workon-ask' && d.text) props.onAsk(d.text)
+    }
+    window.addEventListener('message', onMsg)
+    return () => window.removeEventListener('message', onMsg)
+  }, [])
+  const doc = `<!DOCTYPE html><html><head><style>body{margin:0;background:#F7F4EE;font-family:sans-serif;color:#2B2B28;}${props.piece.css}</style></head><body>${props.piece.html}</body></html>`
+  return (
+    <section className="v10-block">
+      <div className="v10-block-kick">
+        <span className="aura-mark">◇</span>
+        <span>{props.piece.title}</span>
+        <span>· AI 可视化 · 沙箱隔离</span>
+        <span className="acts"><button onClick={props.onClose}>×</button></span>
+      </div>
+      <iframe
+        className="v10-sandbox"
+        sandbox="allow-scripts"
+        srcDoc={doc}
+        title={props.piece.title}
+      />
+    </section>
+  )
+}
+
 /** 归档抽屉（v10 §5）：重要通知到期后落这里，标题=内容总结（首句截断），可展开 */
 function FoldArchive(props: { items: FeedItem[] }): JSX.Element {
   const [open, setOpen] = useState(false)
@@ -376,6 +411,9 @@ export function PaperPane(props: {
   showFlowMap?: boolean
   mindMapText?: string | null
   onCloseMindMap?: () => void
+  sandboxBlock?: { id: string; title: string; html: string; css: string } | null
+  onCloseSandbox?: () => void
+  onSandboxAsk?: (q: string) => void
   onFeedReorder?: (from: number, to: number) => void
   onQuoteFeed?: (text: string) => void
   /** main=主窗右栏（可拆出）· paper=拆出独立窗（可合回，报头即拖拽区）· detached=已拆出主窗占位 */
@@ -449,6 +487,13 @@ export function PaperPane(props: {
       <div className="v10-fold-above">
         <div className="v10-fold-label">折 上 · 你 的 版 面</div>
         <NowBlock presence={props.presence} />
+        {props.sandboxBlock ? (
+          <SandboxView
+            piece={props.sandboxBlock}
+            onClose={() => props.onCloseSandbox?.()}
+            onAsk={(q) => props.onSandboxAsk?.(q)}
+          />
+        ) : null}
         {props.mindMapText ? (
           <section className="v10-block">
             <div className="v10-block-kick">
