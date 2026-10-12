@@ -5,7 +5,7 @@
 import { app, BrowserWindow, Notification, ipcMain } from 'electron'
 import { initSettings, getSettings, setSettings } from './settings'
 import { initDb, flushNow, loadActivitiesDeferred } from './db'
-import { createMainWindow, createWidgetWindow, createPetWindow, createSplashWindow, closeSplash, sendTo, broadcast, widgetWindow, mainWindow, createTodoWidgetWindow, createWorkbenchWindow, attachWorkbench, isWorkbenchDetached, detachPanes, attachPanes, setPaneIgnore, panesState, snapPanes, collapsePane, expandPane, paneCollapsed } from './windows'
+import { createMainWindow, createWidgetWindow, createPetWindow, createSplashWindow, closeSplash, sendTo, broadcast, widgetWindow, mainWindow, createTodoWidgetWindow, createWorkbenchWindow, attachWorkbench, isWorkbenchDetached, detachPanes, attachPanes, setPaneIgnore, panesState, snapPanes, collapsePane, expandPane, paneCollapsed, minimizeMain, hideMainToTray, hideWorkbench } from './windows'
 import { createTray } from './tray'
 import { registerShortcuts, unregisterShortcuts } from './globalShortcut'
 import { registerIpc } from './ipc'
@@ -440,6 +440,18 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('panes:setIgnore', (_e, ignore: boolean) => {
     setPaneIgnore(ignore)
+    return true
+  })
+  ipcMain.handle('win:minimize', () => {
+    minimizeMain()
+    return true
+  })
+  ipcMain.handle('win:hideMain', () => {
+    hideMainToTray()
+    return true
+  })
+  ipcMain.handle('win:hideWorkbench', () => {
+    hideWorkbench()
     return true
   })
   ipcMain.handle('panes:state', () => panesState())

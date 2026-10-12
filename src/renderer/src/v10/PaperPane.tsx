@@ -500,6 +500,8 @@ export function PaperPane(props: {
   onSandboxAsk?: (q: string) => void
   theme?: 'light' | 'dark'
   onToggleTheme?: () => void
+  onMinimize?: () => void
+  onHideToTray?: () => void
   onFeedReorder?: (from: number, to: number) => void
   onQuoteFeed?: (text: string) => void
   /** main=主窗右栏（可拆出）· paper=拆出独立窗（可合回，报头即拖拽区）· detached=已拆出主窗占位 */
@@ -585,6 +587,9 @@ export function PaperPane(props: {
           <span className={`mh-ai ${props.aiOn ? 'on' : ''}`} title={props.aiOn ? 'AI 已配置' : 'AI 未配置（设置里填 Key）'}>
             AI
           </span>
+          {pane !== 'main' ? (
+            <button className="mh-act" onClick={() => { void window.api?.snapPanes?.() }} title="两块玻璃片贴合固定（上下/左右按当前方位）">⎯ 吸附</button>
+          ) : null}
           <button className="mh-act" onClick={() => { try { window.api?.openMain?.() } catch { /* ignore */ } }} title="镜：设置/例程/习惯/隐私">镜</button>
           {pane === 'main' ? (
             <>
@@ -593,11 +598,21 @@ export function PaperPane(props: {
             </>
           ) : pane === 'paper' ? (
             <>
-              <button className="mh-act" onClick={() => { void window.api?.snapPanes?.() }} title="两块玻璃片贴合固定（上下/左右按当前方位）">⎯ 吸附</button>
-              <button className="mh-act" onClick={() => { void window.api?.collapsePane?.('paper') }} title="收起这块玻璃片（托盘玻璃模式唤回）">⇲ 收起</button>
+              <button className="mh-act" onClick={() => { void window.api?.winHideWorkbench?.() }} title="缩小到任务栏">—</button>
               <button className="mh-act" onClick={() => props.onAttach?.()} title="合回主窗一面">✕ 合回</button>
             </>
           ) : null}
+          <span className="mh-winsep" />
+          {pane === 'main' ? (
+            <>
+              <button className="mh-winbtn" onClick={() => props.onMinimize?.()} title="最小化">—</button>
+              <button className="mh-winbtn close" onClick={() => props.onHideToTray?.()} title="收进托盘（点托盘图标唤回）">✕</button>
+            </>
+          ) : pane === 'paper' ? (
+            <button className="mh-winbtn close" onClick={() => { void window.api?.winHideWorkbench?.() }} title="收起右页（任务栏/托盘唤回）">✕</button>
+          ) : (
+            <button className="mh-winbtn close" onClick={() => { void window.api?.collapsePane?.('paper') }} title="收起这块玻璃片（托盘玻璃模式唤回）">✕</button>
+          )}
         </div>
         <div className="mh-sub">
           <span className="mh-dot" />

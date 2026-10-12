@@ -156,9 +156,10 @@
 }
 .v10-masthead .mh-title {
   font-family: var(--font-num);
-  font-size: 19px;
+  font-size: 16px;
   font-weight: 600;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
 }
 .v10-masthead .mh-sub {
   margin-top: 4px;
@@ -460,7 +461,7 @@
 .v10-block[draggable='true']:active { cursor: grabbing; }
 
 /* ── 报头充实（v10：顶栏不空） ────────────────────────── */
-.v10-masthead .mh-row { display: flex; align-items: center; gap: 10px; }
+.v10-masthead .mh-row { display: flex; align-items: center; gap: 6px; }
 .v10-masthead .mh-statepill {
   display: inline-flex; align-items: center; gap: 6px;
   background: rgba(255,255,255,0.55); border-radius: 999px;
@@ -823,3 +824,15 @@
 .v10[data-theme='dark'] .v10-flowmap { background: var(--surface); }
 .v10[data-theme='dark'] .v10-sandbox { background: var(--paper); }
 .v10[data-theme='dark'] .v10-input { color-scheme: dark; }
+
+/* ── 窗口控制组（无边框窗的标准钮） ───────────────────── */
+.mh-winsep { width: 1px; height: 16px; background: rgba(43,43,40,0.18); margin: 0 2px; }
+.v10[data-theme='dark'] .mh-winsep { background: rgba(255,255,255,0.18); }
+.mh-winbtn {
+  width: 26px; height: 20px; border: none; background: rgba(43,43,40,0.08);
+  color: var(--ink-2); font-size: 11px; cursor: pointer;
+  border-radius: 6px; font-family: var(--font-ui); line-height: 1;
+  transition: background 120ms, color 120ms;
+}
+.mh-winbtn:hover { background: rgba(43,43,40,0.16); color: var(--ink); }
+.mh-winbtn.close:hover { background: #C4553B; color: #fff; }

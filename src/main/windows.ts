@@ -1320,6 +1320,19 @@ export function setPaneIgnore(ignore: boolean): void {
   }
 }
 
+export function minimizeMain(): void {
+  mainWindow?.minimize()
+}
+
+export function hideMainToTray(): void {
+  // WorkOn 惯例：✕=收到托盘（不退出），托盘菜单/点图标唤回
+  mainWindow?.hide()
+}
+
+export function hideWorkbench(): void {
+  if (workbenchWindow && !workbenchWindow.isDestroyed()) workbenchWindow.hide()
+}
+
 export function panesState(): { ask: boolean; paper: boolean } {
   return {
     ask: !!askPaneWindow && !askPaneWindow.isDestroyed(),
