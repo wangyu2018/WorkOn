@@ -28,6 +28,8 @@ const num = (s: string): number => parseFloat(s.replace(/,/g, '')) || 0
 
 /** 从回答文本检测可结构化的模式；不匹配返回 null（走 markdown 渲染） */
 export function detectStructured(text: string): Structured | null {
+  // 诚实模式：本地兜底的「需要 AI」提示不硬塞 KPI 卡（否则问啥都是同一张卡）
+  if (text.includes('这个问题需要 AI') || text.includes('配置后即可解锁')) return null
   const kpis: Kpi[] = []
   const bars: Bar[] = []
   let note: string | undefined

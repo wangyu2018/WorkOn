@@ -41,6 +41,7 @@ function TodayPlansBlock(props: { plans: PlanItem[]; onToggle: (p: PlanItem) => 
   const list = props.plans.filter((p) => p.date === key && p.status !== 'cancelled')
   const done = list.filter((p) => p.status === 'done').length
   const sortedAll = [...list].sort((a, b) => (a.startMin ?? 1e9) - (b.startMin ?? 1e9))
+  if (props.hidden || sortedAll.length === 0) return null // 空自动隐藏
   const sorted = expanded ? sortedAll : sortedAll.slice(0, 8)
   return (
     <section className="v10-block">
@@ -57,9 +58,7 @@ function TodayPlansBlock(props: { plans: PlanItem[]; onToggle: (p: PlanItem) => 
       {!expanded && sortedAll.length > 8 ? (
         <button className="v10-foldmore" onClick={() => setExpanded(true)}>展开其余 {sortedAll.length - 8} 件 ▾</button>
       ) : null}
-      {sorted.length === 0 ? (
-        <div className="v10-empty">今天还没有计划——去左栏说一句「帮我排一下今天」。</div>
-      ) : (
+      {(
         sorted.map((p) => (
           <div className="v10-plan-row" key={p.id}>
             <button
@@ -84,6 +83,7 @@ function NowBlock(props: { presence: PresenceSnapshot | null; kick?: (p: { block
   const [showSrc, setShowSrc] = useState(false)
   if (props.hidden) return null
   const s = props.presence?.state
+  if (!s) return null // 空自动隐藏（v10 拍板：置顶块为空不占位）
   const main = props.presence?.screens?.find((x) => x.screen === props.presence?.mainScreen)
   const focusMin = Math.round((props.presence?.continuousFocusSec ?? 0) / 60)
   return (
@@ -115,6 +115,7 @@ function TimelineBlock(props: { trail: TrailSegment[]; days: number; kick?: (p: 
   if (props.hidden) return null
   const cutoff = Date.now() - days * 24 * 3600_000
   const all = props.trail.filter((t) => !t.glance && t.startTs >= cutoff)
+  if (props.hidden || all.length === 0) return null // 空自动隐藏
   const segs = (expanded ? all : all.slice(-8)).reverse()
   return (
     <section
@@ -142,9 +143,7 @@ function TimelineBlock(props: { trail: TrailSegment[]; days: number; kick?: (p: 
         <button className="v10-foldmore" onClick={() => setExpanded(true)}>展开更早的 {all.length - 8} 段 ▾</button>
       ) : null}
       {days === 1 && all.length ? <TimelineBand segs={all} /> : null}
-      {segs.length === 0 ? (
-        <div className="v10-empty">{days === 1 ? '轨迹会随着采集自动长出来（此平台不支持窗口采集时这里保持空白）。' : `${days} 天内没有轨迹记录。`}</div>
-      ) : (
+      {(
         segs.map((t, i) => (
           <div className={`v10-tl-row${t.glance ? ' glance' : ''}`} key={`${t.startTs}-${i}`}>
             <span className="v10-tl-time">{hhmm(t.startTs)}</span>
@@ -335,7 +334,7 @@ function GoalsBlock(props: {
   hidden?: boolean
 }): JSX.Element | null {
   const actives = props.goals.filter((v) => v.goal.status === 'active')
-  if (props.hidden) return null
+  if (props.hidden || actives.length === 0) return null // 空自动隐藏
   return (
     <section className="v10-block">
       <div className="v10-block-kick">
@@ -502,6 +501,8 @@ export function PaperPane(props: {
   onToggleTheme?: () => void
   onMinimize?: () => void
   onHideToTray?: () => void
+  reminders?: Array<{ id: string; title: string; atHHMM?: string; recurring?: string; origin?: string; enabled?: boolean }>
+  onReminderRemoved?: (id: string) => void
   onFeedReorder?: (from: number, to: number) => void
   onQuoteFeed?: (text: string) => void
   /** main=主窗右栏（可拆出）· paper=拆出独立窗（可合回，报头即拖拽区）· detached=已拆出主窗占位 */
@@ -537,7 +538,7 @@ export function PaperPane(props: {
       : [...blockState.hidden, key]
     setBlocks({ ...blockState, hidden })
   }
-  const BLOCK_LABEL: Record<string, string> = { now: '此刻', plans: '今日计划', timeline: '今日轨迹', goals: '人生预期' }
+  const BLOCK_LABEL: Record<string, string> = { now: '此刻', plans: '今日计划', timeline: '今日轨迹', goals: '人生预期', reminders: '提醒' }
   const isPinned = (key: string): boolean => blockState.pinned.includes(key)
   const isHidden = (key: string): boolean => blockState.hidden.includes(key)
   /** kick 行真实动作组（留住=置顶固定 · ×=隐藏），pinned 时锚实心 */

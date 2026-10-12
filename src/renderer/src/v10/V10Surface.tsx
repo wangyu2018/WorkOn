@@ -647,6 +647,8 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           now={now}
           aiOn={aiOn}
           showFlowMap={showFlowMap}
+          reminders={reminders}
+          onReminderRemoved={(id) => setReminders((list) => list.filter((x) => x.id !== id))}
           mindMapText={mindMapText}
           onCloseMindMap={() => setMindMapText(null)}
           onFeedReorder={(from, to) => {
