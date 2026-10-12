@@ -498,6 +498,8 @@ export function PaperPane(props: {
   sandboxBlock?: { id: string; title: string; html: string; css: string } | null
   onCloseSandbox?: () => void
   onSandboxAsk?: (q: string) => void
+  theme?: 'light' | 'dark'
+  onToggleTheme?: () => void
   onFeedReorder?: (from: number, to: number) => void
   onQuoteFeed?: (text: string) => void
   /** main=主窗右栏（可拆出）· paper=拆出独立窗（可合回，报头即拖拽区）· detached=已拆出主窗占位 */
@@ -579,6 +581,7 @@ export function PaperPane(props: {
           <span style={{ marginLeft: 'auto' }} className="mh-clock">
             {props.now !== undefined ? new Date(props.now).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : ''}
           </span>
+          <button className="mh-act" onClick={() => props.onToggleTheme?.()} title="亮/暗主题切换">{props.theme === 'dark' ? '☾' : '◐'}</button>
           <span className={`mh-ai ${props.aiOn ? 'on' : ''}`} title={props.aiOn ? 'AI 已配置' : 'AI 未配置（设置里填 Key）'}>
             AI
           </span>

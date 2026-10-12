@@ -166,7 +166,7 @@ export function FlowMap(props: {
                 width={nodeW}
                 height={nodeH}
                 rx="10"
-                fill={n.kind === 'actual' ? '#fff' : n.kind === 'plan' ? 'var(--celadon-1)' : 'var(--amber-bg)'}
+                fill={n.kind === 'actual' ? 'var(--surface)' : n.kind === 'plan' ? 'var(--celadon-1)' : 'var(--amber-bg)'}
                 stroke={n.color}
                 strokeWidth={isNow ? 2.5 : 1.5}
                 strokeDasharray={n.kind === 'actual' ? undefined : '5 3'}

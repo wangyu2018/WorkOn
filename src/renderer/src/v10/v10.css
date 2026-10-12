@@ -33,6 +33,27 @@
   position: fixed;
   inset: 0;
   z-index: 70;
+  /* 暗色（墨夜）：青瓷/琥珀暗底重标定——审计开放问题的落地方案 */
+  &[data-theme='dark'] {
+    --paper: #14171C;
+    --paper-2: #1A1E25;
+    --hairline: #262C35;
+    --hairline-2: #39414E;
+    --celadon-1: #1C2825;
+    --celadon-2: #22322D;
+    --celadon-3: #29403A;
+    --ink: #E9E5D9;
+    --ink-2: #A8A296;
+    --ink-3: #6E6A60;
+    --amber: #E8A94E;
+    --amber-bg: #38301F;
+    --teal: #17C9B5;
+    --teal-ink: #3ADBC8;
+    --surface: #1B2027;
+    --surface-2: #22322D;
+    --overlay-bg: rgba(20, 23, 28, 0.97);
+    --shadow-color: rgba(0, 0, 0, 0.5);
+  }
   display: flex;
   background: var(--paper);
   color: var(--ink);
@@ -496,7 +517,7 @@
   font-size: 11.5px; padding: 5px 12px; cursor: pointer; font-family: var(--font-ui);
 }
 .v10-attach:hover { background: var(--celadon-2); }
-.v10-flowmap { border: 1px solid var(--hairline); border-radius: var(--r-md); padding: 8px 4px; background: #fff; }
+.v10-flowmap { border: 1px solid var(--hairline); border-radius: var(--r-md); padding: 8px 4px; background: var(--surface); }
 
 /* ── 会话（v10）：顶条/动作面板/续问 ─────────────────── */
 .v10-sesstop {
@@ -587,9 +608,9 @@
 .v10-md-pre code { background: none; color: inherit; padding: 0; }
 .v10-md-hr { border: none; border-top: 1px solid var(--hairline); margin: 8px 0; }
 .v10-clamp { max-height: 220px; overflow: hidden; position: relative; }
-.v10-clamp::after {
+.v10-clamp::after { /* gradient uses paper token below */
   content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 44px;
-  background: linear-gradient(transparent, var(--paper));
+  background: linear-gradient(transparent, var(--overlay-bg));
 }
 .v10-more {
   border: none; background: none; color: var(--teal-ink); font-size: 11px;
@@ -781,3 +802,24 @@
   box-shadow: 0 0 0 3px rgba(124, 111, 240, 0.2);
 }
 .ax-now em { font-size: 9px; color: var(--ink-2); font-style: normal; }
+
+/* ── 暗色适配补充（玻璃片/浮起层/滚动条） ─────────────── */
+.v10[data-theme='dark'] .v10-shrink.hover .v10-shrink-inner { background: var(--paper); }
+.v10[data-theme='dark'] .v10-clamp::after { background: linear-gradient(transparent, var(--paper)); }
+.v10[data-theme='dark'] .sc-kpi { background: var(--surface-2); }
+.v10[data-theme='dark'] .sc-btrack { background: var(--hairline); }
+.v10[data-theme='dark'] .v10-md-pre { background: #0D1015; }
+.v10[data-theme='dark'] .v10-md code { background: var(--surface-2); }
+.v10[data-theme='dark'] .v10-pane-ask .v10-ask,
+.v10[data-theme='dark'] .v10-pane .v10-paper {
+  background: rgba(20, 23, 28, 0.96);
+  border-color: var(--hairline);
+}
+.v10[data-theme='dark'] .v10-masthead { color-scheme: dark; }
+.v10[data-theme='dark'] .mh-statepill,
+.v10[data-theme='dark'] .mh-act { background: rgba(255,255,255,0.08); }
+.v10[data-theme='dark'] .mh-act:hover { background: rgba(255,255,255,0.16); }
+.v10[data-theme='dark'] .v10-goal-axis .ax-node .ax-dot { background: var(--paper); }
+.v10[data-theme='dark'] .v10-flowmap { background: var(--surface); }
+.v10[data-theme='dark'] .v10-sandbox { background: var(--paper); }
+.v10[data-theme='dark'] .v10-input { color-scheme: dark; }

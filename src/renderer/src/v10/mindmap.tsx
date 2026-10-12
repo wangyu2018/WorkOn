@@ -142,15 +142,15 @@ export function MindMap(props: { text: string; rootLabel?: string; width?: numbe
               width={w}
               height={32}
               rx={n.depth === 0 ? 10 : 8}
-              fill={n.depth === 0 ? '#2B2B28' : n.depth === 1 ? 'var(--celadon-1)' : '#fff'}
-              stroke={n.depth === 0 ? '#2B2B28' : n.color}
+              fill={n.depth === 0 ? 'var(--ink)' : n.depth === 1 ? 'var(--surface-2)' : 'var(--surface)'}
+              stroke={n.depth === 0 ? 'var(--ink)' : n.color}
               strokeWidth="1.2"
             />
             <text
               x={x + (n.depth === 0 ? 12 : 10)}
               y={y + 20}
               fontSize={n.depth === 0 ? 12 : 10.5}
-              fill={n.depth === 0 ? '#F7F4EE' : 'var(--ink)'}
+              fill={n.depth === 0 ? 'var(--paper)' : 'var(--ink)'}
               fontFamily="var(--font-ui)"
               fontWeight={n.depth === 0 ? 600 : 400}
             >

@@ -55,6 +55,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const [now, setNow] = useState(Date.now())
   const [archived, setArchived] = useState<FeedItem[]>([])
   const [aiOn, setAiOn] = useState<boolean | null>(null)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => (window.localStorage.getItem('v10theme') === 'dark' ? 'dark' : 'light'))
   const [showFlowMap, setShowFlowMap] = useState(false)
   const [mindMapText, setMindMapText] = useState<string | null>(null)
   const [sandboxBlock, setSandboxBlock] = useState<{ id: string; title: string; html: string; css: string } | null>(null)
@@ -618,7 +619,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
 
   if (paneMode === 'paper') {
     return (
-      <div className="v10 v10-pane">
+      <div className="v10 v10-pane" data-theme={theme}>
         <PaperPane
           pane="paper"
           dateLabel={dateLabel}
@@ -648,8 +649,14 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
     )
   }
 
+  const toggleTheme = (): void => {
+    const next = theme === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    try { window.localStorage.setItem('v10theme', next) } catch { /* ignore */ }
+  }
+
   return (
-    <div className="v10">
+    <div className="v10" data-theme={theme}>
       <AskPane
         chat={chat}
         asking={asking}
@@ -712,6 +719,8 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         onDropBlock={(b) => setObjectChip(b)}
         now={now}
         aiOn={aiOn}
+        theme={theme}
+        onToggleTheme={toggleTheme}
         showFlowMap={showFlowMap}
         mindMapText={mindMapText}
         onCloseMindMap={() => setMindMapText(null)}
