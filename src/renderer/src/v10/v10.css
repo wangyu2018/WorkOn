@@ -677,3 +677,15 @@
 }
 .v10-pane .v10-masthead { border-radius: var(--r-md); margin: 0 10px 6px; }
 .v10-pane .v10-fold-above, .v10-pane .v10-fold-below, .v10-pane .v10-foldline { margin-left: 12px; margin-right: 12px; }
+
+/* ── 回答富呈现：hover 复制 + KPI 可点击 ─────────────── */
+.v10-rich-head { display: flex; justify-content: flex-end; margin-bottom: 2px; }
+.v10-copybtn {
+  border: none; background: none; color: var(--ink-3);
+  font-size: 10px; cursor: pointer; padding: 2px 8px; border-radius: 999px;
+  opacity: 0; transition: opacity 120ms; font-family: var(--font-ui);
+}
+.v10-msg-ai-wrap:hover .v10-copybtn, .v10-copybtn:focus { opacity: 1; }
+.v10-copybtn:hover { color: var(--teal-ink); background: var(--celadon-1); }
+.sc-kpi.clickable { cursor: pointer; transition: background 120ms; }
+.sc-kpi.clickable:hover { background: var(--celadon-2); }

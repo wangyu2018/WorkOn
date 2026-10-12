@@ -86,7 +86,7 @@ export function detectStructured(text: string): Structured | null {
 }
 
 /** 结构化答卡渲染：KPI 格 + 占比/横条图 + 尾注（原文折叠保留） */
-export function StructuredCard(props: { s: Structured }): JSX.Element {
+export function StructuredCard(props: { s: Structured; onAsk?: (q: string) => void }): JSX.Element {
   const { s } = props
   const maxBar = Math.max(...s.bars.map((b) => b.maxHint ?? b.value), 1)
   return (
@@ -94,7 +94,12 @@ export function StructuredCard(props: { s: Structured }): JSX.Element {
       {s.kpis.length ? (
         <div className="sc-kpis">
           {s.kpis.map((k, i) => (
-            <div className="sc-kpi" key={i}>
+            <div
+              className="sc-kpi clickable"
+              key={i}
+              title={`追问：${k.label}为什么是这个数？`}
+              onClick={() => props.onAsk?.(`${k.label}（${k.value}）为什么是这个数？怎么改善？`)}
+            >
               <div className="sc-kv">{k.value}</div>
               <div className="sc-kl">{k.label}</div>
             </div>

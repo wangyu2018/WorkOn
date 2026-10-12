@@ -4,7 +4,7 @@
  * 快捷回复协议（v10 §7）：带选项的消息渲染 ①② 大按钮，输入框回数字即答
  * 块进化（v10 §4.C）：右页组件拖入输入场 → 挂对象芯片 → 一句话调参数
  */
-import { useState, type RefObject, type DragEvent } from 'react'
+import { useEffect, useState, type RefObject, type DragEvent } from 'react'
 import type { PresenceSnapshot, WorkState, ChatSession } from '@shared/types'
 import { STATE_LABEL } from '@shared/stateMeta'
 import { renderMarkdown } from './md'
@@ -13,7 +13,14 @@ import { MindMap } from './mindmap'
 import { Shrinkable } from './Shrinkable'
 
 /** AI 回答富呈现（v10）：结构化答卡优先（KPI/条形）→ markdown → 长文折叠 */
-function RichAnswer(props: { text: string; onMindmap?: (src: string) => void }): JSX.Element {
+function RichAnswer(props: { text: string; onMindmap?: (src: string) => void; onAsk?: (q: string) => void }): JSX.Element {
+  const [copied, setCopied] = useState(false)
+  const copyAll = (): void => {
+    void navigator.clipboard?.writeText(props.text).then(() => {
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    })
+  }
   const [expanded, setExpanded] = useState(false)
   const [mapped, setMapped] = useState(false)
   const s = detectStructured(props.text)
@@ -54,7 +61,10 @@ function RichAnswer(props: { text: string; onMindmap?: (src: string) => void }):
   if (s) {
     return (
       <div className="v10-rich">
-        <StructuredCard s={s} />
+        <div className="v10-rich-head">
+          <button className="v10-copybtn" onClick={copyAll}>{copied ? '✓ 已复制' : '复制'}</button>
+        </div>
+        <StructuredCard s={s} onAsk={props.onAsk} />
         {mapBlock}
       </div>
     )
@@ -71,6 +81,9 @@ function RichAnswer(props: { text: string; onMindmap?: (src: string) => void }):
   }
   return (
     <div className="v10-rich">
+      <div className="v10-rich-head">
+        <button className="v10-copybtn" onClick={copyAll}>{copied ? '✓ 已复制' : '复制'}</button>
+      </div>
       {body}
       {mapBlock}
     </div>
@@ -175,6 +188,8 @@ export function AskPane(props: {
   quoteChip?: QuoteChipData | null
   onClearQuote?: () => void
   onQuoteDrop?: (q: QuoteChipData) => void
+  /** 桥 v0：卡片内交互（KPI 点击等）→ 回填输入场待用户确认发送 */
+  onPrefill?: (q: string) => void
   /** 会话（v10）：列表 + 当前进入的会话 + 动作回调 */
   sessions?: ChatSession[]
   activeSessionId?: string | null
@@ -182,11 +197,20 @@ export function AskPane(props: {
   onAddToSession?: (msgIndex: number, sessionId: string | null, topic?: 'project' | 'life' | 'general') => void
   onSessionRenamed?: (id: string, title: string) => void
   onSessionRemoved?: (id: string) => void
+  prefillText?: string | null
+  onPrefillConsumed?: () => void
 }): JSX.Element {
   const [draft, setDraft] = useState('')
   const [dropHot, setDropHot] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const state: WorkState | undefined = props.presence?.state
+  // 桥 v0：卡片交互回填输入场（用户可改再发——human-in-the-loop）
+  useEffect(() => {
+    if (props.prefillText) {
+      setDraft(props.prefillText)
+      props.onPrefillConsumed?.()
+    }
+  }, [props.prefillText])
   // 对话自动折叠（v10）：只留最近 20 条活跃，更早的收成一行（点开全量）
   const HIDE_COUNT = props.chat.length - 20
   const visible = expanded || HIDE_COUNT <= 0 ? props.chat : props.chat.slice(HIDE_COUNT)
@@ -327,6 +351,7 @@ export function AskPane(props: {
                 <RichAnswer
                   text={m.text}
                   onMindmap={(src) => props.onSend(src.startsWith('__') ? src : `__page__${src}`)}
+                  onAsk={(q) => props.onPrefill?.(q)}
                 />
               </div>
             ) : (
