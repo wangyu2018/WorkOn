@@ -49,8 +49,30 @@ export function listApps(): string[] {
       } catch { /* ignore */ }
     }
   } else if (process.platform === 'win32') {
-    // Windows：开始菜单快捷方式（后续解析 .lnk；当前先返回空）
-    names = []
+    // Windows：开始菜单快捷方式（全机+用户两处），.lnk/.url 文件名即应用名
+    const appdata = process.env.APPDATA ?? ''
+    const dirs = [
+      'C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs',
+      appdata ? path.join(appdata, 'Microsoft', 'Windows', 'Start Menu', 'Programs') : ''
+    ].filter(Boolean)
+    const walk = (dir: string, depth: number): void => {
+      if (depth > 3) return
+      let entries: fs.Dirent[] = []
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true })
+      } catch {
+        return
+      }
+      for (const e of entries) {
+        const full = path.join(dir, e.name)
+        if (e.isDirectory()) walk(full, depth + 1)
+        else if (/\.(lnk|url)$/i.test(e.name)) {
+          const name = e.name.replace(/\.(lnk|url)$/i, '')
+          if (name && !name.startsWith('Uninstall') && !/^卸载/.test(name)) names.push(name)
+        }
+      }
+    }
+    for (const d of dirs) walk(d, 0)
   }
   names = [...new Set(names)].sort((a, b) => a.localeCompare(b))
   cache = { names, at: Date.now() }

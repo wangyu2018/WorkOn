@@ -354,6 +354,54 @@ function GoalsBlock(props: {
   )
 }
 
+/** AI 配置块（v10）：内联配 Key/BaseURL/模型——不跳旧版（v10 表面会遮挡） */
+function AiConfigBlock(props: { onClose: () => void; onSaved: () => void }): JSX.Element {
+  const [base, setBase] = useState('https://api.deepseek.com/v1')
+  const [key, setKey] = useState('')
+  const [model, setModel] = useState('deepseek-chat')
+  const [saved, setSaved] = useState(false)
+  useEffect(() => {
+    void window.api?.getSettings?.().then((st) => {
+      const s2 = st as { aiBaseUrl?: string; aiModel?: string }
+      if (s2.aiBaseUrl) setBase(s2.aiBaseUrl)
+      if (s2.aiModel) setModel(s2.aiModel)
+    })
+  }, [])
+  return (
+    <section className="v10-block">
+      <div className="v10-block-kick">
+        <span className="aura-mark">◇</span>
+        <span>接入 AI</span>
+        <span className="acts"><button onClick={props.onClose}>×</button></span>
+      </div>
+      <div className="v10-aicfg">
+        <label>API BaseURL（OpenAI 兼容端点）
+          <input value={base} onChange={(e) => setBase(e.target.value)} placeholder="https://api.deepseek.com/v1" />
+        </label>
+        <label>API Key
+          <input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="sk-…" />
+        </label>
+        <label>模型
+          <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="deepseek-chat" />
+        </label>
+        <button
+          className="dc-btn"
+          disabled={!key.trim()}
+          style={{ opacity: key.trim() ? 1 : 0.5 }}
+          onClick={() => {
+            void window.api?.setSettings?.({ aiEnabled: true, aiApiKey: key.trim(), aiBaseUrl: base.trim(), aiModel: model.trim() } as never)
+            setSaved(true)
+            props.onSaved()
+          }}
+        >
+          {saved ? '✓ 已保存，再去问一遍试试' : '保存并启用 AI'}
+        </button>
+        <div className="ob-hint">Key 只存本机 settings.json；国内可用 DeepSeek / Kimi / GLM 的兼容端点。</div>
+      </div>
+    </section>
+  )
+}
+
 /** 沙箱可视化块（OpenIntelligentUI 模式）：AI 生成 HTML 进隔离 iframe；按钮 postMessage 回宿主追问 */
 function SandboxView(props: {
   piece: { id: string; title: string; html: string; css: string }
@@ -503,6 +551,9 @@ export function PaperPane(props: {
   onHideToTray?: () => void
   reminders?: Array<{ id: string; title: string; atHHMM?: string; recurring?: string; origin?: string; enabled?: boolean }>
   onReminderRemoved?: (id: string) => void
+  aiConfigOpen?: boolean
+  onCloseAiConfig?: () => void
+  onAiConfigSaved?: () => void
   onFeedReorder?: (from: number, to: number) => void
   onQuoteFeed?: (text: string) => void
   /** main=主窗右栏（可拆出）· paper=拆出独立窗（可合回，报头即拖拽区）· detached=已拆出主窗占位 */
@@ -585,13 +636,18 @@ export function PaperPane(props: {
             {props.now !== undefined ? new Date(props.now).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : ''}
           </span>
           <button className="mh-act" onClick={() => props.onToggleTheme?.()} title="亮/暗主题切换">{props.theme === 'dark' ? '☾' : '◐'}</button>
-          <span className={`mh-ai ${props.aiOn ? 'on' : ''}`} title={props.aiOn ? 'AI 已配置' : 'AI 未配置（设置里填 Key）'}>
+          <span
+            className={`mh-ai ${props.aiOn ? 'on' : ''}`}
+            title={props.aiOn ? 'AI 已配置' : 'AI 未配置——点击去设置'}
+            style={props.aiOn ? undefined : { cursor: 'pointer' }}
+            onClick={() => { if (!props.aiOn) { try { window.api?.openMain?.('settings') } catch { /* ignore */ } } }}
+          >
             AI
           </span>
           {pane !== 'main' ? (
             <button className="mh-act" onClick={() => { void window.api?.snapPanes?.() }} title="两块玻璃片贴合固定（上下/左右按当前方位）">⎯ 吸附</button>
           ) : null}
-          <button className="mh-act" onClick={() => { try { window.api?.openMain?.() } catch { /* ignore */ } }} title="镜：设置/例程/习惯/隐私">镜</button>
+          <button className="mh-act" onClick={() => { try { window.api?.openMain?.('settings') } catch { /* ignore */ } }} title="设置后台（Key/例程/习惯/隐私）">⚙ 设置</button>
           {pane === 'main' ? (
             <>
               <button className="mh-act" onClick={() => props.onDetach?.()} title="右页拆出独立窗口（吸附+位置记忆）">⇱ 拆出</button>
@@ -641,6 +697,9 @@ export function PaperPane(props: {
           </div>
         ) : null}
         
+        {props.aiConfigOpen ? (
+          <AiConfigBlock onClose={() => props.onCloseAiConfig?.()} onSaved={() => props.onAiConfigSaved?.()} />
+        ) : null}
         {props.sandboxBlock ? (
           <SandboxView
             piece={props.sandboxBlock}

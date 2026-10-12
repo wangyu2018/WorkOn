@@ -54,6 +54,7 @@ const api = {
   expandPane: (which: 'ask' | 'paper') => ipcRenderer.invoke('panes:expand', which),
   setPaneTop: (which: 'ask' | 'paper', on: boolean) => ipcRenderer.invoke('panes:setTop', which, on),
   onMusicChanged: on<{ name: string; artist: string; playing: boolean }>('music:changed'),
+  onAiAssist: on<{ enabled: boolean; items: Array<{ key: string; label?: string; status: string; title?: string; doneUntil?: number }> }>('ai-assist:update'),
 
   // 实时状态
   getPresence: () => ipcRenderer.invoke('presence:get'),
@@ -286,7 +287,7 @@ const api = {
   togglePet: () => ipcRenderer.send('win:togglePet'),
   hidePet: () => ipcRenderer.send('pet:hide'),
   showPet: () => ipcRenderer.send('pet:show'),
-  openMain: () => ipcRenderer.send('win:openMain'),
+  openMain: (view?: string) => ipcRenderer.send('win:openMain', view),
   setWidgetOpacity: (v: number) => ipcRenderer.send('widget:opacity', v),
   setWidgetPenetration: (v: boolean) => ipcRenderer.send('widget:penetration', v),
   widgetResize: (w: number, h: number) => ipcRenderer.send('widget:resize', w, h),

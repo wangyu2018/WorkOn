@@ -60,6 +60,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const [mindMapText, setMindMapText] = useState<string | null>(null)
   const [sandboxBlock, setSandboxBlock] = useState<{ id: string; title: string; html: string; css: string } | null>(null)
   const [sandboxLoading, setSandboxLoading] = useState(false)
+  const [aiConfigOpen, setAiConfigOpen] = useState(false)
   // 工作台拆出（v10）：pane=paper=独立右页窗；主窗监听拆出态显示占位
   const paneMode = useMemo(() => new URLSearchParams(window.location.search).get('pane'), [])
   // 玻璃片穿透命中：forward 模式下渲染层仍收 mousemove——指针在玻璃片容器内=可交互，片外=穿透
@@ -130,8 +131,41 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
     void window.api?.getPresence?.().then((p) => setPresence((p as PresenceSnapshot) ?? null))
     void window.api?.getSettings?.().then((st) => setAiOn(!!(st as { aiEnabled?: boolean })?.aiEnabled))
     void window.api?.listSessions?.().then((x) => setSessions((x as ChatSession[]) ?? []))
+    // coding 信号（v10）：AI 编程工具 busy→done → 对话流来件卡
+    const seenDone = new Set<string>()
+    const offA = window.api?.onAiAssist?.((p) => {
+      const dones = (p.items ?? []).filter((it) => it.status === 'done')
+      for (const it of dones) {
+        const dedup = `aidone:${it.key}:${it.doneUntil}`
+        if (seenDone.has(dedup)) continue
+        seenDone.add(dedup)
+        setChat((c) => [
+          ...c,
+          { role: 'ai', text: `✦ ${it.label ?? it.key} 完成了任务${it.title ? `「${it.title.slice(0, 30)}」` : ''}`, options: ['知道了'] }
+        ])
+      }
+    })
     // signals（v10）：消息监控来件 → 对话流来件卡；音乐切歌 → 折下轻通知
     const offM = window.api?.onMessageIncoming?.((p) => {
+      // 来件含时间+事件（「明天3点有个评审」）→ 直接提议提醒（拆路第六去向的自动化）
+      const prop = parseScheduleProposal(p.text)
+      if (prop) {
+        setChat((c) => {
+          const opts = [`${prop.isMeeting ? '提前 5 分钟' : '到点'}提醒我`, '不用了']
+          const next = [
+            ...c,
+            {
+              role: 'ai' as const,
+              text: `◇ 来件 · ${p.app}：${p.text.slice(0, 80)}\n→ 识别到 ${prop.whenLabel} 有「${prop.event}」——${prop.isMeeting ? '到点我会看你是否已入会；' : ''}要我提醒你吗？`,
+              options: opts
+            }
+          ]
+          optionsRef.current = { msgIndex: next.length - 1, options: opts }
+          pendingProposalRef.current = { msgIndex: next.length - 1, proposal: prop }
+          return next
+        })
+        return
+      }
       setChat((c) => [
         ...c,
         { role: 'ai', text: `◇ 来件 · ${p.app}（未读 ${p.unread}）\n${p.text.slice(0, 200)}`, options: ['知道了', '引用继续聊'] }
@@ -227,6 +261,11 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
             setSandboxLoading(false)
             pushAI([{ role: 'ai', text: '生成失败了，换个说法再试一次？' }])
           })
+        return
+      }
+      if (raw === '__aiconfig__') {
+        setAiConfigOpen(true)
+        pushAI([{ role: 'ai', text: '接入卡在右页了——填 Key/BaseURL 保存，然后随便再问我一句。' }])
         return
       }
       if (raw === '__flowmap__') {
@@ -380,6 +419,10 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           if (last) void window.api?.removeReminder?.(last.id)
           setReminders((list) => list.slice(0, -1))
           setChat((c) => [...c, { role: 'ai', text: '行，这条不记了。' }])
+        } else if (picked.includes('配置 AI')) {
+          // 右页内联接入卡（旧版 openMain 会被 v10 表面遮挡——统一走新流程）
+          setAiConfigOpen(true)
+          setChat((c) => [...c, { role: 'ai', text: '接入卡在右页了——填 Key/BaseURL 保存就通（国内可用 DeepSeek/Kimi/GLM 的兼容端点）。' }])
         } else {
           setChat((c) => [...c, { role: 'ai', text: '好。' }])
         }
@@ -554,14 +597,19 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       const offDone = window.api?.onAIStreamDone?.((raw) => {
         // payload 兼容：非流式回退=裸字符串；流式=无 payload（用 chunk 累计）
         const content = (typeof raw === 'string' ? raw : (raw as { content?: string })?.content) || acc || ''
+        // 兜底回答（本地模式）带「去配置 AI」快捷回复——AI 接入入口
+        const needsAI = content.includes('这个问题需要 AI')
+        const opts = needsAI ? ['⚙ 去配置 AI'] : undefined
         setChat((c) => {
           const idx = c.findIndex((m) => m.id === streamId)
           if (idx >= 0) {
             const next = [...c]
-            next[idx] = { ...next[idx], text: content }
+            next[idx] = { ...next[idx], text: content, options: opts }
+            if (opts) optionsRef.current = { msgIndex: idx, options: opts }
             return next
           }
-          return [...c, { id: streamId, role: 'ai' as const, text: content }]
+          if (opts) optionsRef.current = { msgIndex: c.length, options: opts }
+          return [...c, { id: streamId, role: 'ai' as const, text: content, options: opts }]
         })
         if (activeSessionId) void window.api?.addSessionItem?.(activeSessionId, { role: 'ai', text: content, time: Date.now() })
         offChunk?.()
@@ -651,6 +699,9 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           onReminderRemoved={(id) => setReminders((list) => list.filter((x) => x.id !== id))}
           mindMapText={mindMapText}
           onCloseMindMap={() => setMindMapText(null)}
+          aiConfigOpen={aiConfigOpen}
+          onCloseAiConfig={() => setAiConfigOpen(false)}
+          onAiConfigSaved={() => { setAiOn(true); setAiConfigOpen(false) }}
           onFeedReorder={(from, to) => {
             setFeed((f) => {
               const next = [...f]
@@ -739,6 +790,9 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         showFlowMap={showFlowMap}
         mindMapText={mindMapText}
         onCloseMindMap={() => setMindMapText(null)}
+        aiConfigOpen={aiConfigOpen}
+        onCloseAiConfig={() => setAiConfigOpen(false)}
+        onAiConfigSaved={() => { setAiOn(true); setAiConfigOpen(false) }}
         pane={detached ? 'detached' : 'main'}
         onAttach={() => void window.api?.attachWorkbench?.()}
         onDetach={() => void window.api?.detachWorkbench?.()}

@@ -1185,7 +1185,10 @@ export function registerIpc(): void {
   ipcMain.on('win:close', () => mainWindow?.hide())
   ipcMain.on('win:toggleWidget', () => toggleWidget())
   ipcMain.on('win:togglePet', () => togglePet())
-  ipcMain.on('win:openMain', () => createMainWindow())
+  ipcMain.on('win:openMain', (_e, view?: string) => {
+    createMainWindow()
+    if (view) setTimeout(() => sendTo('main', 'nav:view', view), 600)
+  })
   ipcMain.on('widget:opacity', (_e, v: number) => {
     // 临时透明度（quiet 模式等）：吸附态恒不透明，不写设置
     if (!widgetWindow || widgetWindow.isDestroyed()) return
