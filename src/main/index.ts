@@ -38,6 +38,7 @@ import { initReminders, addReminder, listReminders, removeReminder } from './rem
 import { listApps, openAppSafe } from './appLauncher'
 import { generateSandbox } from './sandbox'
 import { initMessageWatch, startMessageWatch, stopMessageWatch } from './messageWatch'
+import { musicControl } from './musicWatch'
 import { startMusicWatch } from './musicWatch'
 import { initLifeGoalJobs } from './lifeGoal'
 import { macCheckPermissions } from './winInfoMac'
@@ -420,6 +421,8 @@ app.whenReady().then(() => {
   // 沙箱可视化拆件（v10，OpenIntelligentUI 模式）：AI 生成轻量 HTML 可视化
   ipcMain.handle('sandbox:generate', async (_e, srcText: string, ask?: string) => generateSandbox(srcText, ask))
   ipcMain.handle('apps:open', (_e, query: string) => openAppSafe(query))
+  // 音乐控制（v10 应用接管·媒体）
+  ipcMain.handle('music:control', (_e, action: 'next' | 'prev' | 'toggle') => musicControl(action))
   ipcMain.handle('workbench:detach', () => {
     createWorkbenchWindow()
     return true
@@ -472,13 +475,22 @@ app.whenReady().then(() => {
   ipcMain.handle('sessions:remove', (_e, id: string) => removeChatSession(id))
   ipcMain.handle('sessions:rename', (_e, id: string, title: string) => renameChatSession(id, title))
   // 消息/音乐信号（v10 signals）：默认关，用户在设置里开
-  initMessageWatch((p) => {
+  initMessageWatch(
+    (p) => {
     sendTo('main', 'message:incoming', p)
     sendTo('workbench', 'message:incoming', p)
     pushNotify('ai', `${p.app} 来了新消息（未读 ${p.unread}）`, p.text.slice(0, 80), [
       { label: '知道了', action: 'dismiss' }
     ], 60)
-  })
+    },
+    (app) => {
+    // 可接管提示（一次性）：IM 前台但监控未开
+    sendTo('main', 'message:hint', { app })
+    pushNotify('ai', `检测到 ${app} 在前台`, '开启消息监控后，新消息会直接出现在对话流里（对它说「开启消息监控」即可）。', [
+      { label: '知道了', action: 'dismiss' }
+    ], 90)
+    }
+  )
   startMusicWatch((info: { name: string; artist: string }) => {
     pushNotify('generic', `♪ 正在播放：${info.name}`, info.artist, [], 20)
   })

@@ -131,9 +131,21 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
     void window.api?.getPresence?.().then((p) => setPresence((p as PresenceSnapshot) ?? null))
     void window.api?.getSettings?.().then((st) => setAiOn(!!(st as { aiEnabled?: boolean })?.aiEnabled))
     void window.api?.listSessions?.().then((x) => setSessions((x as ChatSession[]) ?? []))
-    // coding 信号（v10）：AI 编程工具 busy→done → 对话流来件卡
+    // coding 信号（v10）：AI 编程工具 busy→done → 对话流通知（开始=可接管提示，结束=完成通知）
+    const seenBusy = new Set<string>()
     const seenDone = new Set<string>()
     const offA = window.api?.onAiAssist?.((p) => {
+      for (const it of p.items ?? []) {
+        if (it.status === 'busy') {
+          const dedup = `aidone-busy:${it.key}:${it.busySince ?? 0}`
+          if (seenBusy.has(dedup)) continue
+          seenBusy.add(dedup)
+          setChat((c) => [
+            ...c,
+            { role: 'ai', text: `✦ ${it.label ?? it.key} 在跑任务了${it.title ? `「${it.title.slice(0, 30)}」` : ''}——完成后我会告诉你。` }
+          ])
+        }
+      }
       const dones = (p.items ?? []).filter((it) => it.status === 'done')
       for (const it of dones) {
         const dedup = `aidone:${it.key}:${it.doneUntil}`
@@ -144,6 +156,13 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           { role: 'ai', text: `✦ ${it.label ?? it.key} 完成了任务${it.title ? `「${it.title.slice(0, 30)}」` : ''}`, options: ['知道了'] }
         ])
       }
+    })
+    // IM 可接管提示（一次性）：检测到微信前台但监控未开
+    const offHint = window.api?.onMessageHint?.((h) => {
+      setChat((c) => [
+        ...c,
+        { role: 'ai', text: `检测到 ${h.app} 在前台——开启消息监控后，新消息会直接出现在这里（说「开启消息监控」即可）。`, options: ['开启消息监控', '先不用'] }
+      ])
     })
     // signals（v10）：消息监控来件 → 对话流来件卡；音乐切歌 → 折下轻通知
     const offM = window.api?.onMessageIncoming?.((p) => {
@@ -176,6 +195,12 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         { kind: 'notify', id: `mu${Date.now()}`, title: `♪ ${m.name}`, body: m.artist, time: Date.now(), ttlSec: 20, keep: false },
         ...f
       ])
+      setChat((c) => {
+        const opts = ['⏭ 下一首', '⏸ 播放/暂停', '⏮ 上一首']
+        const next = [...c, { role: 'ai' as const, text: `♪ 切到「${m.name}」— ${m.artist}`, options: opts }]
+        optionsRef.current = { msgIndex: next.length - 1, options: opts }
+        return next
+      })
     })
     void window.api?.workbenchState?.().then((d) => setDetached(!!d))
     let wbPoll: number | undefined
@@ -204,6 +229,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       window.clearInterval(tick)
       window.clearInterval(timer)
       if (wbPoll) clearInterval(wbPoll)
+      offHint?.()
       offM?.()
       offMu?.()
       offW?.()
@@ -419,6 +445,12 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           if (last) void window.api?.removeReminder?.(last.id)
           setReminders((list) => list.slice(0, -1))
           setChat((c) => [...c, { role: 'ai', text: '行，这条不记了。' }])
+        } else if (picked.includes('下一首') || picked.includes('上一首') || picked.includes('播放/暂停')) {
+          const action = picked.includes('下一首') ? 'next' : picked.includes('上一首') ? 'prev' : 'toggle'
+          void window.api?.musicControl?.(action).then((r) => {
+            const res = r as { ok: boolean; error?: string }
+            pushAI([{ role: 'ai', text: res?.ok ? '好了 ✦' : `没控成（${res?.error ?? '未知'}）——mac 上先打开 Music/Spotify。` }])
+          })
         } else if (picked.includes('配置 AI')) {
           // 右页内联接入卡（旧版 openMain 会被 v10 表面遮挡——统一走新流程）
           setAiConfigOpen(true)
@@ -469,6 +501,23 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           return
         }
       }
+      // ── 音乐控制指令（v10 应用接管·媒体） ──
+      const musicM = /^(下一首|上一首|暂停音乐|播放音乐|切个歌|暂停|继续放)$/.exec(normalized)
+      if (musicM) {
+        const action = /下一首|切个歌/.test(musicM[1]) ? 'next' : /上一首/.test(musicM[1]) ? 'prev' : 'toggle'
+        void window.api?.musicControl?.(action).then((r) => {
+          const res = r as { ok: boolean; error?: string }
+          if (res?.ok) {
+            pushAI([{ role: 'ai', text: '好了 ✦' }])
+          } else if (/osascript|System Events|not allowed|Command failed/i.test(res?.error ?? '')) {
+            pushAI([{ role: 'ai', text: '音乐控制需要授权：系统设置 → 隐私与安全性 → 自动化 → 勾选 Electron 控制 System Events；并先打开 Music/Spotify。' }])
+          } else {
+            pushAI([{ role: 'ai', text: `没控成——${res?.error ?? '未知原因'}` }])
+          }
+        })
+        return
+      }
+
       // ── 应用接管 L1（v10）：打开/切到 本机应用 ──
       const launchM = /^(打开|启动|切到|切换到)\s*(.+)$/.exec(normalized)
       if (launchM) {

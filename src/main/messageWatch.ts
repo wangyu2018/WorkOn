@@ -31,9 +31,13 @@ const THROTTLE_MS = 90_000
 
 type IncomingHandler = (p: { app: string; unread: number; text: string; ts: number }) => void
 let handler: IncomingHandler | null = null
+type HintHandler = (app: string) => void
+let hintHandler: HintHandler | null = null
+let hinted = false // 每次启动只提示一次（可接管消息）
 
-export function initMessageWatch(onIncoming: IncomingHandler): void {
+export function initMessageWatch(onIncoming: IncomingHandler, onHint?: HintHandler): void {
   handler = onIncoming
+  hintHandler = onHint ?? null
 }
 
 export function startMessageWatch(): void {
@@ -51,8 +55,16 @@ export function stopMessageWatch(): void {
 
 async function poll(): Promise<void> {
   const s = getSettings()
-  if (!s.messageWatchEnabled) return
   const snap = presence.getSnapshot()
+  // 可接管提示（一次性）：检测到 IM 前台但监控未开 → 告诉用户能力存在（不擅自开）
+  if (!s.messageWatchEnabled && !hinted && hintHandler) {
+    const imFront = (snap.screens ?? []).some((sc) => IM_PATTERNS.some((p) => p.match.test(sc.app ?? '')))
+    if (imFront) {
+      hinted = true
+      hintHandler((snap.screens ?? []).find((sc) => IM_PATTERNS.some((p) => p.match.test(sc.app ?? '')))!.app)
+    }
+  }
+  if (!s.messageWatchEnabled) return
   for (const sc of snap.screens ?? []) {
     const app = sc.app ?? ''
     const pat = IM_PATTERNS.find((p) => p.match.test(app))

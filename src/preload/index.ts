@@ -53,8 +53,10 @@ const api = {
   collapsePane: (which: 'ask' | 'paper') => ipcRenderer.invoke('panes:collapse', which),
   expandPane: (which: 'ask' | 'paper') => ipcRenderer.invoke('panes:expand', which),
   setPaneTop: (which: 'ask' | 'paper', on: boolean) => ipcRenderer.invoke('panes:setTop', which, on),
+  musicControl: (action: 'next' | 'prev' | 'toggle') => ipcRenderer.invoke('music:control', action),
+  onMessageHint: on<{ app: string }>('message:hint'),
   onMusicChanged: on<{ name: string; artist: string; playing: boolean }>('music:changed'),
-  onAiAssist: on<{ enabled: boolean; items: Array<{ key: string; label?: string; status: string; title?: string; doneUntil?: number }> }>('ai-assist:update'),
+  onAiAssist: on<{ enabled: boolean; items: Array<{ key: string; label?: string; status: string; title?: string; doneUntil?: number; busySince?: number }> }>('ai-assist:update'),
 
   // 实时状态
   getPresence: () => ipcRenderer.invoke('presence:get'),

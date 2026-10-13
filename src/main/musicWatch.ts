@@ -82,6 +82,34 @@ export function stopMusicWatch(): void {
   }
 }
 
+/** 音乐控制（v10 应用接管·媒体）：mac osascript；Spotify 优先（在跑时） */
+export function musicControl(action: 'next' | 'prev' | 'toggle'): Promise<{ ok: boolean; error?: string }> {
+  if (process.platform !== 'darwin') {
+    return Promise.resolve({ ok: false, error: '音乐控制当前仅 macOS（Windows 媒体键挂后续）' })
+  }
+  const verb = action === 'next' ? 'next track' : action === 'prev' ? 'previous track' : 'playpause'
+  const script = `
+    tell application "System Events" to set runningApps to name of every process
+    if (runningApps contains "Spotify") then
+      tell application "Spotify" to ${verb}
+      return "ok"
+    end if
+    if (runningApps contains "Music") then
+      tell application "Music" to ${verb}
+      return "ok"
+    end if
+    return "no-player"
+  `
+  return new Promise((resolve) => {
+    exec(`osascript -e ${JSON.stringify(script)}`, { timeout: 5_000 }, (err, stdout) => {
+      const out = (stdout || '').trim()
+      if (err) return resolve({ ok: false, error: err.message })
+      if (out === 'no-player') return resolve({ ok: false, error: '没有在跑的音乐应用（Music/Spotify）' })
+      resolve({ ok: true })
+    })
+  })
+}
+
 export function startMusicWatch(onChange?: (info: MusicInfo) => void): void {
   if (timer) return
   if (onChange) listeners.push(onChange)
