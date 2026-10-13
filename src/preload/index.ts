@@ -44,7 +44,7 @@ const api = {
   onMessageIncoming: on<{ app: string; unread: number; text: string; ts: number }>('message:incoming'),
   detachPanes: () => ipcRenderer.invoke('panes:detach'),
   attachPanes: () => ipcRenderer.invoke('panes:attach'),
-  setPaneIgnore: (ignore: boolean) => ipcRenderer.invoke('panes:setIgnore', ignore),
+  setPaneIgnore: (ignore: boolean) => ipcRenderer.send('panes:setIgnore', ignore),
   panesState: () => ipcRenderer.invoke('panes:state'),
   winMinimize: () => ipcRenderer.invoke('win:minimize'),
   winHideMain: () => ipcRenderer.invoke('win:hideMain'),

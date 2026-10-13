@@ -64,16 +64,26 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   // 工作台拆出（v10）：pane=paper=独立右页窗；主窗监听拆出态显示占位
   const paneMode = useMemo(() => new URLSearchParams(window.location.search).get('pane'), [])
   // 玻璃片穿透命中：forward 模式下渲染层仍收 mousemove——指针在玻璃片容器内=可交互，片外=穿透
+  // 去重（v10 修）：状态不变绝不调 IPC（mousemove 高频，invoke 风暴会导致点击/键盘事件堆积丢失）
   useEffect(() => {
     if (!paneMode) return
+    let last: boolean | null = null
+    const setIgnore = (ignore: boolean): void => {
+      if (last === ignore) return
+      last = ignore
+      void window.api?.setPaneIgnore?.(ignore)
+    }
     const onMove = (e: MouseEvent): void => {
       const el = document.elementFromPoint(e.clientX, e.clientY)
       // 玻璃片=实体纸片：容器内（含空白背景）一律可交互；只有片外透明区穿透
       const interactive = !!el?.closest('[data-interactive]')
-      void window.api?.setPaneIgnore?.(!interactive)
+      setIgnore(!interactive)
     }
     window.addEventListener('mousemove', onMove)
-    return () => window.removeEventListener('mousemove', onMove)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      setIgnore(false)
+    }
   }, [paneMode])
   const [detached, setDetached] = useState(false)
   const [sessions, setSessions] = useState<ChatSession[]>([])

@@ -445,9 +445,8 @@ app.whenReady().then(() => {
     attachPanes()
     return true
   })
-  ipcMain.handle('panes:setIgnore', (_e, ignore: boolean) => {
+  ipcMain.on('panes:setIgnore', (_e, ignore: boolean) => {
     setPaneIgnore(ignore)
-    return true
   })
   ipcMain.handle('win:minimize', () => {
     minimizeMain()
