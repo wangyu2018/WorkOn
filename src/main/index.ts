@@ -2,7 +2,7 @@
  * WorkOn 主进程入口
  * 启动顺序：设置 → 存储 → 窗口 → 监控 → 集成服务 → 托盘 → 快捷键 → 周期任务
  */
-import { app, BrowserWindow, Notification, ipcMain } from 'electron'
+import { app, BrowserWindow, Notification, ipcMain, Menu } from 'electron'
 import { initSettings, getSettings, setSettings } from './settings'
 import { initDb, flushNow, loadActivitiesDeferred } from './db'
 import { createMainWindow, createWidgetWindow, createPetWindow, createSplashWindow, closeSplash, sendTo, broadcast, widgetWindow, mainWindow, createTodoWidgetWindow, createWorkbenchWindow, attachWorkbench, isWorkbenchDetached, detachPanes, attachPanes, setPaneIgnore, panesState, snapPanes, collapsePane, expandPane, paneCollapsed, minimizeMain, hideMainToTray, hideWorkbench, setPaneTop } from './windows'
@@ -314,6 +314,10 @@ app.whenReady().then(() => {
 
   // 尽早建窗：后续清理/IPC/探针再慢也不挡首屏
   const showSplash = getSettings().showSplash !== false
+  // Windows frameless 窗粘贴修复：无应用菜单时 Ctrl+C/V/X 加速器失效——注册编辑/窗口角色
+  if (process.platform !== 'darwin') {
+    Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'editMenu' }, { role: 'windowMenu' }]))
+  }
   const splashAt = Date.now()
   try {
     if (showSplash) createSplashWindow()
