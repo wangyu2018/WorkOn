@@ -32,7 +32,7 @@ function hhmm(ts: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-function TodayPlansBlock(props: { plans: PlanItem[]; onToggle: (p: PlanItem) => void; kick?: (p: { blockKey: string; extra?: JSX.Element }) => JSX.Element; pinned?: boolean; hidden?: boolean }): JSX.Element | null {
+function TodayPlansBlock(props: { plans: PlanItem[]; onToggle: (p: PlanItem) => void; kick?: (p: { blockKey: string; extra?: JSX.Element }) => JSX.Element; pinned?: boolean; hidden?: boolean; onContextAsk?: (key: 'plans', q: string) => void }): JSX.Element | null {
   const today = new Date()
   const [expanded, setExpanded] = useState(false)
   if (props.hidden) return null
@@ -50,6 +50,7 @@ function TodayPlansBlock(props: { plans: PlanItem[]; onToggle: (p: PlanItem) => 
         <span>· {done}/{list.length}</span>
         <span className="acts">
           {props.kick ? props.kick({ blockKey: 'plans', extra: <button onClick={() => setShowSrc(!showSrc)} title="数据源">源</button> }) : null}
+          <button className="blk-chat" title="就这块开个会话" onClick={() => props.onContextAsk?.('plans', '今天的计划排得怎么样')}>对话</button>
         </span>
       </div>
       {showSrc ? (
@@ -108,7 +109,7 @@ function NowBlock(props: { presence: PresenceSnapshot | null; kick?: (p: { block
   )
 }
 
-function TimelineBlock(props: { trail: TrailSegment[]; days: number; kick?: (p: { blockKey: string; extra?: JSX.Element }) => JSX.Element; pinned?: boolean; hidden?: boolean }): JSX.Element | null {
+function TimelineBlock(props: { trail: TrailSegment[]; days: number; kick?: (p: { blockKey: string; extra?: JSX.Element }) => JSX.Element; pinned?: boolean; hidden?: boolean; onContextAsk?: (key: 'timeline', q: string) => void }): JSX.Element | null {
   const days = props.days
   const [expanded, setExpanded] = useState(false)
   const [showSrc, setShowSrc] = useState(false)
@@ -133,7 +134,10 @@ function TimelineBlock(props: { trail: TrailSegment[]; days: number; kick?: (p: 
         <span>· 最近 {segs.length} 段</span>
         {days !== 1 ? <span className="aura-mark">◇ 已调</span> : null}
         <span className="acts">
-          {props.kick ? props.kick({ blockKey: 'timeline', extra: <button onClick={() => setShowSrc(!showSrc)} title="数据源">源</button> }) : null}
+          <span className="acts">
+            {props.kick ? props.kick({ blockKey: 'timeline', extra: <button onClick={() => setShowSrc(!showSrc)} title="数据源">源</button> }) : null}
+            <button className="blk-chat" title="就这块开个会话" onClick={() => props.onContextAsk?.('timeline', '最近我的轨迹怎么样，有什么规律')}>对话</button>
+          </span>
         </span>
       </div>
       {showSrc ? (
@@ -332,6 +336,7 @@ function GoalsBlock(props: {
   kick?: (p: { blockKey: string; extra?: JSX.Element }) => JSX.Element
   pinned?: boolean
   hidden?: boolean
+  onContextAsk?: (key: 'goals', q: string) => void
 }): JSX.Element | null {
   const actives = props.goals.filter((v) => v.goal.status === 'active')
   if (props.hidden || actives.length === 0) return null // 空自动隐藏
@@ -342,6 +347,7 @@ function GoalsBlock(props: {
         <span>· {actives.length} 条在轨</span>
         <span className="acts">
           {props.kick ? props.kick({ blockKey: 'goals' }) : null}
+          <button className="blk-chat" title="就这个目标开个会话" onClick={() => props.onContextAsk?.('goals', '我的目标现在进展如何')}>对话</button>
         </span>
         <span className="acts"><button>留住</button><button>×</button></span>
       </div>
@@ -551,6 +557,8 @@ export function PaperPane(props: {
   onHideToTray?: () => void
   reminders?: Array<{ id: string; title: string; atHHMM?: string; recurring?: string; origin?: string; enabled?: boolean }>
   onReminderRemoved?: (id: string) => void
+  /** 框即会话（v10 简化模型）：块→左栏切换上下文并预填 */
+  onContextAsk?: (key: 'timeline' | 'plans' | 'goals' | 'reminders', q: string) => void
   aiConfigOpen?: boolean
   onCloseAiConfig?: () => void
   onAiConfigSaved?: () => void

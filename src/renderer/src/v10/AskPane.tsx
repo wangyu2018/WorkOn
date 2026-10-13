@@ -12,6 +12,7 @@ import { renderMarkdown } from './md'
 import { detectStructured, StructuredCard } from './structured'
 import { MindMap } from './mindmap'
 import { Shrinkable } from './Shrinkable'
+import { SESSION_CONTEXTS, type ContextKey } from './sessionContext'
 
 /** 你的话/AI 的话 */
 export interface ChatMsg {
@@ -257,6 +258,9 @@ export function AskPane(props: {
   onSandboxGen?: (srcText: string) => void
   /** 玻璃片模式（pane=ask）：控制条按钮 */
   glassControls?: boolean
+  /** 会话上下文（v10 简化模型：框即 session） */
+  activeContext?: ContextKey
+  onSetContext?: (k: ContextKey) => void
 }): JSX.Element {
   const [draft, setDraft] = useState('')
   const [dropHot, setDropHot] = useState(false)
@@ -369,6 +373,19 @@ export function AskPane(props: {
 
   return (
     <aside className="v10-ask">
+      {/* 会话上下文切换条（v10 简化模型：框即 session） */}
+      <div className="v10-ctxbar">
+        {SESSION_CONTEXTS.map((c) => (
+          <button
+            key={c.key}
+            className={`ctx-chip${(props.activeContext ?? 'general') === c.key ? ' on' : ''}`}
+            onClick={() => props.onSetContext?.(c.key)}
+            title={`切换到「${c.label}」会话——问答自动带上这份数据`}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
       {props.glassControls ? (
         <div className="v10-sesstop" style={{ paddingBottom: 4 }}>
           <span className="ses-title" style={{ fontWeight: 600 }}>WorkOn · 问</span>

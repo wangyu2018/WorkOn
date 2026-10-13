@@ -868,3 +868,22 @@
 .v10-aicfg .dc-btn { align-self: flex-start; margin-top: 2px; }
 .v10-msg-ai-wrap { position: relative; }
 .v10-msg-ai-wrap .v10-msgdots { position: absolute; right: 0; top: -2px; }
+
+/* ── 会话上下文切换条（框即 session） ─────────────────── */
+.v10-ctxbar {
+  display: flex; gap: 5px; padding: 8px 14px 0; flex-wrap: wrap;
+}
+.ctx-chip {
+  border: 1px solid var(--hairline-2); background: none; color: var(--ink-3);
+  font-size: 11px; padding: 3px 12px; border-radius: 999px; cursor: pointer; font-family: var(--font-ui);
+  transition: all 120ms;
+}
+.ctx-chip:hover { border-color: var(--teal); color: var(--teal-ink); }
+.ctx-chip.on {
+  background: var(--ink); color: var(--paper); border-color: var(--ink); font-weight: 500;
+}
+.acts .blk-chat, .blk-chat {
+  border: none; background: none; color: var(--teal-ink);
+  font-size: 11px; cursor: pointer; padding: 0; font-family: var(--font-ui);
+}
+.blk-chat:hover { text-decoration: underline; }

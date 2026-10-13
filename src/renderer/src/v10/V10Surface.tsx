@@ -9,6 +9,7 @@ import type { PlanItem, TrailSegment, PresenceSnapshot, GoalView, GoalDraft, Cha
 import { AskPane, type ChatMsg, type ObjectChipData, type QuoteChipData } from './AskPane'
 import { PaperPane, type FeedItem } from './PaperPane'
 import { parseReminderIntent, parseGoalIntent, parseScheduleProposal } from './nlu'
+import { withContext, type ContextKey } from './sessionContext'
 
 import { FlowMap } from './FlowMap'
 import './v10.css'
@@ -61,6 +62,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const [sandboxBlock, setSandboxBlock] = useState<{ id: string; title: string; html: string; css: string } | null>(null)
   const [sandboxLoading, setSandboxLoading] = useState(false)
   const [aiConfigOpen, setAiConfigOpen] = useState(false)
+  const [activeContext, setActiveContext] = useState<ContextKey>('general')
   // 工作台拆出（v10）：pane=paper=独立右页窗；主窗监听拆出态显示占位
   const paneMode = useMemo(() => new URLSearchParams(window.location.search).get('pane'), [])
   // 玻璃片穿透命中：forward 模式下渲染层仍收 mousemove——指针在玻璃片容器内=可交互，片外=穿透
@@ -318,7 +320,11 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       const text = raw.trim()
       if (!text || asking) return
       // 引用芯片：把拖进来的内容作为上下文附给回答（会话框不是主要阅读区，补充要顺手）
-      const quoted = quoteChip ? `（关于我拖进来的内容：「${quoteChip.text.slice(0, 200)}」）\n\n${text}` : text
+      let quoted = quoteChip ? `（关于我拖进来的内容：「${quoteChip.text.slice(0, 200)}」）\n\n${text}` : text
+      // 会话上下文（v10 简化模型）：绑定框后问答自动带数据源摘要
+      if (activeContext !== 'general') {
+        quoted = withContext(activeContext, quoted, { trail, plans, goals, reminders })
+      }
       setChat((c) => [...c, { role: 'user', text }])
       if (activeSessionId) void window.api?.addSessionItem?.(activeSessionId, { role: 'user', text, time: Date.now() })
 
@@ -688,7 +694,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       })
       void window.api?.askQAStream?.(quoted)
     },
-    [asking, reminders, objectChip, blockParams, reloadGoals, pushAI, activeSessionId, quoteChip]
+    [asking, reminders, objectChip, blockParams, reloadGoals, pushAI, activeSessionId, quoteChip, activeContext, trail, plans, goals]
   )
 
   const markAnchor = useCallback(
@@ -794,6 +800,14 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         onClearQuote={() => setQuoteChip(null)}
         onQuoteDrop={(q) => setQuoteChip(q)}
         onPrefill={(q) => setPrefillText(q)}
+        activeContext={activeContext}
+        onSetContext={(k) => {
+          setActiveContext(k)
+          if (k !== 'general') {
+            const label = { general: '通用', timeline: '轨迹', plans: '计划', goals: '人生预期', reminders: '提醒' }[k]
+            pushAI([{ role: 'ai', text: `切到「${label}」会话了——现在问的都是关于${label}的事，数据我自动带上。` }])
+          }
+        }}
         prefillText={prefillText}
         onPrefillConsumed={() => setPrefillText(null)}
         sessions={sessions}
