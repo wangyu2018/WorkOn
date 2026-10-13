@@ -76,13 +76,18 @@
   overflow-y: auto;
   padding: 18px 18px 10px;
 }
-/* 你的话 = 2px 墨竖线引文，无气泡 */
+/* 你的话 = 右对齐青瓷气泡（聊天布局：AI 靠左，你靠右——2026-10-13 拍板） */
 .v10-msg-user {
-  border-left: 2px solid var(--ink-3);
-  padding: 2px 0 2px 12px;
-  margin: 10px 0;
+  margin: 10px 0 10px auto;
+  max-width: 82%;
+  background: var(--celadon-1);
+  border: 1px solid var(--celadon-3);
+  border-radius: 12px 12px 2px 12px;
+  padding: 8px 13px;
   color: var(--ink);
   line-height: 1.65;
+  width: fit-content;
+  box-sizing: border-box;
 }
 /* AI 答 = ◇ aura kick + prose */
 .v10-msg-ai {
@@ -845,3 +850,5 @@
 }
 .v10-aicfg input:focus { border-color: var(--teal); }
 .v10-aicfg .dc-btn { align-self: flex-start; margin-top: 2px; }
+.v10-msg-ai-wrap { position: relative; }
+.v10-msg-ai-wrap .v10-msgdots { position: absolute; right: 0; top: -2px; }
