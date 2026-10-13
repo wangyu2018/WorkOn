@@ -764,6 +764,11 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           onReminderRemoved={(id) => setReminders((list) => list.filter((x) => x.id !== id))}
           mindMapText={mindMapText}
           onCloseMindMap={() => setMindMapText(null)}
+          onQuoteFeed={(t) => setQuoteChip({ text: t, from: '折下' })}
+          onContextAsk={(k, q) => {
+            setActiveContext(k as ContextKey)
+            setPrefillText(q)
+          }}
           aiConfigOpen={aiConfigOpen}
           onCloseAiConfig={() => setAiConfigOpen(false)}
           onAiConfigSaved={() => { setAiOn(true); setAiConfigOpen(false) }}
@@ -866,6 +871,11 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         aiConfigOpen={aiConfigOpen}
         onCloseAiConfig={() => setAiConfigOpen(false)}
         onAiConfigSaved={() => { setAiOn(true); setAiConfigOpen(false) }}
+        onQuoteFeed={(t) => setQuoteChip({ text: t, from: '折下' })}
+        onContextAsk={(k, q) => {
+          setActiveContext(k as ContextKey)
+          setPrefillText(q)
+        }}
         pane={detached ? 'detached' : 'main'}
         onAttach={() => void window.api?.attachWorkbench?.()}
         onDetach={() => void window.api?.detachWorkbench?.()}
