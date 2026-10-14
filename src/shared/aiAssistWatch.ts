@@ -46,7 +46,12 @@ export const AI_ASSIST_POOL: { key: string; label: string }[] = [
   { key: 'workbuddy', label: 'WorkBuddy' },
   { key: 'codefuse', label: 'CodeFuse' },
   { key: 'autoglm', label: 'AutoGLM' },
-  { key: 'devpilot', label: 'DevPilot' }
+  { key: 'devpilot', label: 'DevPilot' },
+  { key: 'devin', label: 'Devin' },
+  { key: 'dumate', label: 'DuMate' },
+  { key: 'qianwen', label: '千问办公' },
+  { key: 'tongyi', label: '通义' },
+  { key: 'qwen', label: 'Qwen' }
 ]
 
 /** 窗口标题像「正在生成 / Agent 跑着」 */
