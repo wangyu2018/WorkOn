@@ -17,20 +17,32 @@ export interface AiAssistItem {
 
 /** 默认可选池（未进监控行的候选） */
 export const AI_ASSIST_POOL: { key: string; label: string }[] = [
+  // ── 国际 ──
   { key: 'cursor', label: 'Cursor' },
   { key: 'claude', label: 'Claude' },
   { key: 'chatgpt', label: 'ChatGPT' },
   { key: 'windsurf', label: 'Windsurf' },
-  { key: 'trae', label: 'Trae' },
-  { key: 'zcode', label: 'ZCode' },
   { key: 'codex', label: 'Codex' },
+  { key: 'gemini', label: 'Gemini' },
+  { key: 'copilot', label: 'Copilot' },
   { key: 'cline', label: 'Cline' },
+  { key: 'augment', label: 'Augment' },
+  { key: 'aider', label: 'Aider' },
+  { key: 'openhands', label: 'OpenHands' },
+  // ── 国内 ──
+  { key: 'trae', label: 'Trae' },
+  { key: 'traecn', label: 'Trae CN' },
   { key: 'codebuddy', label: 'CodeBuddy' },
+  { key: 'zcode', label: 'ZCode' },
+  { key: 'lingma', label: '通义灵码' },
+  { key: 'comate', label: '文心快码' },
+  { key: 'codegeex', label: 'CodeGeeX' },
+  { key: 'marscode', label: 'MarsCode' },
+  { key: 'fitten', label: 'Fitten Code' },
   { key: 'opencode', label: 'OpenCode' },
   { key: 'qoder', label: 'Qoder' },
-  { key: 'gemini', label: 'Gemini' },
   { key: 'kimi', label: 'Kimi' },
-  { key: 'aider', label: 'Aider' }
+  { key: 'iflycode', label: 'iFlyCode' }
 ]
 
 /** 窗口标题像「正在生成 / Agent 跑着」 */
