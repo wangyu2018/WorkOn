@@ -644,8 +644,12 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         return
       }
 
-      // ── 常规问答：流式（OpenIntelligentUI 模式——边生成边读）+ 会话写回 ──
+      // ── 常规问答：AI 配置后走流式（边生成边读）；未配置走稳定同步路径 ──
       setAsking(true)
+      // 超时兜底（v10 修）：流式事件丢失时 15s 自动解锁，asking 永不卡死
+      const askingGuard = window.setTimeout(() => {
+        setAsking(false)
+      }, 15_000)
       const streamId = `ai${Date.now()}`
       let acc = ''
       const offChunk = window.api?.onAIStreamChunk?.((p) => {
@@ -677,6 +681,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           return [...c, { id: streamId, role: 'ai' as const, text: content, options: opts }]
         })
         if (activeSessionId) void window.api?.addSessionItem?.(activeSessionId, { role: 'ai', text: content, time: Date.now() })
+        window.clearTimeout(askingGuard)
         offChunk?.()
         offDone?.()
         offErr?.()
@@ -686,12 +691,31 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       const offErr = window.api?.onAIStreamError?.((p) => {
         const msg = (p as { error?: string })?.error ?? ''
         pushAI([{ role: 'ai', text: `回答失败了（${msg.slice(0, 60)}）——已按原样告诉你，不悄悄换答案。` }])
+        window.clearTimeout(askingGuard)
         offChunk?.()
         offDone?.()
         offErr?.()
         setAsking(false)
         consumeQuote()
       })
+      // AI 未配置 → 稳定同步路径（流式通道的事件时序在本地模式下曾致 asking 卡死）
+      if (!aiOn) {
+        void window.api
+          ?.askQA?.(quoted)
+          .then((r) => {
+            const content = typeof r === 'string' ? r : ((r as { content?: string })?.content ?? '（没有回答）')
+            pushAI([{ role: 'ai', text: content, options: content.includes('这个问题需要 AI') ? ['⚙ 去配置 AI'] : undefined }])
+          })
+          .catch(() => {
+            pushAI([{ role: 'ai', text: '这个问题暂时答不上来。' }])
+          })
+          .finally(() => {
+            window.clearTimeout(askingGuard)
+            setAsking(false)
+            consumeQuote()
+          })
+        return
+      }
       void window.api?.askQAStream?.(quoted)
     },
     [asking, reminders, objectChip, blockParams, reloadGoals, pushAI, activeSessionId, quoteChip, activeContext, trail, plans, goals]

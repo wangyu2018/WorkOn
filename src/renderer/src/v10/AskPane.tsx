@@ -533,6 +533,12 @@ export function AskPane(props: {
           onDragLeave={() => setDropHot(false)}
           onDrop={handleDrop}
           onKeyDown={(e) => {
+            // Ctrl/Cmd+Enter 备用发送（输入法组合态吃 Enter 时的兜底）
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+              e.preventDefault()
+              submit()
+              return
+            }
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault()
               submit()
