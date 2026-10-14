@@ -42,7 +42,11 @@ export const AI_ASSIST_POOL: { key: string; label: string }[] = [
   { key: 'opencode', label: 'OpenCode' },
   { key: 'qoder', label: 'Qoder' },
   { key: 'kimi', label: 'Kimi' },
-  { key: 'iflycode', label: 'iFlyCode' }
+  { key: 'iflycode', label: 'iFlyCode' },
+  { key: 'workbuddy', label: 'WorkBuddy' },
+  { key: 'codefuse', label: 'CodeFuse' },
+  { key: 'autoglm', label: 'AutoGLM' },
+  { key: 'devpilot', label: 'DevPilot' }
 ]
 
 /** 窗口标题像「正在生成 / Agent 跑着」 */
