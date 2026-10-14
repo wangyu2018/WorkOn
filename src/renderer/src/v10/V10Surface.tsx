@@ -177,7 +177,8 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       ])
     })
     // signals（v10）：消息监控来件 → 对话流来件卡；音乐切歌 → 折下轻通知
-    const offM = window.api?.onMessageIncoming?.((p) => {
+    const offM = window.api?.onMessageIncoming?.((raw) => {
+      const p = raw as { app: string; label?: string; unread: number; via?: string; text: string; messages?: Array<{ sender?: string; text: string }>; ts: number }
       // 来件含时间+事件（「明天3点有个评审」）→ 直接提议提醒（拆路第六去向的自动化）
       const prop = parseScheduleProposal(p.text)
       if (prop) {
@@ -187,7 +188,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
             ...c,
             {
               role: 'ai' as const,
-              text: `◇ 来件 · ${p.app}：${p.text.slice(0, 80)}\n→ 识别到 ${prop.whenLabel} 有「${prop.event}」——${prop.isMeeting ? '到点我会看你是否已入会；' : ''}要我提醒你吗？`,
+              text: `◇ 来件 · ${p.label ?? p.app}（${p.via === 'uia' ? 'UIA 读取' : '截屏识别'}）\n${p.text.slice(0, 100)}\n→ 识别到 ${prop.whenLabel} 有「${prop.event}」——${prop.isMeeting ? '到点我会看你是否已入会；' : ''}要我提醒你吗？`,
               options: opts
             }
           ]
@@ -197,9 +198,11 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         })
         return
       }
+      const msgs = (p.messages ?? []).map((m) => (m.sender ? `${m.sender}：${m.text}` : m.text))
+      const body = msgs.length ? msgs.join('\n') : p.text.slice(0, 200)
       setChat((c) => [
         ...c,
-        { role: 'ai', text: `◇ 来件 · ${p.app}（未读 ${p.unread}）\n${p.text.slice(0, 200)}`, options: ['知道了', '引用继续聊'] }
+        { role: 'ai', text: `◇ 来件 · ${p.label ?? p.app}（未读 ${p.unread}）\n${body}`, options: ['知道了', '引用继续聊'] }
       ])
     })
     const offMu = window.api?.onMusicChanged?.((m) => {

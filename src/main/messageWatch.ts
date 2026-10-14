@@ -1,39 +1,83 @@
 /**
- * 消息监控（v10 signals·消息信号，隐私红线内）：
- * IM 应用（微信/企业微信/QQ/钉钉/飞书）标题未读数上升 → 截屏 OCR →
- * 来件内容广播到 v10 对话流（jev-route 提议通道的前置感知层）。
+ * 消息中心 v2（v10 signals·消息信号）：
+ * L1 未读信号（标题多格式）→ L2 窗口级捕获 OCR（只认 IM 窗口内容）→
+ * L3 Windows UIA 读消息列表（失败/非 Windows 回落 OCR）。
  *
- * 隐私红线（SIGNALS-ARCHITECTURE 同源）：
- * - 默认关闭（messageWatchEnabled=false），用户显式开启才工作
- * - 只监控白名单 IM 的「未读数变化」信号，不是持续读屏
- * - OCR 文本只进本地对话流，绝不出网
+ * 隐私红线：默认关（messageWatchEnabled）；只监控白名单 IM；文本只进本地对话流。
+ * payload 增强：{ app, label, unread, via, text, messages:[{sender?,text}], ts }
  */
+import { desktopCapturer } from 'electron'
 import { getSettings } from './settings'
 import { presence } from './presence'
 import { recognizePngBuffer } from './ocrEngine'
-import { desktopCapturer } from 'electron'
 import { sendTo } from './windows'
 
-const IM_PATTERNS: Array<{ match: RegExp; label: string }> = [
+export interface IncomingMessageItem {
+  sender?: string
+  text: string
+}
+export interface IncomingPayload {
+  app: string
+  label: string
+  unread: number
+  via: 'uia' | 'ocr'
+  text: string
+  messages: IncomingMessageItem[]
+  ts: number
+}
+
+/** IM 识别表（可扩展） */
+export const IM_PATTERNS: Array<{ match: RegExp; label: string }> = [
   { match: /^(微信|WeChat)/i, label: '微信' },
   { match: /^(企业微信|WeCom)/i, label: '企业微信' },
-  { match: /^(QQ)/i, label: 'QQ' },
+  { match: /^QQ/i, label: 'QQ' },
   { match: /^(钉钉|DingTalk)/i, label: '钉钉' },
-  { match: /^(飞书|Lark)/i, label: '飞书' }
+  { match: /^(飞书|Lark)/i, label: '飞书' },
+  { match: /^Telegram/i, label: 'Telegram' },
+  { match: /^(Outlook|网易邮箱大师)/i, label: '邮箱' }
 ]
-/** 标题未读数：「微信(3)」「企业微信(12)」 */
-const UNREAD_RE = /[(（]\s*(\d+)\s*[)）]/
+
+/** L1：标题未读数——多格式放宽：(3) 【3】 [3] 「3」 ·3 */
+const UNREAD_RES = [
+  /[(（]\s*(\d+)\s*[)）]/,
+  /[【\[]\s*(\d+)\s*[】\]]/,
+  /[「『]\s*(\d+)\s*[」』]/,
+  /·\s*(\d+)\s*$/
+]
+
+export function detectUnread(title: string): number | null {
+  for (const re of UNREAD_RES) {
+    const m = re.exec(title ?? '')
+    if (m) return parseInt(m[1], 10)
+  }
+  return null
+}
+
+/** OCR 文本清洗+消息切分（L2 增强）：滤时间/系统行，启发发送者 */
+export function splitOcrMessages(lines: string[]): IncomingMessageItem[] {
+  const SYS_RE = /^(微信|WeChat|QQ|钉钉|飞书|企业微信|拍一拍|撤回了一条消息|重新编辑|\d{1,2}:\d{2}|昨天|星期)/
+  const out: IncomingMessageItem[] = []
+  for (const raw of lines) {
+    const line = raw.replace(SYS_RE, '').trim()
+    if (line.length < 2) continue
+    const sm = /^([^:：]{1,12})\s*[:：]\s*(.+)$/.exec(line)
+    if (sm) out.push({ sender: sm[1], text: sm[2] })
+    else out.push({ text: line })
+    if (out.length >= 8) break
+  }
+  return out
+}
 
 let timer: NodeJS.Timeout | null = null
 const lastUnread = new Map<string, number>()
-const lastOcrAt = new Map<string, number>()
+const lastCaptureAt = new Map<string, number>()
 const THROTTLE_MS = 90_000
 
-type IncomingHandler = (p: { app: string; unread: number; text: string; ts: number }) => void
+type IncomingHandler = (p: IncomingPayload) => void
 let handler: IncomingHandler | null = null
 type HintHandler = (app: string) => void
 let hintHandler: HintHandler | null = null
-let hinted = false // 每次启动只提示一次（可接管消息）
+let hinted = false
 
 export function initMessageWatch(onIncoming: IncomingHandler, onHint?: HintHandler): void {
   handler = onIncoming
@@ -43,7 +87,7 @@ export function initMessageWatch(onIncoming: IncomingHandler, onHint?: HintHandl
 export function startMessageWatch(): void {
   if (timer) return
   timer = setInterval(poll, 8_000)
-  console.info('[messageWatch] 已启动（IM 未读数信号）')
+  console.info('[messageWatch] 已启动（L1 未读 → L2 窗口 OCR → L3 UIA）')
 }
 
 export function stopMessageWatch(): void {
@@ -56,12 +100,13 @@ export function stopMessageWatch(): void {
 async function poll(): Promise<void> {
   const s = getSettings()
   const snap = presence.getSnapshot()
-  // 可接管提示（一次性）：检测到 IM 前台但监控未开 → 告诉用户能力存在（不擅自开）
+  // 可接管提示（一次性）：IM 前台但监控未开
   if (!s.messageWatchEnabled && !hinted && hintHandler) {
-    const imFront = (snap.screens ?? []).some((sc) => IM_PATTERNS.some((p) => p.match.test(sc.app ?? '')))
-    if (imFront) {
+    const imScreen = (snap.screens ?? []).find((sc) => IM_PATTERNS.some((p) => p.match.test(sc.app ?? '')))
+    if (imScreen) {
       hinted = true
-      hintHandler((snap.screens ?? []).find((sc) => IM_PATTERNS.some((p) => p.match.test(sc.app ?? '')))!.app)
+      const label = IM_PATTERNS.find((p) => p.match.test(imScreen.app ?? ''))?.label ?? imScreen.app
+      hintHandler(label)
     }
   }
   if (!s.messageWatchEnabled) return
@@ -69,42 +114,62 @@ async function poll(): Promise<void> {
     const app = sc.app ?? ''
     const pat = IM_PATTERNS.find((p) => p.match.test(app))
     if (!pat) continue
-    const m = UNREAD_RE.exec(sc.title ?? '')
-    if (!m) continue
-    const unread = parseInt(m[1], 10)
+    const unread = detectUnread(sc.title ?? '')
+    if (unread === null) continue
     const prev = lastUnread.get(app)
     lastUnread.set(app, unread)
     if (prev === undefined || unread <= prev) continue
-    // 未读上升：节流后触发截屏 OCR
-    const last = lastOcrAt.get(app) ?? 0
+    const last = lastCaptureAt.get(app) ?? 0
     if (Date.now() - last < THROTTLE_MS) continue
-    lastOcrAt.set(app, Date.now())
-    console.info(`[messageWatch] ${pat.label} 未读 ${prev}→${unread}，截屏识别`)
-    void captureAndRecognize(pat.label)
-      .then((text) => {
-        if (!text) return
-        handler?.({ app: pat.label, unread, text, ts: Date.now() })
+    lastCaptureAt.set(app, Date.now())
+    console.info(`[messageWatch] ${pat.label} 未读 ${prev}→${unread}，采集中`)
+    void captureIncoming(pat.label, app, unread)
+      .then((payload) => {
+        if (!payload) return
+        handler?.(payload)
       })
-      .catch(() => { /* OCR 失败静默 */ })
+      .catch(() => { /* ignore */ })
   }
 }
 
-async function captureAndRecognize(source: string): Promise<string | null> {
-  try {
+/** L2：窗口级捕获（title 匹配 IM 窗口，非全屏）→ OCR → 切分 */
+async function captureIncoming(label: string, app: string, unread: number): Promise<IncomingPayload | null> {
+  let via: 'uia' | 'ocr' = 'ocr'
+  let text = ''
+  let messages: IncomingMessageItem[] = []
+
+  // L3 尝试（Windows）：UIA 读 IM 窗口文本叶子（微信3.x/QQ 可读性好）
+  if (process.platform === 'win32') {
+    try {
+      const { readIMWindowText } = (await import('./uiaMessages')) as typeof import('./uiaMessages')
+      const uia = await readIMWindowText(app)
+      if (uia && uia.length) {
+        via = 'uia'
+        messages = uia
+        text = uia.map((m) => (m.sender ? `${m.sender}：${m.text}` : m.text)).join('\n')
+      }
+    } catch { /* UIA 失败回落 OCR */ }
+  }
+
+  // L2 回落：窗口捕获 + OCR
+  if (!messages.length) {
     const sources = await desktopCapturer.getSources({
-      types: ['screen'],
-      thumbnailSize: { width: 1280, height: 720 }
+      types: ['window'],
+      thumbnailSize: { width: 1600, height: 1200 },
+      fetchWindowIcons: false
     })
-    if (!sources.length) return null
-    const png = sources[0].thumbnail.toPNG()
+    const win = sources.find((w) => {
+      const t = (w.name ?? '').toLowerCase()
+      return t.includes(label.toLowerCase()) || t.includes(app.toLowerCase())
+    })
+    if (!win) return null
+    const png = win.thumbnail.toPNG()
     const r = await recognizePngBuffer(png)
     if (r.error || !r.lines?.length) return null
-    // 清洗：取后半（消息区通常在下半屏），过滤系统 UI 词
-    const lines = r.lines.filter((l) => l.trim().length > 1)
-    const tail = lines.slice(-12).join('\n')
-    return tail || null
-  } catch (e) {
-    console.warn('[messageWatch] 截屏识别失败', e)
-    return null
+    messages = splitOcrMessages(r.lines)
+    text = r.lines.slice(-14).join('\n')
   }
+
+  if (!text) return null
+  return { app, label, unread, via, text, messages, ts: Date.now() }
 }

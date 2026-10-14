@@ -41,7 +41,7 @@ const api = {
   attachWorkbench: () => ipcRenderer.invoke('workbench:attach'),
   workbenchState: () => ipcRenderer.invoke('workbench:state'),
   onWorkbenchState: on<{ detached: boolean }>('workbench:state'),
-  onMessageIncoming: on<{ app: string; unread: number; text: string; ts: number }>('message:incoming'),
+  onMessageIncoming: on<{ app: string; label?: string; unread: number; via?: string; text: string; messages?: Array<{ sender?: string; text: string }>; ts: number }>('message:incoming'),
   detachPanes: () => ipcRenderer.invoke('panes:detach'),
   attachPanes: () => ipcRenderer.invoke('panes:attach'),
   setPaneIgnore: (ignore: boolean) => ipcRenderer.send('panes:setIgnore', ignore),
