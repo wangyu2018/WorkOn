@@ -148,7 +148,7 @@ function NowBlock(props: { presence: PresenceSnapshot | null; kick?: (p: { block
         <div className="v10-srcnote">数据源：presence 引擎（窗口采样 5s + winInfo/winInfoMac）· 状态判定 13 态</div>
       ) : null}
       <div className="v10-block-hero">
-        {s ? `${STATE_LABEL[s]}` : '—'}
+        {s ? (s === 'other' ? displayApp(main?.app ?? '') || STATE_LABEL[s] : STATE_LABEL[s]) : '—'}
         <small>{focusSub}</small>
       </div>
       <div className="v10-block-meta">
