@@ -102,14 +102,16 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const [detached, setDetached] = useState(false)
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
-  /** 会话中所有 AI 回复统一走这里（纯数据入参；IPC 绝不放 setChat updater——StrictMode 双调用会双写） */
+  /** 会话中所有回复统一走这里（纯数据入参；IPC 绝不放 setChat updater——StrictMode 双调用会双写）
+   *  BUG-14/19 修：会话态 → 追加到该会话 items（视图即刷新）+ 落库，绝不写全局 chat（防倒灌） */
   const pushAI = useCallback((msgs: ChatMsg[]) => {
-    setChat((c) => [...c, ...msgs])
     if (activeSessionId) {
-      for (const m of msgs) {
-        if (m.role === 'ai') void window.api?.addSessionItem?.(activeSessionId, { role: 'ai', text: m.text, time: Date.now() })
-      }
+      const items = msgs.map((m) => ({ role: (m.role === 'user' ? 'user' : 'ai') as 'user' | 'ai', text: m.text, time: Date.now() }))
+      setSessions((ss) => ss.map((s) => (s.id === activeSessionId ? { ...s, items: [...s.items, ...items] } : s)))
+      for (const it of items) void window.api?.addSessionItem?.(activeSessionId, it)
+      return
     }
+    setChat((c) => [...c, ...msgs])
   }, [activeSessionId])
 
   const reloadPlans = useCallback(() => {
@@ -293,7 +295,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       // 对象芯片挂载（AskPane drop 转发的内部协议，不上屏）
       if (raw.startsWith('__page__')) {
         setMindMapText(raw.slice(8))
-        setChat((c) => [...c, { role: 'ai', text: '思维导图落右页了——那边宽，看全貌。' }])
+        pushAI([{ role: 'ai', text: '思维导图落右页了——那边宽，看全貌。' }])
         return
       }
       if (raw.startsWith('__sandbox__')) {
@@ -323,7 +325,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       }
       if (raw === '__flowmap__') {
         setShowFlowMap(true)
-        setChat((c) => [...c, { role: 'ai', text: '状态导图落右页了——实线是你实际走过的，虚线是计划和锚点建议你去的地方。' }])
+        pushAI([{ role: 'ai', text: '状态导图落右页了——实线是你实际走过的，虚线是计划和锚点建议你去的地方。' }])
         return
       }
       if (raw.startsWith('__chip__')) {
@@ -340,13 +342,12 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       if (activeContext !== 'general') {
         quoted = withContext(activeContext, quoted, { trail, plans, goals, reminders })
       }
-      setChat((c) => [...c, { role: 'user', text }])
-      if (activeSessionId) void window.api?.addSessionItem?.(activeSessionId, { role: 'user', text, time: Date.now() })
+      pushAI([{ role: 'user', text }])
 
       // ── 全局撤销（v10 §4.C：块进化的可召回；无需重新拖芯片） ──
       if (/(换回来|撤销|还原)/.test(text)) {
         setBlockParams({ timelineDays: 1 })
-        setChat((c) => [...c, { role: 'ai', text: '换回今天的轨迹了。' }])
+        pushAI([{ role: 'ai', text: '换回今天的轨迹了。' }])
         return
       }
 
@@ -359,16 +360,10 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           const days = Math.max(1, Math.min(14, parseInt(daysMatch[2], 10)))
           const next: BlockParams = { ...blockParams, timelineDays: days as BlockParams['timelineDays'] }
           setBlockParams(next)
-          setChat((c) => [
-            ...c,
-            { role: 'ai', text: `好，轨迹改成最近 ${days} 天了（旧版本在账里，说「换回来」可召回）。` }
-          ])
+          pushAI([{ role: 'ai', text: `好，轨迹改成最近 ${days} 天了（旧版本在账里，说「换回来」可召回）。` }])
           return
         }
-        setChat((c) => [
-          ...c,
-          { role: 'ai', text: `收到——想调整「${chip.label}」。现在能听懂的：「最近 N 天」（时间窗）、「换回来」（撤销）。更多调整（换图表/改粒度）在学。` }
-        ])
+        pushAI([{ role: 'ai', text: `收到——想调整「${chip.label}」。现在能听懂的：「最近 N 天」（时间窗）、「换回来」（撤销）。更多调整（换图表/改粒度）在学。` }])
         return
       }
 
@@ -419,12 +414,16 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
               .then((d) => {
                 const draft = d as GoalDraft | null
                 if (!draft) {
-                  setChat((c) => [...c, { role: 'ai', text: '还是没拆出来——说得再具体点，或者直接说「算了」。' }])
+                  pushAI([{ role: 'ai', text: '还是没拆出来——说得再具体点，或者直接说「算了」。' }])
                   return
                 }
                 const anchorsText = draft.anchors.map((a) => `  · ${a.targetDate} ${a.title}`).join('\n')
                 const kw = draft.keywords.length ? `\n归因关键词：${draft.keywords.join('、')}` : ''
                 const opts = ['确认创建', '重新拆一版', '算了']
+                if (activeSessionId) {
+                  pushAI([{ role: 'ai', text: `重拆了一版（${draft.source === 'ai' ? 'AI' : '本地'}）：「${draft.event}」→ ${draft.deadline}\n每天应投入约 ${draft.dailyTargetMin} 分钟${kw}\n锚点轨迹：\n${anchorsText}\n（确认卡仅在主对话可点——回主对话说「确认创建」即可）。` }])
+                  return
+                }
                 setChat((c) => {
                   const next = [
                     ...c,
@@ -444,7 +443,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           consumeQuote()
         })
           } else {
-            setChat((c) => [...c, { role: 'ai', text: '好，不立了。' }])
+            pushAI([{ role: 'ai', text: '好，不立了。' }])
           }
           return
         }
@@ -470,12 +469,12 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         }
         if (picked.includes('晚 10 分钟')) {
           void window.api?.addReminder?.({ title: '稍后再提（延后 10 分钟）', recurring: 'once', atTs: Date.now() + 10 * 60_000 })
-          setChat((c) => [...c, { role: 'ai', text: '好，10 分钟后再提一次。' }])
+            pushAI([{ role: 'ai', text: '好，10 分钟后再提一次。' }])
         } else if (picked.includes('不用了')) {
           const last = reminders[reminders.length - 1]
           if (last) void window.api?.removeReminder?.(last.id)
           setReminders((list) => list.slice(0, -1))
-          setChat((c) => [...c, { role: 'ai', text: '行，这条不记了。' }])
+          pushAI([{ role: 'ai', text: '行，这条不记了。' }])
         } else if (picked.includes('下一首') || picked.includes('上一首') || picked.includes('播放/暂停')) {
           const action = picked.includes('下一首') ? 'next' : picked.includes('上一首') ? 'prev' : 'toggle'
           void window.api?.musicControl?.(action).then((r) => {
@@ -485,9 +484,9 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         } else if (picked.includes('配置 AI')) {
           // 右页内联接入卡（旧版 openMain 会被 v10 表面遮挡——统一走新流程）
           setAiConfigOpen(true)
-          setChat((c) => [...c, { role: 'ai', text: '接入卡在右页了——填 Key/BaseURL 保存就通（国内可用 DeepSeek/Kimi/GLM 的兼容端点）。' }])
+          pushAI([{ role: 'ai', text: '接入卡在右页了——填 Key/BaseURL 保存就通（国内可用 DeepSeek/Kimi/GLM 的兼容端点）。' }])
         } else {
-          setChat((c) => [...c, { role: 'ai', text: '好。' }])
+          pushAI([{ role: 'ai', text: '好。' }])
         }
         return
       }
@@ -496,6 +495,10 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       const proposal = parseScheduleProposal(normalized)
       if (proposal) {
         const lead = proposal.isMeeting ? '提前 5 分钟' : ''
+        if (activeSessionId) {
+          pushAI([{ role: 'ai', text: `${proposal.whenLabel}有个「${proposal.event}」——要我提醒你吗？（确认卡仅在主对话可点——回主对话说一句即可）` }])
+          return
+        }
         setChat((c) => {
           const opts = [`${lead}提醒我`, '不用了']
           const next = [
@@ -567,7 +570,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       }
       if (/^(镜|设置|打开设置)$/.test(normalized)) {
         void window.api?.openMain?.()
-        setChat((c) => [...c, { role: 'ai', text: '镜开了（旧版设置页）——例程、习惯、隐私都在那边，v10 会逐步把它们搬进来。' }])
+        pushAI([{ role: 'ai', text: '镜开了（旧版设置页）——例程、习惯、隐私都在那边，v10 会逐步把它们搬进来。' }])
         return
       }
 
@@ -580,16 +583,17 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           .then((d) => {
             const draft = d as GoalDraft | null
             if (!draft) {
-              setChat((c) => [
-                ...c,
-                { role: 'ai', text: '听着像个目标，但我没听出截止时间——带上「年底前」「三个月后」「6 月前」这类时间锚点再跟我说一次。' }
-              ])
+              pushAI([{ role: 'ai', text: '听着像个目标，但我没听出截止时间——带上「年底前」「三个月后」「6 月前」这类时间锚点再跟我说一次。' }])
               return
             }
             const anchorsText = draft.anchors.map((a) => `  · ${a.targetDate} ${a.title}`).join('\n')
             const kw = draft.keywords.length ? `\n归因关键词：${draft.keywords.join('、')}` : ''
             const pj = draft.projectIds.length ? `\n建议绑定项目：${draft.projectIds.length} 个（按名称命中，可在目标卡上改）` : ''
             const opts = ['确认创建', '重新拆一版', '算了']
+            if (activeSessionId) {
+              pushAI([{ role: 'ai', text: `拆好了（${draft.source === 'ai' ? 'AI' : '本地'}拆解）：「${draft.event}」→ ${draft.deadline}\n每天应投入约 ${draft.dailyTargetMin} 分钟${kw}${pj}\n锚点轨迹：\n${anchorsText}\n（确认卡仅在主对话可点——回主对话说「确认创建」即可立轨）。` }])
+              return
+            }
             setChat((c) => {
               const next = [
                 ...c,
@@ -605,7 +609,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
             })
           })
           .catch(() => {
-            setChat((c) => [...c, { role: 'ai', text: '拆解失败——稍后再试，或说得再具体些。' }])
+            pushAI([{ role: 'ai', text: '拆解失败——稍后再试，或说得再具体些。' }])
           })
           .finally(() => {
           setAsking(false)
@@ -652,10 +656,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         const summary = st
           ? `此刻：${st === 'other' ? '在电脑前（细分识别中）' : `${st}`}${presence?.screens?.[0]?.app ? ` · ${presence.screens[0].app}` : ''}。下面给你拆了张状态导图——实线是实际轨迹，虚线是建议去的地方。`
           : '采集还没出数据，导图会空一阵。'
-        setChat((c) => {
-          const next = [...c, { role: 'ai' as const, text: summary, attach: 'flowmap' as const }]
-          return next
-        })
+        pushAI([{ role: 'ai', text: summary, attach: 'flowmap' as const }])
         return
       }
 
@@ -719,8 +720,8 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         setAsking(false)
         consumeQuote()
       })
-      // AI 未配置 → 稳定同步路径（流式通道的事件时序在本地模式下曾致 asking 卡死）
-      if (!aiOn) {
+      // AI 未配置 → 稳定同步路径；会话态同样走同步（流式 chunk 按 id 写全局 chat，会穿透会话隔离——BUG-19）
+      if (!aiOn || activeSessionId) {
         void window.api
           ?.askQA?.(quoted)
           .then((r) => {
@@ -891,9 +892,10 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
             const s2 = window.api?.createSession?.({ first: { role: m.role, text: m.text, time: Date.now() } })
             void s2?.then((x) => {
               const created = x as ChatSession
-              setSessions((list) => [created, ...list])
+              const welcome = { role: 'ai' as const, text: `新会话「${created.title}」建好了——已进入，接着说就行。`, time: Date.now() }
+              setSessions((list) => [{ ...created, items: [...created.items, welcome] }, ...list])
+              void window.api?.addSessionItem?.(created.id, welcome)
               setActiveSessionId(created.id) // 自动进入：后续消息写回该会话
-              setChat((c) => [...c, { role: 'ai', text: `新会话「${created.title}」建好了——已进入，接着说就行。` }])
             })
           }
         }}
