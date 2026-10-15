@@ -669,6 +669,60 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         return
       }
 
+      // ── 时间问句（本地直答，不该进 LLM） ──
+      if (/^(现在)?几点|什么时间|现在时间|当前时间/.test(normalized)) {
+        const n = new Date()
+        const wd = '日一二三四五六'[n.getDay()]
+        pushAI([{ role: 'ai', text: `现在 ${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}，${n.getMonth() + 1}月${n.getDate()}日 星期${wd}。` }])
+        return
+      }
+
+      // ── 专注/摸鱼时长问句（presence 本地数据） ──
+      if (/专注.*(多久|多长|几)|摸鱼.*(多久|多长)|连续(专注|摸鱼)|工作.*多久了/.test(normalized)) {
+        const f = Math.round((presence?.continuousFocusSec ?? 0) / 60)
+        const s = Math.round((presence?.continuousSlackSec ?? 0) / 60)
+        const st = presence?.state
+        const stLabel = st === 'slack' ? '摸鱼中' : st ? `状态：${st}` : '还没采集到'
+        pushAI([{
+          role: 'ai',
+          text: `此刻${stLabel}。${f > 0 ? `已连续专注 ${f} 分钟` : s > 0 ? `已连续摸鱼 ${s} 分钟` : '还没形成连续专注段——「此刻」块那条会实时走。'}`
+        }])
+        return
+      }
+
+      // ── 今日回顾问句（trail 本地数据直汇总，不进 LLM） ──
+      if (/今天.*(干|做|摸|忙)了|今日小结|今天.*(怎么样|回顾|复盘)|我干了啥/.test(normalized)) {
+        const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+        const segs = trail.filter((t) => t.startTs >= todayStart.getTime() && !t.glance)
+        if (segs.length === 0) {
+          pushAI([{ role: 'ai', text: '今天还没采到有效活动段——工作台刚起或者在闲置。' }])
+          return
+        }
+        const total = Math.round(segs.reduce((a, t) => a + t.durationMin, 0))
+        const byApp = new Map<string, number>()
+        for (const t of segs) byApp.set(t.mainApp || '未知', (byApp.get(t.mainApp || '未知') ?? 0) + t.durationMin)
+        const top = [...byApp.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
+        pushAI([{
+          role: 'ai',
+          text: `今天采到 ${segs.length} 段活动，共约 ${total} 分钟。主要耗在：${top.map(([a, m]) => `${a} ${Math.round(m)}分`).join('、')}。`
+        }])
+        return
+      }
+
+      // ── 提醒清单问句放宽（原精确匹配漏「我有哪些提醒」「今天的提醒」） ──
+      if (/提醒/.test(normalized) && /(有哪些|哪些|清单|列表|今天|明天|我的)/.test(normalized) && !parseReminderIntent(text)) {
+        void window.api?.listReminders?.().then((r) => {
+          const list = (r as { id: string; title: string; fireAt?: number; recurring?: string }[]) ?? []
+          pushAI([{
+            role: 'ai',
+            text: list.length === 0
+              ? '还没有提醒——说「晚上9点提醒我 xxx」我来建。'
+              : `提醒 ${list.length} 条：\n${list.map((x) => `· ${x.title}${x.recurring === 'daily' ? '（每天）' : ''}`).join('\n')}`
+          }])
+        })
+        return
+      }
+
       // ── 待办清单问句（BUG-29：plans 已在本地 state，直列不依赖 LLM） ──
       if (/待办|todo|要做的事|还有什么事|任务清单/.test(normalized) && !/提醒|天气|新增|加一个/.test(normalized)) {
         const open = plans.filter((p) => !p.archived && p.status !== 'done' && p.status !== 'cancelled')
