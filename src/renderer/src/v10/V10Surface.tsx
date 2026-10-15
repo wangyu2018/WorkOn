@@ -723,6 +723,38 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         return
       }
 
+      // ── 项目清单/进展问句（listProjects 本地直查） ──
+      if (/项目/.test(normalized) && /(哪些|哪些个|几个|进展|进度|列表|在做的|手上的)/.test(normalized)) {
+        void window.api?.listProjects?.().then((ps) => {
+          const list = (ps as { name?: string; title?: string; status?: string }[]) ?? []
+          const act = list.filter((p) => p.status !== 'archived' && p.status !== 'done')
+          pushAI([{
+            role: 'ai',
+            text: act.length === 0
+              ? '还没有项目——项目用来归拢时间和待办，说一声我帮你建。'
+              : `在跟的项目 ${act.length} 个：\n${act.map((p) => `· ${p.name ?? p.title ?? '未命名'}`).join('\n')}`
+          }])
+        })
+        return
+      }
+
+      // ── 用户画像/身份问句（persona 本地数据，不该进 LLM） ──
+      if (/我是谁|我的岗位|我的职位|我的职业|我做什么|我的画像|我的信息|你了解我|认识我|我的档案/.test(normalized)) {
+        void window.api?.getPersona?.().then((raw) => {
+          const p = raw as { basicInfo?: { nickname?: string; daysActive?: number }; identity?: { occupation?: { value?: string } }; completeness?: number } | null
+          const nick = p?.basicInfo?.nickname
+          const occ = p?.identity?.occupation?.value
+          const days = p?.basicInfo?.daysActive
+          pushAI([{
+            role: 'ai',
+            text: p
+              ? `档案里记的：${nick ? `称呼你「${nick}」，` : ''}${occ ? `岗位是${occ}，` : ''}${days ? `已同行 ${days} 天，` : ''}画像完整度 ${p.completeness ?? 0}%。习惯、专注时段、技能标签这些细项在画像页能看。`
+              : '画像还没建起来——用着用着我会慢慢学。'
+          }])
+        })
+        return
+      }
+
       // ── 待办清单问句（BUG-29：plans 已在本地 state，直列不依赖 LLM） ──
       if (/待办|todo|要做的事|还有什么事|任务清单/.test(normalized) && !/提醒|天气|新增|加一个/.test(normalized)) {
         const open = plans.filter((p) => !p.archived && p.status !== 'done' && p.status !== 'cancelled')
