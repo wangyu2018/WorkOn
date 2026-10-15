@@ -38,10 +38,22 @@ function TodayPlansBlock(props: { plans: PlanItem[]; onToggle: (p: PlanItem) => 
   if (props.hidden) return null
   const [showSrc, setShowSrc] = useState(false)
   const key = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-  const list = props.plans.filter((p) => p.date === key && p.status !== 'cancelled')
+  // 对齐 plans:list 今日视图语义：今日项 + 近 3 天未完成自动顺延（不这么算列表会因全是旧日期而空藏）
+  const carriedCutoff = new Date(today.getTime() - 3 * 86400000)
+  const cutoffKey = `${carriedCutoff.getFullYear()}-${String(carriedCutoff.getMonth() + 1).padStart(2, '0')}-${String(carriedCutoff.getDate()).padStart(2, '0')}`
+  const list = props.plans.filter(
+    (p) =>
+      !p.archived &&
+      p.status !== 'cancelled' &&
+      (p.date === key || (p.date < key && p.date >= cutoffKey && p.status !== 'done' && p.status !== 'delayed'))
+  )
   const done = list.filter((p) => p.status === 'done').length
+  const backlog = props.plans.filter(
+    (p) => !p.archived && p.status !== 'cancelled' && p.status !== 'done' && p.status !== 'delayed' && p.date < cutoffKey
+  )
   const sortedAll = [...list].sort((a, b) => (a.startMin ?? 1e9) - (b.startMin ?? 1e9))
-  if (props.hidden || sortedAll.length === 0) return null // 空自动隐藏
+  // 固定过的块不自动藏——显示空态+积压数，比整块消失更能交代「今天确实没排」
+  if (props.hidden || (sortedAll.length === 0 && backlog.length === 0 && !props.pinned)) return null // 空自动隐藏
   const sorted = expanded ? sortedAll : sortedAll.slice(0, 8)
   return (
     <section
@@ -65,6 +77,7 @@ function TodayPlansBlock(props: { plans: PlanItem[]; onToggle: (p: PlanItem) => 
       {!expanded && sortedAll.length > 8 ? (
         <button className="v10-foldmore" onClick={() => setExpanded(true)}>展开其余 {sortedAll.length - 8} 件 ▾</button>
       ) : null}
+      {sortedAll.length === 0 ? <div className="v10-empty">今天还没排计划——说「计划 xxx」我来建</div> : null}
       {(
         sorted.map((p) => (
           <div className="v10-plan-row" key={p.id}>
@@ -82,6 +95,22 @@ function TodayPlansBlock(props: { plans: PlanItem[]; onToggle: (p: PlanItem) => 
           </div>
         ))
       )}
+      {backlog.length > 0 ? (
+        <>
+          <div className="v10-srcnote">更早积压的待办 · {backlog.length} 项（点圈勾掉，或说过期的我来清）</div>
+          {(expanded ? backlog : backlog.slice(0, 5)).map((p) => (
+            <div className="v10-plan-row" key={p.id}>
+              <button
+                className="v10-plan-check"
+                onClick={() => props.onToggle(p)}
+                title="点一下完成"
+              />
+              <span className="v10-plan-title" style={{ opacity: 0.6 }}>{p.title}</span>
+              <span className="v10-plan-time">{p.date.slice(5)}</span>
+            </div>
+          ))}
+        </>
+      ) : null}
     </section>
   )
 }
