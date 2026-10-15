@@ -771,6 +771,68 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         return
       }
 
+      // ── 明日安排问句 ──
+      if (/明天|明日/.test(normalized) && /(安排|计划|干什么|做什么|干嘛|提醒|日程)/.test(normalized)) {
+        const tm = new Date(); tm.setDate(tm.getDate() + 1)
+        const key = `${tm.getFullYear()}-${String(tm.getMonth() + 1).padStart(2, '0')}-${String(tm.getDate()).padStart(2, '0')}`
+        const tom = plans.filter((p) => p.date === key && p.status !== 'cancelled' && !p.archived)
+        pushAI([{
+          role: 'ai',
+          text: tom.length === 0 ? `明天（${key.slice(5)}）还空着——说「明天X点提醒我 xx」我来排。` : `明天（${key.slice(5)}）排了 ${tom.length} 件：\n${tom.map((p) => `· ${p.title}`).join('\n')}`
+        }])
+        return
+      }
+
+      // ── 应用时长榜（trail 聚合，不进 LLM） ──
+      if (/(应用|软件|app).*(最多|时长|用了)|用得最多|时间.*(花|耗).*哪|哪个.*用.*久/.test(normalized)) {
+        const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+        const segs = trail.filter((t) => t.startTs >= todayStart.getTime() && !t.glance)
+        const byApp = new Map<string, number>()
+        for (const t of segs) byApp.set(t.mainApp || '未知', (byApp.get(t.mainApp || '未知') ?? 0) + t.durationMin)
+        const top = [...byApp.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6)
+        pushAI([{
+          role: 'ai',
+          text: top.length === 0 ? '今天还没采到应用时长数据。' : `今天应用时长榜：\n${top.map(([a, m], i) => `${i + 1}. ${a} — ${Math.round(m)} 分钟`).join('\n')}`
+        }])
+        return
+      }
+
+      // ── 备忘/知识库/成就/习惯（全本地列表直出） ──
+      if (/备忘|便签|记了.*什么|我的?备忘/.test(normalized)) {
+        void window.api?.listMemos?.().then((r) => {
+          const list = (r as { title?: string; text?: string; content?: string }[]) ?? []
+          pushAI([{ role: 'ai', text: list.length === 0 ? '还没有备忘——说「记一下 xxx」我来存。' : `备忘 ${list.length} 条：\n${list.slice(0, 10).map((m) => `· ${m.title ?? m.text ?? m.content ?? '（无标题）'}`).join('\n')}${list.length > 10 ? `\n…还有 ${list.length - 10} 条` : ''}` }])
+        })
+        return
+      }
+      if (/知识库|学了什么|我存的.*(资料|知识)|笔记库/.test(normalized)) {
+        void window.api?.listKnowledge?.().then((r) => {
+          const list = (r as { title?: string; name?: string }[]) ?? []
+          pushAI([{ role: 'ai', text: list.length === 0 ? '知识库还是空的——拖文件进来或说「记住 xxx」。' : `知识库 ${list.length} 条：\n${list.slice(0, 10).map((k) => `· ${k.title ?? k.name ?? '（无标题）'}`).join('\n')}` }])
+        })
+        return
+      }
+      if (/成就|徽章|勋章|解锁了/.test(normalized)) {
+        void window.api?.listAchievements?.().then((r) => {
+          const list = (r as { name?: string; title?: string; unlocked?: boolean; unlockedAt?: number }[]) ?? []
+          const got = list.filter((a) => a.unlocked || a.unlockedAt)
+          pushAI([{ role: 'ai', text: got.length === 0 ? `成就库 ${list.length} 个，还没解锁的——继续用，攒着呢。` : `已解锁 ${got.length}/${list.length} 个成就：\n${got.slice(0, 8).map((a) => `· ${a.name ?? a.title}`).join('\n')}` }])
+        })
+        return
+      }
+      if (/我的?习惯|作息|高效时段|什么时候.*高效/.test(normalized)) {
+        void window.api?.getHabits?.().then((r) => {
+          const h = r as { bestHours?: number[]; summary?: string } | null
+          pushAI([{
+            role: 'ai',
+            text: h?.bestHours?.length
+              ? `画像记的习惯：高效时段 ${h.bestHours.map((x) => `${x}:00`).join('、')}${h.summary ? `；${h.summary}` : ''}。`
+              : h?.summary ?? '习惯画像还在攒数据——多用几天就有了。'
+          }])
+        })
+        return
+      }
+
       // ── 待办清单问句（BUG-29：plans 已在本地 state，直列不依赖 LLM） ──
       if (/待办|todo|要做的事|还有什么事|任务清单/.test(normalized) && !/提醒|天气|新增|加一个/.test(normalized)) {
         const open = plans.filter((p) => !p.archived && p.status !== 'done' && p.status !== 'cancelled')

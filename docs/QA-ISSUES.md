@@ -1259,6 +1259,11 @@ onClick={() => { if (!props.aiOn) { setAiCfg(true) } }}
 | 我的项目有哪些 | listProjects | ✅ 「在跟的项目 6 个：WorkOn/OnDesign/OnKnow/Oner/DWS接口开发/未命名主线」 |
 | 我是谁/我的岗位/我的画像 | getPersona 画像 | ✅ 「称呼你 LaoW，岗位实施运维工程师，同行 29 天，完整度 80%」 |
 | 隐私数据/采集了什么/我的数据 | persona 分层 + settings 采集开关 | ✅ 「L0✓L1✓L2✓L3✓ · 读屏OCR开·键鼠探针开·消息监控关·AI开」 |
+| 明天有什么安排 | plans 明日筛 | ✅ 「明天（10-16）还空着…」 |
+| 哪个应用用得最多/时间花哪 | trail 按 app 聚合 | ✅ 「Browser 93分/Chrome 52分/Devin 24分/mshta 19分/WeChat 10分」 |
+| 我的备忘/记了什么 | listMemos | ✅ 「备忘 4 条：作息午休、17点天气推送…」 |
+| 我的习惯/高效时段 | getHabits | ✅ 数据不足时如实回「还在攒」 |
+| 我解锁了什么成就 | listAchievements | ✅ 「已解锁 1/20：心如止水」 |
 
 **仍走 LLM（有意保留——真需要生成/复杂数据）**：周报日报撰写、通用开放式问答。
 
