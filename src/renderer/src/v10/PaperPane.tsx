@@ -92,7 +92,15 @@ function NowBlock(props: { presence: PresenceSnapshot | null; kick?: (p: { block
   const s = props.presence?.state
   if (!s) return null // 空自动隐藏（v10 拍板：置顶块为空不占位）
   const main = props.presence?.screens?.find((x) => x.screen === props.presence?.mainScreen)
-  const focusMin = Math.round((props.presence?.continuousFocusSec ?? 0) / 60)
+  const focusSec = props.presence?.continuousFocusSec ?? 0
+  const slackSec = props.presence?.continuousSlackSec ?? 0
+  const focusSub = !props.presence
+    ? '等待采集开始'
+    : focusSec > 0
+      ? `连续专注 ${Math.max(1, Math.round(focusSec / 60))} 分钟`
+      : slackSec > 0
+        ? `连续摸鱼 ${Math.max(1, Math.round(slackSec / 60))} 分钟`
+        : '采集中 · 还没进入工作状态'
   return (
     <section
       className="v10-block"
@@ -112,7 +120,7 @@ function NowBlock(props: { presence: PresenceSnapshot | null; kick?: (p: { block
       ) : null}
       <div className="v10-block-hero">
         {s ? `${STATE_LABEL[s]}` : '—'}
-        <small>{focusMin > 0 ? `今日专注 ${Math.round(focusMin)} 分钟` : '还没有采集到活动'}</small>
+        <small>{focusSub}</small>
       </div>
       <div className="v10-block-meta">
         {s ? `${WORK_STATES[s].emoji} ${main?.title || displayApp(main?.app ?? '') || '无前台应用'}` : '等待采集开始'}
