@@ -238,7 +238,7 @@ const api = {
   onPetSettings: on('pet:settings'),
   pageSwitch: () => ipcRenderer.send('page-switch'),
   onPageSwitch: on('page-switch'),
-  testAI: () => ipcRenderer.invoke('ai:test'),
+  testAI: (ov?: { aiApiKey?: string; aiBaseUrl?: string; aiModel?: string }) => ipcRenderer.invoke('ai:test', ov),
   getAIModels: () => ipcRenderer.invoke('ai:models'),
   petAsk: (q: string) => ipcRenderer.invoke('pet:ask', q),
   petAskStream: (q: string) => ipcRenderer.invoke('pet:askStream', q),

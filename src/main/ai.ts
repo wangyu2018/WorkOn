@@ -887,7 +887,7 @@ export function generateTips(analysis: UserAnalysis): string[] {
 }
 
 /** AI 连通性测试（设置页「测试连接」按钮） */
-export async function testAIConnection(): Promise<{
+export async function testAIConnection(ov?: { aiApiKey?: string; aiBaseUrl?: string; aiModel?: string }): Promise<{
   ok: boolean
   latency?: number
   model?: string
@@ -895,14 +895,20 @@ export async function testAIConnection(): Promise<{
   hint?: string
 }> {
   const s = getSettings()
-  if (!s.aiApiKey) return { ok: false, error: '未配置 API Key' }
+  const apiKey = (ov?.aiApiKey ?? s.aiApiKey).trim()
+  const baseUrl = (ov?.aiBaseUrl ?? s.aiBaseUrl).trim()
+  const model = (ov?.aiModel ?? s.aiModel).trim()
+  if (!apiKey) return { ok: false, error: '未配置 API Key' }
+  if (/[^\x21-\x7e]/.test(apiKey)) {
+    return { ok: false, error: 'Key 里混进了中文或不可见字符（常见于复制带格式文本）——重新粘一下，或手敲', hint: '非 ASCII 字符' }
+  }
   const start = Date.now()
   try {
-    const resp = await fetch(`${s.aiBaseUrl.replace(/\/$/, '')}/chat/completions`, {
+    const resp = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.aiApiKey}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: s.aiModel,
+        model,
         messages: [{ role: 'user', content: '回复"OK"两个字' }],
         max_tokens: 10,
         temperature: 0
@@ -921,7 +927,7 @@ export async function testAIConnection(): Promise<{
             : undefined
       return { ok: false, latency, error, hint }
     }
-    return { ok: true, latency, model: s.aiModel }
+    return { ok: true, latency, model }
   } catch (e) {
     const msg = (e as Error).message
     const hint = /ENOTFOUND|ECONNREFUSED/.test(msg)

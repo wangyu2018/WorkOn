@@ -877,7 +877,7 @@ export function registerIpc(): void {
   ipcMain.on('pet:show', () => { if (petWindow) { createPetWindow(); petWindow.show() } })
   ipcMain.on('pet:restore', () => sendTo('pet', 'pet:restore'))
   ipcMain.on('pet:introReplay', () => sendTo('pet', 'pet:introReplay'))
-  ipcMain.handle('ai:test', () => testAIConnection())
+  ipcMain.handle('ai:test', (_e, ov?: { aiApiKey?: string; aiBaseUrl?: string; aiModel?: string }) => testAIConnection(ov))
   ipcMain.handle('pet:ask', (_e, q: string) => petAskShort(String(q).slice(0, 200), habitsOfUser()))
 
   // ── 桌宠流式问答 ──

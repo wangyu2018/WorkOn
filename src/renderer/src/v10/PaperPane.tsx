@@ -428,9 +428,9 @@ function AiConfigBlock(props: { onClose: () => void; onSaved: () => void }): JSX
   const doTest = (): void => {
     setTesting(true)
     setTestResult('')
-    const api = window.api as { testAI?: () => Promise<{ ok?: boolean; latency?: number; model?: string; error?: string }> } | undefined
-    void Promise.resolve(api?.testAI?.())
-      .then((r) => setTestResult(r?.ok ? `✓ 连通（${r.latency ?? '?'}ms · ${r.model ?? model}）` : `✗ ${r?.error ?? '连接失败'}`))
+    const api = window.api as { testAI?: (ov?: { aiApiKey?: string; aiBaseUrl?: string; aiModel?: string }) => Promise<{ ok?: boolean; latency?: number; model?: string; error?: string; hint?: string }> } | undefined
+    void Promise.resolve(api?.testAI?.({ aiApiKey: key.trim() || undefined, aiBaseUrl: base.trim(), aiModel: model.trim() }))
+      .then((r) => setTestResult(r?.ok ? `✓ 连通（${r.latency ?? '?'}ms · ${r.model ?? model}）` : `✗ ${r?.error ?? '连接失败'}${r?.hint ? `（${r.hint}）` : ''}`))
       .catch((e) => setTestResult(`✗ ${String(e).slice(0, 80)}`))
       .finally(() => setTesting(false))
   }
@@ -459,7 +459,8 @@ function AiConfigBlock(props: { onClose: () => void; onSaved: () => void }): JSX
             style={{ opacity: key.trim() || hasKey ? 1 : 0.5, flex: 1 }}
             onClick={() => {
               const patch: Record<string, unknown> = { aiEnabled: true, aiBaseUrl: base.trim(), aiModel: model.trim() }
-              if (key.trim()) patch.aiApiKey = key.trim()
+              // 剥离非 ASCII/空白字符（复制带格式文本常混入中文标点/不可见符，fetch 会 ByteString 报错）
+              if (key.trim()) patch.aiApiKey = key.replace(/[^\x21-\x7e]/g, '').trim()
               void window.api?.setSettings?.(patch as never)
               setSaved(true)
               setHasKey(true)
