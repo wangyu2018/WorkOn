@@ -755,6 +755,22 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         return
       }
 
+      // ── 隐私/采集状态问句（persona 层级 + settings 采集开关，全本地） ──
+      if (/隐私|采集了什么|采了.*什么|我的数据|个人数据|隐私设置|数据.*存.*哪|存了.*什么|谁在看我/.test(normalized)) {
+        void Promise.all([window.api?.getPersona?.(), window.api?.getSettings?.()]).then(([raw, sRaw]) => {
+          const p = raw as { privacySettings?: { aiAccess?: Record<string, boolean> } } | null
+          const s = sRaw as { deepMode?: boolean; inputProbeEnabled?: boolean; messageWatchEnabled?: boolean; aiEnabled?: boolean } | null
+          const acc = p?.privacySettings?.aiAccess ?? {}
+          const layers = ['L0', 'L1', 'L2', 'L3'].map((k) => `${k}${acc[k] ? '✓' : '×'}`).join(' ')
+          const sw = (label: string, v: boolean | undefined) => `${label}：${v ? '开' : '关'}`
+          pushAI([{
+            role: 'ai',
+            text: `数据全存你本机，没上云。画像分四层（L0 基本→L3 深层），AI 问答能访问的层：${layers}。\n采集开关：${sw('读屏 OCR（深度模式）', s?.deepMode)} · ${sw('键鼠探针', s?.inputProbeEnabled)} · ${sw('消息监控', s?.messageWatchEnabled)} · ${sw('AI 问答', s?.aiEnabled)}\n要改哪个直接说，比如「关闭消息监控」。`
+          }])
+        })
+        return
+      }
+
       // ── 待办清单问句（BUG-29：plans 已在本地 state，直列不依赖 LLM） ──
       if (/待办|todo|要做的事|还有什么事|任务清单/.test(normalized) && !/提醒|天气|新增|加一个/.test(normalized)) {
         const open = plans.filter((p) => !p.archived && p.status !== 'done' && p.status !== 'cancelled')

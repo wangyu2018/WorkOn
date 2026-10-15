@@ -1258,6 +1258,7 @@ onClick={() => { if (!props.aiOn) { setAiCfg(true) } }}
 | 专注多久了/摸鱼多久 | presence 连续计时 | ✅ 「此刻 other，还没形成连续专注段」 |
 | 我的项目有哪些 | listProjects | ✅ 「在跟的项目 6 个：WorkOn/OnDesign/OnKnow/Oner/DWS接口开发/未命名主线」 |
 | 我是谁/我的岗位/我的画像 | getPersona 画像 | ✅ 「称呼你 LaoW，岗位实施运维工程师，同行 29 天，完整度 80%」 |
+| 隐私数据/采集了什么/我的数据 | persona 分层 + settings 采集开关 | ✅ 「L0✓L1✓L2✓L3✓ · 读屏OCR开·键鼠探针开·消息监控关·AI开」 |
 
 **仍走 LLM（有意保留——真需要生成/复杂数据）**：周报日报撰写、通用开放式问答。
 
