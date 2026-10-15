@@ -310,7 +310,7 @@ export function AskPane(props: {
     return (
       <aside className="v10-ask">
         <div className="v10-sesstop">
-          <button className="ses-back" onClick={() => props.onEnterSession?.(null)}>← 对话</button>
+          <button className="ses-back" style={{ background: 'var(--ink)', color: 'var(--paper)' }} onClick={() => props.onEnterSession?.(null)}>← 返回主对话</button>
           {renameMode ? (
             <input
               className="ses-rename"
@@ -379,7 +379,12 @@ export function AskPane(props: {
           <button
             key={c.key}
             className={`ctx-chip${(props.activeContext ?? 'general') === c.key ? ' on' : ''}`}
-            onClick={() => props.onSetContext?.(c.key)}
+            onClick={(e) => {
+              props.onSetContext?.(c.key)
+              // BUG-17：chip 抢了焦点导致打字/回车落空——切完立刻还给输入框
+              ;(e.target as HTMLElement).blur()
+              ;(document.querySelector('.v10-input') as HTMLTextAreaElement | null)?.focus()
+            }}
             title={`切换到「${c.label}」会话——问答自动带上这份数据`}
           >
             <span className="ctx-dot" style={{ background: ['var(--ink-3)', '#0FB5A4', '#7C6FF0', '#D98E2B', '#38BDF8'][ci] }} />

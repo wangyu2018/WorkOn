@@ -44,7 +44,13 @@ function TodayPlansBlock(props: { plans: PlanItem[]; onToggle: (p: PlanItem) => 
   if (props.hidden || sortedAll.length === 0) return null // 空自动隐藏
   const sorted = expanded ? sortedAll : sortedAll.slice(0, 8)
   return (
-    <section className="v10-block">
+    <section
+      className="v10-block"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('application/x-workon-block', JSON.stringify({ blockKey: 'plans', label: '今日计划', current: `${done}/${list.length}` }))
+      }}
+    >
       <div className="v10-block-kick">
         <span>◆ 今日计划</span>
         <span>· {done}/{list.length}</span>
@@ -88,7 +94,13 @@ function NowBlock(props: { presence: PresenceSnapshot | null; kick?: (p: { block
   const main = props.presence?.screens?.find((x) => x.screen === props.presence?.mainScreen)
   const focusMin = Math.round((props.presence?.continuousFocusSec ?? 0) / 60)
   return (
-    <section className="v10-block">
+    <section
+      className="v10-block"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('application/x-workon-block', JSON.stringify({ blockKey: 'now', label: '此刻', current: s ? STATE_LABEL[s] : '—' }))
+      }}
+    >
       <div className="v10-block-kick">
         <span>◆ 此刻{props.pinned ? ' · ◆' : ''}</span>
         <span className="acts">
@@ -371,7 +383,13 @@ function GoalsBlock(props: {
   const actives = props.goals.filter((v) => v.goal.status === 'active')
   if (props.hidden || actives.length === 0) return null // 空自动隐藏
   return (
-    <section className="v10-block">
+    <section
+      className="v10-block"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('application/x-workon-block', JSON.stringify({ blockKey: 'goals', label: '人生预期', current: actives.map((a) => a.goal.event).join('/') || '—' }))
+      }}
+    >
       <div className="v10-block-kick">
         <span>◆ 人生预期</span>
         <span>· {actives.length} 条在轨</span>

@@ -660,7 +660,13 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       }
 
       // ── 常规问答：AI 配置后走流式（边生成边读）；未配置走稳定同步路径 ──
-      setAsking(true)
+      // 本地模式+绑定会话上下文时：兜底=数据源摘要（BUG-13 答非所问修复）
+      if (!aiOn && activeContext !== 'general') {
+        const summary = withContext(activeContext, '', { trail, plans, goals, reminders }).trim()
+        pushAI([{ role: 'ai', text: `「${text}」需要 AI 才能深入回答。当前「${activeContext}」会话我能给的本底数据：\n\n${summary}\n\n接入 AI 后我可以基于这些做分析和建议（右上角 AI 未接入 → 点击接入）。`, options: ['⚙ 去配置 AI'] }])
+        optionsRef.current = { msgIndex: chat.length + 1, options: ['⚙ 去配置 AI'] }
+        return
+      }
       // 超时兜底（v10 修）：流式事件丢失时 15s 自动解锁，asking 永不卡死
       const askingGuard = window.setTimeout(() => {
         setAsking(false)
@@ -874,7 +880,9 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           const m = chat[msgIndex]
           if (!m) return
           if (sessionId) {
-            void window.api?.addSessionItem?.(sessionId, { role: m.role, text: m.text, time: Date.now() })
+            const item = { role: m.role, text: m.text, time: Date.now() }
+            void window.api?.addSessionItem?.(sessionId, item)
+            setSessions((list) => list.map((x) => (x.id === sessionId ? { ...x, items: [...x.items, item] } : x)))
             setChat((c) => [...c, { role: 'ai', text: '收进会话了——在左栏顶部「会话」里可继续追问。' }])
           } else if (topic) {
             setArchived((a) => [{ kind: 'notify', id: `mg${Date.now()}`, title: m.text.slice(0, 16) || '归档件', body: m.text, time: Date.now(), ttlSec: 3600, keep: true, topic }, ...a])
