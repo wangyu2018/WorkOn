@@ -434,7 +434,6 @@ function GoalsBlock(props: {
           {props.kick ? props.kick({ blockKey: 'goals' }) : null}
           <button className="blk-chat" title="就这个目标开个会话" onClick={() => props.onContextAsk?.('goals', '我的目标现在进展如何')}>对话</button>
         </span>
-        <span className="acts"><button>留住</button><button>×</button></span>
       </div>
       {actives.length === 0 ? (
         <div className="v10-empty">还没有预期——去左栏说一句「我想在年底前把 X 做到 Y」，我拆成锚点轨迹替你盯。</div>
@@ -518,6 +517,39 @@ function AiConfigBlock(props: { onClose: () => void; onSaved: () => void }): JSX
 }
 
 /** 沙箱可视化块（OpenIntelligentUI 模式）：AI 生成 HTML 进隔离 iframe；按钮 postMessage 回宿主追问 */
+/** 后台监控块（FEAT-6）：一眼看到「它正在为我盯什么」——load:getStatus 人话清单 */
+function BackendWatchBlock(): JSX.Element | null {
+  const [rows, setRows] = useState<Array<{ label: string; human: string }> | null>(null)
+  useEffect(() => {
+    const pull = (): void => {
+      void (window.api as unknown as { getLoadStatus?: () => Promise<{ monitors?: Array<{ label: string; human: string }> }> })?.getLoadStatus?.()
+        .then((r) => {
+          const list = (r as { monitors?: Array<{ label: string; human: string }> })?.monitors
+          if (Array.isArray(list)) setRows(list)
+        })
+        .catch(() => { /* ignore */ })
+    }
+    pull()
+    const t = window.setInterval(pull, 30_000)
+    return () => window.clearInterval(t)
+  }, [])
+  if (!rows?.length) return null
+  return (
+    <section className="v10-block">
+      <div className="v10-block-kick">
+        <span>◇ 后台正在盯</span>
+        <span>· {rows.length} 项</span>
+      </div>
+      {rows.map((r, i) => (
+        <div className="v10-plan-row" key={i}>
+          <span className="v10-plan-title" style={{ color: 'var(--ink-2)' }}>{r.label}</span>
+          <span className="v10-plan-time">{r.human}</span>
+        </div>
+      ))}
+    </section>
+  )
+}
+
 function SandboxView(props: {
   piece: { id: string; title: string; html: string; css: string }
   onClose: () => void
@@ -770,13 +802,13 @@ export function PaperPane(props: {
           <button className="mh-act" onClick={() => setAiCfg(true)} title="设置（AI Key/端点/模型）">⚙ 设置</button>
           {pane === 'main' ? (
             <>
-              <button className="mh-act" onClick={() => props.onDetach?.()} title="右页拆出独立窗口（吸附+位置记忆）">⇱ 拆出</button>
-              <button className="mh-act" onClick={() => { void window.api?.detachPanes?.() }} title="玻璃拆开：问/右页两块穿透玻璃片，拖到一起磁性吸附，点吸附固定排布">◫ 玻璃拆开</button>
+              <button className="mh-act" onClick={() => props.onDetach?.()} title="拆出：右页独立窗口（吸附+位置记忆）">⇱</button>
+              <button className="mh-act" onClick={() => { void window.api?.detachPanes?.() }} title="玻璃拆开：两块穿透玻璃片，磁性吸附">◫</button>
             </>
           ) : pane === 'paper' ? (
             <>
               <button className="mh-act" onClick={() => { void window.api?.winHideWorkbench?.() }} title="缩小到任务栏">—</button>
-              <button className="mh-act" onClick={() => props.onAttach?.()} title="合回主窗一面">✕ 合回</button>
+              <button className="mh-act" onClick={() => props.onAttach?.()} title="合回主窗一面">⇲</button>
             </>
           ) : null}
           <span className="mh-winsep" />

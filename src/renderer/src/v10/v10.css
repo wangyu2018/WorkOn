@@ -943,3 +943,30 @@
 .v10[data-theme='dark'] .ctx-chip { border-color: var(--hairline-2); }
 .ctx-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
 .ctx-chip.on .ctx-dot { outline: 1.5px solid var(--paper); }
+
+
+/* ── 整页居中放大 overlay（FEAT-7） ───────────────────── */
+.v10-zoom-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(20, 23, 28, 0.6);
+  display: flex; align-items: center; justify-content: center;
+  cursor: zoom-out;
+}
+.v10-zoom-body {
+  position: relative;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+  padding: 24px;
+  max-width: min(1100px, 92vw);
+  max-height: 88vh;
+  overflow: auto;
+  cursor: default;
+}
+.v10-zoom-close {
+  position: absolute; top: 10px; right: 12px;
+  border: none; background: var(--paper-2); color: var(--ink-2);
+  font-size: 11px; padding: 3px 10px; border-radius: 999px; cursor: pointer; font-family: var(--font-ui);
+}
+.v10-zoom-close:hover { color: var(--ink); }
