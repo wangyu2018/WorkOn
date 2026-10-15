@@ -656,6 +656,19 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         return
       }
 
+      // ── 人生预期概念/进展问句（数据在本地 goals state，直答不依赖 LLM） ──
+      if (/(人生预期|长期目标).*(是啥|是什么|怎么样|进度|有哪些|咋样)|(是啥|什么是).*(人生预期|长期目标)|目标进展|预期进度/.test(normalized)) {
+        const lines = goals.map((g) => {
+          const pct = g.totalTargetMin > 0 ? ` ${Math.round((g.cumMin / g.totalTargetMin) * 100)}%` : ''
+          return `· ${g.goal.event}${pct}（剩 ${g.remainingDays} 天 → ${g.goal.deadline}）`
+        })
+        pushAI([{
+          role: 'ai',
+          text: `「人生预期」是远期目标盯轨：你说一个预期（比如「年底前做到 X」），我拆成锚点轨迹，每天根据你的实际投入算偏离和预计达成度。\n${goals.length ? `当前在盯 ${goals.length} 个：\n${lines.join('\n')}` : '目前还没有立轨的目标——说「我想在 X 前做到 Y」我来拆。'}\n右页「人生预期」块能看到每条轨迹。`
+        }])
+        return
+      }
+
       // ── 待办清单问句（BUG-29：plans 已在本地 state，直列不依赖 LLM） ──
       if (/待办|todo|要做的事|还有什么事|任务清单/.test(normalized) && !/提醒|天气|新增|加一个/.test(normalized)) {
         const open = plans.filter((p) => !p.archived && p.status !== 'done' && p.status !== 'cancelled')
