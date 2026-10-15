@@ -695,16 +695,16 @@ export function PaperPane(props: {
           <button className="mh-act" onClick={() => props.onToggleTheme?.()} title="主题：浅/暗/跟随系统">{props.theme === 'dark' ? '☾' : props.theme === 'auto' ? 'A' : '◐'}</button>
           <span
             className={`mh-ai ${props.aiOn ? 'on' : ''}`}
-            title={props.aiOn ? 'AI 已接入——点击查看状态' : 'AI 未接入——点击接入（填 Key 即可）'}
+            title={props.aiOn ? 'AI 已接入——点击改配置/看状态' : 'AI 未接入——点击接入（填 Key 即可）'}
             style={{ cursor: 'pointer' }}
-            onClick={() => { if (!props.aiOn) { setAiCfg(true) } }}
+            onClick={() => setAiCfg(true)}
           >
             {props.aiOn ? 'AI ✓' : 'AI 未接入'}
           </span>
           {pane !== 'main' ? (
             <button className="mh-act" onClick={() => { void window.api?.snapPanes?.() }} title="两块玻璃片贴合固定（上下/左右按当前方位）">⎯ 吸附</button>
           ) : null}
-          <button className="mh-act" onClick={() => { try { window.api?.openMain?.('settings') } catch { /* ignore */ } }} title="设置后台（Key/例程/习惯/隐私）">⚙ 设置</button>
+          <button className="mh-act" onClick={() => setAiCfg(true)} title="设置（AI Key/端点/模型）">⚙ 设置</button>
           {pane === 'main' ? (
             <>
               <button className="mh-act" onClick={() => props.onDetach?.()} title="右页拆出独立窗口（吸附+位置记忆）">⇱ 拆出</button>
