@@ -1294,3 +1294,21 @@ onClick={() => { if (!props.aiOn) { setAiCfg(true) } }}
 - 日历视图数据源现成：plans.date / reminders.fireAt / trail.startTs 都是日期戳
 
 **关联**：FEAT-7（整页预览 overlay 容器）、FEAT-8（卡片化——全览是卡片的放大态）、FEAT-10（数据资产入口——全览层就是资产的查看器）
+
+---
+
+## BUG-34 ｜ 「软件接管/打开应用」谎报成功——openAppSafe 只匹配名单从不启动
+
+**状态**：`✅ 已验证`（QA 侧直修）
+**平台**：通用（Windows 实测）
+**严重度**：高（用户原话「软件接管咋操作？」——功能本身是死链还谎称成功）
+
+**根因**：`appLauncher.ts` 的 `openAppSafe()` 只做 `matchApp` 名单匹配，命中后直接 `return {ok:true}`——**`openApp()` 从未被调用**，对话里回「开了 ✦」但实际什么都没发生。且 Windows 分支只存了名字没存路径，就算调了 `start "" "微信"` 也起不来（lnk 不在 PATH）。
+
+**修复（QA 侧）**：
+- `listApps` 扫描时同步记录 `name → .lnk/.app 全路径` 映射
+- `openAppSafe` 匹配后真的 `cmd /c start "" "<lnk全路径>"` 启动（mac 走 `open -a`）
+
+**实测**：`openApp('Notepad3')` → 进程真实拉起（StartTime 吻合）；`openApp('记事本')` → 如实回「没找到」（系统自带应用不在开始菜单清单——已知名单缺口）。
+
+**残余**：①系统内置应用（记事本/计算器等非 .lnk 入口）不在扫描范围，可补 UWP/系统路径；②「切到已开窗口」目前靠再开一次实现，真前台激活要 UIA。

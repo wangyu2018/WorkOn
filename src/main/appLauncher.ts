@@ -1,14 +1,15 @@
 /**
  * 应用接管 L1（v10）：对话「打开/切到 XX」→ 启动/激活本机应用。
  * mac：扫描 /Applications + /System/Applications；open -a 激活（已开即前台切换）。
- * Windows：开始菜单 .lnk 扫描（后续补，当前返回空表回退提示）。
+ * Windows：开始菜单 .lnk/.url 扫描（记名+路径），start 全路径启动（已开会新开/激活实例）。
  * 更深的接管（UI 自动化/读屏操作）挂后续版本——本层只做启动与激活。
  */
-import { exec } from 'child_process'
+import { exec, execFile } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 
 let cache: { names: string[]; at: number } | null = null
+let appPaths = new Map<string, string>() // 应用名(小写) → .app/.lnk 全路径
 
 /** 常见应用中英别名（mac 目录名是英文，用户说中文）——持续补充 */
 const APP_ALIASES: Record<string, string> = {
@@ -39,17 +40,22 @@ const APP_ALIASES: Record<string, string> = {
 export function listApps(): string[] {
   if (cache && Date.now() - cache.at < 10 * 60_000) return cache.names
   let names: string[] = []
+  appPaths = new Map()
   if (process.platform === 'darwin') {
     const dirs = ['/Applications', '/System/Applications']
     for (const dir of dirs) {
       try {
         for (const f of fs.readdirSync(dir)) {
-          if (f.endsWith('.app')) names.push(f.slice(0, -4))
+          if (f.endsWith('.app')) {
+            const n = f.slice(0, -4)
+            names.push(n)
+            appPaths.set(n.toLowerCase(), path.join(dir, f))
+          }
         }
       } catch { /* ignore */ }
     }
   } else if (process.platform === 'win32') {
-    // Windows：开始菜单快捷方式（全机+用户两处），.lnk/.url 文件名即应用名
+    // Windows：开始菜单快捷方式（全机+用户两处），.lnk/.url 文件名即应用名；同时记下全路径供启动
     const appdata = process.env.APPDATA ?? ''
     const dirs = [
       'C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs',
@@ -68,7 +74,10 @@ export function listApps(): string[] {
         if (e.isDirectory()) walk(full, depth + 1)
         else if (/\.(lnk|url)$/i.test(e.name)) {
           const name = e.name.replace(/\.(lnk|url)$/i, '')
-          if (name && !name.startsWith('Uninstall') && !/^卸载/.test(name)) names.push(name)
+          if (name && !name.startsWith('Uninstall') && !/^卸载/.test(name)) {
+            names.push(name)
+            if (!appPaths.has(name.toLowerCase())) appPaths.set(name.toLowerCase(), full)
+          }
         }
       }
     }
@@ -119,7 +128,19 @@ export function openApp(name: string): Promise<{ ok: boolean; error?: string }> 
 export function openAppSafe(query: string): { ok: boolean; name?: string; error?: string } {
   const name = matchApp(query)
   if (!name) return { ok: false, error: `没找到应用「${query}」` }
-  return { ok: true, name }
+  const full = appPaths.get(name.toLowerCase())
+  try {
+    if (process.platform === 'win32') {
+      // Windows：start 启动 .lnk 全路径；explorer.exe 兜底（url/协议类快捷方式）
+      if (full) execFile('cmd.exe', ['/c', 'start', '', full], { timeout: 15_000 }, () => {})
+      else return { ok: false, error: `「${name}」在清单里但没存到路径——重扫一次试试` }
+    } else {
+      exec(`open -a ${JSON.stringify(name)}`, { timeout: 15_000 }, () => {})
+    }
+    return { ok: true, name }
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
 }
 
 // 防止 path 未使用告警（Windows 扫描后续用）
