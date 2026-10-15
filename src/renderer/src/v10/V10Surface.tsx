@@ -1191,6 +1191,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         onCloseMindMap={() => setMindMapText(null)}
         sandboxBlock={sandboxBlock}
         onCloseSandbox={() => setSandboxBlock(null)}
+        onSandboxAsk={(q) => setPrefillText(q)}
         aiConfigOpen={aiConfigOpen}
         onCloseAiConfig={() => setAiConfigOpen(false)}
         onAiConfigSaved={() => { setAiOn(true); setAiConfigOpen(false) }}

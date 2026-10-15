@@ -531,8 +531,10 @@ function SandboxView(props: {
     }
     window.addEventListener('message', onMsg)
     return () => window.removeEventListener('message', onMsg)
-  }, [])
-  const doc = `<!DOCTYPE html><html><head><style>body{margin:0;background:#F7F4EE;font-family:sans-serif;color:#2B2B28;}${props.piece.css}</style></head><body>${props.piece.html}</body></html>`
+  }, [props.onAsk])
+  // 桥脚本：data-ask 按钮点击 → postMessage 回宿主（LLM 只需输出 <button data-ask="问题">，不用自己写 JS）
+  const bridge = `<script>document.addEventListener('click',function(e){var t=e.target.closest('[data-ask]');if(t&&t.dataset.ask)parent.postMessage({type:'workon-ask',text:t.dataset.ask},'*')})<\/script>`
+  const doc = `<!DOCTYPE html><html><head><style>body{margin:0;background:#F7F4EE;font-family:sans-serif;color:#2B2B28;}${props.piece.css}</style></head><body>${props.piece.html}${bridge}</body></html>`
   return (
     <section className="v10-block">
       <div className="v10-block-kick">

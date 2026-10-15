@@ -1630,3 +1630,20 @@ onClick={() => { if (!props.aiOn) { setAiCfg(true) } }}
 4. 接 FEAT-16/18 卡片位与拖动排序
 
 **验证口径**：右页出现项目卡 → 列出 WorkOn/OnDesign/OnKnow 等 → 点击出详情。
+
+---
+
+## BUG-45 ｜ sandbox「今日待办全景」里按钮点不动——三层连环断
+
+**状态**：`✅ 已验证`（QA 侧直修）
+**严重度**：高（「里面按钮点了会回到对话」是承诺能力，实际全断）
+
+**根因（三层全断）**：
+1. **宿主没注桥脚本**：LLM 按约定生 `<button data-ask="…">` 声明式按钮，但 srcdoc 里没有把点击转成 postMessage 的脚本——按钮是死属性
+2. **`onSandboxAsk` prop 断传**：工作台 `<PaperPane>` 没传（同 BUG-43/44 一族——又一个 prop 断传）
+3. **effect 闭包过期**：SandboxView 的 message 监听 `useEffect(..., [])` 捕获旧 props，热更/prop 变更后永远指向旧 onAsk
+
+**修复**：srcdoc 注入 `data-ask` 点击委托脚本；工作台 PaperPane 补 `onSandboxAsk`；effect 依赖补 `props.onAsk`。
+**验证**：postMessage 实测 → 输入框填入「桥测试：这条该进输入框」✓
+
+**模式注记（给对面，重要）**：BUG-43/44/45 三连全是「prop 写了类型但父组件没传」——AskPane/PaperPane 双挂载点（工作台+拆出窗格）每次新加 prop 都得两处同步传，强烈建议把双挂载点抽成共享 props 对象 `{...paneProps}` 一处维护。
