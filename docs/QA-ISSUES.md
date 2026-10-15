@@ -491,6 +491,36 @@ QA 验证后在「QA 回执」追加一行：
 
 ---
 
+## BUG-17 ｜ 点上下文 chip 后焦点停在按钮上——打字/回车全落空
+
+**状态**：`待修`
+**平台**：通用
+**严重度**：高（按用户体感=「输入框死了」，极易触发：点完 chip 直接打字是本能动作）
+
+**用户原话**：「切换计划（chip）以后，在里面输入框输入内容打不出来字，回车输入都无效」
+
+**实测复现**（主窗单窗态，真实鼠标+键盘事件）：
+
+1. 点「轨迹」chip → `document.activeElement` = **BUTTON「轨迹」**（焦点停在按钮上）
+2. 此时敲键盘 → 输入框 value 完全不变
+3. 按 Enter → 等价于再次点击该 chip → 重复注入「切到『轨迹』会话了」AI 消息（也是 BUG-13 里「回错频道」观感的一部分）
+
+**根因**：`AskPane.tsx` ctx-chip 的 `onClick` 后没有把焦点交还给 `v10-input` textarea。按钮拿焦 → 键盘事件全部落在按钮上。
+
+**修法**：`onSetContext` 处理完 `inputRef.current?.focus()`（或在 AskPane 内 chip 点击后 `document.querySelector('.v10-input')?.focus()`）。同理可顺手给快捷 chips（试试建提醒等）和会话返回按钮也补 focus 回输入框。
+
+**顺带建议**：同上下文 chip 重复点击可加守卫（`if (k === activeContext) return`），避免重复注入「切到…」提示。
+
+**复现**：v10 主窗 → 点任一 ctx chip → 直接打字 → 无反应；按 Enter → chip 被重复触发。
+
+**修复记录**：
+- （空，待修复方填写）
+
+**QA 回执**：
+- （空）
+
+---
+
 ## 环境问题（非代码）
 
 **DeepSeek LLM 调用 HTTP 503**：日志 `[ai] LLM 调用失败，回退规则分析: HTTP 503`——AI 拆解/回答全部走本地兜底（兜底正常）。建议检查 key 状态或 DeepSeek 服务侧限流。
