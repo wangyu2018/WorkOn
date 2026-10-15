@@ -29,6 +29,11 @@
   --r-sm: 6px;
   --font-ui: 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif;
   --font-num: 'Songti SC', 'Noto Serif SC', serif;
+  /* 语义层（主题自适应） */
+  --surface: #FFFFFF;
+  --surface-2: var(--celadon-1);
+  --overlay-bg: rgba(247, 244, 238, 0.97);
+  --shadow-color: rgba(43, 43, 40, 0.14);
 
   position: fixed;
   inset: 0;
