@@ -11,7 +11,18 @@ export interface ReminderIntent {
   whenLabel: string
 }
 
-const TIME_RE = /(\d{1,2})\s*[点时:：]\s*(\d{1,2})?\s*分?/
+const TIME_RE = /(\d{1,2}|十[一二两三四五六七八九]?|[一二两三四五六七八九]十?[一二两三四五六七八九]?)\s*[点时:：]\s*(\d{1,2}|半)?\s*分?/
+
+const CN_DIGITS: Record<string, number> = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 }
+
+/** 「四」→4 「十」→10 「十一」→11 「二十」→20；阿拉伯数字原样返回 */
+function toHour(s: string): number {
+  if (/^\d+$/.test(s)) return parseInt(s, 10)
+  if (s === '十') return 10
+  if (s.startsWith('十')) return 10 + (CN_DIGITS[s[1]] ?? 0)
+  if (s.includes('十')) return (CN_DIGITS[s[0]] ?? 1) * 10 + (CN_DIGITS[s[2]] ?? 0)
+  return CN_DIGITS[s] ?? 0
+}
 const DAY_RE = /(每天|每日|天天)/
 const TONIGHT_RE = /(今晚|今天)/
 const TOMORROW_RE = /(明天|明晚|明日)/
@@ -53,8 +64,8 @@ export function parseScheduleProposal(text: string): ScheduleProposal | null {
   if (!TIME_RE.test(text)) return null
   if (!EVENT_RE.test(text)) return null
   const t = TIME_RE.exec(text)!
-  let hour = Math.min(23, parseInt(t[1], 10))
-  const min = t[2] ? Math.min(59, parseInt(t[2], 10)) : 0
+  let hour = Math.min(23, toHour(t[1]))
+  const min = t[2] === '半' ? 30 : t[2] ? Math.min(59, toHour(t[2])) : 0
   const hourPos = t.index
   const prefix = text.slice(Math.max(0, hourPos - 3), hourPos)
   if (/(晚上|晚间|夜里|下午|傍晚|午后|今晚)/.test(prefix) && hour >= 1 && hour <= 11) hour += 12
@@ -80,12 +91,20 @@ export function parseReminderIntent(text: string): ReminderIntent | null {
   if (!REMIND_RE.test(text)) return null
   const t = TIME_RE.exec(text)
   if (!t) return null
-  let hour = Math.min(23, parseInt(t[1], 10))
-  const min = t[2] ? Math.min(59, parseInt(t[2], 10)) : 0
+  let hour = Math.min(23, toHour(t[1]))
+  const min = t[2] === '半' ? 30 : t[2] ? Math.min(59, toHour(t[2])) : 0
   // 时段修饰：晚上/下午/傍晚 1-11 点 → +12（「晚上8点」=20:00 而非 08:00）
   const hourPos = t.index
   const prefix = text.slice(Math.max(0, hourPos - 3), hourPos)
   if (/(晚上|晚间|夜里|下午|傍晚|午後|午后|今晚|今晚)/.test(prefix) && hour >= 1 && hour <= 11) hour += 12
+  // 口语惯例：裸「四点」白天说≈16:00。仅限一次性提醒（每日周期不猜上下午），
+  // 无早上/上午/凌晨标记且该点已过、+12 后仍是今天未来 → 按下午算
+  if (!DAY_RE.test(text) && !/(早上|上午|凌晨|早晨)/.test(prefix) && hour >= 1 && hour <= 11) {
+    const now = new Date()
+    const pm = new Date(); pm.setHours(hour + 12, min, 0, 0)
+    const am = new Date(); am.setHours(hour, min, 0, 0)
+    if (am.getTime() <= now.getTime() && pm.getTime() > now.getTime() && pm.getDate() === now.getDate()) hour += 12
+  }
   const atHHMM = `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}`
   const daily = DAY_RE.test(text)
   // 事项 = 去掉时间和触发词后的剩余部分
