@@ -39,17 +39,23 @@ QA 验证后在「QA 回执」追加一行：
 
 有新 bug 由 QA 追加为 BUG-N 条目（状态=待修）。**只允许 push 到 gitee main，双方不要在同一行上冲突编辑。**
 
+### 平台字段
+
+- `win` —— Windows 侧发现/可复现（QA 本机验）
+- `mac` —— macOS 侧问题（修复方 zcode mac mini 自验，QA 侧只做通用回归）
+- `通用` —— 平台无关，两边都能验
+
+### 用户报障通道
+
+用户在 Windows 本（上班）用出问题 → 直接跟 QA agent 说现象 → QA 复现+定位+落 BUG-N。
+用户在 mac mini（家里 zcode）发现的问题 → 修复方自己落 BUG-N（状态=待修，平台=mac），QA 回归通用部分。
+
 ---
 
 ## BUG-1 ｜ 拆出的右页窗（pane=paper）丢「人生预期」块 + 死按钮
 
 **状态**：`待修`
-**严重度**：中（拆开是核心交互，拆开就丢功能）
-
----
-
-## BUG-1 ｜ 拆出的右页窗（pane=paper）丢「人生预期」块 + 死按钮
-
+**平台**：win（拆窗是通用逻辑，mac 侧建议同步自验）
 **严重度**：中（拆开是核心交互，拆开就丢功能）
 
 **位置**：`src/renderer/src/v10/V10Surface.tsx` —— `paneMode === 'paper'` 分支（约 773-812 行）的 `<PaperPane>` 少传了一批 props。
@@ -77,6 +83,7 @@ QA 验证后在「QA 回执」追加一行：
 ## BUG-2 ｜ 「提醒」块是死代码——建了提醒右页看不到
 
 **状态**：`待修`
+**平台**：通用
 **严重度**：中（功能断层：能建不能看）
 
 **位置**：`src/renderer/src/v10/PaperPane.tsx`
@@ -103,6 +110,7 @@ QA 验证后在「QA 回执」追加一行：
 ## BUG-3 ｜ 新建会话标题截取生硬
 
 **状态**：`待修`
+**平台**：通用
 **严重度**：低（观感问题）
 
 **位置**：`src/renderer/src/v10/V10Surface.tsx` `onAddToSession` → `createSession`（约 867 行）
