@@ -656,6 +656,19 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         return
       }
 
+      // ── 待办清单问句（BUG-29：plans 已在本地 state，直列不依赖 LLM） ──
+      if (/待办|todo|要做的事|还有什么事|任务清单/.test(normalized) && !/提醒|天气|新增|加一个/.test(normalized)) {
+        const open = plans.filter((p) => !p.archived && p.status !== 'done' && p.status !== 'cancelled')
+        const done = plans.filter((p) => p.status === 'done')
+        pushAI([{
+          role: 'ai',
+          text: open.length === 0 && done.length === 0
+            ? '还没有任何待办——说「提醒我 xxx」或「计划 xxx」我来建。'
+            : `待办 ${open.length} 项${done.length ? `（已完成 ${done.length}）` : ''}：\n${open.map((p) => `· ${p.title}${p.startMin != null ? `（${Math.floor(p.startMin / 60)}:${String(p.startMin % 60).padStart(2, '0')}）` : ''}`).join('\n') || '（空的）'}`
+        }])
+        return
+      }
+
       // ── 天气问句（本地直查，不依赖 LLM——AI 挂了/网络抽风也能答；FEAT-8 卡片化的文本先行版） ──
       if (/天气|下雨|带伞|出门|温度|冷吗|热吗/.test(normalized)) {
         void (window.api as { getWeather?: (city?: string) => Promise<unknown> })?.getWeather?.().then((w) => {
