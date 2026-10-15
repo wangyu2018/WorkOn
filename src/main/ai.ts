@@ -180,7 +180,10 @@ export async function llmChat(
       body: JSON.stringify({ model, messages, temperature: 0.4 }),
       signal: ctrl.signal
     })
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    if (!resp.ok) {
+      const body = (await resp.text().catch(() => '')).slice(0, 200)
+      throw new Error(`HTTP ${resp.status} ${body}`)
+    }
     const json = (await resp.json()) as {
       choices?: { message?: { content?: string } }[]
       usage?: { total_tokens?: number }
@@ -238,7 +241,10 @@ export async function llmChatWithTools(
       }),
       signal: ctrl.signal
     })
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    if (!resp.ok) {
+      const body = (await resp.text().catch(() => '')).slice(0, 200)
+      throw new Error(`HTTP ${resp.status} ${body}`)
+    }
     const json = (await resp.json()) as {
       choices?: { message?: { content?: string | null; tool_calls?: ToolCall[] } }[]
       usage?: { total_tokens?: number }
@@ -422,7 +428,10 @@ export async function llmChatStream(
       body: JSON.stringify({ model, messages, temperature: 0.4, stream: true }),
       signal: ctrl.signal
     })
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    if (!resp.ok) {
+      const body = (await resp.text().catch(() => '')).slice(0, 200)
+      throw new Error(`HTTP ${resp.status} ${body}`)
+    }
     const { content } = await parseSSEStream(resp, onChunk)
     trackUsage(model, Math.ceil(content.length / 4) + 200, false)
     return content || null
@@ -479,7 +488,10 @@ export async function chatWithToolLoopStream(
         }),
         signal: ctrl.signal
       })
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      if (!resp.ok) {
+        const body = (await resp.text().catch(() => '')).slice(0, 200)
+        throw new Error(`HTTP ${resp.status} ${body}`)
+      }
 
       // 只有最后一轮（无工具调用）的文本才流式输出
       // 前几轮如果有工具调用，不流式输出 content（通常是空或思考过程）
@@ -797,6 +809,9 @@ function localAnswer(question: string, facts: Record<string, unknown> | null, tr
   const tail = aiConfigured
     ? '这次 AI 接口临时不可用（服务波动/超时），稍后再问一次就好。'
     : '这个问题需要 AI 才能深入回答，去「设置 → AI」配置后即可解锁。'
+  // 非工作类问句（闲聊/生活/通用问答）不附今日小结——答非所问比不答更糟
+  const workRelated = /工作|摸鱼|状态|今天|今日|专注|效率|计划|目标|轨迹|干了|项目/.test(q)
+  if (!workRelated) return tail
   return `本地小结：今日墙钟 ${f.totalMin} 分钟，工作 ${f.workMin} 分钟，摸鱼 ${f.slackMin} 分钟。${tail}`
 }
 
