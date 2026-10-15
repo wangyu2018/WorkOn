@@ -1029,6 +1029,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           onSend={send}
           scrollRef={scrollRef}
           presence={presence}
+          aiOn={aiOn}
           objectChip={objectChip}
           onClearChip={() => setObjectChip(null)}
           quoteChip={quoteChip}
@@ -1073,6 +1074,8 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           onReminderRemoved={(id) => setReminders((list) => list.filter((x) => x.id !== id))}
           mindMapText={mindMapText}
           onCloseMindMap={() => setMindMapText(null)}
+          sandboxBlock={sandboxBlock}
+          onCloseSandbox={() => setSandboxBlock(null)}
           onQuoteFeed={(t) => setQuoteChip({ text: t, from: '折下' })}
           onContextAsk={(k, q) => {
             setActiveContext(k as ContextKey)
@@ -1102,6 +1105,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         onSend={send}
         scrollRef={scrollRef}
         presence={presence}
+        aiOn={aiOn}
         objectChip={objectChip}
         onClearChip={() => setObjectChip(null)}
         quoteChip={quoteChip}
@@ -1185,6 +1189,8 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         showFlowMap={showFlowMap}
         mindMapText={mindMapText}
         onCloseMindMap={() => setMindMapText(null)}
+        sandboxBlock={sandboxBlock}
+        onCloseSandbox={() => setSandboxBlock(null)}
         aiConfigOpen={aiConfigOpen}
         onCloseAiConfig={() => setAiConfigOpen(false)}
         onAiConfigSaved={() => { setAiOn(true); setAiConfigOpen(false) }}

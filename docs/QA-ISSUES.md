@@ -1536,3 +1536,39 @@ onClick={() => { if (!props.aiOn) { setAiCfg(true) } }}
 | 生成可视化（sandbox） | 未测——依赖 LLM 生 HTML，DeepSeek 波动期跳过 |
 
 **设计注记**：optionsRef 在新问题后不自动失效——挂起的选择卡长期可答，回数字会作用到旧卡（协议本意如此，但要意识到）。
+
+---
+
+## BUG-43 ｜ 「生成可视化」按钮永远不可见——aiOn 只传给 PaperPane，两处 AskPane 都没传
+
+**状态**：`✅ 已验证`（QA 侧直修）
+**严重度**：高（sandbox 可视化功能整体不可达——按钮从写好那天起就没渲染过）
+
+**根因**：`aiOn={aiOn}` 只出现在两处 `<PaperPane>` props；两处 `<AskPane>`（工作台 1099、拆出的 ask 窗格 1025）都没传 → `ctx.aiOn` 恒 null → MindChip 里 `生成可视化` 按钮永不渲染。
+**排查路径**：实测按钮缺失 → React fiber 读 AskPane props → `'aiOn' in props` 为 false → 定位传参断点。
+**修复**：两处 `<AskPane>` 补 `aiOn={aiOn}`。
+
+## BUG-44 ｜ 生成可视化成功但右页不渲染——sandboxBlock 状态没传给 PaperPane
+
+**状态**：`✅ 已验证`（QA 侧直修）
+**严重度**：高（LLM 真生成了 piece、对话也回了「落右页了」，但右栏什么都没有）
+
+**根因**：`sandboxBlock` useState + `setSandboxBlock(piece)` 都有，但 `<PaperPane>` 的 `sandboxBlock` prop 从未接线——同 aiOn 一族的「prop 断传」。
+**修复**：两处 `<PaperPane>` 补 `sandboxBlock` + `onCloseSandbox`。
+
+**验证**：修复后点「生成可视化」→ LLM 生成「今日待办全景」→ `.v10-sandbox` iframe 真渲染在右页。
+
+**模式注记**：这俩是同一病——写子组件 props 类型时定义了，父组件忘传。**建议对面自查一遍其它可选 prop 的断传**（尤其 PaperPane/AskPane 新增能力位）。
+
+---
+
+## QA 补测：「未测清单」全清（2026-10-15 晚）
+
+| 项 | 结果 |
+|---|---|
+| 预期确认卡「确认创建」 | ✅ 建目标落库（5 锚点 active），验证后已删不留痕 |
+| 提醒触发「晚 10 分钟」 | ✅ 到点卡弹出 → 回 2 → 真建了 +10min 提醒（已清） |
+| 音乐控制（Windows） | ✅ 优雅报错「仅 macOS」不崩不装死——Windows 媒体键是已知缺口 |
+| 拖拽引用（quoteChip） | ✅ DataTransfer 模拟 → chip 挂载「引用 · 网页选中」→ 前缀送 LLM（AI 回复内容证实收到）→ 用后消费 |
+| 生成可视化 sandbox | ✅ 修复 BUG-43/44 后全链通：按钮可见 → LLM 生成 → iframe 右页渲染 |
+| IM 来件卡 | 静态确认协议正确（onNotify→折下卡+chat options），真实触发需微信实测——归 BUG-30 一体验收 |
