@@ -767,6 +767,35 @@ preload 里 `getLoadStatus` 已暴露，**v10 现在没人消费**。落地 = Pa
 
 ---
 
+## BUG-22 ｜ AI agent 监控完全没提示——三层断链
+
+**状态**：`待修`
+**平台**：win（通用）
+**严重度**：中高（功能上线即静默死）
+
+**用户原话**：「我的接入 AI agent 监控咋没有提示呢？」
+
+**实测**：`aiAssistWatchEnabled: true`，但用户在 zcode/Devin 里干活全程零提示。断链有三层，全中：
+
+1. **v10 没人渲染**：`broadcast()` 把 `ai-assist:update` 发到 main 窗，但 v10 代码里**没有任何监听者**——`AiAssistStrip` 只被 widget（悬浮窗）和 todoWidget 引用。信号到了主窗没人接
+2. **可见性门控掐死采样**：`aiAssistWatchTick`（`aiAssistWatch.ts:170-173`）——**悬浮窗和待办小组件都不可见时直接跳过采样**。用户两个窗都关着（FEAT-3 正要废悬浮窗），所以压根没跑过一次 PS 采样
+3. **名单里没有用户在用的工具**：用户 watch 列表是默认 4 个（cursor/claude/chatgpt/windsurf），`zcode`/`devin` 在 `AI_ASSIST_POOL` 里有但没勾
+
+**修法建议**：
+
+- 采样门控改为「任何消费窗口可见就采样」（main 窗也算消费者）
+- v10 落一个 AI 助手状态条——正好接进 FEAT-6 的后端监控块，或 masthead AI 钮上做闪点
+- 名单默认/引导补 `devin`/`zcode`（用户实际在用的）
+- 配套：FEAT-3 悬浮窗迁移时这条正好顺势落进左右窗格
+
+**修复记录**：
+- （空，待修复方填写）
+
+**QA 回执**：
+- （空）
+
+---
+
 ## FEAT-8 ｜ 问天气 → 结构化天气卡 + 可固定到右页成块
 
 **状态**：`待修`（需求）
