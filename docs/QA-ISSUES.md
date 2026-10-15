@@ -767,6 +767,37 @@ preload 里 `getLoadStatus` 已暴露，**v10 现在没人消费**。落地 = Pa
 
 ---
 
+## BUG-26 ｜ 人生预期块的「留住/×」是死按钮——遗留重复行无 onClick
+
+**状态**：`待修`
+**平台**：通用
+**严重度**：中（高频交互无效）
+
+**用户原话**：「人生预期点留住不生效」
+
+**根因**（`PaperPane.tsx:396-400`）：人生预期块头部有**两行操作区**：
+
+```tsx
+<span className="acts">
+  {props.kick?.({ blockKey: 'goals' })}   {/* ← 真·留住/×（有逻辑） */}
+  <button className="blk-chat">对话</button>
+</span>
+<span className="acts"><button>留住</button><button>×</button></span>
+{/*      ↑ 遗留死代码：裸按钮无 onClick，点了零反应 */}
+```
+
+真的「留住」是 kick 行渲染的 `◇ 留住`（可点，写 localStorage `v10blocks`）；用户点到的是第二行遗留的死「留住/×」。
+
+**修法**：删掉 `PaperPane.tsx:400` 整行死 span（kick 已提供 留住/× + 对话）。**顺带排查其它块是否也有同款死行**（手工 grep `<button>留住</button>` 裸按钮）。
+
+**修复记录**：
+- （空，待修复方填写）
+
+**QA 回执**：
+- （空）
+
+---
+
 ## BUG-25 ｜ 「⚙ 设置」死按钮——nav:view 发进真空，v10 没有设置页
 
 **状态**：`待修`
