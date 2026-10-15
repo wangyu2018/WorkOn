@@ -1,0 +1,75 @@
+# QA Issues —— WorkOn v10
+
+> 测试方：Devin（QA agent）｜ 测试方式：CDP 驱动运行中应用实测（remote-debugging-port=9222）
+> 测试基线：gitee/main @ `9458463`
+> 测试日期：2026-10-15
+
+---
+
+## BUG-1 ｜ 拆出的右页窗（pane=paper）丢「人生预期」块 + 死按钮
+
+**严重度**：中（拆开是核心交互，拆开就丢功能）
+
+**位置**：`src/renderer/src/v10/V10Surface.tsx` —— `paneMode === 'paper'` 分支（约 773-812 行）的 `<PaperPane>` 少传了一批 props。
+
+**实测现象**：
+- 玻璃拆开后，paper 窗顶部显示「已固定 3」但实际只渲染 2 个块（此刻 + 今日轨迹），**人生预期块消失**
+- 「✕ 合回」按钮点击无任何反应（死按钮）
+- 主题切换按钮（☾/◐）点击无效
+- 拖块入对话（onDropBlock）不可用
+
+**根因**：`PaperPane.tsx:747` 用 `props.onMarkAnchor` 当 goals 块的渲染开关；paper 分支没传 `goals / onMarkAnchor / onGoalPatch / onAttach / theme / onToggleTheme / onDropBlock` 等。
+
+**修法**：把主窗分支（约 875 行起）的同一批 props 补到 paper 分支即可——`goals`、`onMarkAnchor`、`onGoalPatch`、`onAttach`、`theme`、`onToggleTheme`、`onDropBlock`、`onboardStep`、`onOnboardFinish`、`onSandboxAsk` 等对照补齐。
+
+**复现**：v10 界面 → 输入「我想在年底前把 X 做到 Y」→ 回 1 建目标 → 点「◫ 玻璃拆开」→ 看 paper 窗缺块、合回按钮无效。
+
+---
+
+## BUG-2 ｜ 「提醒」块是死代码——建了提醒右页看不到
+
+**严重度**：中（功能断层：能建不能看）
+
+**位置**：`src/renderer/src/v10/PaperPane.tsx`
+
+**现象**：
+- `reminders` prop 声明了（行 558）、`V10Surface` 也传了、`BLOCK_LABEL` 里有 `'reminders': '提醒'` 标签、`onReminderRemoved` 也声明了
+- 但折上块渲染数组（约 743-752 行）里**只有 now / plans / timeline / goals 四块**，没有 reminders 块
+- 实测：对话里建 2 条提醒入库成功（`listReminders` 返回 2 条），右页无任何提醒块展示
+
+**修法（二选一）**：
+- 补一个 `RemindersBlock` 组件并进块数组（正确做法，BLOCK_LABEL 都备好了说明本来就要做）
+- 或删掉死代码（prop、label、onReminderRemoved），确认提醒只走折下通知一条通道
+
+**复现**：对话输入「晚上9点提醒我休息」→ 建成 → 右页找不到提醒列表。
+
+---
+
+## BUG-3 ｜ 新建会话标题截取生硬
+
+**严重度**：低（观感问题）
+
+**位置**：`src/renderer/src/v10/V10Surface.tsx` `onAddToSession` → `createSession`（约 867 行）
+
+**现象**：对 AI 开场白消息点 ⋯→新建会话，标题截成「早上好。右页是你的版面——今天的计划和轨迹会自己」（63 字截断、断在词中间），且取的是 AI 开场白而非用户意图消息。
+
+**修法**：标题优先取用户消息；或调 `chatSessions` 的 AI 总结标题路径（`5ab9775` 已实现 AI 总结标题，确认此处是否走了该路径——看起来走的是 plain 截断 fallback）。截断时按词边界 + 省略号。
+
+---
+
+## 环境问题（非代码）
+
+**DeepSeek LLM 调用 HTTP 503**：日志 `[ai] LLM 调用失败，回退规则分析: HTTP 503`——AI 拆解/回答全部走本地兜底（兜底正常）。建议检查 key 状态或 DeepSeek 服务侧限流。
+
+---
+
+## 已验证通过（本次实测清单）
+
+- 回车发送（fae8de0 修复生效）、无 asking 卡死
+- 人生预期全链路：意图识别→本地拆解卡→回 1→创建→右页块→锚点标 hit/取消→加锚点自动按日期排序→删锚点
+- 主题切换（主窗）、块固定/隐藏/恢复、拖块会话上下文「对话」按钮
+- 会话体系：⋯菜单→新建会话→进入会话→会话内消息列表
+- 快捷 chips（试试建提醒）、提醒建/存
+- 玻璃拆开双窗生成、`attachPanes` API 合回
+- KPI 卡不再硬塞（67b2d6b 修复生效）
+- 无 React crash，仅 1 条 key prop 警告（待定位具体列表）
