@@ -701,7 +701,7 @@ export function PaperPane(props: {
   }
   return (
     <main className="v10-paper">
-      <header className="v10-masthead">
+      <header className="v10-masthead draggable">
         <div className="mh-row">
           <div className="mh-title">WorkOn · 一面</div>
           <span className="mh-statepill">

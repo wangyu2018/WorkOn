@@ -694,17 +694,17 @@ QA 验证后在「QA 回执」追加一行：
 
 ---
 
-## BUG-21 ｜ 拆出的窗格不能单独移动/最小化/关闭
+## BUG-21 ｜ 顶栏拖拽区未挂载——主窗+拆出窗格全部拖不动/不能独立最小化关闭
 
-**状态**：`待修`
+**状态**：`部分修复`（win：拖拽已验证；窗格独立最小化/关闭仍待）
 **平台**：通用
-**严重度**：中-高（拆开是核心交互，拆完窗是死位置）
+**严重度**：高（主窗也拖不动，核心窗口交互缺失）
 
-**用户原话**：「拆出，为啥左侧的问答不能单独移动最小化关闭，右侧也是」
+**用户原话**：「拆出，为啥左侧的问答不能单独移动最小化关闭，右侧也是」「顶部不能拖动移动位置」（补充：主窗顶栏同样拖不动）
 
 **实测/代码层确认**：
 
-1. **不能移动**：pane 窗是 `frame:false` 无边框窗，移动全靠 `-webkit-app-region: drag` 拖拽区。`v10.css:675` 写了 `.v10-masthead.draggable{ -webkit-app-region: drag }`，但 `PaperPane.tsx:680` 渲染的是 `<header className="v10-masthead">`——**没挂 draggable class**。AskPane 的 sesstop 同理没拖拽区。两片窗格都拖不动。
+1. **不能移动（主窗+窗格同病）**：`v10.css:675` 写了 `.v10-masthead.draggable{ -webkit-app-region: drag }`，但 `PaperPane.tsx:704` 渲染的是 `<header className="v10-masthead">`——**draggable class 从未挂上**，所以主窗顶栏和拆出的两片窗格都拖不动（无边框窗移动全靠这个拖拽区）。AskPane 的 sesstop 同理没拖拽区。修复=挂上 class 即可，CSS 现成。
 2. **不能最小化**：ask 窗控制组只有 📌置顶/⎯吸附/⇲收起/✕合回——没有「最小化到任务栏」；paper 窗有 `—` 但走的是 `winHideWorkbench`（收工作台）不是窗口最小化。
 3. **不能关闭**：单片窗格没有「关闭这片」的独立入口——只有「合回」（两片一起收）或「收起」（藏托盘）。
 
@@ -884,10 +884,10 @@ onClick={() => { if (!props.aiOn) { setAiCfg(true) } }}
 - 和 ctx chip 色板呼应但独立（session 色≠context 色，别混）
 
 **修复记录**：
-- （空，待修复方填写）
+- QA 侧直修：`PaperPane.tsx` masthead 挂 `draggable` class（拖拽区生效）；`.v10-sesstop` 加 drag 区（左栏顶条/拆出 ask 窗可拖）；`.mh-ai` 补 no-drag（否则 AI 钮不可点）。**遗留**：单片窗格独立的「最小化到任务栏」「关闭这片」按钮仍未加——等修复方补。
 
 **QA 回执**：
-- （空）
+- [2026-10-16] ✅ 拖拽部分已验证（computed `-webkit-app-region: drag` 生效，按钮 no-drag 正常）
 
 ---
 

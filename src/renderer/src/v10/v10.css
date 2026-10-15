@@ -674,7 +674,11 @@
 .v10-pane .v10-paper { padding: 0 0 20px; }
 .v10-masthead.draggable { -webkit-app-region: drag; }
 .v10-masthead.draggable .mh-act,
+.v10-masthead.draggable .mh-ai,
 .v10-masthead.draggable button { -webkit-app-region: no-drag; }
+/* 左栏顶部条同样作拖拽区（拆出的 ask 窗格/主窗左列都可拖移窗口） */
+.v10-sesstop { -webkit-app-region: drag; }
+.v10-sesstop button, .v10-sesstop input, .v10-sesstop .v10-seslist { -webkit-app-region: no-drag; }
 .v10-detached-card { text-align: center; max-width: 380px; padding: 30px; }
 .v10-detached-card .dc-title { font-family: var(--font-num); font-size: 20px; color: var(--ink); margin-bottom: 10px; }
 .v10-detached-card .dc-sub { font-size: 12.5px; color: var(--ink-2); line-height: 1.8; margin-bottom: 18px; }
