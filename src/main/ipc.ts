@@ -221,6 +221,8 @@ export function registerIpc(): void {
       patch.petInteractions !== undefined ||
       patch.petReturnMin !== undefined
     ) {
+      // 主窗/settings 变更广播：v10 表面 aiOn 等状态靠挂载时读一次，跨窗修改后各渲染端状态会僵
+      sendTo('main', 'settings:update', { aiEnabled: next.aiEnabled, aiModel: next.aiModel, aiBaseUrl: next.aiBaseUrl })
       if (patch.aiStreaming !== undefined) sendTo('pet', 'pet:settings', { aiStreaming: next.aiStreaming })
       sendTo('pet', 'pet:settings', {
         petScale: next.petScale,

@@ -307,6 +307,7 @@ const api = {
   onErrorBanner: on('error-banner'),
   onRulesApplied: on('rules:applied'),
   onNavView: on('nav:view'),
+  onSettingsUpdate: on('settings:update'),
 
   // oner
   onerSync: () => ipcRenderer.invoke('oner:sync'),

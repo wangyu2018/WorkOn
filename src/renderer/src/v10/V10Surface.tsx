@@ -156,6 +156,11 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
     })
     void window.api?.getPresence?.().then((p) => setPresence((p as PresenceSnapshot) ?? null))
     void window.api?.getSettings?.().then((st) => setAiOn(!!(st as { aiEnabled?: boolean })?.aiEnabled))
+    // 跨窗配置变更同步：AiConfigBlock 在别的窗格保存后，本窗 aiOn 不会僵在旧值（settings:update 广播）
+    const offSU = window.api?.onSettingsUpdate?.((s) => {
+      const p = s as { aiEnabled?: boolean }
+      if (typeof p.aiEnabled === 'boolean') setAiOn(p.aiEnabled)
+    })
     void window.api?.listSessions?.().then((x) => setSessions((x as ChatSession[]) ?? []))
     // coding 信号（v10）：AI 编程工具 busy→done → 对话流通知（开始=可接管提示，结束=完成通知）
     const seenBusy = new Set<string>()
@@ -254,6 +259,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       offP?.()
       offS?.()
       offR?.()
+      offSU?.()
       offN?.()
       window.clearInterval(tick)
       window.clearInterval(timer)

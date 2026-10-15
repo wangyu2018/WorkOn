@@ -414,13 +414,26 @@ function AiConfigBlock(props: { onClose: () => void; onSaved: () => void }): JSX
   const [key, setKey] = useState('')
   const [model, setModel] = useState('deepseek-chat')
   const [saved, setSaved] = useState(false)
+  const [hasKey, setHasKey] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<string>('')
   useEffect(() => {
     void window.api?.getSettings?.().then((st) => {
-      const s2 = st as { aiBaseUrl?: string; aiModel?: string }
+      const s2 = st as { aiBaseUrl?: string; aiModel?: string; aiApiKey?: string }
       if (s2.aiBaseUrl) setBase(s2.aiBaseUrl)
       if (s2.aiModel) setModel(s2.aiModel)
+      if (s2.aiApiKey) setHasKey(true)
     })
   }, [])
+  const doTest = (): void => {
+    setTesting(true)
+    setTestResult('')
+    const api = window.api as { testAI?: () => Promise<{ ok?: boolean; latency?: number; model?: string; error?: string }> } | undefined
+    void Promise.resolve(api?.testAI?.())
+      .then((r) => setTestResult(r?.ok ? `✓ 连通（${r.latency ?? '?'}ms · ${r.model ?? model}）` : `✗ ${r?.error ?? '连接失败'}`))
+      .catch((e) => setTestResult(`✗ ${String(e).slice(0, 80)}`))
+      .finally(() => setTesting(false))
+  }
   return (
     <section className="v10-block">
       <div className="v10-block-kick">
@@ -432,24 +445,34 @@ function AiConfigBlock(props: { onClose: () => void; onSaved: () => void }): JSX
         <label>API BaseURL（OpenAI 兼容端点）
           <input value={base} onChange={(e) => setBase(e.target.value)} placeholder="https://api.deepseek.com/v1" />
         </label>
-        <label>API Key
-          <input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="sk-…" />
+        <label>API Key{hasKey && !key ? '（已配置，留空保持不变）' : ''}
+          <input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={hasKey ? '已保存·输入以更换' : 'sk-…'} />
         </label>
         <label>模型
           <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="deepseek-chat" />
         </label>
-        <button
-          className="dc-btn"
-          disabled={!key.trim()}
-          style={{ opacity: key.trim() ? 1 : 0.5 }}
-          onClick={() => {
-            void window.api?.setSettings?.({ aiEnabled: true, aiApiKey: key.trim(), aiBaseUrl: base.trim(), aiModel: model.trim() } as never)
-            setSaved(true)
-            props.onSaved()
-          }}
-        >
-          {saved ? '✓ 已保存，再去问一遍试试' : '保存并启用 AI'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className="dc-btn"
+            title="保存配置并启用"
+            disabled={!key.trim() && !hasKey}
+            style={{ opacity: key.trim() || hasKey ? 1 : 0.5, flex: 1 }}
+            onClick={() => {
+              const patch: Record<string, unknown> = { aiEnabled: true, aiBaseUrl: base.trim(), aiModel: model.trim() }
+              if (key.trim()) patch.aiApiKey = key.trim()
+              void window.api?.setSettings?.(patch as never)
+              setSaved(true)
+              setHasKey(true)
+              props.onSaved()
+            }}
+          >
+            {saved ? '✓ 已保存' : '✔ 保存并启用'}
+          </button>
+          <button className="dc-btn" title="用当前配置发一个测试请求" onClick={doTest} disabled={testing}>
+            {testing ? '…' : '⚡ 测连通'}
+          </button>
+        </div>
+        {testResult ? <div className="ob-hint" style={{ marginTop: 6 }}>{testResult}</div> : null}
         <div className="ob-hint">Key 只存本机 settings.json；国内可用 DeepSeek / Kimi / GLM 的兼容端点。</div>
       </div>
     </section>
