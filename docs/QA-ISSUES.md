@@ -442,6 +442,41 @@ QA 验证后在「QA 回执」追加一行：
 
 ---
 
+## BUG-16 ｜ 浮窗「钉在桌面层」点击无效——attach 成功但被自家自检回滚
+
+**状态**：`待修`
+**平台**：win（desktopPin 是 Windows 专属，mac 无此功能）
+**严重度**：中
+
+**用户原话**：「小组件的固定，点击没效果」
+
+**实测**：CDP 调 `setSettings({widgetDesktopPin:true})` → 1.5s 后读回 `widgetDesktopPin=false`——开关被静默重置，无任何失败提示。
+
+**日志实锤**（dev-out.log）：
+
+```
+[desktopPin] attached but not visibly alive, detaching { nativeOk: true, electronOk: false }
+```
+
+**根因**（`desktopPin.ts:258-264`）：`SetParent` 挂到 SHELLDLL_DefView **已经成功**（`IsWindowVisible` native 层=true，窗口其实钉上了），但 `electronLooksAlive` 自检里 `win.isVisible()` 返回 false → 触发 `rollbackAttach` 拆掉 → `applyWidgetDesktopPin`（`windows.ts:1049`）把 setting 重置回 false。
+
+`isVisible()` 为 false 的机理：SetParent 重挂父窗会触发 `WM_SHOWWINDOW(SW_PARENT*)`，Electron 内部的可见性记账被带偏——native 层面窗是可见的（IsWindowVisible=true），Electron 侧 flag 却是 hidden。已排除尺寸原因：当时浮窗 120×36 DIP，过了 `≥40×24` 的阈值。
+
+**修法建议**：
+
+- `electronLooksAlive` 里 `isVisible()` 改成信任 native `IsWindowVisible(child)`（nativeOk 已经查了），Electron flag 不应作为否决项；或加 ~50ms 延迟重试再判
+- **失败要吱声**：attach 失败静默重置 setting，用户看到的就是「点了没反应」。应推个通知/toast（「钉桌面失败：xxx」），todoWidget 分支已有 `desktop-pin-result` 回执通道可复用，widget 分支目前连失败回执都没有
+
+**复现**：桌搭页/设置里开「钉在桌面层」开关 → 开关立即回弹关闭。
+
+**修复记录**：
+- （空，待修复方填写）
+
+**QA 回执**：
+- （空）
+
+---
+
 ## 环境问题（非代码）
 
 **DeepSeek LLM 调用 HTTP 503**：日志 `[ai] LLM 调用失败，回退规则分析: HTTP 503`——AI 拆解/回答全部走本地兜底（兜底正常）。建议检查 key 状态或 DeepSeek 服务侧限流。
