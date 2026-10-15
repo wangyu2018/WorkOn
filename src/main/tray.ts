@@ -44,15 +44,23 @@ function opacityRadios(
   pick: (v: number) => void
 ): Electron.MenuItemConstructorOptions[] {
   const tiers: { label: string; v: number }[] = [
-    { label: '100%', v: 1 },
-    { label: '70%', v: 0.7 },
-    { label: '40%', v: 0.4 }
+    { label: '不透明', v: 1 },
+    { label: '半透明', v: 0.7 },
+    { label: '更透', v: 0.4 },
+    { label: '无极调节…', v: -1 } // 跳设置页滑杆（原生菜单做不了滑块）
   ]
   return tiers.map((t, i) => ({
     label: t.label,
     type: 'radio',
-    checked: i === 0 ? value > 0.85 : i === 1 ? value > 0.55 && value <= 0.85 : value <= 0.55,
-    click: () => pick(t.v)
+    checked: t.v > 0 && (i === 0 ? value > 0.85 : i === 1 ? value > 0.55 && value <= 0.85 : value <= 0.55),
+    click: () => {
+      if (t.v < 0) {
+        // 无极调节：跳设置页滑杆（原生菜单做不了滑块）
+        openMain('settings')
+        return
+      }
+      pick(t.v)
+    }
   }))
 }
 
@@ -127,27 +135,27 @@ function buildMenu(): void {
     sep(),
     // ── 细化（每个悬浮面只在这里调穿透/层级/透明度） ──
     {
-      label: '悬浮窗细化 ▸',
+      label: '右页窗格调节 ▸',
       visible: !!s.widgetVisible,
       submenu: [
-        { label: '点击穿过（透到下层窗口）', type: 'checkbox', checked: !!s.widgetPenetration, click: (it) => { const v = !!(it as Electron.MenuItem & { checked?: boolean }).checked; setSettings({ widgetPenetration: v }); setWidgetPenetration(v) } },
+        { label: '点击穿透（点到下层应用）', type: 'checkbox', checked: !!s.widgetPenetration, click: (it) => { const v = !!(it as Electron.MenuItem & { checked?: boolean }).checked; setSettings({ widgetPenetration: v }); setWidgetPenetration(v) } },
         { label: '置顶显示', type: 'checkbox', checked: s.widgetOnTop !== false, click: (it) => { const v = !!(it as Electron.MenuItem & { checked?: boolean }).checked; setWidgetOnTop(v) } },
         { type: 'separator' },
         ...opacityRadios(s.widgetOpacity ?? 1, (v) => { setSettings({ widgetOpacity: v }); applyWidgetOpacity() })
       ]
     },
     {
-      label: '待办小组件细化 ▸',
+      label: '待办窗格调节 ▸',
       visible: !!s.todoWidgetVisible,
       submenu: [
-        { label: '点击穿过（透到下层窗口）', type: 'checkbox', checked: !!s.todoWidgetPenetration, click: (it) => { const v = !!(it as Electron.MenuItem & { checked?: boolean }).checked; setTodoWidgetPenetration(v) } },
+        { label: '点击穿透（点到下层应用）', type: 'checkbox', checked: !!s.todoWidgetPenetration, click: (it) => { const v = !!(it as Electron.MenuItem & { checked?: boolean }).checked; setTodoWidgetPenetration(v) } },
         { label: '置顶显示', type: 'checkbox', checked: s.todoWidgetOnTop !== false, click: (it) => { const v = !!(it as Electron.MenuItem & { checked?: boolean }).checked; setTodoWidgetLayer(v) } },
         { type: 'separator' },
         ...opacityRadios(s.todoWidgetOpacity ?? 0.95, (v) => { setSettings({ todoWidgetOpacity: v }); refreshTray() })
       ]
     },
     {
-      label: '桌宠细化 ▸',
+      label: '桌宠调节 ▸',
       visible: !!s.petEnabled,
       submenu: opacityRadios(s.petOpacity ?? 1, (v) => setPetOpacity(v))
     },
