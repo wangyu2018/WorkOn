@@ -383,7 +383,8 @@ QA 验证后在「QA 回执」追加一行：
 
 **QA 回执（追）**：
 - [2026-10-15 12:2x] ❌ 复现仍存 | commit `03c9885` | **主路径没修到**：`setSessions` 同步只加在 `onAddToSession`（⋯收进会话，行 885）；会话内发送的两条真实路径没动——`send()` 行 344（user）和 `pushAI` 行 110/`send` 行 704（ai）。实测：会话内发消息→输入框清空→DB 落库（listSessions 有）→**视图仍不刷新**。修法相同：这两处 addSessionItem 后也同步 setSessions。
-- [2026-10-16 xx] ✅ 已验证 | QA 侧直修 | **pushAI 改为会话感知**：activeSessionId 非空时消息写 `sessions.items`（setSessions 乐观更新）+ addSessionItem 落库，不再写全局 chat；send() 用户消息同样走 pushAI；send 内全部回复分支（~15 处 setChat 追加）统一改走 pushAI；选项卡分支（目标拆解/日程提议）加会话护栏降级为纯文本；流式路径在会话态禁用（chunk 按 id 写全局 chat 会穿透隔离），会话内走同步 askQA。实测：会话内发消息→视图即时出现用户条+AI 回复；返回主对话→无倒灌。
+- [2026-10-16 xx] ✅ 已验证 | QA 侧直修（含追加修复） | **pushAI 改为会话感知**（下详）+ **监听器泄漏修复**：`send()` 每次发送无条件注册 onAIStreamChunk/Done/Error，同步路径 return 从不清理——残留 offDone 闭包捕获旧 activeSessionId，后续流式响应触发它往会话 DB 重复写回复（「验证001 回了两条」根因）。已把监听注册挪到同步 return 之后。
+- pushAI 改为会话感知：activeSessionId 非空时消息写 `sessions.items`（setSessions 乐观更新）+ addSessionItem 落库，不再写全局 chat；send() 用户消息同样走 pushAI；send 内全部回复分支（~15 处 setChat 追加）统一改走 pushAI；选项卡分支（目标拆解/日程提议）加会话护栏降级为纯文本；流式路径在会话态禁用（chunk 按 id 写全局 chat 会穿透隔离），会话内走同步 askQA。实测：会话内发消息→视图即时出现用户条+AI 回复；返回主对话→无倒灌。
 
 **QA 回执**：
 - （空）

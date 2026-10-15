@@ -672,6 +672,25 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       const askingGuard = window.setTimeout(() => {
         setAsking(false)
       }, 15_000)
+      // AI 未配置 → 稳定同步路径；会话态同样走同步（流式 chunk 按 id 写全局 chat，会穿透会话隔离——BUG-19）
+      // 监听必须在 return 之后注册——同步路径若先注册又不清理，残留 offDone 闭包捕获旧 activeSessionId，后续流式响应会往会话重复写回复（双回复根因）
+      if (!aiOn || activeSessionId) {
+        void window.api
+          ?.askQA?.(quoted)
+          .then((r) => {
+            const content = typeof r === 'string' ? r : ((r as { content?: string })?.content ?? '（没有回答）')
+            pushAI([{ role: 'ai', text: content, options: content.includes('这个问题需要 AI') ? ['⚙ 去配置 AI'] : undefined }])
+          })
+          .catch(() => {
+            pushAI([{ role: 'ai', text: '这个问题暂时答不上来。' }])
+          })
+          .finally(() => {
+            window.clearTimeout(askingGuard)
+            setAsking(false)
+            consumeQuote()
+          })
+        return
+      }
       const streamId = `ai${Date.now()}`
       let acc = ''
       const offChunk = window.api?.onAIStreamChunk?.((p) => {
@@ -702,7 +721,6 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           if (opts) optionsRef.current = { msgIndex: c.length, options: opts }
           return [...c, { id: streamId, role: 'ai' as const, text: content, options: opts }]
         })
-        if (activeSessionId) void window.api?.addSessionItem?.(activeSessionId, { role: 'ai', text: content, time: Date.now() })
         window.clearTimeout(askingGuard)
         offChunk?.()
         offDone?.()
@@ -720,24 +738,6 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         setAsking(false)
         consumeQuote()
       })
-      // AI 未配置 → 稳定同步路径；会话态同样走同步（流式 chunk 按 id 写全局 chat，会穿透会话隔离——BUG-19）
-      if (!aiOn || activeSessionId) {
-        void window.api
-          ?.askQA?.(quoted)
-          .then((r) => {
-            const content = typeof r === 'string' ? r : ((r as { content?: string })?.content ?? '（没有回答）')
-            pushAI([{ role: 'ai', text: content, options: content.includes('这个问题需要 AI') ? ['⚙ 去配置 AI'] : undefined }])
-          })
-          .catch(() => {
-            pushAI([{ role: 'ai', text: '这个问题暂时答不上来。' }])
-          })
-          .finally(() => {
-            window.clearTimeout(askingGuard)
-            setAsking(false)
-            consumeQuote()
-          })
-        return
-      }
       void window.api?.askQAStream?.(quoted)
     },
     [asking, reminders, objectChip, blockParams, reloadGoals, pushAI, activeSessionId, quoteChip, activeContext, trail, plans, goals]
