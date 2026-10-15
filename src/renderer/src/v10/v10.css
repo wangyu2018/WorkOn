@@ -69,13 +69,32 @@
 
 /* ── 左栏：问（流） ─────────────────────────────── */
 .v10-ask {
-  width: 360px;
+  width: var(--ask-w, 360px);
   flex: none;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--hairline);
   background: var(--paper);
 }
+/* 左右分栏拖宽条：视觉上是 1px 发丝线，实际有 9px 抓取区 */
+.v10-split {
+  flex: none;
+  width: 9px;
+  margin-left: -5px;
+  margin-right: -4px;
+  cursor: col-resize;
+  z-index: 8;
+  position: relative;
+  -webkit-app-region: no-drag;
+}
+.v10-split::after {
+  content: '';
+  position: absolute;
+  left: 4px; top: 0; bottom: 0;
+  width: 1px;
+  background: var(--hairline);
+  transition: background 120ms;
+}
+.v10-split:hover::after { background: var(--teal-ink); width: 2px; }
 .v10-ask-scroll {
   flex: 1;
   overflow-y: auto;
@@ -882,9 +901,15 @@
 .v10-msg-ai-wrap .v10-msgdots { position: absolute; right: 0; top: -2px; }
 
 /* ── 会话上下文切换条（框即 session） ─────────────────── */
+/* 顶带贯通：左侧上下文条与右侧报头同色系，一条连续的薄顶带（不割裂） */
 .v10-ctxbar {
-  display: flex; gap: 5px; padding: 8px 14px 0; flex-wrap: wrap;
+  display: flex; gap: 5px; padding: 12px 14px 10px; flex-wrap: wrap;
+  background: var(--celadon-3);
+  border-radius: 0 0 0 var(--r-lg);
+  box-shadow: 0 1px 0 var(--hairline-2);
+  -webkit-app-region: drag;
 }
+.v10-ctxbar .ctx-chip { -webkit-app-region: no-drag; }
 .ctx-chip {
   border: 1px solid var(--hairline-2); background: none; color: var(--ink-3);
   font-size: 11px; padding: 3px 12px; border-radius: 999px; cursor: pointer; font-family: var(--font-ui);

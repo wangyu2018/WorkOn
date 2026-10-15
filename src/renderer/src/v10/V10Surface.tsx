@@ -34,6 +34,23 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const [goals, setGoals] = useState<GoalView[]>([])
   const [trail, setTrail] = useState<TrailSegment[]>([])
   const [presence, setPresence] = useState<PresenceSnapshot | null>(null)
+  // 左右分栏宽（拖 .v10-split 调整，持久化）
+  const [askW, setAskW] = useState<number>(() => {
+    try { return Number(window.localStorage.getItem('v10askw')) || 360 } catch { return 360 }
+  })
+  const onSplitDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = askW
+    const mv = (ev: MouseEvent) => {
+      const w = Math.min(640, Math.max(280, startW + ev.clientX - startX))
+      setAskW(w)
+      try { window.localStorage.setItem('v10askw', String(w)) } catch { /* ignore */ }
+    }
+    const up = () => { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up) }
+    window.addEventListener('mousemove', mv)
+    window.addEventListener('mouseup', up)
+  }, [askW])
   const [reminders, setReminders] = useState<Array<{ id: string; title: string; atHHMM?: string }>>([])
   const [feed, setFeed] = useState<FeedItem[]>([])
   const [blockParams, setBlockParams] = useState<BlockParams>({ timelineDays: 1 })
@@ -1054,7 +1071,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   }
 
   return (
-    <div className="v10" data-theme={theme}>
+    <div className="v10" data-theme={theme} style={{ '--ask-w': `${askW}px` } as React.CSSProperties}>
       <AskPane
         chat={chat}
         asking={asking}
@@ -1112,6 +1129,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           }
         }}
       />
+      <div className="v10-split" onMouseDown={onSplitDown} title="拖动调整左右宽度" />
       <PaperPane
         dateLabel={dateLabel}
         plans={plans}
