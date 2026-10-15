@@ -656,6 +656,22 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         return
       }
 
+      // ── 天气问句（本地直查，不依赖 LLM——AI 挂了/网络抽风也能答；FEAT-8 卡片化的文本先行版） ──
+      if (/天气|下雨|带伞|出门|温度|冷吗|热吗/.test(normalized)) {
+        void (window.api as { getWeather?: (city?: string) => Promise<unknown> })?.getWeather?.().then((w) => {
+          const info = w as { city?: string; text?: string; tempC?: number; feelsC?: number; humidity?: number; windKph?: number; maxC?: number; minC?: number; tomorrow?: { text?: string; maxC?: number; minC?: number }; error?: string } | null
+          if (!info || info.error || !info.text) {
+            pushAI([{ role: 'ai', text: `天气没查到${info?.error ? `（${info.error}）` : '——网络或服务暂时不通，稍后再试'}。` }])
+            return
+          }
+          pushAI([{
+            role: 'ai',
+            text: `${info.city ?? ''}现在：${info.text}，${Math.round(info.tempC ?? 0)}°C（体感 ${Math.round(info.feelsC ?? info.tempC ?? 0)}°C），湿度 ${info.humidity ?? '?'}%，风 ${Math.round(info.windKph ?? 0)}km/h。\n今日 ${Math.round(info.minC ?? 0)}~${Math.round(info.maxC ?? 0)}°C${info.tomorrow ? `；明天 ${info.tomorrow.text} ${Math.round(info.tomorrow.minC ?? 0)}~${Math.round(info.tomorrow.maxC ?? 0)}°C` : ''}。`
+          }])
+        }).catch(() => pushAI([{ role: 'ai', text: '天气查询失败了——稍后再试。' }]))
+        return
+      }
+
       // ── 状态类问句：文字回答 + 「状态导图」可拆件 chip（点一下落右页） ──
       if (/当前状态|什么状态|在干嘛|在做什么|现在干|状态导图|画个?图/.test(normalized)) {
         const st = presence?.state

@@ -769,7 +769,9 @@ function localAnswer(question: string, facts: Record<string, unknown> | null, tr
     totalMin: number; workMin: number; slackMin: number; dualRatio: number
     dualWorkSlackMin: number; topApps: [string, number][]; bestHours: number[]; mainState: string
   }
-  const q = question.toLowerCase()
+  // BUG-13 根修：send() 注入的「【当前会话：X】\n摘要\n\n」前缀含上下文关键词（如"计划"），
+  // 必须先剥掉再路由——否则用户问天气也会被前缀里的"计划"截胡
+  const q = question.replace(/^【当前会话：[\s\S]*?\n\n/, '').toLowerCase()
   const topList = f.topApps.slice(0, 5).map(([a, m]) => `${a}（${Math.round(m)}分钟）`).join('、')
   if (/专注|focus|效率/.test(q)) {
     const pct = f.totalMin > 0 ? Math.round((f.workMin / f.totalMin) * 100) : 0
@@ -790,7 +792,12 @@ function localAnswer(question: string, facts: Record<string, unknown> | null, tr
   if (/计划|plan|目标/.test(q)) {
     return '计划详情可以在「计划」页查看达成率与预测；监控页的时间轴上也能看到计划时段的虚线框哦。'
   }
-  return `本地小结：今日墙钟 ${f.totalMin} 分钟，工作 ${f.workMin} 分钟，摸鱼 ${f.slackMin} 分钟。这个问题需要 AI 才能深入回答，去「设置 → AI」配置后即可解锁。`
+  // 区分「没配 AI」和「配了但这次调用失败」——后者再喊人去配置是误导（BUG-13 关联）
+  const aiConfigured = Boolean(getSettings().aiEnabled && getSettings().aiApiKey)
+  const tail = aiConfigured
+    ? '这次 AI 接口临时不可用（服务波动/超时），稍后再问一次就好。'
+    : '这个问题需要 AI 才能深入回答，去「设置 → AI」配置后即可解锁。'
+  return `本地小结：今日墙钟 ${f.totalMin} 分钟，工作 ${f.workMin} 分钟，摸鱼 ${f.slackMin} 分钟。${tail}`
 }
 
 export async function askWithContext(
