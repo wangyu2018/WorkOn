@@ -373,15 +373,16 @@ export function AskPane(props: {
 
   return (
     <aside className="v10-ask">
-      {/* 会话上下文切换条（v10 简化模型：框即 session） */}
+      {/* 会话上下文切换条（v10 简化模型：框即 session）——色点标识数据源 */}
       <div className="v10-ctxbar">
-        {SESSION_CONTEXTS.map((c) => (
+        {SESSION_CONTEXTS.map((c, ci) => (
           <button
             key={c.key}
             className={`ctx-chip${(props.activeContext ?? 'general') === c.key ? ' on' : ''}`}
             onClick={() => props.onSetContext?.(c.key)}
             title={`切换到「${c.label}」会话——问答自动带上这份数据`}
           >
+            <span className="ctx-dot" style={{ background: ['var(--ink-3)', '#0FB5A4', '#7C6FF0', '#D98E2B', '#38BDF8'][ci] }} />
             {c.label}
           </button>
         ))}
@@ -450,7 +451,7 @@ export function AskPane(props: {
                 />
               </div>
             ) : (
-              <div className="v10-msg-user">{m.text}</div>
+              m.text
             )}
             <MsgActions
               idx={i}

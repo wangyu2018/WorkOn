@@ -581,7 +581,7 @@ export function PaperPane(props: {
   sandboxBlock?: { id: string; title: string; html: string; css: string } | null
   onCloseSandbox?: () => void
   onSandboxAsk?: (q: string) => void
-  theme?: 'light' | 'dark'
+  theme?: 'light' | 'dark' | 'auto'
   onToggleTheme?: () => void
   onMinimize?: () => void
   onHideToTray?: () => void
@@ -603,6 +603,7 @@ export function PaperPane(props: {
   const archived = props.archived ?? []
   const days = props.blockParams?.timelineDays ?? 1
   const pane = props.pane ?? 'main'
+  const [aiCfg, setAiCfg] = useState(false)
   // 块管理（v10 拍板：「留住/固定」真实化——置顶排序；「×」隐藏可恢复；localStorage 持久）
   const [blockState, setBlockState] = useState<{ pinned: string[]; hidden: string[] }>(() => {
     try {
@@ -673,14 +674,14 @@ export function PaperPane(props: {
           <span style={{ marginLeft: 'auto' }} className="mh-clock">
             {props.now !== undefined ? new Date(props.now).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : ''}
           </span>
-          <button className="mh-act" onClick={() => props.onToggleTheme?.()} title="亮/暗主题切换">{props.theme === 'dark' ? '☾' : '◐'}</button>
+          <button className="mh-act" onClick={() => props.onToggleTheme?.()} title="主题：浅/暗/跟随系统">{props.theme === 'dark' ? '☾' : props.theme === 'auto' ? 'A' : '◐'}</button>
           <span
             className={`mh-ai ${props.aiOn ? 'on' : ''}`}
-            title={props.aiOn ? 'AI 已配置' : 'AI 未配置——点击去设置'}
-            style={props.aiOn ? undefined : { cursor: 'pointer' }}
-            onClick={() => { if (!props.aiOn) { try { window.api?.openMain?.('settings') } catch { /* ignore */ } } }}
+            title={props.aiOn ? 'AI 已接入——点击查看状态' : 'AI 未接入——点击接入（填 Key 即可）'}
+            style={{ cursor: 'pointer' }}
+            onClick={() => { if (!props.aiOn) { setAiCfg(true) } }}
           >
-            AI
+            {props.aiOn ? 'AI ✓' : 'AI 未接入'}
           </span>
           {pane !== 'main' ? (
             <button className="mh-act" onClick={() => { void window.api?.snapPanes?.() }} title="两块玻璃片贴合固定（上下/左右按当前方位）">⎯ 吸附</button>
@@ -735,8 +736,11 @@ export function PaperPane(props: {
           </div>
         ) : null}
         
-        {props.aiConfigOpen ? (
-          <AiConfigBlock onClose={() => props.onCloseAiConfig?.()} onSaved={() => props.onAiConfigSaved?.()} />
+        {(props.aiConfigOpen || aiCfg) ? (
+          <AiConfigBlock
+            onClose={() => { props.onCloseAiConfig?.(); setAiCfg(false) }}
+            onSaved={() => { props.onAiConfigSaved?.(); setAiCfg(false) }}
+          />
         ) : null}
         {props.sandboxBlock ? (
           <SandboxView

@@ -52,16 +52,23 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   /** 块进化：挂在输入场的对象芯片 */
   const [objectChip, setObjectChip] = useState<ObjectChipData | null>(null)
   const [prefillText, setPrefillText] = useState<string | null>(null)
+  // 主题三档循环：浅 → 暗 → 跟随系统（BUG-8）
   const toggleTheme = (): void => {
-    const next = theme === 'dark' ? 'light' : 'dark'
-    setTheme(next)
+    const order: Array<'light' | 'dark' | 'auto'> = ['light', 'dark', 'auto']
+    const next = order[(order.indexOf(themeMode) + 1) % 3]
+    setThemeMode(next)
     try { window.localStorage.setItem('v10theme', next) } catch { /* ignore */ }
   }
   const [quoteChip, setQuoteChip] = useState<QuoteChipData | null>(null)
   const [now, setNow] = useState(Date.now())
   const [archived, setArchived] = useState<FeedItem[]>([])
   const [aiOn, setAiOn] = useState<boolean | null>(null)
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => (window.localStorage.getItem('v10theme') === 'dark' ? 'dark' : 'light'))
+  const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'auto'>(() => {
+    const v = window.localStorage.getItem('v10theme')
+    return v === 'dark' || v === 'auto' ? (v as 'dark' | 'auto') : 'light'
+  })
+  const systemDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+  const theme = themeMode === 'auto' ? (systemDark ? 'dark' : 'light') : themeMode
   const [showFlowMap, setShowFlowMap] = useState(false)
   const [mindMapText, setMindMapText] = useState<string | null>(null)
   const [sandboxBlock, setSandboxBlock] = useState<{ id: string; title: string; html: string; css: string } | null>(null)
@@ -902,6 +909,8 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         now={now}
         aiOn={aiOn}
         theme={theme}
+        onMinimize={() => void window.api?.winMinimize?.()}
+        onHideToTray={() => void window.api?.winHideMain?.()}
         onToggleTheme={toggleTheme}
         showFlowMap={showFlowMap}
         mindMapText={mindMapText}
