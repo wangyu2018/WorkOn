@@ -52,6 +52,11 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   /** 块进化：挂在输入场的对象芯片 */
   const [objectChip, setObjectChip] = useState<ObjectChipData | null>(null)
   const [prefillText, setPrefillText] = useState<string | null>(null)
+  const toggleTheme = (): void => {
+    const next = theme === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    try { window.localStorage.setItem('v10theme', next) } catch { /* ignore */ }
+  }
   const [quoteChip, setQuoteChip] = useState<QuoteChipData | null>(null)
   const [now, setNow] = useState(Date.now())
   const [archived, setArchived] = useState<FeedItem[]>([])
@@ -770,6 +775,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
     )
   }
 
+  const glassMode = useMemo(() => new URLSearchParams(window.location.search).get('glass') === '1', [])
   if (paneMode === 'paper') {
     return (
       <div className="v10 v10-pane" data-theme={theme} data-interactive>
@@ -787,6 +793,15 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           now={now}
           aiOn={aiOn}
           showFlowMap={showFlowMap}
+          goals={goals}
+          onMarkAnchor={markAnchor}
+          onGoalPatch={patchGoal}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          onDropBlock={(b) => setObjectChip(b)}
+          onAttach={() => { glassMode ? void window.api?.attachPanes?.() : void window.api?.attachWorkbench?.() }}
+          onDetach={() => void window.api?.detachWorkbench?.()}
+          onSandboxAsk={(q) => setPrefillText(q)}
           reminders={reminders}
           onReminderRemoved={(id) => setReminders((list) => list.filter((x) => x.id !== id))}
           mindMapText={mindMapText}
@@ -810,12 +825,6 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         />
       </div>
     )
-  }
-
-  const toggleTheme = (): void => {
-    const next = theme === 'dark' ? 'light' : 'dark'
-    setTheme(next)
-    try { window.localStorage.setItem('v10theme', next) } catch { /* ignore */ }
   }
 
   return (
@@ -866,8 +875,10 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           } else {
             const s2 = window.api?.createSession?.({ first: { role: m.role, text: m.text, time: Date.now() } })
             void s2?.then((x) => {
-              setSessions((list) => [x as ChatSession, ...list])
-              setChat((c) => [...c, { role: 'ai', text: `新会话「${(x as ChatSession).title}」建好了。` }])
+              const created = x as ChatSession
+              setSessions((list) => [created, ...list])
+              setActiveSessionId(created.id) // 自动进入：后续消息写回该会话
+              setChat((c) => [...c, { role: 'ai', text: `新会话「${created.title}」建好了——已进入，接着说就行。` }])
             })
           }
         }}
@@ -898,6 +909,8 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         aiConfigOpen={aiConfigOpen}
         onCloseAiConfig={() => setAiConfigOpen(false)}
         onAiConfigSaved={() => { setAiOn(true); setAiConfigOpen(false) }}
+          reminders={reminders}
+          onReminderRemoved={(id) => setReminders((list) => list.filter((x) => x.id !== id))}
         onQuoteFeed={(t) => setQuoteChip({ text: t, from: '折下' })}
         onContextAsk={(k, q) => {
           setActiveContext(k as ContextKey)

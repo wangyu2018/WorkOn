@@ -32,6 +32,14 @@ export function listChatSessions(): ChatSession[] {
   return col<ChatSession>('chatSessions').slice().sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
+function ruleTitle(text: string): string {
+  const clean = text.replace(/\s+/g, ' ').trim()
+  if (clean.length <= 20) return clean
+  const cut = clean.slice(0, 20)
+  const at = Math.max(cut.lastIndexOf(' '), cut.lastIndexOf('，'), cut.lastIndexOf('、'), cut.lastIndexOf('。'))
+  return (at >= 8 ? cut.slice(0, at) : cut) + '…'
+}
+
 export function createChatSession(input: {
   title?: string
   topic?: ChatSession['topic']
@@ -40,9 +48,11 @@ export function createChatSession(input: {
 }): ChatSession {
   const now = Date.now()
   const first = input.first
+  // 标题优先用户消息（QA BUG-3：AI 开场白当标题没意义）
+  const titleSrc = first && first.role === 'user' ? first.text : (input.title ?? first?.text ?? '')
   const s: ChatSession = {
     id: genId('cs'),
-    title: (input.title || first?.text || '新会话').slice(0, 24),
+    title: ruleTitle(input.title || titleSrc || '新会话'),
     topic: input.topic ?? 'general',
     projectId: input.projectId,
     items: first ? [first] : [],
@@ -58,10 +68,14 @@ export function addChatSessionItem(id: string, item: ChatSessionItem): ChatSessi
   const s = col<ChatSession>('chatSessions').find((x) => x.id === id)
   if (!s) return null
   // 首条用户消息到达且标题还是默认「新会话」时补一次 AI 总结
-  const shouldTitle = s.items.length === 0 && item.role === 'user' && (s.title === '新会话' || !s.title)
+  // 标题规则化：首条 user 消息到达时，若标题还是 AI 文本截断（>20 字或含句号）则替换
+  const shouldTitle = item.role === 'user' && (s.title === '新会话' || !s.title || s.title.length > 20 || /[。！？]/.test(s.title))
   s.items.push(item)
   const r = updateIn<ChatSession>('chatSessions', id, { items: s.items, updatedAt: Date.now() })
-  if (shouldTitle) aiSummarizeTitle(id, item.text)
+  if (shouldTitle) {
+    updateIn<ChatSession>('chatSessions', id, { title: ruleTitle(item.text) })
+    aiSummarizeTitle(id, item.text)
+  }
   return r
 }
 

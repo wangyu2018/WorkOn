@@ -189,6 +189,36 @@ function TimelineBand(props: { segs: TrailSegment[] }): JSX.Element {
   )
 }
 
+/** 提醒块（v10）：两类提醒列表，空自动隐藏（置顶可），行内删除 */
+function RemindersBlock(props: {
+  reminders: Array<{ id: string; title: string; atHHMM?: string; recurring?: string; origin?: string; enabled?: boolean }>
+  kick?: (p: { blockKey: string; extra?: JSX.Element }) => JSX.Element
+  pinned?: boolean
+  hidden?: boolean
+  onRemove?: (id: string) => void
+}): JSX.Element | null {
+  const list = props.reminders.filter((r) => r.enabled !== false)
+  if (props.hidden || list.length === 0) return null // 空自动隐藏
+  return (
+    <section className="v10-block">
+      <div className="v10-block-kick">
+        <span>◆ 提醒</span>
+        <span>· {list.length} 条</span>
+        <span className="acts">
+          {props.kick ? props.kick({ blockKey: 'reminders' }) : null}
+        </span>
+      </div>
+      {list.map((r) => (
+        <div className="v10-plan-row" key={r.id}>
+          <span className="v10-plan-time">{r.atHHMM ?? (r.recurring === 'daily' ? '每天' : '定时')}</span>
+          <span className="v10-plan-title">{(r.origin === 'system' ? '⚙ ' : '') + r.title}</span>
+          <button className="v10-unhide" title="删除这条提醒" onClick={() => props.onRemove?.(r.id)}>×</button>
+        </div>
+      ))}
+    </section>
+  )
+}
+
 /** 里程碑轴（人生预期美化）：起点→锚点（按日期定位）→截止，「你在这里」aura 标记 */
 function GoalAxis(props: {
   v: GoalView
@@ -747,6 +777,15 @@ export function PaperPane(props: {
           { key: 'goals', pinned: isPinned('goals'), node: (props.onMarkAnchor ? (
           <GoalsBlock goals={props.goals ?? []} onMarkAnchor={props.onMarkAnchor} onGoalPatch={props.onGoalPatch ?? (() => {})} onContextAsk={props.onContextAsk} />
         ) : null) },
+          { key: 'reminders', pinned: isPinned('reminders'), node: (
+          <RemindersBlock
+            reminders={props.reminders ?? []}
+            kick={Kick}
+            pinned={isPinned('reminders')}
+            hidden={isHidden('reminders')}
+            onRemove={(id) => { void window.api?.removeReminder?.(id); props.onReminderRemoved?.(id) }}
+          />
+        ) },
         ] as Array<{ key: string; pinned: boolean; node: JSX.Element }>)
           .sort((a, b) => Number(b.pinned) - Number(a.pinned))
           .map(({ node }) => node)}

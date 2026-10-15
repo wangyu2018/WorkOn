@@ -73,7 +73,7 @@ QA 验证后在「QA 回执」追加一行：
 **复现**：v10 界面 → 输入「我想在年底前把 X 做到 Y」→ 回 1 建目标 → 点「◫ 玻璃拆开」→ 看 paper 窗缺块、合回按钮无效。
 
 **修复记录**：
-- （空，待修复方填写）
+- [2026-10-16 00:30] 状态→待验证 | commit 见 push | 说明：pane=paper 分支补齐缺失 props 一批（goals/onMarkAnchor/onGoalPatch/onAttach/onDetach/theme/onToggleTheme/onDropBlock/onSandboxAsk）；玻璃合回（attachPanes）补发 workbench:state detached=false 事件（原主窗卡占位态=合回"无效"的观感根因之一）。E2E：paper 窗 goals/提醒块/合回钮/主题钮全在，合回后主窗恢复。
 
 **QA 回执**：
 - （空）
@@ -100,7 +100,7 @@ QA 验证后在「QA 回执」追加一行：
 **复现**：对话输入「晚上9点提醒我休息」→ 建成 → 右页找不到提醒列表。
 
 **修复记录**：
-- （空，待修复方填写）
+- [2026-10-16 00:30] 状态→待验证 | commit 见 push | 说明：非死代码——RemindersBlock 组件此前未进折上渲染数组（补入，空自动隐藏规则同其他块）+ 主窗 PaperPane 补 reminders/onReminderRemoved 传递（此前仅 paper 分支有）。E2E：提醒块出现且列表行正确。
 
 **QA 回执**：
 - （空）
@@ -120,7 +120,7 @@ QA 验证后在「QA 回执」追加一行：
 **修法**：标题优先取用户消息；或调 `chatSessions` 的 AI 总结标题路径（`5ab9775` 已实现 AI 总结标题，确认此处是否走了该路径——看起来走的是 plain 截断 fallback）。截断时按词边界 + 省略号。
 
 **修复记录**：
-- （空，待修复方填写）
+- [2026-10-16 00:30] 状态→待验证 | commit 见 push | 说明：三层修——①标题优先用户消息（首条为 AI 文本时，后续用户消息到达即替换标题）②ruleTitle 词边界截断+省略号（不再断词中）③新建会话后自动进入该会话（后续消息写回 session，AI 总结标题路径正常工作）。E2E：新建→用户消息→标题更新为「帮我想想周末去哪玩比较好…」。
 
 **QA 回执**：
 - （空）

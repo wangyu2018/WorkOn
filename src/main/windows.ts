@@ -1258,7 +1258,7 @@ function createPaneWindow(which: 'ask' | 'paper'): BrowserWindow {
     }
   })
   const pane = which
-  if (isDev) void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/index.html?v10=1&pane=${pane}`)
+  if (isDev) void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/index.html?v10=1&pane=${pane}&glass=1`)
   else void win.loadFile(path.join(__dirname, '../renderer/index.html'))
   win.once('ready-to-show', () => {
     win.show()
@@ -1310,6 +1310,8 @@ export function attachPanes(): void {
   paperPaneWindow?.close()
   mainWindow?.show()
   mainWindow?.focus()
+  // 状态机统一：玻璃合回也复位 detached（主窗占位卡依赖此事件）
+  sendTo('main', 'workbench:state', { detached: false })
   console.info('[v10panes] 合体：恢复一面')
 }
 
