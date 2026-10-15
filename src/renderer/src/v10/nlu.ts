@@ -69,6 +69,8 @@ export function parseScheduleProposal(text: string): ScheduleProposal | null {
   const hourPos = t.index
   const prefix = text.slice(Math.max(0, hourPos - 3), hourPos)
   if (/(晚上|晚间|夜里|下午|傍晚|午后|今晚)/.test(prefix) && hour >= 1 && hour <= 11) hour += 12
+  // 日程语境：裸 1-7 点基本不会指凌晨（「三点评审会」≈15:00），无早上/凌晨标记 → PM 化
+  if (!/(早上|上午|凌晨|早晨)/.test(prefix) && hour >= 1 && hour <= 7) hour += 12
   const atHHMM = `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}`
   const eventM = EVENT_RE.exec(text)
   const event = eventM ? eventM[2] : '日程'
@@ -97,9 +99,10 @@ export function parseReminderIntent(text: string): ReminderIntent | null {
   const hourPos = t.index
   const prefix = text.slice(Math.max(0, hourPos - 3), hourPos)
   if (/(晚上|晚间|夜里|下午|傍晚|午後|午后|今晚|今晚)/.test(prefix) && hour >= 1 && hour <= 11) hour += 12
-  // 口语惯例：裸「四点」白天说≈16:00。仅限一次性提醒（每日周期不猜上下午），
-  // 无早上/上午/凌晨标记且该点已过、+12 后仍是今天未来 → 按下午算
-  if (!DAY_RE.test(text) && !/(早上|上午|凌晨|早晨)/.test(prefix) && hour >= 1 && hour <= 11) {
+  // 口语惯例：裸 1-7 点基本不指凌晨（「四点提醒」≈16:00），无早上/凌晨标记 → PM 化；
+  // 8-11 点仅一次性提醒且该点已过、+12 后仍是今天未来 → 按下午算；每日周期不猜上下午
+  if (!/(早上|上午|凌晨|早晨)/.test(prefix) && hour >= 1 && hour <= 7) hour += 12
+  else if (!DAY_RE.test(text) && !/(早上|上午|凌晨|早晨)/.test(prefix) && hour >= 8 && hour <= 11) {
     const now = new Date()
     const pm = new Date(); pm.setHours(hour + 12, min, 0, 0)
     const am = new Date(); am.setHours(hour, min, 0, 0)
@@ -116,8 +119,7 @@ export function parseReminderIntent(text: string): ReminderIntent | null {
     .replace(/提醒我|提醒|叫我|别忘(了)?|每天|每日|晚上|晚间|夜里|下午|傍晚|早上|上午|中午/g, ' ')
     .replace(/[，,。;；！!？?\s]+/g, ' ')
     .trim()
-  const whenLabel = daily ? `每天 ${atHHMM}` : `${TOMORROW_RE.test(text) ? '明天' : '今天'} ${atHHMM}`
-  if (daily) return { title: title || '提醒', recurring: 'daily', atHHMM, whenLabel }
+  if (daily) return { title: title || '提醒', recurring: 'daily', atHHMM, whenLabel: `每天 ${atHHMM}` }
   // once：算目标时间戳（明天 → +1d）
   const at = new Date()
   at.setHours(hour, min, 0, 0)
@@ -130,5 +132,8 @@ export function parseReminderIntent(text: string): ReminderIntent | null {
     d.setDate(d.getDate() + 1)
     at.setFullYear(d.getFullYear(), d.getMonth(), d.getDate())
   }
+  // 标签跟随最终落点：被顺延到明天时显示「明天」而不是「今天」
+  const isTomorrow = at.toDateString() !== new Date().toDateString()
+  const whenLabel = `${isTomorrow ? '明天' : '今天'} ${atHHMM}`
   return { title: title || '提醒', recurring: 'once', atHHMM, atTs: at.getTime(), whenLabel }
 }

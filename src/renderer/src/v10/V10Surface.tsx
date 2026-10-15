@@ -477,7 +477,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
             const leadTs = proposal.atTs ? proposal.atTs - 5 * 60_000 : undefined
             void window.api?.addReminder?.({
               title: `${proposal.event}（入会）`,
-              recurring: 'daily',
+              recurring: 'once',
               atHHMM: proposal.atHHMM,
               atTs: leadTs ?? proposal.atTs,
               origin: 'user',

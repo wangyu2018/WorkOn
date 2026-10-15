@@ -74,7 +74,7 @@ const RENDER_ROUTES: RenderRoute[] = [
   },
   {
     id: 'markdown',
-    when: (t) => t.length > 420 || /^#{1,3}\s|\n[-*•]\s|\n\s*\|/.test(t),
+    when: (t) => t.length > 420 || /^#{1,3}\s|\n[-*•·]\s|\n\s*\|/.test(t),
     render: (ctx) => {
       const long = ctx.text.length > 420
       return (
@@ -100,6 +100,7 @@ const RENDER_ROUTES: RenderRoute[] = [
       <div className="v10-rich">
         <div className="v10-rich-head"><CopyBtn text={ctx.text} /></div>
         {renderMarkdown(ctx.text)}
+        <MindChip ctx={ctx} />
       </div>
     )
   }
@@ -108,7 +109,7 @@ const RENDER_ROUTES: RenderRoute[] = [
 /** 思维导图拆件 chip（长文/结构化回答的再结构化入口） */
 function MindChip(props: { ctx: { mapped: boolean; setMapped: (v: boolean) => void; onMindmap?: (src: string) => void; onSandbox?: (src: string) => void; text: string; aiOn: boolean | null } }): JSX.Element | null {
   const { ctx } = props
-  const canMap = ctx.text.length > 120 || /^#{1,3}\s|\n[-*•]\s|\n\s*\|/.test(ctx.text)
+  const canMap = ctx.text.length > 120 || /^#{1,3}\s|\n[-*•·]\s|\n\s*\|/.test(ctx.text)
   if (!canMap) return null
   if (ctx.mapped) {
     return (
