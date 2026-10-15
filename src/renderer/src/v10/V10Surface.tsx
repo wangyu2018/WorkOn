@@ -1098,6 +1098,12 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         activeSessionId={activeSessionId}
         onSessionRenamed={(id, title) => setSessions((list) => list.map((x) => (x.id === id ? { ...x, title } : x)))}
         onSessionRemoved={(id) => setSessions((list) => list.filter((x) => x.id !== id))}
+        onDeleteMessage={(i) => setChat((c) => c.filter((_, x) => x !== i))}
+        onDeleteSessionItem={(i) => {
+          if (!activeSessionId) return
+          void window.api?.removeSessionItem?.(activeSessionId, i)
+          setSessions((list) => list.map((x) => (x.id === activeSessionId ? { ...x, items: x.items.filter((_, j) => j !== i) } : x)))
+        }}
         onEnterSession={(id) => {
           if (id === '__list__') {
             // 会话列表视图：临时用 null 但显示列表——简化：开抽屉提示

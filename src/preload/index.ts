@@ -32,6 +32,7 @@ const api = {
   addSessionItem: (id: string, item: { role: 'user' | 'ai'; text: string; time: number }) =>
     ipcRenderer.invoke('sessions:addItem', id, item),
   removeSession: (id: string) => ipcRenderer.invoke('sessions:remove', id),
+  removeSessionItem: (id: string, index: number) => ipcRenderer.invoke('sessions:removeItem', id, index),
   renameSession: (id: string, title: string) => ipcRenderer.invoke('sessions:rename', id, title),
   // 工作台拆出（v10）
   detachWorkbench: () => ipcRenderer.invoke('workbench:detach'),

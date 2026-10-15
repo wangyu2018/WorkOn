@@ -42,7 +42,7 @@ import { musicControl } from './musicWatch'
 import { startMusicWatch } from './musicWatch'
 import { initLifeGoalJobs } from './lifeGoal'
 import { macCheckPermissions } from './winInfoMac'
-import { listChatSessions, createChatSession, addChatSessionItem, removeChatSession, renameChatSession } from './chatSessions'
+import { listChatSessions, createChatSession, addChatSessionItem, removeChatSession, renameChatSession, removeChatSessionItem } from './chatSessions'
 import { aiDevAdvice } from './projects'
 import { listActivities, listActivitiesRange, insertInto, col, updateIn } from './db'
 import type { UserHabits, PlanItem } from '@shared/types'
@@ -475,6 +475,7 @@ app.whenReady().then(() => {
   ipcMain.handle('sessions:addItem', (_e, id: string, item: { role: 'user' | 'ai'; text: string; time: number }) =>
     addChatSessionItem(id, item)
   )
+  ipcMain.handle('sessions:removeItem', (_e, id: string, index: number) => removeChatSessionItem(id, index))
   ipcMain.handle('sessions:remove', (_e, id: string) => removeChatSession(id))
   ipcMain.handle('sessions:rename', (_e, id: string, title: string) => renameChatSession(id, title))
   // 消息/音乐信号（v10 signals）：默认关，用户在设置里开

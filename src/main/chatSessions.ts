@@ -79,6 +79,13 @@ export function addChatSessionItem(id: string, item: ChatSessionItem): ChatSessi
   return r
 }
 
+export function removeChatSessionItem(id: string, index: number): ChatSession | null {
+  const s = col<ChatSession>('chatSessions').find((x) => x.id === id)
+  if (!s || index < 0 || index >= s.items.length) return null
+  const items = s.items.filter((_, i) => i !== index)
+  return updateIn<ChatSession>('chatSessions', id, { items, updatedAt: Date.now() })
+}
+
 export function removeChatSession(id: string): boolean {
   return removeFrom('chatSessions', id)
 }

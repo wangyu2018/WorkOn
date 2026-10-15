@@ -179,11 +179,12 @@ function MsgActions(props: {
   onToggle: () => void
   sessions: ChatSession[]
   onAddToSession: (sessionId: string | null, topic?: 'project' | 'life' | 'general') => void
+  onDelete?: () => void
 }): JSX.Element {
   const [level, setLevel] = useState<'root' | 'pick'>('root')
   if (!props.open) {
     return (
-      <button className="v10-msgdots" onClick={props.onToggle} title="加入会话 / 归档">
+      <button className="v10-msgdots" onClick={props.onToggle} title="加入会话 / 归档 / 删除">
         ⋯
       </button>
     )
@@ -199,6 +200,9 @@ function MsgActions(props: {
           {props.sessions.length > 0 ? <button onClick={() => setLevel('pick')}>更多会话…</button> : null}
           <button onClick={() => props.onAddToSession(null, 'project')}>归档 · 项目</button>
           <button onClick={() => props.onAddToSession(null, 'life')}>归档 · 生活</button>
+          {props.onDelete ? (
+            <button style={{ color: 'var(--red, #c0392b)' }} onClick={props.onDelete}>✕ 删除这条</button>
+          ) : null}
         </>
       ) : (
         <>
@@ -250,6 +254,10 @@ export function AskPane(props: {
   activeSessionId?: string | null
   onEnterSession?: (id: string | null) => void
   onAddToSession?: (msgIndex: number, sessionId: string | null, topic?: 'project' | 'life' | 'general') => void
+  /** 删除主对话消息（chat 数组下标） */
+  onDeleteMessage?: (msgIndex: number) => void
+  /** 删除会话内消息（会话 items 下标） */
+  onDeleteSessionItem?: (index: number) => void
   onSessionRenamed?: (id: string, title: string) => void
   onSessionRemoved?: (id: string) => void
   prefillText?: string | null
@@ -349,6 +357,7 @@ export function AskPane(props: {
             <div
               key={i}
               className={m.role === 'user' ? 'v10-msg-user' : 'v10-msg-ai'}
+              style={{ position: 'relative' }}
               draggable
               onDragStart={(e) => {
                 e.dataTransfer.setData(
@@ -358,6 +367,14 @@ export function AskPane(props: {
               }}
             >
               {m.text}
+              <button
+                className="v10-msgdots"
+                style={{ position: 'absolute', top: 2, right: m.role === 'user' ? 4 : undefined, left: m.role === 'user' ? undefined : 4, opacity: 0.5 }}
+                title="删除这条"
+                onClick={() => props.onDeleteSessionItem?.(i)}
+              >
+                ×
+              </button>
             </div>
           ))}
         </div>
@@ -465,6 +482,10 @@ export function AskPane(props: {
               sessions={props.sessions ?? []}
               onAddToSession={(sid, topic) => {
                 props.onAddToSession?.(i, sid, topic)
+                setMenuIdx(null)
+              }}
+              onDelete={() => {
+                props.onDeleteMessage?.(i)
                 setMenuIdx(null)
               }}
             />
