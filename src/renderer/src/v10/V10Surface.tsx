@@ -686,6 +686,30 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         return
       }
 
+      // ── 预期可达性/偏离/提前问句（forecast 已在本地 GoalView，直答不依赖 LLM） ──
+      if (goals.length && /(目标|预期).*(能不能|能否|达到|达成|完成|来得及|偏离|提前|预测|预计)|(能不能|能否|会不会|偏离|提前).*(目标|预期|达成)|我?这?(么|样)?干/.test(normalized)) {
+        const lines = goals.filter((g) => g.goal.status === 'active').map((g) => {
+          const f = g.forecast
+          if (!f) return `· ${g.goal.event}：数据还不够算预测（再攒几天投入记录）`
+          const pct = Math.round(f.completionPct * 100)
+          const needDays = f.paceMinPerDay > 0 ? Math.ceil(Math.max(0, g.totalTargetMin - g.cumMin) / f.paceMinPerDay) : Infinity
+          const finish = isFinite(needDays) ? new Date(Date.now() + needDays * 86400000) : null
+          const early = isFinite(needDays) ? Math.round(g.remainingDays - needDays) : 0
+          const earlyTxt = !finish
+            ? '照现在节奏基本追不上'
+            : early > 0
+              ? `预计 ${finish.getMonth() + 1}/${finish.getDate()} 达成——比截止提前 ${early} 天`
+              : early < 0
+                ? `照现速要到 ${finish.getMonth() + 1}/${finish.getDate()}——会晚 ${-early} 天`
+                : '预计刚好踩线达成'
+          const lever = f.levers[0] ? `\n  杠杆：若${f.levers[0].label}→ 完成度可到 ${Math.round(f.levers[0].newCompletionPct * 100)}%` : ''
+          const warn = g.alerts.length ? `\n  ⚠ ${g.alerts.join('；')}` : ''
+          return `· ${g.goal.event}：照近 14 天节奏（日均 ${Math.round(f.paceMinPerDay)} 分）到期预计完成 ${pct}%${f.projectedAnchorTitle ? `，落点「${f.projectedAnchorTitle}」` : ''}\n  ${earlyTxt}｜达标需日均 ${f.requiredMinPerDay} 分${lever}${warn}`
+        })
+        pushAI([{ role: 'ai', text: lines.length ? lines.join('\n') : '没有在盯的目标——说「我想在 X 前做到 Y」我来拆。' }])
+        return
+      }
+
       // ── 时间问句（本地直答，不该进 LLM） ──
       if (/^(现在)?几点|什么时间|现在时间|当前时间/.test(normalized)) {
         const n = new Date()
