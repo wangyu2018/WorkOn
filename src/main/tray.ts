@@ -9,7 +9,7 @@
 import { app, Menu, Tray, nativeImage } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import { createMainWindow, toggleWidget, togglePet, sendTo, setWidgetPenetration, petWindow, widgetWindow, toggleTodoWidget, setTodoWidgetPenetration, setTodoWidgetLayer, setWidgetOnTop, setPetOpacity, applyWidgetOpacity, detachPanes, attachPanes, expandPane, paneCollapsed, panesState } from './windows'
+import { createMainWindow, toggleWidget, togglePet, sendTo, setWidgetPenetration, petWindow, widgetWindow, toggleTodoWidget, setTodoWidgetPenetration, setTodoWidgetLayer, setWidgetOnTop, setPetOpacity, applyWidgetOpacity, detachPanes, attachPanes, expandPane, paneCollapsed, panesState, snapPanes, collapsePane } from './windows'
 import { getSettings, setSettings } from './settings'
 
 let tray: Tray | null = null
@@ -86,14 +86,13 @@ function buildMenu(): void {
       submenu: [
         { label: '拆开（问/右页 两块玻璃片）', click: () => detachPanes() },
         { label: '合回一面', click: () => attachPanes() },
-        { label: '吸附固定排布', click: () => { void import('./windows').then((m) => m.snapPanes()) } },
+        { label: '吸附固定排布', click: () => { snapPanes() } },
         { type: 'separator' },
         { label: '问玻璃（显示/唤回）', click: () => expandPane('ask') },
         { label: '右页玻璃（显示/唤回）', click: () => expandPane('paper') },
         {
           label: '收起全部玻璃',
           click: () => {
-            const { collapsePane } = require('./windows') as typeof import('./windows')
             collapsePane('ask')
             collapsePane('paper')
           }

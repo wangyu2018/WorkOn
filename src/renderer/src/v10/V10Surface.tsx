@@ -91,6 +91,21 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const [sandboxBlock, setSandboxBlock] = useState<{ id: string; title: string; html: string; css: string } | null>(null)
   const [sandboxLoading, setSandboxLoading] = useState(false)
   const [aiConfigOpen, setAiConfigOpen] = useState(false)
+  // FEAT-1 双窗格容器化：每片窗格装什么页=state 可换（URL pane= 只是初始 role）
+  const [paneContents, setPaneContents] = useState<{ askPane: 'ask' | 'paper'; paperPane: 'ask' | 'paper' }>(() => ({
+    askPane: (new URLSearchParams(window.location.search).get('pane') === 'ask' ? 'ask' : undefined) as 'ask' | undefined ?? 'ask',
+    paperPane: (new URLSearchParams(window.location.search).get('pane') === 'paper' ? 'paper' : undefined) as 'paper' | undefined ?? 'paper'
+  }))
+  const askPaneContent = paneContents.askPane
+  const swapPaneContent = (win: 'askPane' | 'paperPane'): void => {
+    setPaneContents((c) => {
+      const next = { ...c, [win]: c[win] === 'ask' ? ('paper' as const) : ('ask' as const) }
+      // FEAT-2 上下文感知：paper 页=看板语境 → 对话上下文自动切「计划」；ask 页=通用
+      if (next.paperPane === 'paper') setActiveContext('plans')
+      else setActiveContext('general')
+      return next
+    })
+  }
   const [activeContext, setActiveContext] = useState<ContextKey>('general')
   // 工作台拆出（v10）：pane=paper=独立右页窗；主窗监听拆出态显示占位
   const paneMode = useMemo(() => new URLSearchParams(window.location.search).get('pane'), [])
@@ -1022,7 +1037,53 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
     // 玻璃片：问（全宽对话流）
     return (
       <div className="v10 v10-pane v10-pane-ask" data-interactive>
-        <AskPane
+        {askPaneContent === 'paper' ? (
+          <PaperPane
+            pane="paper"
+            dateLabel={dateLabel}
+            plans={plans}
+            goals={goals}
+            onMarkAnchor={markAnchor}
+            onGoalPatch={patchGoal}
+            trail={trail}
+            presence={presence}
+            onTogglePlan={togglePlan}
+            onExit={props.onExit}
+            feed={feed}
+            archived={archived}
+            blockParams={blockParams}
+            onDropBlock={(b) => setObjectChip(b)}
+            now={now}
+            aiOn={aiOn}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+            showFlowMap={showFlowMap}
+            reminders={reminders}
+            onReminderRemoved={(id) => setReminders((list) => list.filter((x) => x.id !== id))}
+            onQuoteFeed={(t) => setQuoteChip({ text: t, from: '折下' })}
+            onContextAsk={(k, q) => {
+              setActiveContext(k as ContextKey)
+              setPrefillText(q)
+            }}
+            sandboxBlock={sandboxBlock}
+            onCloseSandbox={() => setSandboxBlock(null)}
+            aiConfigOpen={aiConfigOpen}
+            onCloseAiConfig={() => setAiConfigOpen(false)}
+            onAiConfigSaved={() => { setAiOn(true); setAiConfigOpen(false) }}
+            onboardStep={undefined}
+            onOnboardFinish={finishOnboard}
+            onHideToTray={() => void window.api?.collapsePane?.('ask')}
+            onFeedReorder={(from, to) => {
+              setFeed((f) => {
+                const next = [...f]
+                const [m] = next.splice(from, 1)
+                next.splice(to, 0, m)
+                return next
+              })
+            }}
+          />
+        ) : (
+          <AskPane
           glassControls
           chat={chat}
           asking={asking}
@@ -1039,6 +1100,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           activeSessionId={activeSessionId}
           onEnterSession={setActiveSessionId}
         />
+        )}
       </div>
     )
   }
@@ -1081,6 +1143,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
             setActiveContext(k as ContextKey)
             setPrefillText(q)
           }}
+          onSwapContent={() => swapPaneContent('paperPane')}
           aiConfigOpen={aiConfigOpen}
           onCloseAiConfig={() => setAiConfigOpen(false)}
           onAiConfigSaved={() => { setAiOn(true); setAiConfigOpen(false) }}
@@ -1202,6 +1265,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           setActiveContext(k as ContextKey)
           setPrefillText(q)
         }}
+        onSwapContent={() => swapPaneContent('paperPane')}
         pane={detached ? 'detached' : 'main'}
         onAttach={() => void window.api?.attachWorkbench?.()}
         onDetach={() => void window.api?.detachWorkbench?.()}

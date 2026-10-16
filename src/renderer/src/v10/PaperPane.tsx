@@ -249,7 +249,13 @@ function RemindersBlock(props: {
   const list = props.reminders.filter((r) => r.enabled !== false)
   if (props.hidden || list.length === 0) return null // 空自动隐藏
   return (
-    <section className="v10-block">
+    <section
+      className="v10-block"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('application/x-workon-block', JSON.stringify({ blockKey: 'reminders', label: '提醒', current: `${list.length} 条` }))
+      }}
+    >
       <div className="v10-block-kick">
         <span>◆ 提醒</span>
         <span>· {list.length} 条</span>
@@ -700,6 +706,8 @@ export function PaperPane(props: {
   onHideToTray?: () => void
   reminders?: Array<{ id: string; title: string; atHHMM?: string; recurring?: string; origin?: string; enabled?: boolean }>
   onReminderRemoved?: (id: string) => void
+  /** FEAT-1：窗格换装——切换这片窗格装的内容页 */
+  onSwapContent?: () => void
   /** 框即会话（v10 简化模型）：块→左栏切换上下文并预填 */
   onContextAsk?: (key: 'timeline' | 'plans' | 'goals' | 'reminders', q: string) => void
   aiConfigOpen?: boolean
@@ -797,7 +805,10 @@ export function PaperPane(props: {
             {props.aiOn ? 'AI ✓' : 'AI 未接入'}
           </span>
           {pane !== 'main' ? (
-            <button className="mh-act" onClick={() => { void window.api?.snapPanes?.() }} title="两块玻璃片贴合固定（上下/左右按当前方位）">⎯ 吸附</button>
+            <>
+              <button className="mh-act" onClick={() => { void window.api?.snapPanes?.() }} title="两块玻璃片贴合固定（上下/左右按当前方位）">⎯ 吸附</button>
+              <button className="mh-act" onClick={() => props.onSwapContent?.()} title="这片窗格换装：对话 ⇄ 看板">⇄ 换页</button>
+            </>
           ) : null}
           <button className="mh-act" onClick={() => setAiCfg(true)} title="设置（AI Key/端点/模型）">⚙ 设置</button>
           {pane === 'main' ? (
