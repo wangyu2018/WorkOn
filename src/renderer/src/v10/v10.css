@@ -496,7 +496,7 @@
 /* ── 报头充实（v10：顶栏不空） ────────────────────────── */
 .v10-masthead .mh-row { display: flex; align-items: center; gap: 6px; }
 .v10-masthead .mh-statepill {
-  display: inline-flex; align-items: center; gap: 6px;
+  display: inline-flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0;
   background: rgba(255,255,255,0.55); border-radius: 999px;
   font-size: 11px; color: var(--ink-2); padding: 3px 10px;
   max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -509,7 +509,7 @@
 }
 .v10-masthead .mh-ai.on { border: none; background: var(--aura); color: #fff; }
 .v10-masthead .mh-act {
-  border: none; background: rgba(255,255,255,0.5); color: var(--ink-2);
+  flex: none; border: none; background: rgba(255,255,255,0.5); color: var(--ink-2);
   font-size: 11px; padding: 3px 10px; border-radius: 999px; cursor: pointer; font-family: var(--font-ui);
 }
 .v10-masthead .mh-act:hover { background: #fff; color: var(--teal-ink); }
@@ -903,7 +903,7 @@
 .mh-winsep { width: 1px; height: 16px; background: rgba(43,43,40,0.18); margin: 0 2px; }
 .v10[data-theme='dark'] .mh-winsep { background: rgba(255,255,255,0.18); }
 .mh-winbtn {
-  width: 26px; height: 20px; border: none; background: rgba(43,43,40,0.08);
+  width: 26px; height: 20px; flex: none; border: none; background: rgba(43,43,40,0.08);
   color: var(--ink-2); font-size: 11px; cursor: pointer;
   border-radius: 6px; font-family: var(--font-ui); line-height: 1;
   transition: background 120ms, color 120ms;
