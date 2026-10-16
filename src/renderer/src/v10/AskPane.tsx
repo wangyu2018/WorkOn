@@ -524,8 +524,10 @@ export function AskPane(props: {
           </div>
           )
         })}
-        {props.asking ? <div className="v10-msg-ai">…</div> : null}
-        {props.sandboxLoading ? <div className="v10-msg-ai v10-sandbox-loading">◈ 可视化生成中——AI 在画板块，稍候片刻…</div> : null}
+        {props.asking ? <div className="v10-msg-ai v10-typing"><span /><span /><span /></div> : null}
+        {props.sandboxLoading ? (
+          <div className="v10-msg-ai v10-sandbox-loading">◈ 可视化生成中——AI 在画板块 <span className="v10-dots"><i /><i /><i /></span></div>
+        ) : null}
       </div>
       <div className="v10-ask-inputbar">
         {props.quoteChip ? (

@@ -766,6 +766,14 @@
 .v10-sandbox-sec-head button:hover { color: var(--ink-1); background: var(--hairline); }
 .v10-sandbox-empty { font-size: 12px; color: var(--ink-3); padding: 10px 4px; }
 .v10-sandbox-loading { opacity: .85; font-style: normal; }
+/* 回答/生成中的跳动三点 */
+.v10-typing { display: inline-flex; gap: 5px; align-items: center; }
+.v10-typing span, .v10-dots i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); animation: v10-dot-bounce 1.2s infinite ease-in-out; }
+.v10-typing span:nth-child(2), .v10-dots i:nth-child(2) { animation-delay: .15s; }
+.v10-typing span:nth-child(3), .v10-dots i:nth-child(3) { animation-delay: .3s; }
+.v10-dots { display: inline-flex; gap: 4px; margin-left: 4px; vertical-align: middle; }
+.v10-dots i { width: 4px; height: 4px; }
+@keyframes v10-dot-bounce { 0%, 80%, 100% { transform: translateY(0); opacity: .35; } 40% { transform: translateY(-4px); opacity: 1; } }
 
 /* ── 块管理（留住/隐藏真实化） ─────────────────────────── */
 .acts .blk-pin.on { color: var(--teal-ink); font-weight: 600; }
