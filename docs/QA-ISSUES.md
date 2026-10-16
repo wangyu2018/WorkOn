@@ -1865,3 +1865,24 @@ onClick={() => { if (!props.aiOn) { setAiCfg(true) } }}
 4. **左右割裂**：顶色带已贯通（celadon 一条横穿）；进一步可把 ctxbar 的会话 chip 和报头信息合一条逻辑顶栏（左 chip 右信息，一根带）
 
 **QA 已先修**：mh-focus/mh-clock/mh-ai/mh-title 全加 nowrap+flex:none——「专注 0 分钟」竖排、时钟折行这类挤压事故不会再发生（随 BUG-53 同族）。
+
+
+---
+
+## 回归批次4（对面 0076ecf：BUG-22/24/25/28/30/31）— 2026-10-16
+
+| 项 | 结果 | 说明 |
+|---|---|---|
+| BUG-28 定时天气 | ❌→已修(BUG-55) | 对面护栏放在天气路由**之后**且正则仅阿拉伯数字——「下午4点告诉我天气」仍回即时天气、护栏为死代码。修法：nlu `REMIND_RE` 补 `告诉我|到时候` + 标题清理同步，走 parseReminderIntent 全链（中文数字/PM化/顺延全吃），删死护栏。实测「下午4点/四点告诉我天气」→ 明天16:00 提醒 + 确认卡 ✓ |
+| BUG-30 来件查询 | ❌→已修(BUG-55) | ring buffer + `messages:recent` IPC + preload 都有了，**渲染层查询路由没写**（第6次断传）。补本地路由「新消息/谁找我/未读」→ recentMessages()，空态给监控引导。ring 实测为空（监控未收到件，合理） |
+| BUG-31 预期概念 | ✅ | 「人生预期是什么」→ 本地直答含在盯目标清单 |
+| BUG-24 chip 颜色 | ✅ | chip 实测带 bg 色（43,43,40 / 15,181,164 / 217,142,43…）；`.ses-back` 返回钮在码 |
+| BUG-25 v10 退出 | ⚠️ 静态 | App.tsx nav:view 先清 v10surface+setV10Surface(false) 成立；`v10:exit` 监听是死代码（无 dispatch），实际路径可用 |
+| BUG-22 采样门 | ⚠️ 未全验 | 窗口 hidden 时无法验 presence 流；主进程日志 `[load]` 正常。AI 通知渲染需真前台 AI 工具事件 |
+| 回归 | ✅ | 今天干了啥→回顾 / 目标可达→forecast / 待办→29项列表 |
+
+### BUG-55（QA 侧已修）：对面 BUG-28/30 修复均为「写了没接」
+- BUG-28 护栏路由顺序颠倒 + 中文数字/PM 缺失 → 改用 nlu REMIND_RE 扩词 + parseReminderIntent
+- BUG-30 渲染层查询路由缺失 → V10Surface 补 recentMessages 本地路由
+
+**对面第 6 次断传**：功能码写了，调用点没接。再次建议：新增 API/prop 时强制「定义处→调用处」双向查一遍，或 CI 加未引用导出告警。

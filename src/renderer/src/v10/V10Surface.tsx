@@ -15,9 +15,6 @@ import { STATE_LABEL } from '@shared/stateMeta'
 import { FlowMap } from './FlowMap'
 import './v10.css'
 
-/** 时间捕获（BUG-28 定时语义护栏用） */
-const TIME_CAPTURE_RE = /(\d{1,2})\s*[点时:：]\s*(\d{1,2})?\s*分?/
-
 /** 首启三步卡状态（v10 §2：指引式首启，两分钟） */
 type OnboardStep = 0 | 1 | 2 | 3
 
@@ -996,27 +993,23 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         return
       }
 
-      // ── BUG-28 护栏：定时语义（时间+告诉我/提醒）→ 建任务型提醒，不被天气等意图截胡 ──
-      if (/\d{1,2}\s*[点时:：]/.test(normalized) && /(告诉我|提醒|到时候|叫我)/.test(normalized)) {
-        const t2 = TIME_CAPTURE_RE.exec(normalized)
-        const wm = /(天气|下雨|温度)/.exec(normalized)
-        if (t2 && wm) {
-          const hh = parseInt(t2[1], 10)
-          const mm2 = t2[2] ? parseInt(t2[2], 10) : 0
-          const at = new Date(); at.setHours(hh, mm2, 0, 0)
-          if (at.getTime() <= Date.now()) at.setDate(at.getDate() + 1)
-          void window.api?.addReminder?.({
-            title: `${wm[1]}提醒（到点播报天气）`,
-            recurring: 'once',
-            atTs: at.getTime(),
-            origin: 'user',
-            confirmKeywords: undefined
-          })
-          setReminders((list) => [...list, { id: `tmp${Date.now()}`, title: `${wm[1]}提醒`, atHHMM: `${String(hh).padStart(2,'0')}:${String(mm2).padStart(2,'0')}` }])
-          pushAI([{ role: 'ai', text: `好——${String(hh).padStart(2,'0')}:${String(mm2).padStart(2,'0')} 到点我播报${wm[1]}，不用你记。` }])
-          return
-        }
+      // ── 消息查询（BUG-30 接线）：「微信有新消息吗」→ 读消息监控 ring buffer，不碰 LLM ──
+      if (/(新消息|消息提醒|收到消息|来消息|谁找我|有人找|未读)/.test(normalized) && !/提醒|开启|关闭|设置/.test(normalized)) {
+        void window.api?.recentMessages?.().then((list) => {
+          const items = (list as Array<{ app: string; label?: string; text: string; unread?: number; time?: number }> | null) ?? []
+          if (!items.length) {
+            pushAI([{ role: 'ai', text: '还没收到监控的件——消息监控开着的话，微信来消息会直接推这里（说「开启消息监控」）。' }])
+            return
+          }
+          pushAI([{
+            role: 'ai',
+            text: `最近 ${items.length} 件来件：\n${items.slice(0, 6).map((p) => `· ${p.label ?? p.app}${p.unread ? `（未读 ${p.unread}）` : ''}：${(p.text ?? '').slice(0, 60)}`).join('\n')}`
+          }])
+        })
+        return
       }
+
+      // BUG-28：定时语义由 parseReminderIntent 统一覆盖（REMIND_RE 含告诉我/到时候，提醒路由在天气之前）
 
       // ── 状态类问句：文字回答 + 「状态导图」可拆件 chip（点一下落右页） ──
       if (/当前状态|什么状态|在干嘛|在做什么|现在干|状态导图|画个?图/.test(normalized)) {

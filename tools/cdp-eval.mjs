@@ -8,7 +8,10 @@ const wsFile = process.argv.includes('--ws')
 const argList = process.argv.slice(2)
 const shotIdx = argList.indexOf('--shot')
 const shotPath = shotIdx >= 0 ? argList[shotIdx + 1] : null
-const expr = argList.filter((a, i) => (shotIdx < 0 || (i !== shotIdx && i !== shotIdx + 1)) && !a.startsWith('--'))[0]
+const exprFileIdx = argList.indexOf('--expr-file')
+const expr = exprFileIdx >= 0
+  ? (await import('node:fs')).readFileSync(argList[exprFileIdx + 1], 'utf8')
+  : argList.filter((a, i) => (shotIdx < 0 || (i !== shotIdx && i !== shotIdx + 1)) && !a.startsWith('--'))[0]
 
 const list = await (await fetch('http://localhost:9222/json')).json()
 const pane = argList.find((a) => a.startsWith('--pane='))?.slice(7)

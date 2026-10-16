@@ -26,7 +26,7 @@ function toHour(s: string): number {
 const DAY_RE = /(每天|每日|天天)/
 const TONIGHT_RE = /(今晚|今天)/
 const TOMORROW_RE = /(明天|明晚|明日)/
-const REMIND_RE = /(提醒|叫我|别忘)/
+const REMIND_RE = /(提醒|叫我|别忘|告诉我|到时候)/
 
 // ───────────────────────── 人生预期意图 ─────────────────────────
 
@@ -116,7 +116,7 @@ export function parseReminderIntent(text: string): ReminderIntent | null {
     .replace(DAY_RE, ' ')
     .replace(TONIGHT_RE, ' ')
     .replace(TOMORROW_RE, ' ')
-    .replace(/提醒我|提醒|叫我|别忘(了)?|每天|每日|晚上|晚间|夜里|下午|傍晚|早上|上午|中午/g, ' ')
+    .replace(/提醒我|告诉我|到时候|提醒|叫我|别忘(了)?|每天|每日|晚上|晚间|夜里|下午|傍晚|早上|上午|中午/g, ' ')
     .replace(/[，,。;；！!？?\s]+/g, ' ')
     .trim()
   if (daily) return { title: title || '提醒', recurring: 'daily', atHHMM, whenLabel: `每天 ${atHHMM}` }
