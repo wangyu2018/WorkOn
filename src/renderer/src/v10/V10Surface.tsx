@@ -97,7 +97,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const theme = themeMode === 'auto' ? (systemDark ? 'dark' : 'light') : themeMode
   const [showFlowMap, setShowFlowMap] = useState(false)
   const [mindMapText, setMindMapText] = useState<string | null>(null)
-  const [sandboxBlock, setSandboxBlock] = useState<{ id: string; title: string; css: string; sections: { title: string; html: string }[] } | null>(null)
+  const [sandboxBlock, setSandboxBlock] = useState<{ id: string; title: string; css: string; sections: { title: string; html: string }[]; src?: string } | null>(null)
   const [sandboxLoading, setSandboxLoading] = useState(false)
   const [aiConfigOpen, setAiConfigOpen] = useState(false)
   // FEAT-1 双窗格容器化：每片窗格装什么页=state 可换（URL pane= 只是初始 role）
@@ -337,6 +337,40 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
     ])
   }, [])
 
+  /** 当下实时数据快照（可视化刷新/生成时带上，防止画出过期数据） */
+  const liveSnapshot = useCallback((): string => {
+    const isDone = (p: PlanItem): boolean => p.status === 'done'
+    const isOpen = (p: PlanItem): boolean => !p.archived && p.status !== 'done' && p.status !== 'cancelled'
+    const fmt = (p: PlanItem): string =>
+      `${isDone(p) ? '☑' : '☐'} ${p.title}${p.startMin != null ? ` ${String(Math.floor(p.startMin / 60)).padStart(2, '0')}:${String(p.startMin % 60).padStart(2, '0')}` : ''}`
+    const open = plans.filter(isOpen).length
+    return `此刻实时数据（以此为准，覆盖上文旧数据）：\n待办 ${open} 项 / 已完成 ${plans.filter(isDone).length} 项：\n${plans.filter((p) => !p.archived).map(fmt).join('\n') || '（无）'}${reminders.length ? `\n今日提醒：${reminders.map((r) => `${r.atHHMM ?? ''} ${r.title}`).join('；')}` : ''}${presence?.state ? `\n此刻状态：${STATE_LABEL[presence.state] ?? presence.state}` : ''}`
+  }, [plans, reminders, presence])
+
+  /** 生成/刷新沙箱可视化：数据类内容自动拼上实时快照；src 存进块里供 ⟳ 刷新复用 */
+  const regenerateSandbox = useCallback(
+    (src: string) => {
+      setSandboxLoading(true)
+      const payload = /待办|计划|提醒|轨迹|今天|今日|时间线|日程|进度|状态|分钟|工作|摸鱼/.test(src) ? `${src}\n\n${liveSnapshot()}` : src
+      void window.api
+        ?.generateSandbox?.(payload)
+        .then((piece) => {
+          setSandboxLoading(false)
+          if (!piece) {
+            pushAI([{ role: 'ai', text: '可视化没生成出来（AI 未配置或生成失败）。配置 Key 后这个功能就活了。' }])
+            return
+          }
+          setSandboxBlock({ ...(piece as { id: string; title: string; css: string; sections: { title: string; html: string }[] }), src })
+          pushAI([{ role: 'ai', text: `可视化「${(piece as { title: string }).title}」落右页了——每块可单独取舍，块头 ⟳ 拿最新数据重画。` }])
+        })
+        .catch(() => {
+          setSandboxLoading(false)
+          pushAI([{ role: 'ai', text: '生成失败了，换个说法再试一次？' }])
+        })
+    },
+    [liveSnapshot]
+  )
+
   const send = useCallback(
     (raw: string) => {
       // 对象芯片挂载（AskPane drop 转发的内部协议，不上屏）
@@ -347,22 +381,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       }
       if (raw.startsWith('__sandbox__')) {
         const src = raw.slice(11)
-        setSandboxLoading(true)
-        void window.api
-          ?.generateSandbox?.(src)
-          .then((piece) => {
-            setSandboxLoading(false)
-            if (!piece) {
-              pushAI([{ role: 'ai', text: '可视化没生成出来（AI 未配置或生成失败）。配置 Key 后这个功能就活了。' }])
-              return
-            }
-            setSandboxBlock(piece as { id: string; title: string; css: string; sections: { title: string; html: string }[] })
-            pushAI([{ role: 'ai', text: `可视化「${(piece as { title: string }).title}」落右页了——里面的按钮点了会回到对话。` }])
-          })
-          .catch(() => {
-            setSandboxLoading(false)
-            pushAI([{ role: 'ai', text: '生成失败了，换个说法再试一次？' }])
-          })
+        void regenerateSandbox(src)
         return
       }
       if (raw === '__aiconfig__') {
@@ -1185,6 +1204,10 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           onCloseMindMap={() => setMindMapText(null)}
           sandboxBlock={sandboxBlock}
           onCloseSandbox={() => setSandboxBlock(null)}
+          onSandboxRefresh={() => {
+            if (sandboxBlock?.src) regenerateSandbox(sandboxBlock.src)
+            else pushAI([{ role: 'ai', text: '这个块没存下来源，刷不了——重新点一次「生成可视化」就有了。' }])
+          }}
           onQuoteFeed={(t) => setQuoteChip({ text: t, from: '折下' })}
           onContextAsk={(k, q) => {
             setActiveContext(k as ContextKey)
@@ -1302,6 +1325,10 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         onCloseMindMap={() => setMindMapText(null)}
         sandboxBlock={sandboxBlock}
         onCloseSandbox={() => setSandboxBlock(null)}
+        onSandboxRefresh={() => {
+          if (sandboxBlock?.src) regenerateSandbox(sandboxBlock.src)
+          else pushAI([{ role: 'ai', text: '这个块没存下来源，刷不了——重新点一次「生成可视化」就有了。' }])
+        }}
         onSandboxAsk={(q) => setPrefillText(q)}
         aiConfigOpen={aiConfigOpen}
         onCloseAiConfig={() => setAiConfigOpen(false)}

@@ -560,6 +560,7 @@ function SandboxView(props: {
   piece: { id: string; title: string; css: string; sections: { title: string; html: string }[] }
   onClose: () => void
   onAsk: (q: string) => void
+  onRefresh?: () => void
 }): JSX.Element {
   const [gone, setGone] = useState<number[]>([])
   const [heights, setHeights] = useState<Record<number, number>>({})
@@ -590,7 +591,10 @@ function SandboxView(props: {
         <span className="aura-mark">◇</span>
         <span>{props.piece.title}</span>
         <span>· AI 可视化 · {shown.length} 块 · 沙箱隔离</span>
-        <span className="acts"><button onClick={props.onClose}>×</button></span>
+        <span className="acts">
+          {props.onRefresh ? <button title="拿最新数据重画" onClick={props.onRefresh}>⟳</button> : null}
+          <button onClick={props.onClose}>×</button>
+        </span>
       </div>
       {shown.length === 0 ? <div className="v10-sandbox-empty">板块都清掉了——再点一次「生成可视化」重做。</div> : null}
       {shown.map(({ s, i }) => (
@@ -725,6 +729,8 @@ export function PaperPane(props: {
   sandboxBlock?: { id: string; title: string; css: string; sections: { title: string; html: string }[] } | null
   onCloseSandbox?: () => void
   onSandboxAsk?: (q: string) => void
+  /** ⟳ 拿最新数据重生成（可视化是快照，数据变了手动刷） */
+  onSandboxRefresh?: () => void
   theme?: 'light' | 'dark' | 'auto'
   onToggleTheme?: () => void
   onMinimize?: () => void
@@ -896,6 +902,7 @@ export function PaperPane(props: {
             piece={props.sandboxBlock}
             onClose={() => props.onCloseSandbox?.()}
             onAsk={(q) => props.onSandboxAsk?.(q)}
+            onRefresh={props.onSandboxRefresh}
           />
         ) : null}
         {props.mindMapText ? (
