@@ -191,6 +191,7 @@
   font-weight: 600;
   letter-spacing: 0.3px;
   white-space: nowrap;
+  flex: none;
 }
 .v10-masthead .mh-sub {
   margin-top: 4px;
@@ -501,10 +502,10 @@
   font-size: 11px; color: var(--ink-2); padding: 3px 10px;
   max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.v10-masthead .mh-focus { font-size: 11px; color: var(--ink-2); font-family: var(--font-num); }
-.v10-masthead .mh-clock { font-family: var(--font-num); font-size: 15px; color: var(--ink); font-weight: 600; letter-spacing: 1px; }
+.v10-masthead .mh-focus { font-size: 11px; color: var(--ink-2); font-family: var(--font-num); white-space: nowrap; flex: none; }
+.v10-masthead .mh-clock { font-family: var(--font-num); font-size: 15px; color: var(--ink); font-weight: 600; letter-spacing: 1px; white-space: nowrap; flex: none; }
 .v10-masthead .mh-ai {
-  font-size: 9.5px; padding: 2px 7px; border-radius: 999px;
+  font-size: 9.5px; padding: 2px 7px; border-radius: 999px; flex: none; white-space: nowrap;
   border: 1px solid var(--hairline-2); color: var(--ink-3); letter-spacing: 1px;
 }
 .v10-masthead .mh-ai.on { border: none; background: var(--aura); color: #fff; }
