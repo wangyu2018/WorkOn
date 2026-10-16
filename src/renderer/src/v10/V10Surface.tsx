@@ -767,7 +767,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       }
 
       // ── 预期可达性/偏离/提前问句（forecast 已在本地 GoalView，直答不依赖 LLM） ──
-      if (goals.length && /(目标|预期).*(能不能|能否|达到|达成|完成|来得及|偏离|提前|预测|预计)|(能不能|能否|会不会|偏离|提前).*(目标|预期|达成)|我?这?(么|样)?干/.test(normalized)) {
+      if (goals.length && /(目标|预期).*(能不能|能否|达到|达成|完成|来得及|偏离|提前|预测|预计)|(能不能|能否|会不会|偏离|提前).*(目标|预期|达成)|(我?这?(么|样)?干|这样下去|照这样).{0,12}(目标|预期|行吗|可行|有用吗|有效|能成|能行|达到|达成|完成|来得及)|偏离了?[吗么]?$|会(提前|晚|来得及)[吗么]?$|提前多少/.test(normalized)) {
         const lines = goals.filter((g) => g.goal.status === 'active').map((g) => {
           const f = g.forecast
           if (!f) return `· ${g.goal.event}：数据还不够算预测（再攒几天投入记录）`
