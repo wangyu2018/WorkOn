@@ -319,6 +319,7 @@ export function AskPane(props: {
 
   const [menuIdx, setMenuIdx] = useState<number | null>(null) // 行内动作面板（零浮层：hover ⋯ 展开）
   const [listOpen, setListOpen] = useState(false) // 会话列表下拉
+  const [armedSesId, setArmedSesId] = useState<string | null>(null) // 列表内删会话两次确认
   const active = props.sessions?.find((x) => x.id === props.activeSessionId) ?? null
 
   // 会话视图：进入某会话后左栏显示其消息 + 继续追问
@@ -443,10 +444,24 @@ export function AskPane(props: {
           {listOpen ? (
             <div className="v10-seslist">
               {props.sessions.map((x) => (
-                <button key={x.id} onClick={() => { props.onEnterSession?.(x.id); setListOpen(false) }}>
-                  {x.title.slice(0, 16)}
-                  <span className="ses-n">{x.items.length} 条</span>
-                </button>
+                <div key={x.id} className="v10-sesitem">
+                  <button onClick={() => { props.onEnterSession?.(x.id); setListOpen(false) }}>
+                    {x.title.slice(0, 16)}
+                    <span className="ses-n">{x.items.length} 条</span>
+                  </button>
+                  <button
+                    className={`ses-del${armedSesId === x.id ? ' armed' : ''}`}
+                    title={armedSesId === x.id ? '再点一次确认删除' : '删除会话'}
+                    onClick={() => {
+                      if (armedSesId !== x.id) { setArmedSesId(x.id); window.setTimeout(() => setArmedSesId(null), 2500); return }
+                      void window.api?.removeSession?.(x.id)
+                      props.onSessionRemoved?.(x.id)
+                      setArmedSesId(null)
+                    }}
+                  >
+                    {armedSesId === x.id ? '确认删?' : '✕'}
+                  </button>
+                </div>
               ))}
             </div>
           ) : null}
