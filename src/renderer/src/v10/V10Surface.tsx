@@ -10,6 +10,7 @@ import { AskPane, type ChatMsg, type ObjectChipData, type QuoteChipData } from '
 import { PaperPane, type FeedItem } from './PaperPane'
 import { parseReminderIntent, parseGoalIntent, parseScheduleProposal } from './nlu'
 import { withContext, type ContextKey } from './sessionContext'
+import { STATE_LABEL } from '@shared/stateMeta'
 
 import { FlowMap } from './FlowMap'
 import './v10.css'
@@ -22,6 +23,14 @@ function loadOnboardStep(): OnboardStep {
     if (window.localStorage.getItem('v10onboard') === 'done') return 3
   } catch { /* ignore */ }
   return 0
+}
+
+/** 裸应用名速查的中文别名（trail 里存的是英文名：WeChat/Browser/…） */
+const APP_CN_ALIAS: Record<string, string> = {
+  '微信': 'wechat', '企业微信': 'wecom', '钉钉': 'dingtalk', '飞书': 'feishu', 'qq': 'qq', 'tim': 'tim',
+  '浏览器': 'browser', '谷歌浏览器': 'chrome', '谷歌': 'chrome', '火狐': 'firefox', '记事本': 'notepad',
+  '网易云': 'music', '网易云音乐': 'music', '音乐': 'music', '播放器': 'video', '终端': 'terminal', '命令行': 'terminal',
+  '会议': 'meeting', '文档': 'office', '笔记': 'notes', '截图': 'screenshot', '画图': 'paint'
 }
 
 /** 块参数（块进化 diff 的作用对象；v10 §4.C：改参数不改画） */
@@ -606,6 +615,43 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           })
         return
       }
+      // ── 裸应用名速查（v10）：「微信」→ 今日用量 + 归属 + 接管提示；无匹配词形才放行给 LLM ──
+      if (
+        normalized.length >= 2 && normalized.length <= 16 &&
+        !/[\s?？!！。，,、：:;；]/.test(normalized) &&
+        !/^(打开|启动|切到|切换到|提醒我|提醒|计划|新增|加一个|撤销|换回来|开启|关闭|停用|取消|整理|梳理|总结|回顾|明天|今天|现在|几点|什么|为什么|怎么|帮我|生成|查询|搜索|看|查)/.test(normalized)
+      ) {
+        const q = normalized.toLowerCase()
+        const needle = (APP_CN_ALIAS[normalized] ?? APP_CN_ALIAS[q] ?? q).toLowerCase()
+        const hit = (app?: string | null): boolean => !!app && app.toLowerCase().includes(needle)
+        const today0 = new Date(); today0.setHours(0, 0, 0, 0)
+        const todaySegs = trail.filter((t) => t.startTs >= today0.getTime() && !t.glance && (hit(t.mainApp) || hit(t.auxApp)))
+        const allSegs = trail.filter((t) => hit(t.mainApp) || hit(t.auxApp))
+        const aliasHit = APP_CN_ALIAS[normalized] ?? APP_CN_ALIAS[q]
+        if (todaySegs.length || allSegs.length || aliasHit) {
+          const appName = [...new Set([...allSegs.map((t) => t.mainApp), ...allSegs.map((t) => t.auxApp)].filter(Boolean) as string[])][0] ?? normalized
+          if (todaySegs.length === 0) {
+            pushAI([{ role: 'ai', text: `「${normalized}」今天还没出场${allSegs.length ? `（轨迹里有 ${allSegs.length} 段历史）` : '（轨迹里也没见过它）'}。要开它说「打开 ${normalized}」。` }])
+          } else {
+            const mins = Math.round(todaySegs.reduce((a, t) => a + t.durationMin, 0))
+            const last = new Date(Math.max(...todaySegs.map((t) => t.endTs)))
+            const hh = `${String(last.getHours()).padStart(2, '0')}:${String(last.getMinutes()).padStart(2, '0')}`
+            const byState = new Map<string, number>()
+            for (const t of todaySegs) {
+              const lb = STATE_LABEL[t.mainState] ?? t.mainState
+              byState.set(lb, (byState.get(lb) ?? 0) + t.durationMin)
+            }
+            const topState = [...byState.entries()].sort((a, b) => b[1] - a[1])[0]
+            const isIM = /wechat|wecom|weixin|qq|tim|dingtalk|feishu|lark/.test(needle)
+            pushAI([{
+              role: 'ai',
+              text: `${appName}：今天 ${mins} 分钟 · ${todaySegs.length} 段，最近 ${hh} 还在用${topState ? `（大多被记成「${topState[0]}」）` : ''}。${isIM ? `要接管它说「开启消息监控」，新来件会直接推这里；要打开说「打开 ${normalized}」。` : `要拉起说「打开 ${normalized}」。`}`
+            }])
+          }
+          return
+        }
+      }
+
       if (/^(镜|设置|打开设置)$/.test(normalized)) {
         void window.api?.openMain?.()
         pushAI([{ role: 'ai', text: '镜开了（旧版设置页）——例程、习惯、隐私都在那边，v10 会逐步把它们搬进来。' }])
