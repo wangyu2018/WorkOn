@@ -101,10 +101,10 @@ export function renderMarkdown(src: string): JSX.Element {
     }
 
     // 无序列表（含缩进二级）
-    if (/^\s*[-*•]\s+/.test(line)) {
+    if (/^\s*[-*•·]\s+/.test(line)) {
       const items: string[] = []
-      while (i < lines.length && /^\s*[-*•]\s+/.test(lines[i])) {
-        items.push(lines[i].replace(/^\s*[-*•]\s+/, ''))
+      while (i < lines.length && /^\s*[-*•·]\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*[-*•·]\s+/, ''))
         i++
       }
       blocks.push(
@@ -139,7 +139,7 @@ export function renderMarkdown(src: string): JSX.Element {
     // 普通段落（连续非空行合并）
     const para: string[] = [line]
     i++
-    while (i < lines.length && lines[i].trim() && !/^\s*([-*•]|\d+[.、]|#{1,4}\s|\||```|---)/.test(lines[i])) {
+    while (i < lines.length && lines[i].trim() && !/^\s*([-*•·]|\d+[.、]|#{1,4}\s|\||```|---)/.test(lines[i])) {
       para.push(lines[i++])
     }
     blocks.push(

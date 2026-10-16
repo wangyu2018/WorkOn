@@ -50,8 +50,6 @@ export function Shrinkable(props: { children: ReactNode; scale?: number; hint?: 
     <div
       className={`v10-shrink${zoom ? ' zoom' : ''}`}
       style={{ height: zoom ? naturalH : naturalH * scale || undefined }}
-      onMouseEnter={() => setZoom(true)}
-      onMouseLeave={() => setZoom(false)}
       onClick={(e) => {
         // 点击=整页居中放大（portal 到 body，脱离左栏约束）
         if (!zoom) {
