@@ -1647,3 +1647,33 @@ onClick={() => { if (!props.aiOn) { setAiCfg(true) } }}
 **验证**：postMessage 实测 → 输入框填入「桥测试：这条该进输入框」✓
 
 **模式注记（给对面，重要）**：BUG-43/44/45 三连全是「prop 写了类型但父组件没传」——AskPane/PaperPane 双挂载点（工作台+拆出窗格）每次新加 prop 都得两处同步传，强烈建议把双挂载点抽成共享 props 对象 `{...paneProps}` 一处维护。
+
+---
+
+## BUG-46 ｜ 「后台正在盯」块双重断链：字段名错（monitors→实为 paces）+ 组件从未挂载
+
+**状态**：（QA 侧直修）
+**严重度**：中（FEAT-6 功能整体不可达——对面写了 BackendWatchBlock 但右页永远看不到）
+
+**根因**：
+1.  返回字段是 ，组件读  → 恒 null
+2. 组件定义了但 PaperPane 块列表里**从未挂载**（同 BUG-43/44/45 一族第四例）
+
+**修复（QA 侧）**：字段改读 ；挂载进置顶排序块列表（key: 'watch'）。
+**验证**：右页出现「◇ 后台正在盯 · 5 项」——读屏/窗口/AI 编程工具/桌宠节奏人话清单真渲染。
+
+---
+
+## QA 验收：对面 ab9f8d7 + 39757f4 回归（2026-10-16）
+
+| 项 | 结果 |
+|---|---|
+| BUG-12 RemindersBlock draggable | ✅ （空时自动隐藏属设计行为） |
+| BUG-26 GoalsBlock 死按钮 | ✅ 残留 0 个 |
+| BUG-27 AI ✓ 点击开接入卡 | ✅  |
+| BUG-20 masthead 图标化 | ✅ 见 AI ✓ 钮 |
+| pane=paper props 对齐 | ✅ typecheck 过 |
+| FEAT-7 Shrinkable→整页 overlay | ✅ 点开 ，✕ 关闭正常 |
+| FEAT-6 BackendWatchBlock | ❌→✅ 字段错+未挂载（BUG-46，QA 已修） |
+
+**模式注记（第四次）**：「定义了没接」已是这家最高频病——43/44/45/46 四连。建议对面在 CI 加个死代码扫描：导出的块组件没在 JSX 里出现就报警。

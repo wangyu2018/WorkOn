@@ -528,9 +528,9 @@ function BackendWatchBlock(): JSX.Element | null {
   const [rows, setRows] = useState<Array<{ label: string; human: string }> | null>(null)
   useEffect(() => {
     const pull = (): void => {
-      void (window.api as unknown as { getLoadStatus?: () => Promise<{ monitors?: Array<{ label: string; human: string }> }> })?.getLoadStatus?.()
+      void (window.api as unknown as { getLoadStatus?: () => Promise<{ paces?: Array<{ label: string; human: string }> }> })?.getLoadStatus?.()
         .then((r) => {
-          const list = (r as { monitors?: Array<{ label: string; human: string }> })?.monitors
+          const list = (r as { paces?: Array<{ label: string; human: string }> })?.paces
           if (Array.isArray(list)) setRows(list)
         })
         .catch(() => { /* ignore */ })
@@ -914,6 +914,7 @@ export function PaperPane(props: {
             onRemove={(id) => { void window.api?.removeReminder?.(id); props.onReminderRemoved?.(id) }}
           />
         ) },
+          { key: 'watch', pinned: isPinned('watch'), node: (<BackendWatchBlock />) },
         ] as Array<{ key: string; pinned: boolean; node: JSX.Element }>)
           .sort((a, b) => Number(b.pinned) - Number(a.pinned))
           .map(({ node }) => node)}
