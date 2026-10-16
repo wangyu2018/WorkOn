@@ -88,7 +88,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const theme = themeMode === 'auto' ? (systemDark ? 'dark' : 'light') : themeMode
   const [showFlowMap, setShowFlowMap] = useState(false)
   const [mindMapText, setMindMapText] = useState<string | null>(null)
-  const [sandboxBlock, setSandboxBlock] = useState<{ id: string; title: string; html: string; css: string } | null>(null)
+  const [sandboxBlock, setSandboxBlock] = useState<{ id: string; title: string; css: string; sections: { title: string; html: string }[] } | null>(null)
   const [sandboxLoading, setSandboxLoading] = useState(false)
   const [aiConfigOpen, setAiConfigOpen] = useState(false)
   // FEAT-1 双窗格容器化：每片窗格装什么页=state 可换（URL pane= 只是初始 role）
@@ -347,7 +347,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
               pushAI([{ role: 'ai', text: '可视化没生成出来（AI 未配置或生成失败）。配置 Key 后这个功能就活了。' }])
               return
             }
-            setSandboxBlock(piece as { id: string; title: string; html: string; css: string })
+            setSandboxBlock(piece as { id: string; title: string; css: string; sections: { title: string; html: string }[] })
             pushAI([{ role: 'ai', text: `可视化「${(piece as { title: string }).title}」落右页了——里面的按钮点了会回到对话。` }])
           })
           .catch(() => {
@@ -1091,6 +1091,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           scrollRef={scrollRef}
           presence={presence}
           aiOn={aiOn}
+          sandboxLoading={sandboxLoading}
           objectChip={objectChip}
           onClearChip={() => setObjectChip(null)}
           quoteChip={quoteChip}
@@ -1169,6 +1170,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         scrollRef={scrollRef}
         presence={presence}
         aiOn={aiOn}
+        sandboxLoading={sandboxLoading}
         objectChip={objectChip}
         onClearChip={() => setObjectChip(null)}
         quoteChip={quoteChip}

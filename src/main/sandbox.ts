@@ -8,17 +8,23 @@ import { llmChat, extractJson } from './ai'
 import { getSettings } from './settings'
 import { genId } from '@shared/types'
 
-export interface SandboxPiece {
-  id: string
-  html: string
-  css: string
+export interface SandboxSection {
   title: string
+  html: string
 }
 
-const SYSTEM_RULES = `你是 WorkOn 的可视化生成器。输出一个 JSON：{"title":"不超过10字","html":"主体结构","css":"样式"}。
+export interface SandboxPiece {
+  id: string
+  title: string
+  css: string
+  /** 分板块输出——宿主每 section 渲一张独立卡（用户可逐块取舍） */
+  sections: SandboxSection[]
+}
+
+const SYSTEM_RULES = `你是 WorkOn 的可视化生成器。输出一个 JSON：{"title":"不超过10字","css":"共享样式","sections":[{"title":"板块名","html":"板块HTML"}]}。
 要求：
-- html 里只写一个根元素 <div class="viz">…</div>，展示用户要的可视化（图表用纯 div/CSS 条形、SVG、或简单交互按钮）
-- css 写 .viz 及其子元素样式；配色用米白底 #F7F4EE、墨色 #2B2B28、青 #0FB5A4、琥珀 #D98E2B；字体 sans-serif；尺寸自适应容器宽
+- 把内容按板块拆成 2~4 个 sections（比如「进行中 / 积压 / 统计」「总览 / 明细」），每块独立成卡；每块 html 只写一个根元素 <div class="viz">…</div>
+- css 写 .viz 及其子元素样式；配色用米白底 #F7F4EE、墨色 #2B2B28、青 #0FB5A4、琥珀 #D98E2B；字体 sans-serif；尺寸自适应容器宽，不要给大空隙
 - 如需交互，按钮用 <button data-ask="要点名的追问">文案</button>——点击会通知宿主把追问送进对话
 - 禁止 <script> 标签、禁止外部资源、禁止 iframe
 - 只输出 JSON 本体`
@@ -37,12 +43,16 @@ export async function generateSandbox(srcText: string, ask?: string): Promise<Sa
     'standard'
   )
   if (!out) return null
-  const parsed = extractJson(out) as { title?: string; html?: string; css?: string } | null
-  if (!parsed?.html) return null
+  const parsed = extractJson(out) as { title?: string; css?: string; html?: string; sections?: { title?: string; html?: string }[] } | null
+  const sections = Array.isArray(parsed?.sections)
+    ? parsed!.sections!.filter((x) => x?.html).map((x) => ({ title: (x.title ?? '').slice(0, 12), html: x.html! }))
+    : []
+  if (sections.length === 0 && parsed?.html) sections.push({ title: '', html: parsed.html })
+  if (sections.length === 0) return null
   return {
     id: genId('sb'),
-    title: (parsed.title ?? '可视化').slice(0, 12),
-    html: parsed.html,
-    css: parsed.css ?? ''
+    title: (parsed!.title ?? '可视化').slice(0, 12),
+    css: parsed!.css ?? '',
+    sections
   }
 }

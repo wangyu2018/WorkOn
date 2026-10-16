@@ -2,7 +2,7 @@
  * 右栏「表」：活页结构（v10 §3.3）
  * 报头 sticky（唯一永久物）→ 折上（你的版面，栏目三段式）→ 折线 → 折下（TTL 推送区）
  */
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { PlanItem, TrailSegment, PresenceSnapshot, GoalView } from '@shared/types'
 import type { BlockParams } from './V10Surface'
 import type { ObjectChipData } from './AskPane'
@@ -557,36 +557,61 @@ function BackendWatchBlock(): JSX.Element | null {
 }
 
 function SandboxView(props: {
-  piece: { id: string; title: string; html: string; css: string }
+  piece: { id: string; title: string; css: string; sections: { title: string; html: string }[] }
   onClose: () => void
   onAsk: (q: string) => void
 }): JSX.Element {
-  // 桥：沙箱内按钮 postMessage {type:'workon-ask', text} → 宿主回填追问
+  const [gone, setGone] = useState<number[]>([])
+  const [heights, setHeights] = useState<Record<number, number>>({})
+  const frameRefs = useRef(new Map<number, HTMLIFrameElement>())
+  // 桥：workon-ask（按钮追问回填）+ workon-size（沙箱上报内容高度 → iframe 自适应，不用上下拖）
   useEffect(() => {
     const onMsg = (e: MessageEvent): void => {
-      const d = e.data as { type?: string; text?: string } | null
+      const d = e.data as { type?: string; text?: string; h?: number } | null
       if (d?.type === 'workon-ask' && d.text) props.onAsk(d.text)
+      if (d?.type === 'workon-size' && typeof d.h === 'number') {
+        for (const [i, f] of frameRefs.current) {
+          if (f.contentWindow === e.source) {
+            setHeights((m) => (m[i] === d.h ? m : { ...m, [i]: Math.min(d.h! + 4, 560) }))
+            return
+          }
+        }
+      }
     }
     window.addEventListener('message', onMsg)
     return () => window.removeEventListener('message', onMsg)
   }, [props.onAsk])
   // 桥脚本：data-ask 按钮点击 → postMessage 回宿主（LLM 只需输出 <button data-ask="问题">，不用自己写 JS）
-  const bridge = `<script>document.addEventListener('click',function(e){var t=e.target.closest('[data-ask]');if(t&&t.dataset.ask)parent.postMessage({type:'workon-ask',text:t.dataset.ask},'*')})<\/script>`
-  const doc = `<!DOCTYPE html><html><head><style>body{margin:0;background:#F7F4EE;font-family:sans-serif;color:#2B2B28;}${props.piece.css}</style></head><body>${props.piece.html}${bridge}</body></html>`
+  const bridge = `<script>document.addEventListener('click',function(e){var t=e.target.closest('[data-ask]');if(t&&t.dataset.ask)parent.postMessage({type:'workon-ask',text:t.dataset.ask},'*')});function ph(){try{parent.postMessage({type:'workon-size',h:document.documentElement.scrollHeight},'*')}catch(_){}};window.addEventListener('load',ph);setTimeout(ph,80);setTimeout(ph,400);if(window.ResizeObserver){new ResizeObserver(ph).observe(document.body)}<\/script>`
+  const shown = props.piece.sections.map((s, i) => ({ s, i })).filter((x) => !gone.includes(x.i))
   return (
     <section className="v10-block">
       <div className="v10-block-kick">
         <span className="aura-mark">◇</span>
         <span>{props.piece.title}</span>
-        <span>· AI 可视化 · 沙箱隔离</span>
+        <span>· AI 可视化 · {shown.length} 块 · 沙箱隔离</span>
         <span className="acts"><button onClick={props.onClose}>×</button></span>
       </div>
-      <iframe
-        className="v10-sandbox"
-        sandbox="allow-scripts"
-        srcDoc={doc}
-        title={props.piece.title}
-      />
+      {shown.length === 0 ? <div className="v10-sandbox-empty">板块都清掉了——再点一次「生成可视化」重做。</div> : null}
+      {shown.map(({ s, i }) => (
+        <div className="v10-sandbox-sec" key={i}>
+          <div className="v10-sandbox-sec-head">
+            <span>{s.title || `板块 ${i + 1}`}</span>
+            <button title="去掉这块（保留其它）" onClick={() => setGone((g) => [...g, i])}>×</button>
+          </div>
+          <iframe
+            ref={(el) => {
+              if (el) frameRefs.current.set(i, el)
+              else frameRefs.current.delete(i)
+            }}
+            className="v10-sandbox"
+            sandbox="allow-scripts"
+            style={{ height: heights[i] ?? 120 }}
+            srcDoc={`<!DOCTYPE html><html><head><style>body{margin:0;background:#F7F4EE;font-family:sans-serif;color:#2B2B28;}${props.piece.css}</style></head><body>${s.html}${bridge}</body></html>`}
+            title={`${props.piece.title}-${i}`}
+          />
+        </div>
+      ))}
     </section>
   )
 }
@@ -697,7 +722,7 @@ export function PaperPane(props: {
   showFlowMap?: boolean
   mindMapText?: string | null
   onCloseMindMap?: () => void
-  sandboxBlock?: { id: string; title: string; html: string; css: string } | null
+  sandboxBlock?: { id: string; title: string; css: string; sections: { title: string; html: string }[] } | null
   onCloseSandbox?: () => void
   onSandboxAsk?: (q: string) => void
   theme?: 'light' | 'dark' | 'auto'

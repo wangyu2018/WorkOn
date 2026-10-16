@@ -57,6 +57,7 @@ interface RenderRoute {
     onAsk?: (q: string) => void
     onSandbox?: (src: string) => void
     aiOn: boolean | null
+    sandboxLoading?: boolean
   }) => JSX.Element
 }
 
@@ -107,7 +108,7 @@ const RENDER_ROUTES: RenderRoute[] = [
 ]
 
 /** 思维导图拆件 chip（长文/结构化回答的再结构化入口） */
-function MindChip(props: { ctx: { mapped: boolean; setMapped: (v: boolean) => void; onMindmap?: (src: string) => void; onSandbox?: (src: string) => void; text: string; aiOn: boolean | null } }): JSX.Element | null {
+function MindChip(props: { ctx: { mapped: boolean; setMapped: (v: boolean) => void; onMindmap?: (src: string) => void; onSandbox?: (src: string) => void; text: string; aiOn: boolean | null; sandboxLoading?: boolean } }): JSX.Element | null {
   const { ctx } = props
   const canMap = ctx.text.length > 120 || /^#{1,3}\s|\n[-*•·]\s|\n\s*\|/.test(ctx.text)
   if (!canMap) return null
@@ -116,15 +117,20 @@ function MindChip(props: { ctx: { mapped: boolean; setMapped: (v: boolean) => vo
       <div className="v10-attachrow">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <Shrinkable scale={0.55} hint="预览 · 移过放大">
+            <Shrinkable scale={0.55} hint="预览 · 点击放大">
               <MindMap text={ctx.text} rootLabel="回答" width={520} />
             </Shrinkable>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <button className="v10-attach" onClick={() => ctx.onMindmap?.(`__page__${ctx.text}`)}>落右页 ▸</button>
             {ctx.aiOn ? (
-              <button className="v10-attach" style={{ background: 'var(--celadon-2)' }} onClick={() => ctx.onSandbox?.(`__sandbox__${ctx.text}`)}>
-                ◇ 生成可视化
+              <button
+                className="v10-attach"
+                style={{ background: 'var(--celadon-2)' }}
+                disabled={!!ctx.sandboxLoading}
+                onClick={() => ctx.onSandbox?.(`__sandbox__${ctx.text}`)}
+              >
+                {ctx.sandboxLoading ? '◈ 生成中…' : '◇ 生成可视化'}
               </button>
             ) : null}
           </div>
@@ -156,7 +162,7 @@ function CopyBtn(props: { text: string }): JSX.Element {
   )
 }
 
-function RichAnswer(props: { text: string; onMindmap?: (src: string) => void; onAsk?: (q: string) => void; onSandbox?: (src: string) => void; aiOn?: boolean | null }): JSX.Element {
+function RichAnswer(props: { text: string; onMindmap?: (src: string) => void; onAsk?: (q: string) => void; onSandbox?: (src: string) => void; aiOn?: boolean | null; sandboxLoading?: boolean }): JSX.Element {
   const [expanded, setExpanded] = useState(false)
   const [mapped, setMapped] = useState(false)
   const ctx = {
@@ -168,7 +174,8 @@ function RichAnswer(props: { text: string; onMindmap?: (src: string) => void; on
     onMindmap: props.onMindmap,
     onAsk: props.onAsk,
     onSandbox: props.onSandbox,
-    aiOn: props.aiOn ?? null
+    aiOn: props.aiOn ?? null,
+    sandboxLoading: props.sandboxLoading
   }
   const route = RENDER_ROUTES.find((r) => r.when(ctx.text)) ?? RENDER_ROUTES[RENDER_ROUTES.length - 1]
   return route.render(ctx)
@@ -264,6 +271,8 @@ export function AskPane(props: {
   prefillText?: string | null
   onPrefillConsumed?: () => void
   aiOn?: boolean | null
+  /** 沙箱可视化生成中（点了「生成可视化」后的进度反馈） */
+  sandboxLoading?: boolean
   onSandboxGen?: (srcText: string) => void
   /** 玻璃片模式（pane=ask）：控制条按钮 */
   glassControls?: boolean
@@ -468,6 +477,7 @@ export function AskPane(props: {
                 <RichAnswer
                   text={m.text}
                   aiOn={props.aiOn}
+                  sandboxLoading={props.sandboxLoading}
                   onMindmap={(src) => props.onSend(src.startsWith('__') ? src : `__page__${src}`)}
                   onAsk={(q) => props.onPrefill?.(q)}
                   onSandbox={(src) => props.onSend(src)}
@@ -515,6 +525,7 @@ export function AskPane(props: {
           )
         })}
         {props.asking ? <div className="v10-msg-ai">…</div> : null}
+        {props.sandboxLoading ? <div className="v10-msg-ai v10-sandbox-loading">◈ 可视化生成中——AI 在画板块，稍候片刻…</div> : null}
       </div>
       <div className="v10-ask-inputbar">
         {props.quoteChip ? (
