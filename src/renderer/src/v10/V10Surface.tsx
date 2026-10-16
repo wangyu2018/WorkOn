@@ -15,6 +15,9 @@ import { STATE_LABEL } from '@shared/stateMeta'
 import { FlowMap } from './FlowMap'
 import './v10.css'
 
+/** 时间捕获（BUG-28 定时语义护栏用） */
+const TIME_CAPTURE_RE = /(\d{1,2})\s*[点时:：]\s*(\d{1,2})?\s*分?/
+
 /** 首启三步卡状态（v10 §2：指引式首启，两分钟） */
 type OnboardStep = 0 | 1 | 2 | 3
 
@@ -118,6 +121,16 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const [activeContext, setActiveContext] = useState<ContextKey>('general')
   // 工作台拆出（v10）：pane=paper=独立右页窗；主窗监听拆出态显示占位
   const paneMode = useMemo(() => new URLSearchParams(window.location.search).get('pane'), [])
+  // BUG-25：v10 开着时「⚙ 设置」/nav:view → 退出 v10 回旧版对应页（v10 盖住旧版，导航需先退面）
+  useEffect(() => {
+    if (paneMode) return
+    const onExitNav = (): void => {
+      try { window.localStorage.removeItem('v10surface') } catch { /* ignore */ }
+      props.onExit?.()
+    }
+    window.addEventListener('v10:exit', onExitNav)
+    return () => window.removeEventListener('v10:exit', onExitNav)
+  }, [paneMode, props.onExit])
   // 玻璃片穿透命中：forward 模式下渲染层仍收 mousemove——指针在玻璃片容器内=可交互，片外=穿透
   // 去重（v10 修）：状态不变绝不调 IPC（mousemove 高频，invoke 风暴会导致点击/键盘事件堆积丢失）
   useEffect(() => {
@@ -981,6 +994,28 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           }])
         }).catch(() => pushAI([{ role: 'ai', text: '天气查询失败了——稍后再试。' }]))
         return
+      }
+
+      // ── BUG-28 护栏：定时语义（时间+告诉我/提醒）→ 建任务型提醒，不被天气等意图截胡 ──
+      if (/\d{1,2}\s*[点时:：]/.test(normalized) && /(告诉我|提醒|到时候|叫我)/.test(normalized)) {
+        const t2 = TIME_CAPTURE_RE.exec(normalized)
+        const wm = /(天气|下雨|温度)/.exec(normalized)
+        if (t2 && wm) {
+          const hh = parseInt(t2[1], 10)
+          const mm2 = t2[2] ? parseInt(t2[2], 10) : 0
+          const at = new Date(); at.setHours(hh, mm2, 0, 0)
+          if (at.getTime() <= Date.now()) at.setDate(at.getDate() + 1)
+          void window.api?.addReminder?.({
+            title: `${wm[1]}提醒（到点播报天气）`,
+            recurring: 'once',
+            atTs: at.getTime(),
+            origin: 'user',
+            confirmKeywords: undefined
+          })
+          setReminders((list) => [...list, { id: `tmp${Date.now()}`, title: `${wm[1]}提醒`, atHHMM: `${String(hh).padStart(2,'0')}:${String(mm2).padStart(2,'0')}` }])
+          pushAI([{ role: 'ai', text: `好——${String(hh).padStart(2,'0')}:${String(mm2).padStart(2,'0')} 到点我播报${wm[1]}，不用你记。` }])
+          return
+        }
       }
 
       // ── 状态类问句：文字回答 + 「状态导图」可拆件 chip（点一下落右页） ──

@@ -37,7 +37,7 @@ import { canInterrupt } from './confirmQueue'
 import { initReminders, addReminder, listReminders, removeReminder } from './reminders'
 import { listApps, openAppSafe } from './appLauncher'
 import { generateSandbox } from './sandbox'
-import { initMessageWatch, startMessageWatch, stopMessageWatch } from './messageWatch'
+import { initMessageWatch, startMessageWatch, stopMessageWatch, recentIncoming } from './messageWatch'
 import { musicControl } from './musicWatch'
 import { startMusicWatch } from './musicWatch'
 import { initLifeGoalJobs } from './lifeGoal'
@@ -465,6 +465,7 @@ app.whenReady().then(() => {
   ipcMain.handle('panes:collapse', (_e, which: 'ask' | 'paper') => collapsePane(which))
   ipcMain.handle('panes:expand', (_e, which: 'ask' | 'paper') => expandPane(which))
   ipcMain.handle('panes:collapsed', (_e, which: 'ask' | 'paper') => paneCollapsed(which))
+  ipcMain.handle('messages:recent', () => recentIncoming())
   ipcMain.handle('panes:setTop', (_e, which: 'ask' | 'paper', on: boolean) => {
     setPaneTop(which, on)
     return true

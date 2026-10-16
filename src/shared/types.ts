@@ -1117,7 +1117,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ocrCacheLimit: 200,
   privacyExcludedApps: [],
   aiAssistWatchEnabled: false,
-  aiAssistWatchApps: ['cursor', 'claude', 'chatgpt', 'windsurf'],
+  aiAssistWatchApps: ['cursor', 'claude', 'chatgpt', 'windsurf', 'zcode', 'devin', 'trae', 'codebuddy'],
   workChains: [],
   widgetVisible: false, // 悬浮卡片默认隐藏（设置里可手动开启），状态由桌宠对话泡泡提供
   widgetMode: 'mini',

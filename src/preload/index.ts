@@ -56,6 +56,7 @@ const api = {
   setPaneTop: (which: 'ask' | 'paper', on: boolean) => ipcRenderer.invoke('panes:setTop', which, on),
   musicControl: (action: 'next' | 'prev' | 'toggle') => ipcRenderer.invoke('music:control', action),
   onMessageHint: on<{ app: string }>('message:hint'),
+  recentMessages: () => ipcRenderer.invoke('messages:recent'),
   onMusicChanged: on<{ name: string; artist: string; playing: boolean }>('music:changed'),
   onAiAssist: on<{ enabled: boolean; items: Array<{ key: string; label?: string; status: string; title?: string; doneUntil?: number; busySince?: number }> }>('ai-assist:update'),
 

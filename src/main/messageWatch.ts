@@ -75,6 +75,9 @@ const THROTTLE_MS = 90_000
 
 type IncomingHandler = (p: IncomingPayload) => void
 let handler: IncomingHandler | null = null
+/** 查询式 ring buffer（BUG-30）：最近来件存一份，「微信消息」问句可查 */
+const recentRing: IncomingPayload[] = []
+const RING_MAX = 20
 type HintHandler = (app: string) => void
 let hintHandler: HintHandler | null = null
 let hinted = false
@@ -88,6 +91,11 @@ export function startMessageWatch(): void {
   if (timer) return
   timer = setInterval(poll, 8_000)
   console.info('[messageWatch] 已启动（L1 未读 → L2 窗口 OCR → L3 UIA）')
+}
+
+/** 查询式：最近来件（BUG-30，「微信消息」问句用） */
+export function recentIncoming(): IncomingPayload[] {
+  return recentRing.slice()
 }
 
 export function stopMessageWatch(): void {
@@ -126,6 +134,8 @@ async function poll(): Promise<void> {
     void captureIncoming(pat.label, app, unread)
       .then((payload) => {
         if (!payload) return
+        recentRing.unshift(payload)
+        if (recentRing.length > RING_MAX) recentRing.pop()
         handler?.(payload)
       })
       .catch(() => { /* ignore */ })

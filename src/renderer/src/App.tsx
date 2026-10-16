@@ -240,6 +240,11 @@ export default function App() {
   // 托盘快速问答等外部跳转请求
   useEffect(() => {
     const off = window.api.onNavView?.((v) => {
+      // v10 表面盖住旧版——导航先退 v10（BUG-25：⚙ 设置在 v10 模式下不可达）
+      if (window.localStorage.getItem('v10surface') === '1') {
+        window.localStorage.removeItem('v10surface')
+        setV10Surface(false)
+      }
       if (typeof v !== 'string') return
       // 监控已迁入首页模块；旧入口落到首页
       useAppStore.getState().setView(v === 'monitor' ? 'home' : (v as never))

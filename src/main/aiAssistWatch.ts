@@ -167,10 +167,12 @@ export async function aiAssistWatchTick(ts = Date.now()): Promise<void> {
   if (sampling || ts - lastSampleAt < minMs) return
   lastSampleAt = ts
   sampling = true
-  // 可见性门控：悬浮窗与待办小组件都不可见时，采样结果无人消费，直接跳过省掉 PS 开销
-  const { widgetWindow: ww, todoWidgetWindow: tw } = (await import('./windows')) as { widgetWindow?: import('electron').BrowserWindow | null; todoWidgetWindow?: import('electron').BrowserWindow | null }
+  // 可见性门控（BUG-22 修）：v10 主窗/玻璃窗也是消费者——任何窗口可见就采样
+  const { widgetWindow: ww, todoWidgetWindow: tw, mainWindow: mw, getWorkbenchWindow: gwb } = (await import('./windows')) as never
+  const mod = (await import('./windows')) as { mainWindow?: import('electron').BrowserWindow | null; getWorkbenchWindow?: () => import('electron').BrowserWindow | null }
   const vis = (w?: import('electron').BrowserWindow | null): boolean => !!w && !w.isDestroyed() && w.isVisible()
-  if (!vis(ww) && !vis(tw)) return
+  const mainVis = vis(mod.mainWindow)
+  if (!vis(ww) && !vis(tw) && !mainVis) return
 
   const live = await sampleProcesses(watched)
   const liveMap = new Map(live.map((x) => [x.key, x]))
