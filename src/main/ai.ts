@@ -801,8 +801,9 @@ function localAnswer(question: string, facts: Record<string, unknown> | null, tr
   if (/双屏|副屏|并行/.test(q)) {
     return `今日双屏并行占比 ${f.dualRatio}%${f.dualWorkSlackMin > 0 ? `，主工作+副摸鱼并行 ${f.dualWorkSlackMin} 分钟` : ''}。`
   }
-  if (/计划|plan|目标/.test(q)) {
-    return '计划详情可以在「计划」页查看达成率与预测；监控页的时间轴上也能看到计划时段的虚线框哦。'
+  // 仅「查询类」计划问句给指路（BUG-56：整理/安排/规划类是动作请求，不能指路搪塞；v10 无「计划页」，指路改指右页块）
+  if (/计划|plan|目标/.test(q) && /(怎么样|如何|进展|完成|达成|哪里看|在哪|还剩|多少)/.test(q) && !/(整理|规划|安排|制定|做|排|拆)/.test(q)) {
+    return '计划进展可以在右页「今日计划 / 人生预期」块直接看；想让我帮你排，直接说「帮我把 X 安排到周 Y」就行。'
   }
   // 区分「没配 AI」和「配了但这次调用失败」——后者再喊人去配置是误导（BUG-13 关联）
   const aiConfigured = Boolean(getSettings().aiEnabled && getSettings().aiApiKey)
