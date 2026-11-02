@@ -1027,6 +1027,12 @@ export interface AppSettings {
   v10WorkbenchBounds?: { x: number; y: number; width: number; height: number }
   /** 消息监控（v10 signals·隐私红线）：默认关；开启后 IM 未读上升→截屏 OCR→来件进对话流 */
   messageWatchEnabled?: boolean
+  /** EdgeDock 边缘分组（用户 2026-11-02）：三边 Dock 应用分组+排序+批量启动 */
+  edgeDocks?: {
+    top: { title: string; items: Array<{ id: string; appKey: string; label: string; icon: string; order: number }> }
+    left: { title: string; items: Array<{ id: string; appKey: string; label: string; icon: string; order: number }> }
+    right: { title: string; items: Array<{ id: string; appKey: string; label: string; icon: string; order: number }> }
+  }
   /** v10 玻璃双窗：问/右页 位置尺寸记忆 */
   v10AskBounds?: { x: number; y: number; width: number; height: number }
   v10PaperBounds?: { x: number; y: number; width: number; height: number }

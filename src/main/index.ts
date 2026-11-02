@@ -37,6 +37,7 @@ import { canInterrupt } from './confirmQueue'
 import { initReminders, addReminder, listReminders, removeReminder } from './reminders'
 import { listApps, openAppSafe } from './appLauncher'
 import { generateSandbox } from './sandbox'
+import { getDock, addDockItem, removeDockItem, reorderDock, renameDock, launchDockItem, launchDockGroup, createDockWindow, closeDock, dockVisible } from './edgeDock'
 import { initMessageWatch, startMessageWatch, stopMessageWatch, recentIncoming } from './messageWatch'
 import { musicControl } from './musicWatch'
 import { startMusicWatch } from './musicWatch'
@@ -466,6 +467,17 @@ app.whenReady().then(() => {
   ipcMain.handle('panes:expand', (_e, which: 'ask' | 'paper') => expandPane(which))
   ipcMain.handle('panes:collapsed', (_e, which: 'ask' | 'paper') => paneCollapsed(which))
   ipcMain.handle('messages:recent', () => recentIncoming())
+  // EdgeDock 边缘分组（2026-11-02 用户需求）
+  ipcMain.handle('edgedock:get', (_e, edge: 'top' | 'left' | 'right') => getDock(edge))
+  ipcMain.handle('edgedock:add', (_e, edge: 'top' | 'left' | 'right', appKey: string, label: string, icon: string) => addDockItem(edge, appKey, label, icon))
+  ipcMain.handle('edgedock:remove', (_e, edge: 'top' | 'left' | 'right', id: string) => removeDockItem(edge, id))
+  ipcMain.handle('edgedock:reorder', (_e, edge: 'top' | 'left' | 'right', ids: string[]) => reorderDock(edge, ids))
+  ipcMain.handle('edgedock:rename', (_e, edge: 'top' | 'left' | 'right', title: string) => renameDock(edge, title))
+  ipcMain.handle('edgedock:launchItem', (_e, edge: 'top' | 'left' | 'right', id: string) => launchDockItem(edge, id))
+  ipcMain.handle('edgedock:launchGroup', (_e, edge: 'top' | 'left' | 'right') => launchDockGroup(edge))
+  ipcMain.handle('edgedock:show', (_e, edge: 'top' | 'left' | 'right') => { createDockWindow(edge); return true })
+  ipcMain.handle('edgedock:hide', (_e, edge?: 'top' | 'left' | 'right') => { closeDock(edge); return true })
+  ipcMain.handle('edgedock:visible', (_e, edge: 'top' | 'left' | 'right') => dockVisible(edge))
   ipcMain.handle('panes:setTop', (_e, which: 'ask' | 'paper', on: boolean) => {
     setPaneTop(which, on)
     return true

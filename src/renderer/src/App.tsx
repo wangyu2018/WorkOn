@@ -29,6 +29,7 @@ import { usePerspective } from './lib/usePerspective'
 import { PERSPECTIVE_NAV } from './lib/perspective'
 import { PERSPECTIVES, PERSPECTIVE_META } from '@shared/perspective'
 import V10Surface from './v10/V10Surface'
+import { EdgeDockBar } from './v10/EdgeDockBar'
 
 interface NavItem {
   key: ViewKey
@@ -280,6 +281,12 @@ export default function App() {
 
   // v10「一面一角色」新表面：URL 参数 ?v10=1 开（写入 localStorage 持久），
   // ?v10=0 关；开关切换即整面替换，旧版 16 视图结构零改动（docs/UI-DESIGN-SPEC-v10.md）
+  // EdgeDock 边缘分组（2026-11-02）：?edgedock=top|left|right → 渲染 Dock 条
+  const edgeDockMode = useMemo(() => {
+    const q = new URLSearchParams(window.location.search).get('edgedock')
+    return q === 'top' || q === 'left' || q === 'right' ? q : null
+  }, [])
+
   const [v10Surface, setV10Surface] = useState((): boolean => {
     try {
       const q = new URLSearchParams(window.location.search).get('v10')
@@ -288,6 +295,11 @@ export default function App() {
       return window.localStorage.getItem('v10surface') === '1'
     } catch { return false }
   })
+  // EdgeDock 路由优先
+  if (edgeDockMode) {
+    return <EdgeDockBar edge={edgeDockMode} />
+  }
+
   if (v10Surface) return <V10Surface onExit={() => setV10Surface(false)} />
 
   return (

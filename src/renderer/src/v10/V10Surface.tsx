@@ -611,6 +611,42 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           return
         }
       }
+      // ── EdgeDock 指令（2026-11-02）：边缘分组管理+批量启动 ──
+      const EDGE_MAP: Record<string, 'top' | 'left' | 'right'> = { '顶部': 'top', '左边': 'left', '左侧': 'left', '右边': 'right', '右侧': 'right', '顶栏': 'top', '左栏': 'left', '右栏': 'right' }
+      // 显示/隐藏 Dock
+      const dockVis = /(显示|打开|开启|关闭|隐藏|收起)(顶部|左边|左侧|右边|右侧|顶栏|左栏|右栏)(Dock|dock|栏|边框)?/.exec(normalized)
+      if (dockVis) {
+        const on = /显示|打开|开启/.test(dockVis[1])
+        const edge = EDGE_MAP[dockVis[2]]
+        if (edge) {
+          void (window.api as unknown as { dockShow?: (e: string) => Promise<boolean>; dockHide?: (e?: string) => Promise<boolean> })[on ? 'dockShow' : 'dockHide']?.(edge)
+          pushAI([{ role: 'ai', text: `${on ? '显示' : '收起'}了${dockVis[2]}的 Dock ✦${on ? '——现在把应用拖过去或说「把 XX 加到' + dockVis[2] + '」' : ''}` }])
+          return
+        }
+      }
+      // 把 XX 加到某边
+      const dockAdd = /把\s*(.+?)\s*加到\s*(顶部|左边|左侧|右边|右侧|顶栏|左栏|右栏)/.exec(normalized)
+      if (dockAdd) {
+        const appName = dockAdd[1].trim()
+        const edge = EDGE_MAP[dockAdd[2]]
+        const ICONS: Record<string, string> = { chrome: '🌐', safari: '🧭', firefox: '🦊', edge: '🌊', 微信: '💬', '企业微信': '💼', qq: '🐧', 钉钉: '📎', 飞书: '🐦', cursor: '⌨️', claude: '🤖', zcode: '⚡', devin: '🧠', trae: '🚀', codebuddy: '🛠️', terminal: '>_', 访达: '📁', finder: '📁', vscode: '💙', code: '💙', music: '🎵', spotify: '🎧' }
+        const icon = ICONS[appName.toLowerCase()] ?? '📦'
+        void (window.api as unknown as { dockAdd?: (e: string, k: string, l: string, i: string) => Promise<unknown> })?.dockAdd?.(edge, appName, appName, icon)
+        pushAI([{ role: 'ai', text: `「${appName}」已加入${dockAdd[2]}分组 ✦（${icon} 图标，运行时亮青点）` }])
+        return
+      }
+      // 启动某边分组
+      const dockLaunch = /(启动|打开|跑).*(顶部|左边|左侧|右边|右侧|顶栏|左栏|右栏)(分组|Dock|dock|组)?/.exec(normalized)
+      if (dockLaunch && /(分组|dock|dock|组)/.test(normalized)) {
+        const edge = EDGE_MAP[dockLaunch[2]]
+        if (edge) {
+          void (window.api as unknown as { dockLaunchGroup?: (e: string) => Promise<number> })?.dockLaunchGroup?.(edge).then((n) => {
+            pushAI([{ role: 'ai', text: n > 0 ? `${dockLaunch[2]}分组按序启动了 ${n} 个应用 ✦` : '分组里还没有应用——说「把 XX 加到' + dockLaunch[2] + '」先添加。' }])
+          })
+          return
+        }
+      }
+
       // ── 音乐控制指令（v10 应用接管·媒体） ──
       const musicM = /^(下一首|上一首|暂停音乐|播放音乐|切个歌|暂停|继续放)$/.exec(normalized)
       if (musicM) {

@@ -993,3 +993,57 @@
   font-size: 11px; padding: 3px 10px; border-radius: 999px; cursor: pointer; font-family: var(--font-ui);
 }
 .v10-zoom-close:hover { color: var(--ink); }
+
+/* ── EdgeDock 边缘分组（2026-11-02） ──────────────────── */
+.edock {
+  position: fixed; z-index: 500;
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(20, 23, 28, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #E9E5D9; font-family: 'PingFang SC', sans-serif;
+}
+.edock-top { top: 0; left: 0; right: 0; height: 52px; padding: 0 16px; flex-direction: row; border-top: none; border-left: none; border-right: none; }
+.edock-left { top: 60px; left: 0; bottom: 40px; width: 56px; flex-direction: column; padding: 10px 4px; border-left: none; }
+.edock-right { top: 60px; right: 0; bottom: 40px; width: 56px; flex-direction: column; padding: 10px 4px; border-right: none; }
+
+.edock-group-title {
+  border: none; background: rgba(255, 255, 255, 0.08); color: #E9E5D9;
+  font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 8px;
+  cursor: pointer; white-space: nowrap; letter-spacing: 1px;
+  transition: background 120ms;
+}
+.edock-group-title:hover { background: var(--teal); color: #fff; }
+
+.edock-items { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.edock-items::-webkit-scrollbar { display: none; }
+.edock-items-h { flex-direction: row; }
+.edock-items-v { flex-direction: column; flex: 1; overflow-y: auto; }
+
+.edock-item {
+  position: relative; display: flex; flex-direction: column; align-items: center;
+  border: none; background: none; cursor: pointer; padding: 4px; border-radius: 8px;
+  transition: background 120ms; min-width: 36px;
+}
+.edock-item:hover { background: rgba(255, 255, 255, 0.08); }
+.edock-icon { font-size: 20px; line-height: 1; }
+.edock-dot {
+  position: absolute; top: 2px; right: 2px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+}
+.edock-item.on .edock-dot { background: #0FB5A4; box-shadow: 0 0 4px rgba(15, 181, 164, 0.5); }
+.edock-item.ai .edock-dot { background: #7C6FF0; box-shadow: 0 0 4px rgba(124, 111, 240, 0.6); animation: edock-pulse 1.5s ease infinite; }
+@keyframes edock-pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.4 } }
+.edock-label { font-size: 9px; color: #A8A296; margin-top: 2px; max-width: 48px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.edock-empty { font-size: 10px; color: #6E6A60; padding: 4px; }
+.edock-collapse {
+  border: none; background: none; color: #6E6A60; font-size: 14px;
+  cursor: pointer; padding: 2px 8px; border-radius: 6px;
+}
+.edock-collapse:hover { color: #E9E5D9; background: rgba(255,255,255,0.08); }
+.edock-collapsed {
+  width: 18px !important; height: 18px !important; min-width: 18px; min-height: 18px;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.edock-collapsed .edock-edge-label { font-size: 10px; color: #A8A296; }

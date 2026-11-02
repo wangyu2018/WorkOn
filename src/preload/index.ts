@@ -57,6 +57,17 @@ const api = {
   musicControl: (action: 'next' | 'prev' | 'toggle') => ipcRenderer.invoke('music:control', action),
   onMessageHint: on<{ app: string }>('message:hint'),
   recentMessages: () => ipcRenderer.invoke('messages:recent'),
+  // EdgeDock
+  dockGet: (edge: string) => ipcRenderer.invoke('edgedock:get', edge),
+  dockAdd: (edge: string, appKey: string, label: string, icon: string) => ipcRenderer.invoke('edgedock:add', edge, appKey, label, icon),
+  dockRemove: (edge: string, id: string) => ipcRenderer.invoke('edgedock:remove', edge, id),
+  dockReorder: (edge: string, ids: string[]) => ipcRenderer.invoke('edgedock:reorder', edge, ids),
+  dockRename: (edge: string, title: string) => ipcRenderer.invoke('edgedock:rename', edge, title),
+  dockLaunchItem: (edge: string, id: string) => ipcRenderer.invoke('edgedock:launchItem', edge, id),
+  dockLaunchGroup: (edge: string) => ipcRenderer.invoke('edgedock:launchGroup', edge),
+  dockShow: (edge: string) => ipcRenderer.invoke('edgedock:show', edge),
+  dockHide: (edge?: string) => ipcRenderer.invoke('edgedock:hide', edge),
+  onDockStatus: on<{ edge: string; running: string[]; aiBusy: string[] }>('edgedock:status'),
   onMusicChanged: on<{ name: string; artist: string; playing: boolean }>('music:changed'),
   onAiAssist: on<{ enabled: boolean; items: Array<{ key: string; label?: string; status: string; title?: string; doneUntil?: number; busySince?: number }> }>('ai-assist:update'),
 
