@@ -1007,6 +1007,14 @@
 .edock-left { top: 60px; left: 0; bottom: 40px; width: 56px; flex-direction: column; padding: 10px 4px; border-left: none; }
 .edock-right { top: 60px; right: 0; bottom: 40px; width: 56px; flex-direction: column; padding: 10px 4px; border-right: none; }
 
+/* Win11 式滑出动画：主进程 show() → visibilitychange → 重放滑入；hide 时类复位，下次重放 */
+@keyframes edock-in-top { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+@keyframes edock-in-left { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+@keyframes edock-in-right { from { transform: translateX(100%); } to { transform: translateX(0); } }
+.edock.edock-reveal.edock-top { animation: edock-in-top 0.18s ease-out; }
+.edock.edock-reveal.edock-left { animation: edock-in-left 0.18s ease-out; }
+.edock.edock-reveal.edock-right { animation: edock-in-right 0.18s ease-out; }
+
 .edock-group-title {
   border: none; background: rgba(255, 255, 255, 0.08); color: #E9E5D9;
   font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 8px;

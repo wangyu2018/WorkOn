@@ -96,7 +96,8 @@ function MiniTrailBar({ trail, plans, forecasts }: { trail: MergedTrail; plans: 
   return (
     <div>
       <div
-        className="relative h-8 w-full cursor-pointer overflow-hidden rounded-lg border border-white/[0.06] bg-ink-900/60 transition-colors hover:border-neon-cyan/30"
+        className="relative h-8 w-full cursor-pointer overflow-hidden rounded-lg transition-colors"
+        style={{ background: 'var(--surface-2)' }}
         onClick={goCalendar}
         title="点击到日历页查看完整时间轴（可缩放/编辑）"
       >
@@ -159,29 +160,29 @@ function MiniTrailBar({ trail, plans, forecasts }: { trail: MergedTrail; plans: 
           })}
         {/* 当前时刻线 */}
         <div
-          className="pointer-events-none absolute bottom-0 top-0 w-px bg-neon-cyan"
-          style={{ left: `${(nowMin / 1440) * 100}%`, boxShadow: '0 0 8px rgba(34,211,238,0.8)' }}
+          className="pointer-events-none absolute bottom-0 top-0 w-px"
+          style={{ left: `${(nowMin / 1440) * 100}%`, background: 'var(--accent)' }}
         />
       </div>
-      <div className="mt-1.5 flex items-center gap-1">
-        <span className="text-[10px] text-slate-600">图例</span>
+      <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+        <span className="text-2xs text-slate-500">图例</span>
         {legendStates.map(([st, min]) => {
           const m = WORK_STATES[st]
           return (
-            <span key={st} className="flex items-center gap-0.5 text-[10px] text-slate-400">
+            <span key={st} className="flex items-center gap-1 text-2xs text-slate-500">
               <span className="inline-block h-1.5 w-1.5 rounded-sm" style={{ background: m.color }} />
-              {m.emoji} {m.label}
+              {m.label}
             </span>
           )
         })}
         {(plans?.items ?? []).filter((it) => it.plan.startMin !== undefined && it.plan.endMin !== undefined && it.plan.endMin > it.plan.startMin).length > 0 ? (
-          <span className="flex items-center gap-0.5 text-[10px] text-slate-400">
-            <span className="inline-block h-1.5 w-1.5 rounded-sm border border-dashed border-neon-cyan/60" />
+          <span className="flex items-center gap-1 text-2xs text-slate-500">
+            <span className="inline-block h-1.5 w-1.5 rounded-sm border border-dashed" style={{ borderColor: 'var(--accent)' }} />
             计划
           </span>
         ) : null}
       </div>
-      <button className="mt-0.5 text-[11px] text-slate-500 transition-colors hover:text-neon-cyan" onClick={goCalendar}>
+      <button className="mt-1 text-xs text-slate-500 hover:text-slate-200" onClick={goCalendar}>
         {summary ? `${summary} ` : ''}→ 查看详情
       </button>
     </div>
@@ -192,35 +193,36 @@ function MiniTrailBar({ trail, plans, forecasts }: { trail: MergedTrail; plans: 
 function PlanProgressRows({ pva }: { pva: PlanVsActual }) {
   const setView = useAppStore((s) => s.setView)
 
-  const statusIcon = (st: string, matched: boolean) =>
-    st === 'done' ? '✅' : st === 'doing' || matched ? '🔄' : st === 'cancelled' ? '🚫' : '⬜'
+  /** 状态用小圆点表达（不再用 emoji 勾叉方块） */
+  const statusDot = (st: string, matched: boolean): string =>
+    st === 'done' ? '#10b981' : st === 'cancelled' ? '#9ca3af' : st === 'doing' || matched ? 'var(--accent)' : 'var(--text-3)'
 
   return (
     <>
-      <div className="mb-2 flex items-center gap-2 text-[11px] text-slate-500">
-        <span>📋 今日计划 {pva.items.length} 项 · 达成 {Math.round(pva.achievement)}%</span>
-        <span className="text-slate-600">计划 {fmtMin(pva.plannedMin)} / 实际 {fmtMin(pva.actualWorkMin)}</span>
+      <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
+        <span>今日计划 {pva.items.length} 项 · 达成 {Math.round(pva.achievement)}%</span>
+        <span className="text-slate-400">计划 {fmtMin(pva.plannedMin)} / 实际 {fmtMin(pva.actualWorkMin)}</span>
       </div>
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         {pva.items.map(({ plan, coveredMin, matched }) => {
           const plannedMin = plan.durationMin ?? (plan.endMin !== undefined && plan.startMin !== undefined ? plan.endMin - plan.startMin : 0)
           const pct = plannedMin > 0 ? Math.min(100, Math.round((coveredMin / plannedMin) * 100)) : matched ? 100 : 0
           return (
             <button
               key={plan.id}
-              className="flex items-center gap-2.5 rounded-lg border border-white/[0.05] bg-white/[0.03] px-2.5 py-2 text-left text-[12px] transition-colors hover:border-white/[0.1] hover:bg-white/[0.06]"
+              className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs hover:bg-[var(--surface-3)]"
               onClick={() => setView('plan')}
               title="跳到计划视图"
             >
-              <span>{statusIcon(plan.status, matched)}</span>
+              <span
+                className="h-1.5 w-1.5 shrink-0 rounded-full"
+                style={{ background: statusDot(plan.status, matched) }}
+              />
               <span className="min-w-0 flex-1 truncate text-slate-200">{plan.title}</span>
-              <div className="h-1.5 w-28 overflow-hidden rounded-full bg-white/[0.06]">
-                <div
-                  className={`h-full rounded-full ${pct >= 80 ? 'bg-neon-green' : pct >= 40 ? 'bg-neon-amber' : 'bg-neon-pink'}`}
-                  style={{ width: `${pct}%` }}
-                />
+              <div className="h-1 w-24 shrink-0 overflow-hidden rounded-full" style={{ background: 'var(--surface-3)' }}>
+                <div className="h-full rounded-full" style={{ width: `${pct}%`, background: 'var(--accent)' }} />
               </div>
-              <span className="w-28 shrink-0 text-right text-slate-400">
+              <span className="w-24 shrink-0 text-right tabular-nums text-slate-500">
                 {fmtMin(coveredMin)} / {plannedMin > 0 ? fmtMin(plannedMin) : '—'}
               </span>
             </button>
@@ -234,10 +236,8 @@ function PlanProgressRows({ pva }: { pva: PlanVsActual }) {
 /** 区块标题（v6 视觉对齐）：teal 芯片图标 + 标题 */
 function SectionTitle({ icon, children, className = 'mb-3' }: { icon: ComponentProps<typeof Icon>['name']; children: ReactNode; className?: string }) {
   return (
-    <h2 className={`flex items-center gap-2 text-[15px] font-semibold text-slate-200 ${className}`}>
-      <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[9px] bg-[var(--teal-soft)] text-[var(--teal)]">
-        <Icon name={icon} size={14} />
-      </span>
+    <h2 className={`flex items-center gap-2 text-base font-semibold text-slate-100 ${className}`}>
+      <Icon name={icon} size={15} className="shrink-0 text-slate-500" />
       {children}
     </h2>
   )
@@ -458,76 +458,66 @@ export default function MonitorView({
       {sections.presence ? (
       <section className="glass-card anim-fade-up" style={{ animationDelay: '60ms', order: rankOf('presence') }}>
         {presence && stateMeta ? (
-          <div className="flex flex-col items-center gap-6 lg:flex-row">
-            {/* 左：渐变描边大圆环（中心专注度大数字）+ 环下状态徽章 pill */}
-            <div className="flex shrink-0 flex-col items-center gap-3">
-              <GradientRing value={presence.focusLevel} size={150} stroke={12} stops={ringStops}>
-                <div className="text-center">
-                  <div className="text-[36px] font-extrabold leading-none tabular-nums text-slate-100">{presence.focusLevel}</div>
-                  <div className="mt-1.5 text-[10px] font-medium tracking-wide text-slate-500">专注度 · 0–100</div>
-                </div>
-              </GradientRing>
+          <div className="flex flex-col gap-4">
+            {/* 首行：一句结论（当前在干什么 + 专注度）+ 右侧状态徽章。不再用大圆环占掉半张卡 */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <span
-                className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] font-semibold"
-                style={{ borderColor: `${stateMeta.color}55`, background: `${stateMeta.color}18`, color: stateMeta.color }}
+                className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium"
+                style={{ background: 'var(--surface-3)', color: stateMeta.color }}
                 title={`当前状态：${stateMeta.label}（按前台应用/输入实时判定）`}
               >
                 <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full" style={{ background: stateMeta.color }} />
-                {stateMeta.emoji} {stateMeta.label}
+                {stateMeta.label}
+              </span>
+              <span className="text-base font-semibold text-slate-100">
+                {presence.focusLevel}
+                <span className="ml-1 text-xs font-normal text-slate-500">/ 100 专注度</span>
+              </span>
+              {grade ? (
+                <span className="text-xs text-slate-500" title={`评级按专注度分档：S≥90 / A≥75 / B≥55 / C≥35 / D<35\n${scoreLine ?? ''}`}>
+                  {grade.grade} · {grade.label}
+                </span>
+              ) : null}
+              <span className="text-xs text-slate-500">
+                {presence.continuousFocusSec > 60
+                  ? `已连续专注 ${fmtMin(presence.continuousFocusSec / 60)}`
+                  : presence.continuousSlackSec > 60
+                    ? `已休息 ${fmtMin(presence.continuousSlackSec / 60)}`
+                    : '刚开始这一段落'}
               </span>
             </div>
-            {/* 右：评级 / 情境 / 打分 / 建议 / 各屏状态 */}
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                {grade ? (
-                  <span
-                    className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold"
-                    style={{ borderColor: `${grade.color}55`, background: `${grade.color}18`, color: grade.color }}
-                    title={`注意力评级（按专注度分档：S≥90 / A≥75 / B≥55 / C≥35 / D<35）\n${scoreLine ?? ''}`}
+
+            {/* 进度条：一条即可读出强度，替代渐变圆环 */}
+            <div className="h-1.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--surface-3)' }}>
+              <div
+                className="h-full rounded-full transition-[width] duration-500"
+                style={{ width: `${Math.max(2, Math.min(100, presence.focusLevel))}%`, background: grade?.color ?? 'var(--accent)' }}
+              />
+            </div>
+
+            {advice ? <div className="text-xs text-slate-400">{advice}</div> : null}
+
+            {/* 屏幕明细：收起为紧凑行，仅焦点屏高亮 */}
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              {presence.screens.map((sc) => {
+                const m = WORK_STATES[sc.state]
+                const isFocus = (sc.active ?? false) || sc.screen === presence.mainScreen
+                return (
+                  <div
+                    key={sc.screen}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-1.5"
+                    style={{ background: isFocus ? 'var(--teal-soft)' : 'var(--surface-2)' }}
                   >
-                    {grade.grade} · {grade.label}
-                  </span>
-                ) : null}
-                <span className="text-[11px] text-slate-500">情境 {presence.context || '—'}</span>
-                {presence.continuousFocusSec > 60 ? (
-                  <span className="text-[11px] text-slate-500">· 已连续专注 {fmtMin(presence.continuousFocusSec / 60)}</span>
-                ) : null}
-                {presence.continuousSlackSec > 60 ? (
-                  <span className="text-[11px] text-slate-500">· 已摸鱼 {fmtMin(presence.continuousSlackSec / 60)}</span>
-                ) : null}
-              </div>
-              {scoreLine ? (
-                <div className="mt-1 text-[11px] text-slate-600" title="专注度怎么算的：状态基础分 + 连续工作奖励（每分钟 +0.5，30 分钟拿满 +15）；无键鼠输入超 1 分钟封顶 40">
-                  打分 {scoreLine}
-                </div>
-              ) : null}
-              {advice ? <div className="anim-fade-in mt-1 text-[11px] text-neon-amber/90">💡 {advice}</div> : null}
-              <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
-                {presence.screens.map((sc) => {
-                  const m = WORK_STATES[sc.state]
-                  const isFocus = (sc.active ?? false) || sc.screen === presence.mainScreen
-                  return (
-                    <div
-                      key={sc.screen}
-                      className="flex items-center gap-2 rounded-lg border px-2.5 py-1.5 transition-colors hover:bg-white/[0.05]"
-                      style={{
-                        borderColor: isFocus ? 'var(--teal-border)' : 'rgba(255,255,255,0.05)',
-                        background: isFocus ? 'var(--teal-soft)' : 'rgba(255,255,255,0.03)'
-                      }}
-                    >
-                      <span className="text-sm">{m.emoji}</span>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[12px] text-slate-200">
-                          屏 {sc.screen + 1} · {sc.appName || sc.app}
-                        </div>
-                        <div className="truncate text-[11px] text-slate-500">{sc.title}</div>
-                      </div>
-                      {isFocus ? <span className="chip shrink-0 text-[var(--teal)]">焦点</span> : null}
-                      {sc.stickyRelax ? <span className="chip shrink-0 text-neon-green">粘性</span> : null}
+                    <span className="text-xs text-slate-500">屏{sc.screen + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs text-slate-200">{sc.appName || sc.app}</div>
+                      <div className="truncate text-2xs text-slate-500">{sc.title}</div>
                     </div>
-                  )
-                })}
-              </div>
+                    <span className="shrink-0 text-2xs text-slate-500">{m.label}</span>
+                    {isFocus ? <span className="chip shrink-0">焦点</span> : null}
+                  </div>
+                )
+              })}
             </div>
           </div>
         ) : presence ? (
@@ -581,7 +571,7 @@ export default function MonitorView({
         !attentionLoaded ? (
         <section className="glass-card anim-fade-up" style={{ animationDelay: '120ms', order: rankOf('attention') }}>
           <SectionTitle icon="activity">今日评分图谱</SectionTitle>
-          <div className="flex items-center gap-2 py-5 text-[12px] text-slate-500">
+          <div className="flex items-center gap-2 py-5 text-xs text-slate-500">
             <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-neon-cyan" />
             评分计算中…
           </div>
@@ -589,7 +579,7 @@ export default function MonitorView({
       ) : !attention || (attention.today.finalScore === 0 && (trail?.totalMin ?? 0) < 30) ? (
         <section className="glass-card anim-fade-up" style={{ animationDelay: '120ms', order: rankOf('attention') }}>
           <SectionTitle icon="activity">今日评分图谱</SectionTitle>
-          <p className="py-4 text-center text-[12px] text-slate-500">今天还没有足够的活动数据，先去专注工作一会儿，评分稍后就会出现在这里。</p>
+          <EmptyState title="数据还不够" hint="保持 WorkOn 运行，活动满 30 分钟后会自动生成评分。" />
         </section>
       ) : (
         <div style={{ order: rankOf('attention') }}>
@@ -606,30 +596,30 @@ export default function MonitorView({
         >
           <SectionTitle icon="chart">状态分布</SectionTitle>
           {trail ? (
-            <div className="mb-3 flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
-              <span>🖥️ {Object.keys(trail.screenMinutes).length} 屏监控</span>
+            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+              <span>{Object.keys(trail.screenMinutes).length} 块屏</span>
               {(Object.entries(trail.screenMinutes) as [string, number][]).map(([scr, min]) => (
-                <span key={scr}>
-                  屏{Number(scr)+1} {fmtMin(min)}
+                <span key={scr} className="tabular-nums">
+                  屏{Number(scr) + 1} · {fmtMin(min)}
                 </span>
               ))}
               {trail.dualMin > 0 ? (
-                <span className="text-neon-cyan">· 并行 {fmtMin(trail.dualMin)} ({Math.round(trail.dualRatio * 100)}%)</span>
+                <span className="tabular-nums">并行 {fmtMin(trail.dualMin)}（{Math.round(trail.dualRatio * 100)}%）</span>
               ) : null}
               {trail.dualWorkSlackMin > 0 ? (
-                <span className="text-neon-pink">· 工作+摸鱼并行 {fmtMin(trail.dualWorkSlackMin)}</span>
+                <span className="tabular-nums">工作+摸鱼并行 {fmtMin(trail.dualWorkSlackMin)}</span>
               ) : null}
             </div>
           ) : null}
           {groupRows.length > 0 && groupTotalMin > 0 ? (
             <div>
               {/* 堆叠彩条：一条圆角横条按各分组时长占比分段填色，hover 显示 title */}
-              <div className="flex h-4 w-full overflow-hidden rounded-full border border-white/[0.06] bg-white/[0.03]">
+              <div className="flex h-2.5 w-full overflow-hidden rounded-full" style={{ background: 'var(--surface-3)' }}>
                 {groupRows.map((g) => (
                   <div
                     key={g.key}
-                    className="h-full transition-all"
-                    style={{ width: `${(g.min / groupTotalMin) * 100}%`, minWidth: 3, background: g.fill, transitionDuration: '300ms' }}
+                    className="h-full"
+                    style={{ width: `${(g.min / groupTotalMin) * 100}%`, minWidth: 3, background: g.fill }}
                     title={`${g.label} · ${fmtMin(g.min)}（${Math.round((g.min / groupTotalMin) * 100)}%）`}
                   />
                 ))}
@@ -641,7 +631,7 @@ export default function MonitorView({
                   return (
                     <button
                       key={g.key}
-                      className={`flex items-center gap-1.5 rounded-md px-1 py-0.5 text-[11px] transition-colors ${active ? 'bg-white/[0.06] text-slate-200' : 'text-slate-400 hover:text-slate-200'}`}
+                      className={`flex items-center gap-1.5 rounded-md px-1 py-0.5 text-xs ${active ? 'bg-[var(--surface-3)] text-slate-200' : 'text-slate-400 hover:text-slate-200'}`}
                       onClick={() => setExpandedGroup(active ? null : g.key)}
                       title={`${g.label} · ${fmtMin(g.min)}（点击${active ? '收起' : '查看'}明细）`}
                     >
@@ -654,16 +644,16 @@ export default function MonitorView({
               </div>
               {/* 下钻面板：组内状态明细 + 应用 TOP */}
               {expandedGrp ? (
-                <div className="anim-fade-in mt-2 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2.5">
-                  <div className="mb-1.5 text-[10px] text-slate-500">{expandedGrp.label} · 状态明细</div>
+                <div className="anim-fade-in mt-2 rounded-lg px-3 py-2.5" style={{ background: 'var(--surface-2)' }}>
+                  <div className="mb-1.5 text-2xs text-slate-500">{expandedGrp.label} · 状态明细</div>
                   {expandedGrpStates.length > 0 ? (
                     <div className="flex flex-col gap-1">
                       {expandedGrpStates.map(({ st, min }) => {
                         const m = WORK_STATES[st]
                         return (
-                          <div key={st} className="flex items-center gap-2 text-[11px]">
-                            <span className="w-20 shrink-0 truncate text-slate-300">{m.emoji} {m.label}</span>
-                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
+                          <div key={st} className="flex items-center gap-2 text-xs">
+                            <span className="w-20 shrink-0 truncate text-slate-300">{m.label}</span>
+                            <div className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--surface-3)' }}>
                               <div
                                 className="h-full rounded-full"
                                 style={{ width: `${(min / Math.max(1, expandedGrpStates[0].min)) * 100}%`, background: expandedGrp.dot, opacity: 0.8 }}
@@ -675,15 +665,15 @@ export default function MonitorView({
                       })}
                     </div>
                   ) : (
-                    <div className="text-[11px] text-slate-600">暂无状态数据</div>
+                    <div className="text-xs text-slate-500">暂无状态数据</div>
                   )}
                   {expandedGrpApps.length > 0 ? (
-                    <div className="mt-2 border-t border-white/[0.05] pt-2">
-                      <div className="mb-1 text-[10px] text-slate-500">应用 TOP</div>
+                    <div className="mt-2 border-t pt-2" style={{ borderColor: 'var(--line)' }}>
+                      <div className="mb-1 text-2xs text-slate-500">应用 TOP</div>
                       <div className="flex flex-wrap gap-1.5">
                         {expandedGrpApps.map(([app, appMin]) => (
-                          <span key={app} className="rounded-md border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 text-[10.5px] text-slate-400" title={app}>
-                            {displayApp(app)} <span className="tabular-nums text-slate-600">{fmtMin(appMin)}</span>
+                          <span key={app} className="rounded-md px-1.5 py-0.5 text-2xs text-slate-400" style={{ background: 'var(--surface-3)' }} title={app}>
+                            {displayApp(app)} <span className="tabular-nums text-slate-500">{fmtMin(appMin)}</span>
                           </span>
                         ))}
                       </div>
@@ -706,15 +696,15 @@ export default function MonitorView({
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 transition-colors hover:border-neon-cyan/25">
                   <div className="text-xl font-bold text-neon-cyan">{Math.round(trail!.dualRatio * 100)}%</div>
-                  <div className="mt-0.5 text-[11px] text-slate-500">并行占比</div>
+                  <div className="mt-0.5 text-xs text-slate-500">并行占比</div>
                 </div>
                 <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 transition-colors hover:border-neon-cyan/25">
                   <div className="text-xl font-bold text-slate-100">{fmtMin(trail!.dualMin)}</div>
-                  <div className="mt-0.5 text-[11px] text-slate-500">并行时长</div>
+                  <div className="mt-0.5 text-xs text-slate-500">并行时长</div>
                 </div>
                 <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 transition-colors hover:border-neon-cyan/25">
                   <div className="text-xl font-bold text-neon-pink">{fmtMin(trail!.dualWorkSlackMin)}</div>
-                  <div className="mt-0.5 text-[11px] text-slate-500">工作+摸鱼并行</div>
+                  <div className="mt-0.5 text-xs text-slate-500">工作+摸鱼并行</div>
                 </div>
               </div>
               <div className="flex flex-col gap-1.5">
@@ -722,9 +712,9 @@ export default function MonitorView({
                   const idx = Number(scr)
                   const isFocus = presence?.mainScreen === idx
                   return (
-                    <div key={scr} className="flex items-center gap-2 text-[12px]">
+                    <div key={scr} className="flex items-center gap-2 text-xs">
                       <span
-                        className="flex h-6 w-11 shrink-0 items-center justify-center gap-1 rounded-md border text-[10px] font-bold"
+                        className="flex h-6 w-11 shrink-0 items-center justify-center gap-1 rounded-md border text-2xs font-bold"
                         style={
                           isFocus
                             ? { borderColor: 'var(--teal-border)', background: 'var(--teal-soft)', color: 'var(--teal)' }
@@ -746,7 +736,7 @@ export default function MonitorView({
                       </div>
                       <span className="w-16 shrink-0 text-right tabular-nums text-slate-400">{fmtMin(min)}</span>
                       {isFocus ? (
-                        <span className="chip shrink-0 text-[10px] text-[var(--teal)]">焦点</span>
+                        <span className="chip shrink-0 text-2xs text-[var(--teal)]">焦点</span>
                       ) : (
                         <span className="w-[34px] shrink-0" />
                       )}
@@ -755,7 +745,7 @@ export default function MonitorView({
                 })}
               </div>
               {trail!.auxTopState ? (
-                <div className="text-[11px] text-slate-500">
+                <div className="text-xs text-slate-500">
                   主屏 {WORK_STATES[trail!.mainState].emoji} {WORK_STATES[trail!.mainState].label} · 副屏{' '}
                   {WORK_STATES[trail!.auxTopState].emoji} {WORK_STATES[trail!.auxTopState].label}
                 </div>
@@ -768,7 +758,7 @@ export default function MonitorView({
         {showTop ? (
         <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '150ms', order: rankOf('topApps') }}>
           <SectionTitle icon="folder">应用 TOP 榜</SectionTitle>
-          <p className="mb-3 text-[11px] text-slate-500">今日前台应用按时长排名 · 占比横条为该应用占全部应用活动的比例</p>
+          <p className="mb-3 text-xs text-slate-500">今日前台应用按时长排名 · 占比横条为该应用占全部应用活动的比例</p>
           {topApps.length > 0 ? (
             <div className="flex flex-col gap-0.5">
               {topApps.map(({ app, min, pct }, i) => {
@@ -777,16 +767,16 @@ export default function MonitorView({
                 return (
                   <div key={app} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-white/[0.04]">
                     <span
-                      className={`w-5 shrink-0 text-center text-[12px] font-extrabold tabular-nums ${
+                      className={`w-5 shrink-0 text-center text-xs font-extrabold tabular-nums ${
                         i === 0 ? 'text-[var(--teal)]' : i === 1 ? 'text-[var(--violet)]' : i === 2 ? 'text-[var(--cyan)]' : 'text-slate-600'
                       }`}
                     >
                       {i + 1}
                     </span>
-                    <span className="w-5 shrink-0 text-center text-[12px]" title={meta.label}>
+                    <span className="w-5 shrink-0 text-center text-xs" title={meta.label}>
                       {meta.emoji}
                     </span>
-                    <span className="w-32 shrink-0 truncate text-[12px] text-slate-200" title={app}>
+                    <span className="w-32 shrink-0 truncate text-xs text-slate-200" title={app}>
                       {displayApp(app)}
                     </span>
                     <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
@@ -795,8 +785,8 @@ export default function MonitorView({
                         style={{ width: `${Math.max(2, pct * 100)}%`, background: bar, transitionDuration: '300ms' }}
                       />
                     </div>
-                    <span className="w-14 shrink-0 text-right text-[12px] tabular-nums text-slate-300">{fmtMin(min)}</span>
-                    <span className="w-10 shrink-0 text-right text-[11px] tabular-nums text-slate-500">{Math.round(pct * 100)}%</span>
+                    <span className="w-14 shrink-0 text-right text-xs tabular-nums text-slate-300">{fmtMin(min)}</span>
+                    <span className="w-10 shrink-0 text-right text-xs tabular-nums text-slate-500">{Math.round(pct * 100)}%</span>
                   </div>
                 )
               })}
@@ -812,10 +802,10 @@ export default function MonitorView({
       <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '240ms', order: rankOf('trail') }}>
         <div className="mb-3 flex items-center justify-between">
           <SectionTitle icon="clock" className="">今日时间轴</SectionTitle>
-          <div className="flex items-center gap-3 text-[11px] text-slate-500">
+          <div className="flex items-center gap-3 text-xs text-slate-500">
             {trail ? <span className="chip">墙钟 {fmtMin(trail.totalMin)}</span> : null}
-            <button className="glass-btn !px-2 !py-1" onClick={() => void load()} title="刷新">
-              <Icon name="refresh" size={13} />
+            <button className="ui-icon-btn" onClick={() => void load()} title="刷新" aria-label="刷新">
+              <Icon name="refresh" size={14} />
             </button>
           </div>
         </div>

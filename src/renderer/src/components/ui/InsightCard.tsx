@@ -26,12 +26,13 @@ interface InsightCardProps {
   onClick?: () => void
 }
 
+/** 图标芯片统一中性灰；红色仅用于「摸鱼/分心」这类负向指标，避免彩色方块堆满一屏 */
 const TONE_BG: Record<string, string> = {
-  teal: 'bg-[var(--teal-soft)] text-[var(--teal-deep)]',
-  red: 'bg-[rgba(239,68,68,0.1)] text-[#f87171]',
+  teal: 'bg-[var(--surface-3)] text-slate-400',
+  red: 'bg-[rgba(239,68,68,0.1)] text-red-400',
   ai: 'bg-[rgba(139,92,246,0.1)] text-[var(--violet)]',
-  cyan: 'bg-[rgba(6,182,212,0.1)] text-[var(--cyan)]',
-  amber: 'bg-[rgba(245,158,11,0.1)] text-[#fbbf24]'
+  cyan: 'bg-[var(--surface-3)] text-slate-400',
+  amber: 'bg-[var(--surface-3)] text-slate-400'
 }
 
 /** KPI 洞察卡（v6 .card.ins）：图标芯片 + 大数字 + 趋势徽章 + sparkline + 基线行 */
@@ -49,39 +50,34 @@ export function InsightCard({
 }: InsightCardProps) {
   return (
     <div
-      className={`glass-card hoverable relative overflow-hidden !p-4${onClick ? ' cursor-pointer' : ''}`}
+      className={`glass-card hoverable relative flex h-full flex-col overflow-hidden !p-3.5${onClick ? ' cursor-pointer' : ''}`}
       onClick={onClick}
     >
-      {highlight ? (
-        <span className="pointer-events-none absolute -top-4 right-3 select-none text-[52px] leading-none opacity-10">✦</span>
-      ) : null}
       <div className="flex items-center gap-2">
-        <span className={`flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[9px] ${TONE_BG[tone]}`}>
+        <span className={`flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-md ${TONE_BG[tone]}`}>
           {icon}
         </span>
-        <span className="text-[10px] font-bold tracking-wide text-slate-500">{label}</span>
-        {spark ? <span className="ml-auto">{<Sparkline data={spark} />}</span> : null}
+        <span className="truncate text-xs font-medium text-slate-500">{label}</span>
+        {spark ? <span className="ml-auto shrink-0 opacity-60">{<Sparkline data={spark} />}</span> : null}
       </div>
-      <div className="mt-1.5 flex items-baseline gap-1 text-[26px] font-extrabold leading-tight text-slate-100">
+      <div className="mt-2 flex items-baseline gap-1.5 text-2xl font-semibold leading-none tracking-tight text-slate-100">
         {big}
       </div>
       {trend ? (
         <span
-          className={`mt-2 inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10.5px] font-extrabold ${
-            trend.dir === 'up'
-              ? 'bg-[var(--teal-soft)] text-[var(--teal-deep)]'
-              : 'bg-[rgba(239,68,68,0.1)] text-[#f87171]'
+          className={`mt-1.5 self-start text-2xs ${
+            trend.good === false ? 'text-red-500/90' : 'text-slate-500'
           }`}
         >
-          {trend.dir === 'up' ? '▲' : '▼'} {trend.text}
+          {trend.dir === 'up' ? '↑' : '↓'} {trend.text}
         </span>
       ) : null}
       {detail ? (
         <div className="mt-2 rounded-lg border px-2 py-1.5" style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }}>
-          <div className="text-[10px] font-bold text-slate-400">{detail.title}</div>
+          <div className="text-2xs font-bold text-slate-400">{detail.title}</div>
           <div className="mt-1 flex flex-col gap-0.5">
             {detail.items.map((it, i) => (
-              <div key={i} className="flex justify-between text-[10.5px] text-slate-400">
+              <div key={i} className="flex justify-between text-2xs text-slate-400">
                 <span>{it.label}</span>
                 <span className="tabular-nums">{it.value}</span>
               </div>
@@ -90,7 +86,7 @@ export function InsightCard({
         </div>
       ) : null}
       {base ? (
-        <div className="mt-2.5 border-t border-dashed border-[var(--line)] pt-2 text-[9.5px] leading-relaxed text-slate-500">
+        <div className="mt-2 truncate text-2xs text-slate-500" title={typeof base === 'string' ? base : undefined}>
           {base}
         </div>
       ) : null}

@@ -126,7 +126,7 @@ export default function HeatmapView({ range = '7d', yearMonth }: HeatmapViewProp
         {/* 列头：周一到周日 */}
         <div className="mb-1 grid grid-cols-7 gap-1">
           {WEEK_LABELS.map((label, i) => (
-            <div key={i} className="text-center text-[10px] text-slate-500">
+            <div key={i} className="text-center text-2xs text-slate-500">
               周{label}
             </div>
           ))}
@@ -145,7 +145,7 @@ export default function HeatmapView({ range = '7d', yearMonth }: HeatmapViewProp
                 <div
                   key={di}
                   title={`${key} · 工作 ${Math.round(focusMin)}m`}
-                  className={`flex h-12 items-center justify-center rounded-lg text-[11px] transition-transform hover:scale-105 ${
+                  className={`flex h-12 items-center justify-center rounded-lg text-xs transition-transform hover:scale-105 ${
                     isToday ? 'ring-1 ring-neon-cyan' : ''
                   }`}
                   style={{
@@ -162,7 +162,7 @@ export default function HeatmapView({ range = '7d', yearMonth }: HeatmapViewProp
             })}
           </div>
         ))}
-        <div className="mt-3 flex items-center justify-end gap-1.5 text-[10px] text-slate-500">
+        <div className="mt-3 flex items-center justify-end gap-1.5 text-2xs text-slate-500">
           <span>少</span>
           {[0.1, 0.3, 0.55, 0.8, 0.95].map((a) => (
             <span key={a} className="h-3 w-3 rounded-[3px]" style={{ background: `rgba(34,211,238,${a})` }} />
@@ -217,24 +217,24 @@ export default function HeatmapView({ range = '7d', yearMonth }: HeatmapViewProp
       {/* 结论层：黄金时段 / 峰值 / 低谷 */}
       <div className="mb-3 grid grid-cols-3 gap-3">
         <div>
-          <div className="text-[16px] font-extrabold text-slate-100">{Math.floor(avgDaily / 60)}h{avgDaily % 60}m</div>
-          <div className="text-[9px] text-slate-500">日均专注 · 近 7 天</div>
+          <div className="text-lg font-extrabold text-slate-100">{Math.floor(avgDaily / 60)}h{avgDaily % 60}m</div>
+          <div className="text-2xs text-slate-500">日均专注 · 近 7 天</div>
         </div>
         <div>
-          <div className="text-[16px] font-extrabold text-[var(--teal-deep)]">
+          <div className="text-lg font-extrabold text-[var(--teal-deep)]">
             {dayLabel(peak.dayIdx)} {pad(peak.h)}:00
           </div>
-          <div className="text-[9px] text-slate-500">峰值时刻 · {Math.round(peak.min)}m</div>
+          <div className="text-2xs text-slate-500">峰值时刻 · {Math.round(peak.min)}m</div>
         </div>
         <div>
-          <div className="text-[16px] font-extrabold text-[#f87171]">
+          <div className="text-lg font-extrabold text-[#f87171]">
             {valleyStart >= 0 ? `${pad(valleyStart)}:00–${pad(valleyStart + 2)}:00` : '—'}
           </div>
-          <div className="text-[9px] text-slate-500">低谷时段 · 建议排会议</div>
+          <div className="text-2xs text-slate-500">低谷时段 · 建议排会议</div>
         </div>
       </div>
       <div
-        className="mb-3 flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] text-slate-300"
+        className="mb-3 flex items-center gap-2 rounded-xl px-3 py-2 text-xs text-slate-300"
         style={{ background: 'var(--aura-soft)', border: '1px solid rgba(139,92,246,0.25)' }}
       >
         <span className="shrink-0" style={{ color: 'var(--violet)' }}>✦</span>
@@ -254,7 +254,7 @@ export default function HeatmapView({ range = '7d', yearMonth }: HeatmapViewProp
         {/* 小时表头 */}
         <div className="mb-1 flex gap-1 pl-14">
           {Array.from({ length: 24 }, (_, h) => (
-            <div key={h} className="flex-1 text-center text-[9px] text-slate-500">
+            <div key={h} className="flex-1 text-center text-2xs text-slate-500">
               {h % 3 === 0 ? h : ''}
             </div>
           ))}
@@ -264,7 +264,7 @@ export default function HeatmapView({ range = '7d', yearMonth }: HeatmapViewProp
           const isToday = key === today
           return (
             <div key={key} className="mb-1 flex items-center gap-1">
-              <div className={`w-14 shrink-0 text-[10px] ${isToday ? 'font-semibold text-neon-cyan' : 'text-slate-500'}`}>
+              <div className={`w-14 shrink-0 text-2xs ${isToday ? 'font-semibold text-neon-cyan' : 'text-slate-500'}`}>
                 周{WEEK_LABELS[(d.getDay() + 6) % 7]} {d.getMonth() + 1}/{d.getDate()}
               </div>
               {hours.map((min, h) => {
@@ -288,7 +288,7 @@ export default function HeatmapView({ range = '7d', yearMonth }: HeatmapViewProp
           )
         })}
         {/* 图例 */}
-        <div className="mt-3 flex items-center justify-end gap-1.5 text-[10px] text-slate-500">
+        <div className="mt-3 flex items-center justify-end gap-1.5 text-2xs text-slate-500">
           <span>少</span>
           {[0.1, 0.3, 0.55, 0.8, 0.95].map((a) => (
             <span key={a} className="h-3 w-3 rounded-[3px]" style={{ background: `rgb(var(--teal-rgb) / ${a})` }} />

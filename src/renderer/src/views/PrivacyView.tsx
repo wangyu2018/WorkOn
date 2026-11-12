@@ -26,7 +26,7 @@ function Section({
 }) {
   return (
     <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: `${delay}ms` }}>
-      <h2 className="mb-3 flex items-center gap-2.5 text-[14px] font-semibold text-slate-200">
+      <h2 className="mb-3 flex items-center gap-2.5 text-base font-semibold text-slate-200">
         <span className="flex h-6 w-6 items-center justify-center rounded-lg border border-neon-cyan/20 bg-neon-cyan/10">
           <Icon name={icon} size={13} className="text-neon-cyan" />
         </span>
@@ -41,8 +41,8 @@ function Row({ label, desc, children }: { label: string; desc?: string; children
   return (
     <div className="-mx-2 flex items-center gap-4 rounded-lg px-2 py-2.5 transition-colors hover:bg-white/[0.03]">
       <div className="min-w-0 flex-1">
-        <div className="text-[13px] text-slate-300">{label}</div>
-        {desc ? <div className="mt-0.5 text-[11px] text-slate-500">{desc}</div> : null}
+        <div className="text-sm text-slate-300">{label}</div>
+        {desc ? <div className="mt-0.5 text-xs text-slate-500">{desc}</div> : null}
       </div>
       <div className="shrink-0">{children}</div>
     </div>
@@ -78,7 +78,7 @@ function NumberSetting({ value, onCommit, min, max, suffix }: { value: number; o
           if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
         }}
       />
-      {suffix ? <span className="text-[11px] text-slate-500">{suffix}</span> : null}
+      {suffix ? <span className="text-xs text-slate-500">{suffix}</span> : null}
     </span>
   )
 }
@@ -141,10 +141,10 @@ function PrivacyStats({ reloadToken, excludedKey, onCleared }: { reloadToken: nu
     setConfirmApp(app)
   }
   if (!rows || rows.length === 0)
-    return <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] py-3 text-center text-[11px] text-slate-500">暂无采集记录</div>
+    return <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] py-3 text-center text-xs text-slate-500">暂无采集记录</div>
   return (
     <div className="mt-2 overflow-hidden rounded-xl border border-white/[0.06]">
-      <table className="w-full text-[11px]">
+      <table className="w-full text-xs">
         <thead>
           <tr className="bg-white/[0.03] text-left text-slate-500">
             <th className="px-2.5 py-2 font-medium">应用</th>
@@ -160,7 +160,7 @@ function PrivacyStats({ reloadToken, excludedKey, onCleared }: { reloadToken: nu
               <td className="max-w-[120px] truncate px-2.5 py-1.5">{r.app}</td>
               <td className="px-2.5 py-1.5">
                 {r.excluded ? (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-neon-green/20 bg-neon-green/10 px-1.5 py-0.5 text-[10px] text-neon-green">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-neon-green/20 bg-neon-green/10 px-1.5 py-0.5 text-2xs text-neon-green">
                     <span className="h-1 w-1 rounded-full bg-neon-green" />
                     已排除 · 不再采集
                   </span>
@@ -177,7 +177,7 @@ function PrivacyStats({ reloadToken, excludedKey, onCleared }: { reloadToken: nu
               </td>
               <td className="px-2 py-1.5 text-right">
                 <button
-                  className="rounded-md border border-red-500/25 px-1.5 py-0.5 text-[10px] text-red-400 transition-all hover:border-red-500/40 hover:bg-red-500/15"
+                  className="rounded-md border border-red-500/25 px-1.5 py-0.5 text-2xs text-red-400 transition-all hover:border-red-500/40 hover:bg-red-500/15"
                   disabled={clearing === r.app}
                   onClick={() => void clearApp(r.app)}
                 >
@@ -235,14 +235,14 @@ function DoNotCollectGrid({ excluded, onToggle }: { excluded: string[]; onToggle
             title={desc}
           >
             <span
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[14px]"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-base"
               style={{ background: 'var(--surface-3)', border: '1px solid var(--line)' }}
             >
               {emoji}
             </span>
             <div className="min-w-0 flex-1">
-              <div className="text-[12.5px] font-medium text-slate-200">{label}</div>
-              <div className="mt-0.5 truncate text-[10.5px] text-slate-500">{desc}</div>
+              <div className="text-sm font-medium text-slate-200">{label}</div>
+              <div className="mt-0.5 truncate text-2xs text-slate-500">{desc}</div>
             </div>
             <Toggle checked={on} onChange={(v) => onToggle(keyword, v)} />
           </div>
@@ -306,7 +306,7 @@ function StorageBars() {
     <div className="flex flex-col gap-3 py-1">
       {rows.map(({ emoji, label, gradient, width, value, pending }) => (
         <div key={label} className="flex items-center gap-3">
-          <span className="w-28 shrink-0 truncate text-[12px] text-slate-400">
+          <span className="w-28 shrink-0 truncate text-xs text-slate-400">
             {emoji} {label}
           </span>
           <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--surface-3)' }}>
@@ -315,10 +315,10 @@ function StorageBars() {
               style={{ width: `${width}%`, background: gradient, transition: 'width .5s var(--ease-soft)' }}
             />
           </span>
-          <span className={`w-44 shrink-0 text-right text-[11px] tabular-nums ${pending ? 'text-slate-600' : 'text-slate-500'}`}>{value}</span>
+          <span className={`w-44 shrink-0 text-right text-xs tabular-nums ${pending ? 'text-slate-600' : 'text-slate-500'}`}>{value}</span>
         </div>
       ))}
-      <p className="text-[10.5px] text-slate-600">数据全部存储在本机 userData 目录；清空方式见上方「一键清空」与下方留存策略。</p>
+      <p className="text-2xs text-slate-600">数据全部存储在本机 userData 目录；清空方式见上方「一键清空」与下方留存策略。</p>
     </div>
   )
 }
@@ -393,13 +393,13 @@ export default function PrivacyView() {
           <Icon name="shield" size={20} className="text-white" />
         </span>
         <div className="min-w-[220px] flex-1">
-          <div className="flex flex-wrap items-center gap-2 text-[14px] font-semibold text-slate-100">
+          <div className="flex flex-wrap items-center gap-2 text-base font-semibold text-slate-100">
             本地优先 · 0 云端上传
-            <span className="rounded-full border px-1.5 py-0.5 text-[10px] font-medium" style={{ borderColor: 'rgba(16,185,129,.4)', background: 'rgba(16,185,129,.12)', color: '#34d399' }}>
+            <span className="rounded-full border px-1.5 py-0.5 text-2xs font-medium" style={{ borderColor: 'rgba(16,185,129,.4)', background: 'rgba(16,185,129,.12)', color: '#34d399' }}>
               已验证
             </span>
           </div>
-          <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">
+          <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
             活动记录、画像与报表只写本机数据库；联网仅限天气查询与 AI（默认关闭），且不包含任何窗口正文内容。
           </p>
         </div>
@@ -411,8 +411,8 @@ export default function PrivacyView() {
       {/* 0.2 不采集名单 */}
       <Section title="不采集名单" icon="eye" delay={30}>
         <div className="py-2.5">
-          <p className="mb-2.5 text-[12px] text-slate-500">打开开关的类别完全停止采集：不截屏、不 OCR、不记标题、不产生活动记录。</p>
-          <p className="mb-2.5 text-[11px] text-slate-600">未标记的聊天应用（微信 / QQ / 钉钉 / 飞书等）按<b className="text-slate-400">会话对象</b>细分记录：窗口标题每换一个联系人或群，时间轴与报表都会切成独立时段。</p>
+          <p className="mb-2.5 text-xs text-slate-500">打开开关的类别完全停止采集：不截屏、不 OCR、不记标题、不产生活动记录。</p>
+          <p className="mb-2.5 text-xs text-slate-600">未标记的聊天应用（微信 / QQ / 钉钉 / 飞书等）按<b className="text-slate-400">会话对象</b>细分记录：窗口标题每换一个联系人或群，时间轴与报表都会切成独立时段。</p>
           <DoNotCollectGrid excluded={excludedApps} onToggle={(k, v) => toggleExcludedApp(k, v)} />
         </div>
       </Section>
@@ -425,12 +425,12 @@ export default function PrivacyView() {
       {/* 1. 应用级不采集 */}
       <Section title="隐私保护" icon="shield">
         <div className="py-2.5">
-          <div className="mb-2 text-[12px] text-slate-500">应用级不采集（标记后完全停止：不截屏、不 OCR、不记标题、不产生活动记录）</div>
+          <div className="mb-2 text-xs text-slate-500">应用级不采集（标记后完全停止：不截屏、不 OCR、不记标题、不产生活动记录）</div>
           <div className="grid grid-cols-2 gap-x-4 sm:grid-cols-3">
             {allPrivacyApps.map((app) => (
               <div
                 key={app}
-                className="-mx-1.5 flex items-center justify-between rounded-lg px-1.5 py-1.5 text-[13px] text-slate-300 transition-colors hover:bg-white/[0.03]"
+                className="-mx-1.5 flex items-center justify-between rounded-lg px-1.5 py-1.5 text-sm text-slate-300 transition-colors hover:bg-white/[0.03]"
               >
                 {app}
                 <Toggle checked={excludedApps.includes(app)} onChange={(v) => toggleExcludedApp(app, v)} />
@@ -440,7 +440,7 @@ export default function PrivacyView() {
           {addingApp ? (
             <div className="anim-fade-in mt-2 flex items-center gap-2">
               <input
-                className="glass-input !w-52 !py-1 !text-[12px]"
+                className="glass-input !w-52 !py-1 !text-xs"
                 placeholder="应用名（如 notepad.exe 或 记事本）"
                 autoFocus
                 value={customApp}
@@ -455,7 +455,7 @@ export default function PrivacyView() {
                 }}
               />
               <button
-                className="glass-btn primary !px-2 !py-1 !text-[11px]"
+                className="glass-btn primary !px-2 !py-1 !text-xs"
                 disabled={!customApp.trim()}
                 onClick={() => {
                   toggleExcludedApp(customApp.trim(), true)
@@ -465,13 +465,13 @@ export default function PrivacyView() {
               >
                 添加
               </button>
-              <button className="glass-btn !px-2 !py-1 !text-[11px]" onClick={() => setAddingApp(false)}>
+              <button className="glass-btn !px-2 !py-1 !text-xs" onClick={() => setAddingApp(false)}>
                 取消
               </button>
             </div>
           ) : (
             <button
-              className="mt-2 inline-flex items-center gap-1 text-[11px] text-neon-cyan/70 transition-colors hover:text-neon-cyan"
+              className="mt-2 inline-flex items-center gap-1 text-xs text-neon-cyan/70 transition-colors hover:text-neon-cyan"
               onClick={() => setAddingApp(true)}
             >
               <Icon name="plus" size={11} /> 添加自定义应用
@@ -480,7 +480,7 @@ export default function PrivacyView() {
           {/* 各应用痕迹统计（近 14 天，默认收起，展开后验证隐私标记是否生效） */}
           <div className="mt-3">
             <button
-              className="flex items-center gap-1.5 text-[12px] text-slate-500 transition-colors hover:text-slate-300"
+              className="flex items-center gap-1.5 text-xs text-slate-500 transition-colors hover:text-slate-300"
               title="展开验证隐私标记"
               onClick={() => setStatsOpen((o) => !o)}
             >
@@ -492,8 +492,8 @@ export default function PrivacyView() {
             ) : null}
           </div>
           <div className="mt-3 rounded-xl border border-neon-cyan/10 bg-neon-cyan/[0.03] p-3.5">
-            <p className="mb-2 flex items-center gap-1.5 text-[13px] font-medium text-neon-cyan/80">🔒 数据存储声明</p>
-            <div className="grid grid-cols-1 gap-x-4 gap-y-1 text-[11px] text-slate-500 sm:grid-cols-2">
+            <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-neon-cyan/80">🔒 数据存储声明</p>
+            <div className="grid grid-cols-1 gap-x-4 gap-y-1 text-xs text-slate-500 sm:grid-cols-2">
               <p className="flex items-center gap-1.5">
                 <Icon name="check" size={11} className="shrink-0 text-neon-green/80" /> 所有数据仅存储在本机
               </p>
@@ -533,7 +533,7 @@ export default function PrivacyView() {
           {(() => {
             const acc = monitorAccuracyOf(settings.monitorInterval)
             return (
-              <p className="text-[11px] leading-relaxed text-slate-500">
+              <p className="text-xs leading-relaxed text-slate-500">
                 当前精度：<span className="text-slate-300">{acc.tier}</span>（时长误差约 {acc.err}）· {acc.note}
               </p>
             )
@@ -549,8 +549,8 @@ export default function PrivacyView() {
           <Toggle checked={!!settings.performanceMode} onChange={(v) => p({ performanceMode: v })} />
         </Row>
         <details className="-mx-2 px-2 py-1.5">
-          <summary className="cursor-pointer text-[11px] text-slate-500 hover:text-slate-300">记录分层说明</summary>
-          <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+          <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-300">记录分层说明</summary>
+          <p className="mt-1 text-xs leading-relaxed text-slate-500">
             记录分两层：<span className="text-slate-300">时长 / 应用 / 类目 / 当前会话对象</span> 为精确记录；「刷了 N 条」等细颗粒内容属<span className="text-slate-300">估算</span>（需开启深度模式，带置信度标注），非精确事实。
           </p>
         </details>
@@ -559,7 +559,7 @@ export default function PrivacyView() {
       {/* 2. OCR 资源管理 */}
       <Section title="OCR 资源管理" icon="scan" delay={60}>
         <div className="py-2.5">
-          <div className="flex flex-col gap-1.5 text-[13px]">
+          <div className="flex flex-col gap-1.5 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-slate-500">截屏缓存</span>
               <span className="text-slate-300">{ocrStats ? `${fmtBytes(ocrStats.shotBytes)}（${ocrStats.shotCount} 张）` : '—'}</span>
@@ -570,7 +570,7 @@ export default function PrivacyView() {
             </div>
             <div className="mt-1 flex items-center justify-between border-t border-white/[0.05] pt-2 font-medium">
               <span className="text-neon-cyan">总计占用</span>
-              <span className="text-[15px] font-semibold text-neon-cyan">{ocrStats ? fmtBytes(ocrStats.totalBytes) : '—'}</span>
+              <span className="text-lg font-semibold text-neon-cyan">{ocrStats ? fmtBytes(ocrStats.totalBytes) : '—'}</span>
             </div>
           </div>
         </div>
@@ -618,8 +618,8 @@ export default function PrivacyView() {
           >
             <Icon name="trash" size={13} /> {clearing ? '清理中…' : '一键清理全部截屏缓存'}
           </button>
-          <p className="mt-1.5 flex items-center gap-1 text-[11px] text-slate-600">⚠️ 清理后不可恢复，仅保留最近7天</p>
-          {clearNote ? <div className="anim-fade-in mt-1 text-[11px] text-neon-green">{clearNote}</div> : null}
+          <p className="mt-1.5 flex items-center gap-1 text-xs text-slate-600">⚠️ 清理后不可恢复，仅保留最近7天</p>
+          {clearNote ? <div className="anim-fade-in mt-1 text-xs text-neon-green">{clearNote}</div> : null}
         </div>
       </Section>
 

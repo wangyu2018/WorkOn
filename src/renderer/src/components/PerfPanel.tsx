@@ -34,7 +34,7 @@ export function PerfPanel() {
 
   return (
     <div className="anim-fade-in mt-1 rounded-lg border border-white/[0.07] bg-white/[0.02] p-2.5">
-      <div className="mb-2 flex items-center justify-between text-[11px]">
+      <div className="mb-2 flex items-center justify-between text-xs">
         <span className="font-medium text-slate-200">性能监控</span>
         <span className="text-slate-500 tabular-nums">
           总内存 <b className="text-neon-cyan">{data?.totalMemoryMB ?? '—'} MB</b> · 总 CPU <b className="text-neon-cyan">{data?.totalCpu ?? '—'}%</b>
@@ -44,7 +44,7 @@ export function PerfPanel() {
         <>
           <div className="flex flex-col gap-1">
             {data.metrics.map((m) => (
-              <div key={m.pid} className="flex items-center gap-2 text-[10px]">
+              <div key={m.pid} className="flex items-center gap-2 text-2xs">
                 <span className="w-14 shrink-0 text-slate-400">{TYPE_LABEL[m.type] ?? m.type}</span>
                 <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
                   <div className="h-full rounded-full" style={{ width: `${Math.min(100, m.cpu)}%`, background: m.cpu > 60 ? '#f43f5e' : m.cpu > 30 ? '#f59e0b' : '#22d3ee' }} />
@@ -54,7 +54,7 @@ export function PerfPanel() {
               </div>
             ))}
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-white/[0.05] pt-1.5 text-[10px] text-slate-500">
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-white/[0.05] pt-1.5 text-2xs text-slate-500">
             <span>监控：<b className="text-slate-300">{(data.modules.monitor as { running?: boolean; intervalMs?: number })?.running ? `开 · ${Math.round(((data.modules.monitor as { intervalMs?: number })?.intervalMs ?? 0) / 1000)}s` : '关'}</b></span>
             <span>深度OCR：<b className="text-slate-300">{data.modules.deepMode ? '开' : '关'}</b></span>
             <span>桌宠：<b className="text-slate-300">{data.modules.petEnabled ? '开' : '关'}</b></span>
@@ -63,7 +63,7 @@ export function PerfPanel() {
           </div>
         </>
       ) : (
-        <p className="text-[11px] text-slate-500">加载中…</p>
+        <p className="text-xs text-slate-500">加载中…</p>
       )}
     </div>
   )

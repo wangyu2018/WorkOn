@@ -179,9 +179,9 @@ export function AutomationLab() {
   return (
     <div className="mt-4 border-t border-white/[0.06] pt-3">
       <div className="flex items-center justify-between">
-        <div className="text-[10px] uppercase text-slate-600">自动化工坊 · 触发器 → 条件 → 动作</div>
+        <div className="text-2xs uppercase text-slate-600">自动化工坊 · 触发器 → 条件 → 动作</div>
         <button
-          className="rounded-lg border px-2.5 py-1 text-[11px] transition-all hover:-translate-y-px"
+          className="rounded-lg border px-2.5 py-1 text-xs transition-all hover:-translate-y-px"
           style={{ background: 'var(--aura)', borderColor: 'transparent', color: '#fff' }}
           onClick={() => setDraft({ ...EMPTY_DRAFT })}
         >
@@ -192,17 +192,17 @@ export function AutomationLab() {
       {/* 模板 */}
       {rules.length === 0 && !draft ? (
         <div className="mt-2 flex flex-col gap-1.5">
-          <div className="text-[10px] text-slate-500">从模板开始：</div>
+          <div className="text-2xs text-slate-500">从模板开始：</div>
           {TEMPLATES.map((t) => (
             <button
               key={t.name}
               className="flex items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1.5 text-left transition-all hover:border-[rgba(15,181,164,0.4)]"
               onClick={() => setDraft({ ...(t.rule as unknown as Draft), name: t.name })}
             >
-              <span className="rounded bg-[var(--teal-soft)] px-1.5 py-0.5 text-[9px] font-bold text-[var(--teal-deep)]">模板</span>
+              <span className="rounded bg-[var(--teal-soft)] px-1.5 py-0.5 text-2xs font-bold text-[var(--teal-deep)]">模板</span>
               <span className="min-w-0 flex-1">
-                <b className="block truncate text-[11.5px] text-slate-200">{t.name}</b>
-                <span className="block truncate text-[10px] text-slate-500">{t.desc}</span>
+                <b className="block truncate text-xs text-slate-200">{t.name}</b>
+                <span className="block truncate text-2xs text-slate-500">{t.desc}</span>
               </span>
             </button>
           ))}
@@ -214,13 +214,13 @@ export function AutomationLab() {
         <div className="mt-2 flex flex-col gap-1.5">
           {rules.map((r) => (
             <div key={r.id} className="flex items-center gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5">
-              <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold ${TAG_CLS.trg}`}>{TRIGGER_LABEL[r.trigger.kind]}</span>
+              <span className={`shrink-0 rounded px-1.5 py-0.5 text-2xs font-bold ${TAG_CLS.trg}`}>{TRIGGER_LABEL[r.trigger.kind]}</span>
               <div className="min-w-0 flex-1">
-                <b className="block truncate text-[12px] text-slate-200">{r.name}</b>
-                <div className="truncate text-[10px] text-slate-500">{triggerSummary(r)} → {actionsSummary(r)}</div>
+                <b className="block truncate text-xs text-slate-200">{r.name}</b>
+                <div className="truncate text-2xs text-slate-500">{triggerSummary(r)} → {actionsSummary(r)}</div>
               </div>
               <button
-                className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${r.enabled ? 'bg-[var(--teal-soft)] text-[var(--teal-deep)]' : 'bg-white/10 text-slate-500'}`}
+                className={`shrink-0 rounded-full px-2 py-0.5 text-2xs font-bold ${r.enabled ? 'bg-[var(--teal-soft)] text-[var(--teal-deep)]' : 'bg-white/10 text-slate-500'}`}
                 onClick={() => void toggle(r)}
               >
                 {r.enabled ? '已启用' : '已停用'}
@@ -235,14 +235,14 @@ export function AutomationLab() {
       {draft ? (
         <div className="mt-2 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-2.5">
           <input
-            className="w-full rounded-lg border border-[var(--line)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-[12px] text-slate-200 outline-none focus:border-[var(--border-active)]"
+            className="w-full rounded-lg border border-[var(--line)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-[var(--border-active)]"
             placeholder="自动化名称（如：每天 18:00 生成日报）"
             value={draft.name}
             onChange={(e) => set({ name: e.target.value })}
           />
           {/* 触发器积木 */}
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <span className="rounded px-1.5 py-0.5 text-[9px] font-bold ${TAG_CLS.trg} bg-[var(--teal-soft)] text-[var(--teal-deep)]">触发器</span>
+            <span className="rounded px-1.5 py-0.5 text-2xs font-bold ${TAG_CLS.trg} bg-[var(--teal-soft)] text-[var(--teal-deep)]">触发器</span>
             {(Object.keys(TRIGGER_LABEL) as TriggerKind[]).map((k) => (
               <button
                 key={k}
@@ -250,7 +250,7 @@ export function AutomationLab() {
                 onDragStart={(e) => { e.dataTransfer.setData('text/plain', `trg:${k}`); setDragKind(`trg:${k}`) }}
                 onDragEnd={() => setDragKind(null)}
                 onClick={() => set({ triggerKind: k })}
-                className={`cursor-grab rounded-md border px-2 py-1 text-[10.5px] transition-all active:cursor-grabbing ${
+                className={`cursor-grab rounded-md border px-2 py-1 text-2xs transition-all active:cursor-grabbing ${
                   draft.triggerKind === k
                     ? 'border-[rgba(15,181,164,0.5)] bg-[var(--teal-soft)] text-[var(--teal-deep)]'
                     : 'border-[var(--line)] text-slate-400 hover:text-slate-200'
@@ -272,17 +272,17 @@ export function AutomationLab() {
               setDragKind(null)
             }}
           >
-            <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${draft.triggerKind ? 'bg-[var(--teal-soft)] text-[var(--teal-deep)]' : 'bg-white/5 text-slate-500'}`}>
+            <span className={`rounded px-1.5 py-0.5 text-2xs font-bold ${draft.triggerKind ? 'bg-[var(--teal-soft)] text-[var(--teal-deep)]' : 'bg-white/5 text-slate-500'}`}>
               {draft.triggerKind ? TRIGGER_LABEL[draft.triggerKind] : '⬇ 拖入触发器'}
             </span>
             {draft.workdayOnly ? (
-              <span className="flex items-center gap-1 rounded bg-[rgba(245,158,11,0.12)] px-1.5 py-0.5 text-[9px] font-bold text-[#fbbf24]">
+              <span className="flex items-center gap-1 rounded bg-[rgba(245,158,11,0.12)] px-1.5 py-0.5 text-2xs font-bold text-[#fbbf24]">
                 仅工作日
                 <button className="hover:text-slate-200" onClick={() => set({ workdayOnly: false })}>✕</button>
               </span>
             ) : null}
             {draft.minFocusHours > 0 ? (
-              <span className="flex items-center gap-1 rounded bg-[rgba(245,158,11,0.12)] px-1.5 py-0.5 text-[9px] font-bold text-[#fbbf24]">
+              <span className="flex items-center gap-1 rounded bg-[rgba(245,158,11,0.12)] px-1.5 py-0.5 text-2xs font-bold text-[#fbbf24]">
                 专注≥{draft.minFocusHours}h
                 <button className="hover:text-slate-200" onClick={() => set({ minFocusHours: 0 })}>✕</button>
               </span>
@@ -290,18 +290,18 @@ export function AutomationLab() {
             <span className="text-slate-600">→</span>
             {draft.actions.length ? (
               draft.actions.map((a, i) => (
-                <span key={a.kind + String(i)} className="flex items-center gap-1 rounded bg-[rgba(139,92,246,0.12)] px-1.5 py-0.5 text-[9px] font-bold text-[var(--violet)]">
+                <span key={a.kind + String(i)} className="flex items-center gap-1 rounded bg-[rgba(139,92,246,0.12)] px-1.5 py-0.5 text-2xs font-bold text-[var(--violet)]">
                   {ACTION_LABEL[a.kind]}
                   <button className="hover:text-slate-200" onClick={() => set({ actions: draft.actions.filter((_, j) => j !== i) })}>✕</button>
                 </span>
               ))
             ) : (
-              <span className="text-[9px] text-slate-500">⬇ 拖入动作</span>
+              <span className="text-2xs text-slate-500">⬇ 拖入动作</span>
             )}
           </div>
 
           {/* 触发参数 */}
-          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-slate-400">
             {draft.triggerKind === 'daily' ? (
               <label>
                 时间 <input type="time" className="rounded border border-[var(--line)] bg-[var(--bg-surface)] px-1.5 py-0.5 text-slate-200" value={draft.time} onChange={(e) => set({ time: e.target.value })} />
@@ -326,7 +326,7 @@ export function AutomationLab() {
           </div>
           {/* 动作积木 */}
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <span className="rounded bg-[rgba(139,92,246,0.12)] px-1.5 py-0.5 text-[9px] font-bold text-[var(--violet)]">动作</span>
+            <span className="rounded bg-[rgba(139,92,246,0.12)] px-1.5 py-0.5 text-2xs font-bold text-[var(--violet)]">动作</span>
             {(Object.keys(ACTION_LABEL) as ActionKind[]).map((k) => {
               const on = draft.actions.some((a) => a.kind === k)
               return (
@@ -336,7 +336,7 @@ export function AutomationLab() {
                   onDragStart={(e) => { e.dataTransfer.setData('text/plain', `act:${k}`); setDragKind(`act:${k}`) }}
                   onDragEnd={() => setDragKind(null)}
                   onClick={() => set({ actions: on ? draft.actions.filter((a) => a.kind !== k) : [...draft.actions, { kind: k }] })}
-                  className={`cursor-grab rounded-md border px-2 py-1 text-[10.5px] transition-all active:cursor-grabbing ${
+                  className={`cursor-grab rounded-md border px-2 py-1 text-2xs transition-all active:cursor-grabbing ${
                     on
                       ? 'border-[rgba(139,92,246,0.5)] bg-[rgba(139,92,246,0.12)] text-[var(--violet)]'
                       : 'border-[var(--line)] text-slate-400 hover:text-slate-200'
@@ -348,15 +348,15 @@ export function AutomationLab() {
             })}
           </div>
           <div className="mt-2.5 flex justify-end gap-2">
-            <button className="glass-btn !py-1 text-[11px]" onClick={() => setDraft(null)}>取消</button>
-            <button className="glass-btn primary !py-1 text-[11px]" disabled={busy || !draft.actions.length} onClick={() => void save()}>
+            <button className="glass-btn !py-1 text-xs" onClick={() => setDraft(null)}>取消</button>
+            <button className="glass-btn primary !py-1 text-xs" disabled={busy || !draft.actions.length} onClick={() => void save()}>
               保存自动化
             </button>
           </div>
         </div>
       ) : null}
 
-      {tip ? <div className="mt-2 rounded-lg bg-[var(--teal-soft)] px-2.5 py-1.5 text-[11px] text-[var(--teal-deep)]">{tip}</div> : null}
+      {tip ? <div className="mt-2 rounded-lg bg-[var(--teal-soft)] px-2.5 py-1.5 text-xs text-[var(--teal-deep)]">{tip}</div> : null}
     </div>
   )
 }

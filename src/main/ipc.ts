@@ -43,6 +43,7 @@ import { getFocusChainState } from './focusChain'
 import { registerNotifyIpc, pushNotify } from './notify'
 import { listAutomations, saveAutomation, removeAutomation, toggleAutomation, automationMinuteTick } from './automation'
 import { starGraphForDays } from './starGraph'
+import { pendingReview, reviewSummary, confirmReviewApp, ignoreReviewApp, reviewProjects } from './review'
 import { attributionTick, getAttribution, listBindings, bindProject, unbindProject, setBinding, answerAttribution } from './attributions'
 import { startAllWatchers, getTodayActivity, stalledProjects, dirWatcherTick } from './dirWatcher'
 import { buildStatusCard, parseStatusCard, applyCardDiff, summarizeProgressPaste } from './statusCard'
@@ -101,6 +102,7 @@ import {
   getPoints, addPoints
 } from './motions'
 import { createMotionWindow } from './windows'
+import { getTrace, setTraceSink } from './trace'
 import { listTemplates } from './report/templates'
 import { parseUserTemplate } from './report/templateParser'
 
@@ -124,6 +126,10 @@ function habitsOfUser(): UserHabits | null {
 }
 
 export function registerIpc(): void {
+  // AI 处理轨迹：实时推送到主窗口（隧道边缘边看）
+  setTraceSink((e) => sendTo('main', 'ai:trace', e))
+  ipcMain.handle('ai:getTrace', (_e, id: string) => getTrace(String(id)))
+
   // ── 设置 ──
   ipcMain.handle('settings:get', () => getSettings())
   ipcMain.handle('settings:set', (_e, patch: Partial<AppSettings>) => {
@@ -524,6 +530,15 @@ export function registerIpc(): void {
   ipcMain.handle('projects:aiReview', (_e, projectId: string, trailMinutes: number) => aiReview(String(projectId), Number(trailMinutes) || 0))
   ipcMain.handle('projects:aiDevAdvice', (_e, ctx) => aiDevAdvice(ctx))
 
+  // ── 一分钟校对（待确认队列） ──
+  ipcMain.handle('review:pending', (_e, date?: string) => pendingReview(date))
+  ipcMain.handle('review:summary', (_e, date?: string) => reviewSummary(date))
+  ipcMain.handle('review:confirm', (_e, app: string, projectId: string | null, date?: string) =>
+    confirmReviewApp(String(app ?? ''), projectId ?? null, date)
+  )
+  ipcMain.handle('review:ignore', (_e, app: string, date?: string) => ignoreReviewApp(String(app ?? ''), date))
+  ipcMain.handle('review:projects', () => reviewProjects())
+
   // ── 开发者性能监控 ──
   ipcMain.handle('perf:stats', () => {
     const metrics = app.getAppMetrics().map((m) => ({
@@ -639,7 +654,7 @@ export function registerIpc(): void {
     if (!s.aiStreaming) {
       // 流式未启用 → 回退普通模式
       const result = await askWithContext(question, ana, todayTrail(), habitsOfUser(), screenContext ?? undefined)
-      sendTo('main', 'ai:streamDone', result.content)
+      sendTo('main', 'ai:streamDone', { content: result.content, traceId: result.traceId })
       return result
     }
     try {
@@ -651,11 +666,11 @@ export function registerIpc(): void {
         (toolName) => sendTo('main', 'ai:streamTool', { tool: toolName }),
         habitsOfUser()
       )
-      sendTo('main', 'ai:streamDone', result.content)
+      sendTo('main', 'ai:streamDone', { content: result.content, traceId: result.traceId })
       return result
     } catch (e) {
       sendTo('main', 'ai:streamError', { error: (e as Error).message })
-      return { content: null, references: [] }
+      return { content: null, references: [], traceId: '' }
     }
   })
 

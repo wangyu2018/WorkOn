@@ -17,6 +17,7 @@ import { Icon } from '../components/Icon'
 import type { IconName } from '../components/Icon'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { InsightCard } from '../components/ui/InsightCard'
+import { ModalShell } from '../components/ui/Modal'
 import { AiThinking } from '../components/ui/AiThinking'
 import { useSettingsStore } from '../stores/settingsStore'
 import { WEEK_LABELS, addDays, clockOf, fmtDateLabel, fmtMin, todayKey } from '../components/utils'
@@ -75,12 +76,12 @@ function metaOf(template: ReportTemplate | undefined, gs: GeneratedSection): Tem
 /** 分区标题（与 ReportHub 同风格） */
 function SectionTitle({ icon, title, hint }: { icon: IconName; title: string; hint?: string }) {
   return (
-    <h3 className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-slate-200">
+    <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-200">
       <span className="flex h-5 w-5 items-center justify-center rounded-md bg-neon-cyan/15 text-neon-cyan">
         <Icon name={icon} size={12} />
       </span>
       {title}
-      {hint ? <span className="ml-auto text-[10px] font-normal text-slate-500">{hint}</span> : null}
+      {hint ? <span className="ml-auto text-2xs font-normal text-slate-500">{hint}</span> : null}
     </h3>
   )
 }
@@ -281,23 +282,23 @@ function EntryCard({ ge, meta, editing, onStartEdit, onCancelEdit, onEditChange,
     >
       {/* 第一行：时间段 + 状态 chip + 置信度 */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[12px] font-medium text-slate-200">
+        <span className="text-xs font-medium text-slate-200">
           {hhmm(e.startTs)}-{hhmm(e.endTs)} <span className="text-slate-500">({fmtMin(e.durationMin)})</span>
         </span>
         <span
-          className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+          className="rounded-full px-1.5 py-0.5 text-2xs font-medium"
           style={{ background: `${color}1f`, color }}
         >
           {e.stateLabel}
         </span>
-        <span className={`ml-auto text-[10px] ${ge.needsReview ? 'text-amber-400' : 'text-slate-500'}`}>
+        <span className={`ml-auto text-2xs ${ge.needsReview ? 'text-amber-400' : 'text-slate-500'}`}>
           ★{e.confidence.toFixed(2)}
           {ge.needsReview ? ' ⚠' : ''}
         </span>
       </div>
       {/* 字段行 */}
       {displayFields.length > 0 ? (
-        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px]">
+        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
           {displayFields.map((f) => {
             const v = ge.fieldValues[f.key]?.value ?? ''
             return v ? (
@@ -316,10 +317,10 @@ function EntryCard({ ge, meta, editing, onStartEdit, onCancelEdit, onEditChange,
       {/* 待确认操作行 */}
       {ge.needsReview && !isEditing ? (
         <div className="mt-1.5 flex items-center gap-2">
-          <button className="glass-btn primary !px-2 !py-0.5 !text-[10px]" onClick={() => onConfirm(e.id)}>
+          <button className="glass-btn primary !px-2 !py-0.5 !text-2xs" onClick={() => onConfirm(e.id)}>
             <Icon name="check" size={10} /> 确认
           </button>
-          <button className="glass-btn !px-2 !py-0.5 !text-[10px]" onClick={() => onStartEdit(ge)}>
+          <button className="glass-btn !px-2 !py-0.5 !text-2xs" onClick={() => onStartEdit(ge)}>
             <Icon name="edit" size={10} /> 编辑
           </button>
         </div>
@@ -335,20 +336,20 @@ function EntryCard({ ge, meta, editing, onStartEdit, onCancelEdit, onEditChange,
               ['output', '产出']
             ] as const
           ).map(([key, label]) => (
-            <label key={key} className="flex items-center gap-2 text-[11px] text-slate-500">
+            <label key={key} className="flex items-center gap-2 text-xs text-slate-500">
               <span className="w-8 shrink-0">{label}</span>
               <input
-                className="glass-input flex-1 !py-1 !text-[11px]"
+                className="glass-input flex-1 !py-1 !text-xs"
                 value={editing[key]}
                 onChange={(ev) => onEditChange(key, ev.target.value)}
               />
             </label>
           ))}
           <div className="mt-1 flex justify-end gap-2">
-            <button className="glass-btn !px-2 !py-0.5 !text-[10px]" onClick={onCancelEdit}>
+            <button className="glass-btn !px-2 !py-0.5 !text-2xs" onClick={onCancelEdit}>
               取消
             </button>
-            <button className="glass-btn primary !px-2 !py-0.5 !text-[10px]" onClick={onSaveEdit}>
+            <button className="glass-btn primary !px-2 !py-0.5 !text-2xs" onClick={onSaveEdit}>
               保存
             </button>
           </div>
@@ -438,14 +439,12 @@ function ImportTemplateModal({ presets, aiEnabled, onClose, onSelectPreset, onSa
   }
 
   return (
-    <div className="anim-fade-in fixed inset-0 z-[70] flex items-center justify-center bg-black/55 backdrop-blur-sm">
-      <div className="glass-card anim-scale-in flex max-h-[84vh] w-[680px] max-w-[92vw] flex-col overflow-hidden">
+    <ModalShell open onClose={onClose} bare>
+      <div className="glass-card anim-scale-in flex max-h-[84vh] w-[680px] max-w-[92vw] flex-col overflow-hidden" style={{ background: 'var(--bg-deep)', borderRadius: 'var(--r-lg)', boxShadow: 'var(--shadow-lg)' }}>
         <div className="mb-3 flex items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-neon-cyan/15 text-neon-cyan">
-            <Icon name="sparkles" size={13} />
-          </span>
-          <h3 className="text-[14px] font-semibold text-slate-100">导入我的日报格式</h3>
-          <button className="ml-auto text-slate-500 transition-colors hover:text-slate-300" onClick={onClose}>
+          <Icon name="sparkles" size={16} className="text-slate-500" />
+          <h3 className="text-base font-semibold text-slate-100">导入我的日报格式</h3>
+          <button className="ui-icon-btn ml-auto" aria-label="关闭" onClick={onClose}>
             <Icon name="x" size={15} />
           </button>
         </div>
@@ -453,12 +452,12 @@ function ImportTemplateModal({ presets, aiEnabled, onClose, onSelectPreset, onSa
         {step === 1 ? (
           <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
             <textarea
-              className="glass-input h-52 w-full resize-y !text-[12px] leading-relaxed"
+              className="glass-input h-52 w-full resize-y !text-xs leading-relaxed"
               placeholder={RAW_PLACEHOLDER}
               value={raw}
               onChange={(e) => setRaw(e.target.value)}
             />
-            {error ? <div className="anim-fade-in text-[11px] text-amber-400">⚠ {error}</div> : null}
+            {error ? <div className="anim-fade-in text-xs text-amber-400">⚠ {error}</div> : null}
             <div className="flex items-center gap-2">
               <button className="glass-btn primary" disabled={!raw.trim() || parsing} onClick={() => void parse()}>
                 {parsing ? (
@@ -471,14 +470,14 @@ function ImportTemplateModal({ presets, aiEnabled, onClose, onSelectPreset, onSa
                   </>
                 )}
               </button>
-              <span className="text-[10px] text-slate-600">解析后可预览并微调结构再保存</span>
+              <span className="text-2xs text-slate-600">解析后可预览并微调结构再保存</span>
             </div>
             {presets.length > 0 ? (
               <div className="border-t border-white/[0.05] pt-3">
-                <div className="mb-1.5 text-[11px] text-slate-500">或选预置模板</div>
+                <div className="mb-1.5 text-xs text-slate-500">或选预置模板</div>
                 <div className="flex flex-wrap gap-1.5">
                   {presets.map((t) => (
-                    <button key={t.id} className="glass-btn !px-2.5 !py-1 !text-[11px]" onClick={() => onSelectPreset(t.id)}>
+                    <button key={t.id} className="glass-btn !px-2.5 !py-1 !text-xs" onClick={() => onSelectPreset(t.id)}>
                       {t.name}
                     </button>
                   ))}
@@ -490,15 +489,15 @@ function ImportTemplateModal({ presets, aiEnabled, onClose, onSelectPreset, onSa
           <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
             <div className="grid min-h-0 flex-1 gap-3 overflow-hidden sm:grid-cols-2">
               {/* 左：原文 */}
-              <pre className="min-h-0 overflow-y-auto rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-[11px] leading-relaxed text-slate-400">
+              <pre className="min-h-0 overflow-y-auto rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 text-xs leading-relaxed text-slate-400">
                 {draft.rawContent ?? raw}
               </pre>
               {/* 右：结构编辑 */}
               <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto pr-1">
-                <label className="flex items-center gap-2 text-[11px] text-slate-500">
+                <label className="flex items-center gap-2 text-xs text-slate-500">
                   <span className="w-12 shrink-0">模板名</span>
                   <input
-                    className="glass-input flex-1 !py-1 !text-[12px]"
+                    className="glass-input flex-1 !py-1 !text-xs"
                     value={draft.name}
                     onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                   />
@@ -507,7 +506,7 @@ function ImportTemplateModal({ presets, aiEnabled, onClose, onSelectPreset, onSa
                   <div key={s.id || si} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5">
                     <div className="flex items-center gap-2">
                       <input
-                        className="glass-input flex-1 !py-1 !text-[11px]"
+                        className="glass-input flex-1 !py-1 !text-xs"
                         value={s.title}
                         placeholder="段落标题"
                         onChange={(e) =>
@@ -515,7 +514,7 @@ function ImportTemplateModal({ presets, aiEnabled, onClose, onSelectPreset, onSa
                         }
                       />
                       <select
-                        className="glass-input w-28 shrink-0 !py-1 !text-[11px]"
+                        className="glass-input w-28 shrink-0 !py-1 !text-xs"
                         value={s.type}
                         onChange={(e) =>
                           setDraft({
@@ -535,7 +534,7 @@ function ImportTemplateModal({ presets, aiEnabled, onClose, onSelectPreset, onSa
                       {(parsed.sections[si]?.fields ?? []).map((f) => {
                         const checked = s.fields.some((x) => x.key === f.key)
                         return (
-                          <label key={f.key} className="flex cursor-pointer items-center gap-1 text-[10px] text-slate-400">
+                          <label key={f.key} className="flex cursor-pointer items-center gap-1 text-2xs text-slate-400">
                             <input
                               type="checkbox"
                               className="accent-cyan-400"
@@ -552,8 +551,8 @@ function ImportTemplateModal({ presets, aiEnabled, onClose, onSelectPreset, onSa
                 ))}
               </div>
             </div>
-            {error ? <div className="anim-fade-in text-[11px] text-amber-400">⚠ {error}</div> : null}
-            <div className="flex justify-end gap-2 border-t border-white/[0.05] pt-3">
+            {error ? <div className="anim-fade-in text-xs text-amber-500">{error}</div> : null}
+            <div className="flex justify-end gap-2 pt-3">
               <button className="glass-btn" onClick={() => setStep(1)}>
                 返回
               </button>
@@ -564,7 +563,7 @@ function ImportTemplateModal({ presets, aiEnabled, onClose, onSelectPreset, onSa
           </div>
         ) : null}
       </div>
-    </div>
+    </ModalShell>
   )
 }
 
@@ -771,7 +770,7 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
     return (
       <div key={t.id} className="group relative">
         <button
-          className={`flex w-full items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left text-[12px] transition-all ${
+          className={`flex w-full items-center gap-1.5 rounded-lg border px-2 py-1.5 text-left text-xs transition-all ${
             active
               ? 'border-[var(--teal-border)] bg-[var(--teal-soft)] font-medium text-[var(--teal)]'
               : 'border-transparent text-slate-400 hover:border-white/[0.08] hover:bg-white/[0.03] hover:text-slate-200'
@@ -786,7 +785,7 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
             <Icon name={isUser ? 'edit' : 'sparkles'} size={10} />
           </span>
           <span className="truncate">{t.name}</span>
-          {t.isDefault ? <span className="ml-auto shrink-0 text-[9px] text-slate-500">默认</span> : null}
+          {t.isDefault ? <span className="ml-auto shrink-0 text-2xs text-slate-500">默认</span> : null}
         </button>
         {isUser ? (
           <button
@@ -803,46 +802,33 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── AI 日报 hero：aura 渐变专属卡 ── */}
-      <section
-        className="anim-fade-up relative overflow-hidden rounded-2xl p-5 text-white"
-        style={{ background: 'var(--aura)', boxShadow: 'var(--glow-i)' }}
-      >
-        <span className="pointer-events-none absolute -top-9 right-1 select-none text-[130px] leading-none text-white/[0.14]">✦</span>
-        <div className="relative flex flex-wrap items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-white/[0.16] text-[13px]">✦</span>
-          <h3 className="text-[14px] font-bold tracking-wide">AI 日报</h3>
-          <span className="rounded-full bg-white/[0.12] px-2 py-0.5 text-[10px] text-white/85">
-            {fmtDateLabel(date)} {weekLabel(date)}
-          </span>
-          {generatedAt ? <span className="ml-auto text-[10px] text-white/60">生成于 {hhmm(generatedAt)}</span> : null}
+      {/* ── 今日回顾：一句话总结，中性表面 + 一枚 AI 标识，不做整块渐变 ── */}
+      <section className="anim-fade-up glass-card flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Icon name="sparkles" size={14} className="text-slate-500" />
+          <h3 className="text-base font-semibold text-slate-100">今日总结</h3>
+          <span className="text-xs text-slate-500">{fmtDateLabel(date)}</span>
+          {generatedAt ? <span className="ml-auto text-2xs text-slate-500">生成于 {hhmm(generatedAt)}</span> : null}
         </div>
-        <div className="relative mt-3 min-h-10">
+        <div className="min-h-10">
           {loading && !report ? (
             <AiThinking hints={['正在汇总今天的时段…', '正在提炼工作主线…', '日报摘要即将生成…']} />
           ) : report ? (
-            <p className="max-w-[760px] text-[12.5px] font-medium leading-relaxed text-white/90">{heroSummary}</p>
+            <p className="max-w-[760px] text-sm leading-relaxed text-slate-300">{heroSummary}</p>
           ) : (
-            <p className="text-[12.5px] leading-relaxed text-white/75">
-              这一天还没有足够数据，先去专注工作一会儿，AI 日报会自动汇总在这里。
+            <p className="text-sm leading-relaxed text-slate-500">
+              这一天还没有足够数据，先去专注工作一会儿，回顾会自动汇总在这里。
             </p>
           )}
         </div>
-        <div className="relative mt-4 flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {onGoWeekly ? (
-            <button
-              className="rounded-[10px] border border-white/35 bg-white/[0.12] px-3.5 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-white/[0.22]"
-              onClick={onGoWeekly}
-            >
-              ✦ 生成周报
+            <button className="glass-btn" onClick={onGoWeekly}>
+              <Icon name="calendar" size={13} /> 生成周报
             </button>
           ) : null}
-          <button
-            className="rounded-[10px] border border-white/35 bg-white/[0.12] px-3.5 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-white/[0.22] disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={!report}
-            onClick={() => copy('md')}
-          >
-            {copied === 'md' ? '已导出 ✓' : '导出 MD'}
+          <button className="glass-btn" disabled={!report} onClick={() => copy('md')}>
+            {copied === 'md' ? '已导出' : '导出 MD'}
           </button>
         </div>
       </section>
@@ -852,40 +838,35 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
         <button className="glass-btn !px-1.5 !py-1" title="前一天" onClick={() => setDate(addDays(date, -1))}>
           <Icon name="chevronLeft" size={13} />
         </button>
-        <span className="min-w-28 text-center text-[13px] font-medium text-slate-200">{fmtDateLabel(date)}</span>
+        <span className="min-w-28 text-center text-sm font-medium text-slate-200">{fmtDateLabel(date)}</span>
         <button className="glass-btn !px-1.5 !py-1" title="后一天" disabled={isToday} onClick={() => !isToday && setDate(addDays(date, 1))}>
           <Icon name="chevronRight" size={13} />
         </button>
         {!isToday ? (
-          <button className="glass-btn !px-2 !py-1 !text-[11px]" onClick={() => setDate(todayKey())}>
+          <button className="glass-btn !px-2 !py-1 !text-xs" onClick={() => setDate(todayKey())}>
             今天
           </button>
         ) : null}
         <div className="flex-1" />
         {/* AI 开关二态胶囊 */}
         <button
-          className="flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:border-white/[0.16]"
+          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-slate-500 hover:bg-[var(--surface-3)] hover:text-slate-300"
           onClick={toggleAI}
           title="切换后自动重新生成"
         >
-          <span className={`h-1.5 w-1.5 rounded-full ${aiOn ? 'bg-violet-400 shadow-[0_0_6px_rgba(167,139,250,0.8)]' : 'bg-neon-green'}`} />
+          <span className={`h-1.5 w-1.5 rounded-full ${aiOn ? 'bg-[var(--accent)]' : 'bg-slate-500'}`} />
           {aiOn ? 'AI 增强 · 在线' : '基础能力 · 离线'}
         </button>
         {aiStatusText ? (
-          <span className={`text-[10px] ${report?.aiStatus === 'fallback_to_base' ? 'text-amber-400' : 'text-slate-500'}`}>{aiStatusText}</span>
+          <span className={`text-2xs ${report?.aiStatus === 'fallback_to_base' ? 'text-amber-500' : 'text-slate-500'}`}>{aiStatusText}</span>
         ) : null}
-        <button className={`glass-btn !px-2.5 !py-1 !text-[11px] ${copied === 'text' ? 'primary' : ''}`} disabled={!report} onClick={() => copy('text')}>
-          {copied === 'text' ? '已复制 ✓' : '复制文本'}
-        </button>
         <button
-          className="glass-btn !px-2.5 !py-1 !text-[11px]"
-          title="手动刷新（绕过节流；AI 次数仍受每日上限）"
+          className="ui-icon-btn"
+          title="重新生成"
+          aria-label="重新生成"
           onClick={() => setManualKey((k) => k + 1)}
         >
-          <Icon name="refresh" size={13} /> 手动刷新
-        </button>
-        <button className={`glass-btn !px-2.5 !py-1 !text-[11px] ${copied === 'md' ? 'primary' : ''}`} disabled={!report} onClick={() => copy('md')}>
-          {copied === 'md' ? '已复制 ✓' : '复制 MD'}
+          <Icon name="refresh" size={14} />
         </button>
       </div>
 
@@ -940,17 +921,17 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
           <section className="glass-card hoverable anim-fade-up !p-3">
             <SectionTitle icon="calendar" title="报表模板" />
             <div className="flex flex-col gap-1">
-              <div className="mb-0.5 text-[10px] text-slate-600">预置</div>
+              <div className="mb-0.5 text-2xs text-slate-600">预置</div>
               {presets.map(renderTemplateItem)}
               {userTemplates.length > 0 ? (
                 <>
-                  <div className="mb-0.5 mt-2 text-[10px] text-slate-600">我的模板</div>
+                  <div className="mb-0.5 mt-2 text-2xs text-slate-600">我的模板</div>
                   {userTemplates.map(renderTemplateItem)}
                 </>
               ) : null}
             </div>
             <button
-              className="mt-2.5 flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-white/[0.12] px-2 py-1.5 text-[11px] text-slate-500 transition-colors hover:border-neon-cyan/40 hover:text-neon-cyan"
+              className="mt-2.5 flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-white/[0.12] px-2 py-1.5 text-xs text-slate-500 transition-colors hover:border-neon-cyan/40 hover:text-neon-cyan"
               onClick={() => setShowImport(true)}
             >
               <Icon name="plus" size={11} /> 导入我的格式
@@ -960,7 +941,7 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
           {/* 覆盖率卡 */}
           <section className="glass-card hoverable anim-fade-up !p-3" style={{ animationDelay: '60ms' }}>
             <SectionTitle icon="chart" title="数据质量" />
-            <div className="flex items-center justify-between text-[11px]">
+            <div className="flex items-center justify-between text-xs">
               <span className="text-slate-500">字段覆盖率</span>
               <span className="font-medium text-neon-cyan">{report ? `${Math.round(report.coverage * 100)}%` : '—'}</span>
             </div>
@@ -970,7 +951,7 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
                 style={{ width: `${report ? Math.round(report.coverage * 100) : 0}%` }}
               />
             </div>
-            <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
+            <div className="mt-2 flex items-center justify-between text-2xs text-slate-500">
               <span>
                 高置信 <span className="text-slate-300">{report ? report.entries.length - needReviewCount : 0}</span>
               </span>
@@ -990,7 +971,7 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
           ) : !report || report.entries.length === 0 ? (
             <div className="glass-card flex flex-col items-center gap-2 py-10 text-center">
               <span className="text-2xl opacity-70">🗓️</span>
-              <p className="text-[12px] text-slate-500">这一天还没有足够数据，换个日期看看吧。</p>
+              <p className="text-xs text-slate-500">这一天还没有足够数据，换个日期看看吧。</p>
             </div>
           ) : (
             report.sections.map((gs, gi) => {
@@ -1006,7 +987,7 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
                 return (
                   <section key={gs.sectionId} className="glass-card hoverable anim-fade-up" style={{ animationDelay: `${gi * 50}ms` }}>
                     {gs.title ? <SectionTitle icon={icon} title={gs.title} /> : null}
-                    <div className="flex flex-wrap gap-x-5 gap-y-1 text-[12px]">
+                    <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs">
                       {parts.map((f) => (
                         <span key={f.key} className="text-slate-400">
                           <span className="text-slate-500">{f.label}</span>{' '}
@@ -1023,7 +1004,7 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
                 return (
                   <section key={gs.sectionId} className="glass-card hoverable anim-fade-up" style={{ animationDelay: `${gi * 50}ms` }}>
                     {gs.title ? <SectionTitle icon={icon} title={gs.title} /> : null}
-                    <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] py-3 text-center text-[11px] text-slate-500">
+                    <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] py-3 text-center text-xs text-slate-500">
                       自由备注区（导出时保留）
                     </div>
                   </section>
@@ -1038,15 +1019,15 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
                     {gs.entries.length > 0 ? (
                       <div className="flex flex-col gap-1">
                         {gs.entries.map((ge) => (
-                          <div key={ge.reportEntry.id} className="flex items-center gap-2 rounded-lg px-1.5 py-1 text-[12px] text-slate-300">
+                          <div key={ge.reportEntry.id} className="flex items-center gap-2 rounded-lg px-1.5 py-1 text-xs text-slate-300">
                             <span className="h-1 w-1 shrink-0 rounded-full bg-neon-cyan/70" />
                             <span className="truncate">{ge.reportEntry.contentTag ?? ge.reportEntry.stateLabel}</span>
-                            <span className="ml-auto shrink-0 text-[10px] text-slate-600">{ge.reportEntry.stateLabel}</span>
+                            <span className="ml-auto shrink-0 text-2xs text-slate-600">{ge.reportEntry.stateLabel}</span>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-[11px] text-slate-600">暂无计划项</p>
+                      <p className="text-xs text-slate-600">暂无计划项</p>
                     )}
                   </section>
                 )
@@ -1077,7 +1058,7 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
                       ))}
                     </div>
                   ) : (
-                    <p className="text-[11px] text-slate-600">本段无匹配条目</p>
+                    <p className="text-xs text-slate-600">本段无匹配条目</p>
                   )}
                 </section>
               )
@@ -1095,10 +1076,10 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
               {report.achievements.map((a) => {
                 const m = ACH_META[a.status]
                 return (
-                  <div key={a.planId} className="flex items-center gap-2 rounded-lg px-1.5 py-1 text-[12px] transition-colors hover:bg-white/[0.03]">
+                  <div key={a.planId} className="flex items-center gap-2 rounded-lg px-1.5 py-1 text-xs transition-colors hover:bg-white/[0.03]">
                     <span className={`w-4 shrink-0 text-center ${m.cls}`}>{m.mark}</span>
                     <span className="min-w-0 truncate text-slate-300">{a.title}</span>
-                    <span className="ml-auto shrink-0 text-[11px] text-slate-500">
+                    <span className="ml-auto shrink-0 text-xs text-slate-500">
                       {fmtMin(a.actualMin)}/{fmtMin(a.plannedMin)} <span className={m.cls}>({Math.round(a.achievementRate * 100)}%)</span>
                     </span>
                   </div>
@@ -1106,7 +1087,7 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
               })}
             </div>
           ) : (
-            <p className="py-2 text-center text-[11px] text-slate-600">当日暂无计划项</p>
+            <p className="py-2 text-center text-xs text-slate-600">当日暂无计划项</p>
           )}
         </section>
 
@@ -1117,13 +1098,13 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
               {report.patterns.patternTags.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
                   {report.patterns.patternTags.map((t) => (
-                    <span key={t} className="rounded-full border border-neon-cyan/20 bg-neon-cyan/[0.08] px-2 py-0.5 text-[10px] text-neon-cyan">
+                    <span key={t} className="rounded-full border border-neon-cyan/20 bg-neon-cyan/[0.08] px-2 py-0.5 text-2xs text-neon-cyan">
                       {t}
                     </span>
                   ))}
                 </div>
               ) : null}
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-500">最佳时段</span>
                   <span className="font-medium text-slate-300">{report.patterns.peakHours[0]?.slot ?? '—'}</span>
@@ -1133,7 +1114,7 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
                   <span className="font-medium text-slate-300">
                     {report.patterns.fragmentationScore}/100
                     <span
-                      className={`ml-1 text-[10px] ${
+                      className={`ml-1 text-2xs ${
                         report.patterns.fragmentationScore < 25
                           ? 'text-neon-green'
                           : report.patterns.fragmentationScore > 60
@@ -1156,7 +1137,7 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
               </div>
             </div>
           ) : (
-            <p className="py-2 text-center text-[11px] text-slate-600">数据积累中（需≥3天）</p>
+            <p className="py-2 text-center text-xs text-slate-600">数据积累中（需≥3天）</p>
           )}
         </section>
       </div>
@@ -1226,18 +1207,18 @@ function WeekEntryCard({ e }: { e: ReportEntry }) {
       }`}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[12px] font-medium text-slate-200">
+        <span className="text-xs font-medium text-slate-200">
           {hhmm(e.startTs)}-{hhmm(e.endTs)} <span className="text-slate-500">({fmtMin(e.durationMin)})</span>
         </span>
-        <span className="rounded-full px-1.5 py-0.5 text-[10px] font-medium" style={{ background: `${color}1f`, color }}>
+        <span className="rounded-full px-1.5 py-0.5 text-2xs font-medium" style={{ background: `${color}1f`, color }}>
           {e.stateLabel}
         </span>
-        <span className={`ml-auto text-[10px] ${e.needsReview ? 'text-amber-400' : 'text-slate-500'}`}>
+        <span className={`ml-auto text-2xs ${e.needsReview ? 'text-amber-400' : 'text-slate-500'}`}>
           ★{e.confidence.toFixed(2)}
           {e.needsReview ? ' ⚠' : ''}
         </span>
       </div>
-      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px]">
+      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
         {dims.map(([label, v]) =>
           v ? (
             <span key={label} className="text-slate-400">
@@ -1348,7 +1329,7 @@ function SmartWeeklyReportView({ onSynced }: { onSynced?: () => void }) {
         <button className="glass-btn !px-1.5 !py-1" title="上一周" onClick={() => setAnchor(addDays(anchor, -7))}>
           <Icon name="chevronLeft" size={13} />
         </button>
-        <span className="min-w-40 text-center text-[13px] font-medium text-slate-200">
+        <span className="min-w-40 text-center text-sm font-medium text-slate-200">
           {fmtDateLabel(monday)} ~ {fmtDateLabel(addDays(monday, 6))}
         </span>
         <button
@@ -1360,22 +1341,22 @@ function SmartWeeklyReportView({ onSynced }: { onSynced?: () => void }) {
           <Icon name="chevronRight" size={13} />
         </button>
         {!isCurrentWeek ? (
-          <button className="glass-btn !px-2 !py-1 !text-[11px]" onClick={() => setAnchor(todayKey())}>
+          <button className="glass-btn !px-2 !py-1 !text-xs" onClick={() => setAnchor(todayKey())}>
             本周
           </button>
         ) : null}
         <div className="flex-1" />
         {/* AI 开关二态胶囊（周报 AI 复用单日管线增强） */}
         <button
-          className="flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[11px] text-slate-300 transition-colors hover:border-white/[0.16]"
+          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-slate-500 hover:bg-[var(--surface-3)] hover:text-slate-300"
           onClick={toggleAI}
           title="切换后自动重新生成"
         >
-          <span className={`h-1.5 w-1.5 rounded-full ${aiOn ? 'bg-violet-400 shadow-[0_0_6px_rgba(167,139,250,0.8)]' : 'bg-neon-green'}`} />
+          <span className={`h-1.5 w-1.5 rounded-full ${aiOn ? 'bg-[var(--accent)]' : 'bg-slate-500'}`} />
           {aiOn ? 'AI 增强 · 在线' : '基础能力 · 离线'}
         </button>
         {aiStatusText ? (
-          <span className={`text-[10px] ${report?.aiStatus === 'fallback_to_base' ? 'text-amber-400' : 'text-slate-500'}`}>{aiStatusText}</span>
+          <span className={`text-2xs ${report?.aiStatus === 'fallback_to_base' ? 'text-amber-500' : 'text-slate-500'}`}>{aiStatusText}</span>
         ) : null}
       </div>
 
@@ -1427,7 +1408,7 @@ function SmartWeeklyReportView({ onSynced }: { onSynced?: () => void }) {
       ) : !report || report.days.every((d) => d.entries.length === 0) ? (
         <div className="glass-card flex flex-col items-center gap-2 py-10 text-center">
           <span className="text-2xl opacity-70">🗓️</span>
-          <p className="text-[12px] text-slate-500">这一周还没有足够数据，换一周看看吧。</p>
+          <p className="text-xs text-slate-500">这一周还没有足够数据，换一周看看吧。</p>
         </div>
       ) : (
         report.days.map((day, di) => (

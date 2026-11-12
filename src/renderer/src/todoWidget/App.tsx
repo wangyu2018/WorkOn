@@ -379,12 +379,12 @@ export default function TodoWidgetApp() {
   const renderPlanRow = (p: PlanItem, nested = false) => (
     <div key={p.id} className={`flex items-center gap-2 py-[3px] ${nested ? 'pl-4' : ''}`}>
       <button
-        className={`shrink-0 text-[12px] ${p.status === 'done' ? 'text-[var(--teal-deep)]' : 'text-slate-500 hover:text-slate-300'}`}
+        className={`shrink-0 text-xs ${p.status === 'done' ? 'text-[var(--teal-deep)]' : 'text-slate-500 hover:text-slate-300'}`}
         onClick={() => void togglePlan(p)}
       >
         {p.status === 'done' ? '☑' : p.status === 'in_progress' || p.status === 'partial' ? '◐' : '○'}
       </button>
-      <span className={`min-w-0 flex-1 truncate text-[12px] ${p.status === 'done' ? 'text-slate-500 line-through' : nested ? 'text-slate-400' : 'text-slate-300'}`}>
+      <span className={`min-w-0 flex-1 truncate text-xs ${p.status === 'done' ? 'text-slate-500 line-through' : nested ? 'text-slate-400' : 'text-slate-300'}`}>
         {nested ? `↳ ${p.title}` : p.title}
       </span>
     </div>
@@ -415,7 +415,7 @@ export default function TodoWidgetApp() {
       <div key={t.id} style={{ paddingLeft: isLevel2 ? 14 : 26 }} className="py-[3px]">
         <div className="group flex items-center gap-2">
           <button
-            className={`shrink-0 text-[12px] transition-colors ${st === 'done' ? 'text-[var(--teal-deep)]' : st === 'doing' ? 'text-[#fbbf24]' : 'text-slate-500 hover:text-slate-300'}`}
+            className={`shrink-0 text-xs transition-colors ${st === 'done' ? 'text-[var(--teal-deep)]' : st === 'doing' ? 'text-[#fbbf24]' : 'text-slate-500 hover:text-slate-300'}`}
             style={APP_NO_DRAG}
             onClick={() => void toggleTask(t)}
             title={st === 'done' ? '取消完成' : '完成'}
@@ -423,7 +423,7 @@ export default function TodoWidgetApp() {
             {STATE_MARK[st]}
           </button>
           <span
-            className={`min-w-0 flex-1 cursor-pointer truncate text-left text-[12px] ${
+            className={`min-w-0 flex-1 cursor-pointer truncate text-left text-xs ${
               st === 'done' ? 'text-slate-500 line-through decoration-slate-600' : isCurrent ? 'font-medium text-[var(--teal-deep)]' : 'text-slate-300'
             }`}
             style={APP_NO_DRAG}
@@ -433,11 +433,11 @@ export default function TodoWidgetApp() {
             }}
           >
             {t.title}
-            {isCurrent ? <span className="ml-1.5 text-[10px] text-[var(--teal-deep)]">● 正在干{attr?.sec ? ` ${Math.max(1, Math.round(attr.sec / 60))}m` : ''}</span> : null}
+            {isCurrent ? <span className="ml-1.5 text-2xs text-[var(--teal-deep)]">● 正在干{attr?.sec ? ` ${Math.max(1, Math.round(attr.sec / 60))}m` : ''}</span> : null}
           </span>
         </div>
         {open && isLevel2 ? (
-          <div className="mt-0.5 rounded-lg bg-white/[0.03] px-2.5 py-1.5 text-[10.5px] leading-relaxed text-slate-500">
+          <div className="mt-0.5 rounded-lg bg-white/[0.03] px-2.5 py-1.5 text-2xs leading-relaxed text-slate-500">
             {isCurrent
               ? `今天：归属自实时监控 · 已持续 ${Math.max(1, Math.round((attr?.sec ?? 0) / 60))} 分钟`
               : (activityHint[projectId] ?? '加载中…')}
@@ -463,12 +463,12 @@ export default function TodoWidgetApp() {
         onClick={() => setCollapsed(false)}
         title="展开待办"
       >
-        <span className={`text-[11px] font-semibold tracking-wide ${lightMode ? 'text-slate-700' : 'text-white/90'}`}>
+        <span className={`text-xs font-semibold tracking-wide ${lightMode ? 'text-slate-700' : 'text-white/90'}`}>
           待办
         </span>
         {openN > 0 ? (
           <span
-            className="min-w-[16px] rounded-full px-1 text-center text-[9px] font-bold text-white"
+            className="min-w-[16px] rounded-full px-1 text-center text-2xs font-bold text-white"
             style={{ background: 'var(--teal)' }}
           >
             {openN > 99 ? '99+' : openN}
@@ -494,7 +494,7 @@ export default function TodoWidgetApp() {
         <div className="flex cursor-move items-center justify-end gap-1.5 pb-1" style={APP_DRAG}>
           <button
             type="button"
-            className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+            className={`rounded-md px-1.5 py-0.5 text-2xs font-medium transition-colors ${
               editMode
                 ? 'bg-[var(--teal-soft)] text-[var(--teal-deep)]'
                 : 'text-slate-500 hover:text-slate-200'
@@ -506,7 +506,7 @@ export default function TodoWidgetApp() {
           </button>
           <button
             type="button"
-            className={`text-[11px] transition-colors ${penetrated ? 'text-[#fbbf24]' : 'text-slate-500 hover:text-slate-200'}`}
+            className={`text-xs transition-colors ${penetrated ? 'text-[#fbbf24]' : 'text-slate-500 hover:text-slate-200'}`}
             style={APP_NO_DRAG}
             title={penetrated ? '关闭穿透（恢复交互）' : '开启穿透（纯查看，不挡操作）'}
             onClick={() => {
@@ -517,7 +517,7 @@ export default function TodoWidgetApp() {
           >👁</button>
           <button
             type="button"
-            className="text-[11px] text-slate-500 transition-colors hover:text-slate-200"
+            className="text-xs text-slate-500 transition-colors hover:text-slate-200"
             style={APP_NO_DRAG}
             onClick={() => setCollapsed(true)}
             title="收起"
@@ -529,14 +529,14 @@ export default function TodoWidgetApp() {
           </div>
         ) : null}
         <div className="min-h-0 flex-1 overflow-y-auto pr-0.5" style={APP_NO_DRAG}>
-          {loadErr ? <div className="mb-2 text-[10.5px] text-[#f87171]">加载失败：{loadErr}</div> : null}
+          {loadErr ? <div className="mb-2 text-2xs text-[#f87171]">加载失败：{loadErr}</div> : null}
           {editMode ? (
             <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-lg border border-dashed border-[var(--line)] p-1.5">
-              <span className="text-[10px] text-slate-500">显示分区：</span>
+              <span className="text-2xs text-slate-500">显示分区：</span>
               {([['projects', t('project')], ['todos', '待办'], ['life', '生活']] as const).map(([k, label]) => (
                 <button
                   key={k}
-                  className={`rounded-full border px-2 py-0.5 text-[10px] font-bold transition-all ${zoneOn(k) ? 'border-[rgba(15,181,164,0.5)] bg-[var(--teal-soft)] text-[var(--teal-deep)]' : 'border-[var(--line)] text-slate-500'}`}
+                  className={`rounded-full border px-2 py-0.5 text-2xs font-bold transition-all ${zoneOn(k) ? 'border-[rgba(15,181,164,0.5)] bg-[var(--teal-soft)] text-[var(--teal-deep)]' : 'border-[var(--line)] text-slate-500'}`}
                   onClick={() => toggleZone(k)}
                 >
                   {label}{zoneOn(k) ? ' ✓' : ''}
@@ -570,12 +570,12 @@ export default function TodoWidgetApp() {
                 return (
                   <div key={p.id} className="mb-2">
                     <div className="flex cursor-pointer items-center gap-1.5 py-[3px]" onClick={() => setExpanded((e) => ({ ...e, [p.id]: !open }))}>
-                      <span className="text-[10px] text-slate-500">{open ? '▾' : '▸'}</span>
-                      <span className="shrink-0 text-[9px]" style={{ color: PRIO_META[p.priority ?? 'medium'].color }} title={`优先级：${PRIO_META[p.priority ?? 'medium'].label}`}>{PRIO_META[p.priority ?? 'medium'].mark}</span>
-                      <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-slate-100">{p.name}</span>
+                      <span className="text-2xs text-slate-500">{open ? '▾' : '▸'}</span>
+                      <span className="shrink-0 text-2xs" style={{ color: PRIO_META[p.priority ?? 'medium'].color }} title={`优先级：${PRIO_META[p.priority ?? 'medium'].label}`}>{PRIO_META[p.priority ?? 'medium'].mark}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-100">{p.name}</span>
                       {combinedTotal > 0 ? (
                         <span className="flex shrink-0 items-center gap-1.5">
-                          <span className="text-[10px] tabular-nums text-slate-500">{combinedPct}%</span>
+                          <span className="text-2xs tabular-nums text-slate-500">{combinedPct}%</span>
                           <span className="h-1 w-12 overflow-hidden rounded-full bg-white/10">
                             <span className="block h-full rounded-full bg-[var(--teal)]" style={{ width: `${combinedPct}%` }} />
                           </span>
@@ -586,7 +586,7 @@ export default function TodoWidgetApp() {
                           const days = Math.ceil((new Date(`${p.deadline}T23:59:59`).getTime() - Date.now()) / 86400000)
                           return (
                             <span
-                              className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${
+                              className={`shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-bold ${
                                 days < 0 ? 'bg-[rgba(239,68,68,0.12)] text-[#f87171]' : days <= 7 ? 'bg-[rgba(245,158,11,0.12)] text-[#fbbf24]' : 'bg-[var(--teal-soft)] text-[var(--teal-deep)]'
                               }`}
                             >
@@ -595,21 +595,21 @@ export default function TodoWidgetApp() {
                           )
                         })()
                       ) : combinedTotal - combinedDone > 0 ? (
-                        <span className="shrink-0 text-[9px] text-slate-500">剩{combinedTotal - combinedDone}项</span>
+                        <span className="shrink-0 text-2xs text-slate-500">剩{combinedTotal - combinedDone}项</span>
                       ) : null}
                     </div>
                     {open ? (
                       <>
                         {shown.map((t) => renderNode(t, p.id, true))}
                         {list.length > shown.length ? (
-                          <div className="pl-6 text-[10px] text-slate-600">还有 {list.length - shown.length} 条跨天任务</div>
+                          <div className="pl-6 text-2xs text-slate-600">还有 {list.length - shown.length} 条跨天任务</div>
                         ) : null}
                         {shownPlans.length ? (
                           <>
                             {list.length ? (
-                              <div className="mb-0.5 mt-1 pl-6 text-[9px] uppercase tracking-wider text-slate-600">今日安排</div>
+                              <div className="mb-0.5 mt-1 pl-6 text-2xs uppercase tracking-wider text-slate-600">今日安排</div>
                             ) : (
-                              <div className="mb-0.5 mt-0.5 pl-6 text-[9px] uppercase tracking-wider text-slate-600">今日安排</div>
+                              <div className="mb-0.5 mt-0.5 pl-6 text-2xs uppercase tracking-wider text-slate-600">今日安排</div>
                             )}
                             {shownPlans.map((pl) => (
                               <div key={pl.id}>
@@ -620,49 +620,49 @@ export default function TodoWidgetApp() {
                               </div>
                             ))}
                             {linkedPlans.length > shownPlans.length ? (
-                              <div className="pl-6 text-[10px] text-slate-600">还有 {linkedPlans.length - shownPlans.length} 条今日安排</div>
+                              <div className="pl-6 text-2xs text-slate-600">还有 {linkedPlans.length - shownPlans.length} 条今日安排</div>
                             ) : null}
                           </>
                         ) : null}
                         {!list.length && !linkedPlans.length ? (
-                          <div className="pl-6 text-[10.5px] text-slate-600">暂无任务 / 今日待办</div>
+                          <div className="pl-6 text-2xs text-slate-600">暂无任务 / 今日待办</div>
                         ) : null}
                       </>
                     ) : null}
                   </div>
                 )
               })}
-              {!projects.length ? <div className="py-1 text-[11px] text-slate-600">还没有活跃项目 · Alt+Space 打开对话框创建</div> : null}
+              {!projects.length ? <div className="py-1 text-xs text-slate-600">还没有活跃项目 · Alt+Space 打开对话框创建</div> : null}
             </>
           ) : null}
 
           {/* ── 待办区：未挂项目的今日项 ── */}
           {zoneOn('todos') ? (
             <>
-              <div className="mb-0.5 mt-3 border-t border-[var(--line)] pt-2 text-[10px] uppercase tracking-wider text-slate-600">待办 · 未挂项目</div>
+              <div className="mb-0.5 mt-3 border-t border-[var(--line)] pt-2 text-2xs uppercase tracking-wider text-slate-600">待办 · 未挂项目</div>
               {todoZone.map((p) => (
                 <div key={p.id}>
                   {renderPlanRow(p)}
                   {(childMap[p.id] ?? []).map((c) => renderPlanRow(c, true))}
                 </div>
               ))}
-              {!todoZone.length ? <div className="py-1 text-[10.5px] text-slate-600">暂无未挂{t('project')}的待办</div> : null}
-              {todoRoots.length > todoZone.length ? <div className="text-[10px] text-slate-600">还有 {todoRoots.length - todoZone.length} 条</div> : null}
+              {!todoZone.length ? <div className="py-1 text-2xs text-slate-600">暂无未挂{t('project')}的待办</div> : null}
+              {todoRoots.length > todoZone.length ? <div className="text-2xs text-slate-600">还有 {todoRoots.length - todoZone.length} 条</div> : null}
             </>
           ) : null}
 
           {/* ── 生活区 ── */}
           {zoneOn('life') ? (
             <>
-              <div className="mb-0.5 mt-3 border-t border-[var(--line)] pt-2 text-[10px] uppercase tracking-wider text-slate-600">生活</div>
+              <div className="mb-0.5 mt-3 border-t border-[var(--line)] pt-2 text-2xs uppercase tracking-wider text-slate-600">生活</div>
               {lifeZone.map((p) => (
                 <div key={p.id}>
                   {renderPlanRow(p)}
                   {(childMap[p.id] ?? []).map((c) => renderPlanRow(c, true))}
                 </div>
               ))}
-              {!lifeZone.length ? <div className="py-1 text-[10.5px] text-slate-600">暂无生活事项</div> : null}
-              {lifeRoots.length > lifeZone.length ? <div className="text-[10px] text-slate-600">还有 {lifeRoots.length - lifeZone.length} 条</div> : null}
+              {!lifeZone.length ? <div className="py-1 text-2xs text-slate-600">暂无生活事项</div> : null}
+              {lifeRoots.length > lifeZone.length ? <div className="text-2xs text-slate-600">还有 {lifeRoots.length - lifeZone.length} 条</div> : null}
             </>
           ) : null}
         </div>

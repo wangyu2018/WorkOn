@@ -129,7 +129,7 @@ export const WeatherBadge = memo(function WeatherBadge() {
 
   return (
     <div
-      className="app-no-drag flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] text-slate-300 transition-colors hover:bg-white/[0.06]"
+      className="app-no-drag flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-slate-300 transition-colors hover:bg-white/[0.06]"
       title={`${data.city} · 当前 ${data.text} ${data.tempC}°C · 今日 ${data.minC}~${data.maxC}°C${rainHour ? ` · 未来${weatherHours}h ${rainHour.text} ${rainHour.tempC}°C` : ''}`}
     >
       <WeatherGlyph text={rainHour?.text ?? data.text} />

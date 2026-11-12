@@ -3,6 +3,7 @@
  */
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron'
 import type { AppSettings, PetState, PlanStatus } from '@shared/types'
+import type { TraceEvent } from '@shared/trace'
 
 function on<T>(channel: string) {
   return (cb: (payload: T) => void) => {
@@ -187,6 +188,14 @@ const api = {
   aiProjectReview: (projectId: string, trailMinutes: number) => ipcRenderer.invoke('projects:aiReview', projectId, trailMinutes),
   aiDevAdvice: (ctx: unknown) => ipcRenderer.invoke('projects:aiDevAdvice', ctx),
 
+  // 一分钟校对（待确认队列）
+  reviewPending: (date?: string) => ipcRenderer.invoke('review:pending', date),
+  reviewSummary: (date?: string) => ipcRenderer.invoke('review:summary', date),
+  reviewConfirm: (app: string, projectId: string | null, date?: string) =>
+    ipcRenderer.invoke('review:confirm', app, projectId, date),
+  reviewIgnore: (app: string, date?: string) => ipcRenderer.invoke('review:ignore', app, date),
+  reviewProjects: () => ipcRenderer.invoke('review:projects'),
+
   // AI 分析 / 问答
   getAnalysis: (date?: string) => ipcRenderer.invoke('analysis:get', date),
   refreshAnalysis: () => ipcRenderer.invoke('analysis:refresh'),
@@ -214,6 +223,8 @@ const api = {
   onAIStreamError: on('ai:streamError'),
   onAIStreamReset: on('ai:streamReset'),
   onAIStreamTool: on('ai:streamTool'),
+  onAITrace: on<TraceEvent>('ai:trace'),
+  getAITrace: (traceId: string) => ipcRenderer.invoke('ai:getTrace', traceId),
   listQA: () => ipcRenderer.invoke('qa:list'),
   pruneQA: (keepIds: string[]) => ipcRenderer.invoke('qa:prune', keepIds),
   listMemos: () => ipcRenderer.invoke('memos:list'),

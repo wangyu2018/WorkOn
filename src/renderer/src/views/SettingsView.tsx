@@ -4,6 +4,7 @@ import { AI_ASSIST_POOL, normalizeAssistKey } from '@shared/aiAssistWatch'
 import { useSettingsStore } from '../stores/settingsStore'
 import { Icon } from '../components/Icon'
 import { Toggle } from '../components/Toggle'
+import { ModalShell } from '../components/ui/Modal'
 import { PerfPanel } from '../components/PerfPanel'
 
 const ASSIST_MIME = 'application/x-workon-ai-assist'
@@ -59,7 +60,7 @@ function AiAssistWatchDrag({
         onDragOver={allow}
         onDrop={dropIn}
       >
-        <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">监控中</div>
+        <div className="mb-1.5 text-2xs font-medium uppercase tracking-wider text-slate-400">监控中</div>
         <div className="flex min-h-[52px] flex-wrap gap-1.5">
           {watchRows.length ? (
             watchRows.map((r) => (
@@ -68,13 +69,13 @@ function AiAssistWatchDrag({
                 type="button"
                 draggable
                 onDragStart={(e) => onDragStart(e, r.key)}
-                className="cursor-grab rounded-lg border border-[var(--border-active)] bg-[var(--surface-3)] px-2 py-1 text-[11px] text-slate-200 active:cursor-grabbing"
+                className="cursor-grab rounded-lg border border-[var(--border-active)] bg-[var(--surface-3)] px-2 py-1 text-xs text-slate-200 active:cursor-grabbing"
               >
                 {r.label}
               </button>
             ))
           ) : (
-            <span className="text-[11px] text-slate-600">从右侧拖入</span>
+            <span className="text-xs text-slate-600">从右侧拖入</span>
           )}
         </div>
       </div>
@@ -83,7 +84,7 @@ function AiAssistWatchDrag({
         onDragOver={allow}
         onDrop={dropOut}
       >
-        <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">未监控</div>
+        <div className="mb-1.5 text-2xs font-medium uppercase tracking-wider text-slate-500">未监控</div>
         <div className="flex min-h-[52px] flex-wrap gap-1.5">
           {AI_ASSIST_POOL.filter((p) => !watchedSet.has(p.key)).map((r) => (
             <button
@@ -91,7 +92,7 @@ function AiAssistWatchDrag({
               type="button"
               draggable
               onDragStart={(e) => onDragStart(e, r.key)}
-              className="cursor-grab rounded-lg border border-[var(--line)] bg-transparent px-2 py-1 text-[11px] text-slate-400 active:cursor-grabbing hover:border-slate-500"
+              className="cursor-grab rounded-lg border border-[var(--line)] bg-transparent px-2 py-1 text-xs text-slate-400 active:cursor-grabbing hover:border-slate-500"
             >
               {r.label}
             </button>
@@ -126,10 +127,10 @@ function WatchedFolders() {
   return (
     <div className="space-y-2">
       {dirs.length === 0 ? (
-        <p className="text-[12px] text-slate-600">尚未添加工作文件夹。点击下方按钮选择目录。</p>
+        <p className="text-xs text-slate-600">尚未添加工作文件夹。点击下方按钮选择目录。</p>
       ) : (
         dirs.map((d) => (
-          <div key={d} className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2 text-[12px]">
+          <div key={d} className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2 text-xs">
             <span className="text-slate-300 truncate">{d}</span>
             <button onClick={() => void removeFolder(d)} className="text-slate-500 hover:text-red-400">✕</button>
           </div>
@@ -147,7 +148,7 @@ function WatchedFolders() {
 function Section({ title, icon, children }: { title: string; icon: Parameters<typeof Icon>[0]['name']; children: React.ReactNode }) {
   return (
     <section className="glass-card hoverable">
-      <h2 className="mb-2 flex items-center gap-2.5 text-[13px] font-semibold text-slate-200">
+      <h2 className="mb-2 flex items-center gap-2.5 text-sm font-semibold text-slate-200">
         <span
           className="flex h-6 w-6 items-center justify-center rounded-lg border"
           style={{ background: 'var(--accent-softer)', borderColor: 'var(--border-active)', color: 'var(--accent)' }}
@@ -165,8 +166,8 @@ function Row({ label, desc, children }: { label: string; desc?: string; children
   return (
     <div className="flex items-center gap-4 py-2.5">
       <div className="min-w-0 flex-1">
-        <div className="text-[13px] text-slate-300">{label}</div>
-        {desc ? <div className="mt-0.5 text-[11px] text-slate-500">{desc}</div> : null}
+        <div className="text-sm text-slate-300">{label}</div>
+        {desc ? <div className="mt-0.5 text-xs text-slate-500">{desc}</div> : null}
       </div>
       <div className="shrink-0">{children}</div>
     </div>
@@ -192,7 +193,7 @@ function IntegrationSection({
   return (
     <Section title={title} icon={icon}>
       <div className="py-1">
-        <p className="mb-2 text-[12px] leading-relaxed text-slate-500">{description}</p>
+        <p className="mb-2 text-xs leading-relaxed text-slate-500">{description}</p>
         <Row label="启用">
           <Toggle checked={enabled} onChange={onToggle} />
         </Row>
@@ -281,7 +282,7 @@ function NumberSetting({
           if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
         }}
       />
-      {suffix ? <span className="text-[11px] text-slate-500">{suffix}</span> : null}
+      {suffix ? <span className="text-xs text-slate-500">{suffix}</span> : null}
     </span>
   )
 }
@@ -301,15 +302,15 @@ function PromptLayers() {
   }
   return (
     <div className="py-2.5">
-      <button className="text-[11px] text-neon-cyan/70 transition-colors hover:text-neon-cyan" onClick={load}>
+      <button className="text-xs text-neon-cyan/70 transition-colors hover:text-neon-cyan" onClick={load}>
         {open ? '▾ 收起提示词三层上下文' : '▸ 查看提示词三层上下文（调试）'}
       </button>
       {open && layers ? (
         <div className="anim-fade-in mt-2 flex flex-col gap-2">
           {layers.map((l, i) => (
             <div key={i} className="rounded-lg border border-white/[0.07] bg-white/[0.02] p-2.5">
-              <div className="mb-1 text-[11px] font-medium text-neon-violet">{l.title}</div>
-              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all text-[10px] leading-relaxed text-slate-400">
+              <div className="mb-1 text-xs font-medium text-neon-violet">{l.title}</div>
+              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all text-2xs leading-relaxed text-slate-400">
                 {typeof l.data === 'string' ? l.data : JSON.stringify(l.data, null, 2)}
               </pre>
             </div>
@@ -423,11 +424,11 @@ export default function SettingsView() {
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
       {!localStorage.getItem('introBarDismissed') && (
         <div className="glass-card hoverable flex items-center justify-between px-4 py-2.5 mb-0">
-          <span className="text-[12px] text-slate-400">
+          <span className="text-xs text-slate-400">
             <span className="text-slate-200 font-medium">WorkOn</span> = 看得见的专注，有人陪你把一天过明白
           </span>
           <div className="flex items-center gap-3">
-            <button className="text-[11px] text-neon-cyan hover:underline" onClick={() => setIntroOpen(true)}>查看全部功能</button>
+            <button className="text-xs text-neon-cyan hover:underline" onClick={() => setIntroOpen(true)}>查看全部功能</button>
             <button className="text-slate-500 hover:text-slate-300" onClick={() => { localStorage.setItem('introBarDismissed', '1'); /* force re-render via state */ setIntroOpen(false) }}>✕</button>
           </div>
         </div>
@@ -448,7 +449,7 @@ export default function SettingsView() {
             ).map(([id, label]) => (
               <button
                 key={id}
-                className={`rounded-full border px-2.5 py-0.5 text-[11px] transition-colors ${
+                className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
                   (settings.ocrEngine || 'auto') === id
                     ? 'border-[var(--teal-border)] bg-[var(--teal-soft)] text-[var(--teal-deep)]'
                     : 'border-[var(--line)] text-slate-400 hover:text-slate-200'
@@ -507,19 +508,19 @@ export default function SettingsView() {
         {settings.aiAssistWatchEnabled ? <AiAssistWatchDrag settings={settings} patch={p} /> : null}
       </Section>
       {aiKeyHint ? (
-        <div className="anim-fade-in rounded-xl border border-neon-amber/30 bg-neon-amber/10 px-4 py-2.5 text-[12px] text-neon-amber">
+        <div className="anim-fade-in rounded-xl border border-neon-amber/30 bg-neon-amber/10 px-4 py-2.5 text-xs text-neon-amber">
           ⚠️ {aiKeyHint}
         </div>
       ) : null}
       <Section title="AI" icon="brain">
         <div className="py-1">
-          <p className="mb-2 text-[12px] leading-relaxed text-slate-500">
+          <p className="mb-2 text-xs leading-relaxed text-slate-500">
             开启后解锁：LLM 深度画像、情境化建议、智能问答、提示词三层上下文。未开启时基础能力仍可用：规则分析（专注/效率指数、最佳时段、分心应用）、本地统计问答、习惯推导。
           </p>
           <div className="flex items-center justify-between gap-3">
             <Row label="启用">
               <div className="flex items-center gap-2">
-                {aiEnabling ? <span className="text-[11px] text-slate-500">校验中…</span> : null}
+                {aiEnabling ? <span className="text-xs text-slate-500">校验中…</span> : null}
                 <Toggle
                   checked={settings.aiEnabled}
                   disabled={aiEnabling}
@@ -527,7 +528,7 @@ export default function SettingsView() {
                 />
               </div>
             </Row>
-            <button className="shrink-0 text-[11px] text-neon-cyan/70 transition-colors hover:text-neon-cyan" onClick={() => setAiExpanded((e) => !e)}>
+            <button className="shrink-0 text-xs text-neon-cyan/70 transition-colors hover:text-neon-cyan" onClick={() => setAiExpanded((e) => !e)}>
               {aiExpanded ? '▾ 收起配置参数' : '▸ 展开配置参数'}
             </button>
           </div>
@@ -573,7 +574,7 @@ export default function SettingsView() {
                   </button>
                   {aiTest.text ? (
                     <div
-                      className={`anim-fade-in max-w-[300px] text-right text-[11px] ${
+                      className={`anim-fade-in max-w-[300px] text-right text-xs ${
                         aiTest.state === 'ok' ? 'text-neon-green' : 'text-neon-red'
                       }`}
                     >
@@ -587,10 +588,10 @@ export default function SettingsView() {
               {settings.devMode ? <PromptLayers /> : null}
             </div>
           ) : null}
-          <details className="mt-3 text-[12px]">
+          <details className="mt-3 text-xs">
             <summary className="cursor-pointer text-slate-400 hover:text-slate-200">📊 查看能力边界</summary>
             <div className="mt-2 rounded-xl border border-white/10 p-3">
-              <div className="grid grid-cols-3 gap-2 text-[11px]">
+              <div className="grid grid-cols-3 gap-2 text-xs">
                 <div className="font-medium text-slate-300">功能</div><div className="font-medium text-slate-400 text-center">无需 AI</div><div className="font-medium text-[var(--teal)] text-center">开启 AI 后增强</div>
                 {['日报/周报生成|65% 覆盖|95% + 摘要/拆解','实际活动记录|✓ 本地规则|LLM 增强','快捷推荐|✗|AI 推荐','注意力曲线|✓ 算法|—','位置提醒|✓ 天气 API|—','文件夹解析|✓ 正则|LLM 归纳','任务排期（AI）|按预估工时排序|AI 智能排入每日计划','实时建议提醒|固定模板|AI 结合当前项目/状态生成','项目复盘|✓ 手动汇总|AI 自动生成复盘与改进建议'].map((r,i)=>{const [n,w,a]=r.split('|');return <Fragment key={i}><div className="text-slate-200">{n}</div><div className="text-slate-400 text-center">{w}</div><div className="text-[var(--teal)] text-center">{a}</div></Fragment>})}
               </div>
@@ -601,11 +602,11 @@ export default function SettingsView() {
 
       {/* 4. 外观 */}
       <Section title="桌面组件" icon="monitor">
-        <div className="mb-2 rounded-lg border border-white/[0.05] bg-white/[0.02] px-2.5 py-1.5 text-[11px] text-slate-500">
+        <div className="mb-2 rounded-lg border border-white/[0.05] bg-white/[0.02] px-2.5 py-1.5 text-xs text-slate-500">
           完整管控（显隐 / 钉桌面 / 顶层 / 穿透）在「搭子」页；此处为快捷入口。
           「钉桌面」= 和桌面图标同层（显示桌面后仍在）；「沉底/关顶层」只是普通窗口往后排，不是钉桌面。
         </div>
-        <div className="flex flex-col gap-3 py-1 text-[12px]">
+        <div className="flex flex-col gap-3 py-1 text-xs">
           {/* 监控悬浮窗 */}
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
@@ -623,19 +624,19 @@ export default function SettingsView() {
             <div className="flex flex-wrap gap-1.5">
               <button
                 type="button"
-                className="glass-btn !px-2 !py-0.5 text-[10px]"
+                className="glass-btn !px-2 !py-0.5 text-2xs"
                 onClick={() => void patch({ widgetMode: 'mini', widgetDockEdge: null })}
               >
                 收起到 mini
               </button>
               <button
                 type="button"
-                className="glass-btn !px-2 !py-0.5 text-[10px]"
+                className="glass-btn !px-2 !py-0.5 text-2xs"
                 onClick={() => void patch({ widgetDockEdge: null })}
               >
                 清除贴边吸附
               </button>
-              <span className="text-[10px] text-slate-600">空区挖洞默认开；整窗穿透后需在此关闭</span>
+              <span className="text-2xs text-slate-600">空区挖洞默认开；整窗穿透后需在此关闭</span>
             </div>
           </div>
           {/* 待办树小组件 */}
@@ -643,7 +644,7 @@ export default function SettingsView() {
             <div className="flex items-center justify-between">
               <span className="font-medium text-slate-300">待办树小组件</span>
               <div className="flex items-center gap-3">
-                <button className="glass-btn !px-2 !py-0.5 text-[10px]" onClick={() => void window.api?.toggleTodoWidget?.()}>
+                <button className="glass-btn !px-2 !py-0.5 text-2xs" onClick={() => void window.api?.toggleTodoWidget?.()}>
                   {settings.todoWidgetVisible ? '隐藏' : '显示'}
                 </button>
                 <label className="flex items-center gap-1.5 text-slate-500">
@@ -719,8 +720,8 @@ export default function SettingsView() {
         </Row>
         <div className="flex items-center gap-4 py-2.5">
           <div className="min-w-0 flex-1">
-            <div className="text-[13px] text-slate-300">亮暗模式</div>
-            <div className="mt-0.5 text-[11px] text-slate-500">跟随系统时随操作系统自动切换</div>
+            <div className="text-sm text-slate-300">亮暗模式</div>
+            <div className="mt-0.5 text-xs text-slate-500">跟随系统时随操作系统自动切换</div>
           </div>
         </div>
         {/* 外观三卡：浅色 / 深色 / 跟随系统（绑定 settings.appearanceMode） */}
@@ -745,14 +746,14 @@ export default function SettingsView() {
                 }}
               >
                 <span className="flex items-center gap-2">
-                  <span className="text-[16px] leading-none">{emoji}</span>
-                  <span className={`text-[13px] font-medium ${active ? 'text-slate-100' : 'text-slate-300'}`}>{label}</span>
+                  <span className="text-lg leading-none">{emoji}</span>
+                  <span className={`text-sm font-medium ${active ? 'text-slate-100' : 'text-slate-300'}`}>{label}</span>
                   <span
                     className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full transition-all"
                     style={{ background: active ? 'var(--teal)' : 'transparent', boxShadow: active ? '0 0 6px var(--teal)' : 'none' }}
                   />
                 </span>
-                <span className="mt-1 block text-[10.5px] leading-relaxed text-slate-500">{desc}</span>
+                <span className="mt-1 block text-2xs leading-relaxed text-slate-500">{desc}</span>
               </button>
             )
           })}
@@ -785,7 +786,7 @@ export default function SettingsView() {
                     className="h-8 w-8 shrink-0 overflow-hidden rounded-lg border border-white/10"
                     style={{ background: `linear-gradient(145deg, ${c1}, ${c2})` }}
                   />
-                  <span className={`text-[12px] ${active ? 'text-slate-100' : 'text-slate-400'}`}>{label}</span>
+                  <span className={`text-xs ${active ? 'text-slate-100' : 'text-slate-400'}`}>{label}</span>
                 </button>
               )
             })}
@@ -854,7 +855,7 @@ export default function SettingsView() {
             {(['rules', 'shadow', 'model_first'] as const).map((m) => (
               <button
                 key={m}
-                className={`glass-btn !px-2.5 !py-1 !text-[11px] ${settings.recognitionMode === m ? 'primary' : ''}`}
+                className={`glass-btn !px-2.5 !py-1 !text-xs ${settings.recognitionMode === m ? 'primary' : ''}`}
                 onClick={() => p({ recognitionMode: m })}
               >
                 {m === 'rules' ? '纯规则' : m === 'shadow' ? '影子' : '模型优先'}
@@ -872,17 +873,17 @@ export default function SettingsView() {
         {settings.devMode ? (
           <Row label="OCR 数据集（开发者）" desc="本地导出截图/结构化数据，或批量 OCR 生成标注集（数据不出本机）">
             <div className="flex items-center gap-2">
-              <button className="glass-btn !px-2.5 !py-1 !text-[11px]" onClick={() => void exportOcr()} title="导出结构化快照 + 截屏清单">
+              <button className="glass-btn !px-2.5 !py-1 !text-xs" onClick={() => void exportOcr()} title="导出结构化快照 + 截屏清单">
                 <Icon name="folder" size={12} /> 导出数据
               </button>
-              <button className="glass-btn !px-2.5 !py-1 !text-[11px]" onClick={() => void batchOcr()} title="对全部截屏批量 RapidOCR 生成标注集">
+              <button className="glass-btn !px-2.5 !py-1 !text-xs" onClick={() => void batchOcr()} title="对全部截屏批量 RapidOCR 生成标注集">
                 <Icon name="scan" size={12} /> 批量 OCR 标注
               </button>
-              <button className="glass-btn !px-2.5 !py-1 !text-[11px]" onClick={() => void exportPrompts()} title="导出 AI 提示词/规则集，用于训练本地小模型">
+              <button className="glass-btn !px-2.5 !py-1 !text-xs" onClick={() => void exportPrompts()} title="导出 AI 提示词/规则集，用于训练本地小模型">
                 <Icon name="brain" size={12} /> 导出提示词集
               </button>
             </div>
-            {devOcrNote ? <div className="anim-fade-in mt-1 text-[11px] text-neon-green">{devOcrNote}</div> : null}
+            {devOcrNote ? <div className="anim-fade-in mt-1 text-xs text-neon-green">{devOcrNote}</div> : null}
           </Row>
         ) : null}
       </Section>
@@ -901,7 +902,7 @@ export default function SettingsView() {
               <button
                 key={h}
                 onClick={() => p({ weatherHours: h })}
-                className={`rounded-md px-2.5 py-1 text-[11px] transition-colors ${(settings.weatherHours ?? 3) === h ? 'bg-neon-cyan/20 text-neon-cyan' : 'bg-white/[0.05] text-slate-400 hover:bg-white/[0.1]'}`}
+                className={`rounded-md px-2.5 py-1 text-xs transition-colors ${(settings.weatherHours ?? 3) === h ? 'bg-neon-cyan/20 text-neon-cyan' : 'bg-white/[0.05] text-slate-400 hover:bg-white/[0.1]'}`}
               >
                 {h}h
               </button>
@@ -912,43 +913,45 @@ export default function SettingsView() {
 
       {/* v3.0 文件夹 ingestion */}
       <Section title="工作文件夹" icon="folder">
-        <p className="mb-3 text-[12px] text-slate-500">
+        <p className="mb-3 text-xs text-slate-500">
           添加工作目录后，其中的 随手记(.md) / 会议纪要 / 数据表(.csv) 将自动融入日报周报生成。
         </p>
         <WatchedFolders />
       </Section>
 
       {introOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setIntroOpen(false)}>
-          <div className="glass-card anim-scale-in w-[440px] max-h-[70vh] overflow-auto p-5" onClick={e => e.stopPropagation()}>
-            <h3 className="text-[17px] font-bold text-slate-100 mb-4">WorkOn 功能介绍</h3>
-            <div className="space-y-4 text-[13px] text-slate-300 leading-relaxed">
-              <p><span className="text-neon-cyan font-semibold">WorkOn</span> = 看得见的专注，有人陪你把一天过明白。</p>
+        <ModalShell open onClose={() => setIntroOpen(false)} bare>
+          <div className="glass-card anim-scale-in w-[460px] max-h-[70vh] overflow-auto" style={{ background: 'var(--bg-deep)', borderRadius: 'var(--r-lg)', boxShadow: 'var(--shadow-lg)' }}>
+            <h3 className="mb-4 text-xl font-semibold tracking-tight text-slate-100">WorkOn 功能介绍</h3>
+            <div className="space-y-4 text-sm leading-relaxed text-slate-300">
+              <p><span className="font-semibold text-slate-100">WorkOn</span> = 看得见的专注，有人陪你把一天过明白。</p>
               <div className="space-y-2">
                 {[
-                  ['✦', '首页 — 每日全景', '工作/生活星图 + 时间轴 + Widget 可编排'],
-                  ['✦', '日历 — 注意力热度', '热力图 + 日/周视图，红色时间线'],
-                  ['✦', '计划 — 从想法到执行', '手动新建 + 会议纪要一键导入'],
-                  ['✦', '报表 — 智能日报周报', '五维评分 + 实际活动记录，可投送到主页'],
-                  ['✦', '搭子 — 桌面虚拟人', 'ARIA/LUNA/KIRA/ZEN/SHIN 五角色，可拖拽互动'],
-                  ['✦', '浮窗 — 托盘手柄', '收起=注意力图标，展开=迷你面板'],
-                  ['✦', '问答 — AI 增强', '对话内嵌图表 + 快捷指令']
-                ].map(([icon, title, desc], i) => (
-                  <div key={i} className="flex gap-2">
-                    <span className="text-neon-cyan shrink-0">{icon}</span>
-                    <div><span className="text-slate-200 font-medium">{title}</span><br /><span className="text-[11px] text-slate-500">{desc}</span></div>
+                  ['今天', '每日全景', '结论 + 时间轴 + 一分钟校对'],
+                  ['计划', '从想法到执行', '手动新建 + 会议纪要一键导入'],
+                  ['回顾', '日报 / 周报 / 知识沉淀', '五维评分 + 实际活动记录'],
+                  ['日历', '注意力热度', '热力图 + 日/周视图'],
+                  ['更多', '主线 / 问答 / 画像 / 搭子 / 隐私', '低频能力收在二级入口']
+                ].map(([tag, title, desc]) => (
+                  <div key={title} className="flex gap-2">
+                    <span className="shrink-0 rounded px-1.5 py-0.5 text-2xs text-slate-500" style={{ background: 'var(--surface-2)' }}>{tag}</span>
+                    <div>
+                      <span className="font-medium text-slate-200">{title}</span>
+                      <br />
+                      <span className="text-xs text-slate-500">{desc}</span>
+                    </div>
                   </div>
                 ))}
               </div>
-              <div className="border-t border-white/10 pt-3 text-[11px] text-slate-500">
-                <p>数据隐私：只分析窗口标题与应用名称，不触碰文件内容或私密信息。注意力评分（五维）完全本地计算，AI 可选开启。</p>
+              <div className="border-t pt-3 text-xs text-slate-500" style={{ borderColor: 'var(--line)' }}>
+                <p>数据隐私：只分析窗口标题与应用名称，不触碰文件内容或私密信息。注意力评分完全本地计算，AI 可选开启。</p>
               </div>
             </div>
             <div className="mt-4 flex justify-end">
-              <button className="glass-btn primary text-[12px]" onClick={() => setIntroOpen(false)}>知道了</button>
+              <button className="glass-btn primary" onClick={() => setIntroOpen(false)}>知道了</button>
             </div>
           </div>
-        </div>
+        </ModalShell>
       )}
     </div>
   )
@@ -980,18 +983,18 @@ function LoadPaceCard() {
       : { text: '电脑很顺畅', cls: 'text-[var(--teal)]' }
   return (
     <div className="px-4 py-3">
-      <div className={`mb-1.5 text-[12px] font-medium ${mood.cls}`}>
+      <div className={`mb-1.5 text-xs font-medium ${mood.cls}`}>
         {mood.text}（CPU {st.cpuPercent}% · 内存 {st.memPercent}%）
       </div>
       <div className="flex flex-col gap-0.5">
         {st.paces.map((row) => (
-          <div key={row.key} className="flex items-center justify-between text-[11px]">
+          <div key={row.key} className="flex items-center justify-between text-xs">
             <span className="text-slate-500">{row.label}</span>
             <span className="tabular-nums text-slate-300">{row.human}</span>
           </div>
         ))}
       </div>
-      {!st.enabled ? <div className="mt-1 text-[10.5px] text-slate-600">忙时轻档已关闭，WorkOn 会一直保持全速</div> : null}
+      {!st.enabled ? <div className="mt-1 text-2xs text-slate-600">忙时轻档已关闭，WorkOn 会一直保持全速</div> : null}
     </div>
   )
 }

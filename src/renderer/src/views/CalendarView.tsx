@@ -6,6 +6,7 @@ import { BUILTIN_CATEGORIES } from '@shared/planAnalysis'
 import { genId } from '@shared/types'
 import { displayApp } from '@shared/appDisplayName'
 import { holidayOf } from '@shared/cnHolidays'
+import { ModalShell } from '../components/ui/Modal'
 import { CATEGORY_META, categoryOf, type AppCategory } from '@shared/appCategory'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
@@ -116,22 +117,22 @@ function ActivityDetailCard({ entry, pos, onEdit, onClose, matchedApp, matchedTi
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[12px] font-semibold truncate">{app}</span>
-          <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+          <span className="text-xs font-semibold truncate">{app}</span>
+          <span className="shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-medium"
             style={{ color: `rgb(${sense.rgb})`, background: `rgb(${sense.rgb}/0.14)` }}>
             {sense.label}
           </span>
         </div>
-        <div className="mt-1 text-[11px] leading-snug" style={{ color: 'var(--pop-text-strong)' }}>
+        <div className="mt-1 text-xs leading-snug" style={{ color: 'var(--pop-text-strong)' }}>
           {title || '（未命名）'}
         </div>
         {(counterpart || topic) ? (
-          <div className="mt-1 text-[11px] leading-snug" style={{ color: 'var(--pop-text-muted)' }}>
+          <div className="mt-1 text-xs leading-snug" style={{ color: 'var(--pop-text-muted)' }}>
             {counterpart ? <span>与 <b style={{ color: 'var(--pop-text-strong)' }}>{counterpart}</b> 沟通</span> : null}
             {topic ? <span>查看：<b style={{ color: 'var(--pop-text-strong)' }}>{topic}</b></span> : null}
           </div>
         ) : null}
-        <div className="mt-1.5 flex items-center gap-2 text-[10px]" style={{ color: 'var(--pop-text-muted)' }}>
+        <div className="mt-1.5 flex items-center gap-2 text-2xs" style={{ color: 'var(--pop-text-muted)' }}>
           <span>{clockOf(entry.startMin)} – {clockOf(entry.endMin)}</span>
           <span style={{ color: 'var(--pop-text-muted)' }}>·</span>
           <span>{fmtMin(entry.endMin - entry.startMin)}</span>
@@ -139,13 +140,13 @@ function ActivityDetailCard({ entry, pos, onEdit, onClose, matchedApp, matchedTi
         </div>
         <div className="mt-2 flex items-center gap-2">
           <button
-            className="flex-1 rounded-lg border border-white/10 py-1 text-[10px] text-slate-300 transition-colors hover:bg-white/[0.08]"
+            className="flex-1 rounded-lg border border-white/10 py-1 text-2xs text-slate-300 transition-colors hover:bg-white/[0.08]"
             onClick={onEdit}
           >
             ✏️ 编辑
           </button>
           <button
-            className="rounded-lg border border-white/10 px-2 py-1 text-[10px] text-slate-400 transition-colors hover:bg-white/[0.08]"
+            className="rounded-lg border border-white/10 px-2 py-1 text-2xs text-slate-400 transition-colors hover:bg-white/[0.08]"
             onClick={onClose}
           >
             关闭
@@ -193,11 +194,14 @@ function EntryEditor({ entry, isNew, onClose, onSaved }: EditorProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="glass-card anim-scale-in w-[340px]" onClick={(e) => e.stopPropagation()}>
+    <ModalShell open onClose={onClose} bare>
+      <div
+        className="glass-card anim-scale-in w-[360px]"
+        style={{ background: 'var(--bg-deep)', borderRadius: 'var(--r-lg)', boxShadow: 'var(--shadow-lg)' }}
+      >
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="flex items-center gap-2 text-[15px] font-semibold text-slate-200">
-            <Icon name="edit" size={14} className="text-neon-cyan" />
+          <h3 className="flex items-center gap-2 text-lg font-semibold text-slate-200">
+            <Icon name="edit" size={16} className="text-slate-500" />
             {isNew ? '补录时段' : '编辑时段'}
           </h3>
           <span className="chip">{SOURCE_LABEL[draft.source]}</span>
@@ -214,15 +218,15 @@ function EntryEditor({ entry, isNew, onClose, onSaved }: EditorProps) {
               if (e.key === 'Escape') onClose()
             }}
           />
-            <label className="flex items-center gap-1.5 text-[11px] text-slate-500">
+            <label className="flex items-center gap-1.5 text-xs text-slate-500">
               日期
               <input type="date" value={draft.date}
                 onChange={(e) => setDraft((d) => ({ ...d, date: e.target.value }))}
-                className="glass-input !px-2 !py-1 !text-[11px]"
+                className="glass-input !px-2 !py-1 !text-xs"
               />
             </label>
           <div className="grid grid-cols-2 gap-2">
-            <label className="text-[11px] text-slate-500">
+            <label className="text-xs text-slate-500">
               开始
               <input
                 type="time"
@@ -231,7 +235,7 @@ function EntryEditor({ entry, isNew, onClose, onSaved }: EditorProps) {
                 onChange={(e) => setTime('startMin', e.target.value)}
               />
             </label>
-            <label className="text-[11px] text-slate-500">
+            <label className="text-xs text-slate-500">
               结束
               <input
                 type="time"
@@ -242,7 +246,7 @@ function EntryEditor({ entry, isNew, onClose, onSaved }: EditorProps) {
             </label>
           </div>
           <div>
-            <div className="mb-1.5 text-[11px] text-slate-500">状态</div>
+            <div className="mb-1.5 text-xs text-slate-500">状态</div>
             <div className="grid grid-cols-4 gap-1.5">
               {ALL_STATES.map((s) => {
                 const m = WORK_STATES[s]
@@ -250,7 +254,7 @@ function EntryEditor({ entry, isNew, onClose, onSaved }: EditorProps) {
                 return (
                   <button
                     key={s}
-                    className={`rounded-lg border px-1 py-1 text-[11px] transition-all ${
+                    className={`rounded-lg border px-1 py-1 text-xs transition-all ${
                       active ? 'border-neon-cyan/60 bg-neon-cyan/10 text-slate-100' : 'border-white/[0.07] text-slate-400 hover:bg-white/[0.05]'
                     }`}
                     style={active ? { boxShadow: `0 0 10px ${m.color}33` } : undefined}
@@ -272,14 +276,14 @@ function EntryEditor({ entry, isNew, onClose, onSaved }: EditorProps) {
             <button className="glass-btn" onClick={onClose}>
               取消
             </button>
-            {timeHint ? <div className="mb-1.5 text-[11px] text-amber-300">⚠ {timeHint}</div> : null}
+            {timeHint ? <div className="mb-1.5 text-xs text-amber-300">⚠ {timeHint}</div> : null}
             <button className="glass-btn primary" disabled={!draft.title.trim()} onClick={() => void save()}>
               <Icon name="check" size={13} /> 保存
             </button>
           </div>
         </div>
       </div>
-    </div>
+    </ModalShell>
   )
 }
 
@@ -344,7 +348,7 @@ function MonthPlanPill({
   const delayed = plan.status === 'delayed'
   return (
     <span
-      className={`month-plan-pill block w-full truncate rounded px-1 py-px text-left text-[9px] font-medium leading-snug${done ? ' is-done' : ''}`}
+      className={`month-plan-pill block w-full truncate rounded px-1 py-px text-left text-2xs font-medium leading-snug${done ? ' is-done' : ''}`}
       style={{
         background: `${color}33`,
         borderLeft: `2px solid ${delayed ? '#EF4444' : color}`,
@@ -422,10 +426,10 @@ function PlanHoverCard({
       <div className="flex items-start gap-2">
         <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color }} />
         <div className="min-w-0 flex-1">
-          <div className="text-[12.5px] font-semibold leading-snug" style={{ color: 'var(--pop-text-strong)' }}>
+          <div className="text-sm font-semibold leading-snug" style={{ color: 'var(--pop-text-strong)' }}>
             {plan.title}
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]" style={{ color: 'var(--pop-text-muted)' }}>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-2xs" style={{ color: 'var(--pop-text-muted)' }}>
             <span className="rounded px-1 py-px" style={{ background: `${color}33`, color }}>
               {catLabel}
             </span>
@@ -439,7 +443,7 @@ function PlanHoverCard({
             ) : null}
           </div>
           {plan.note ? (
-            <div className="mt-1.5 text-[11px] leading-snug" style={{ color: 'var(--pop-text-muted)' }}>
+            <div className="mt-1.5 text-xs leading-snug" style={{ color: 'var(--pop-text-muted)' }}>
               {plan.note}
             </div>
           ) : null}
@@ -549,7 +553,7 @@ function DayDetailCard({ date, reloadKey, onEditEntry, onAdd, dayPlans, categori
   return (
     <div className="glass-card anim-fade-up" style={{ animationDelay: '120ms' }}>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[14px] font-semibold text-slate-200">{fmtDateLabel(date)}</span>
+        <span className="text-base font-semibold text-slate-200">{fmtDateLabel(date)}</span>
         {date === today ? <span className="chip text-[var(--teal)]">今天</span> : null}
         <span className="chip">专注 {fmtMin(dayWorkMin(trail))}</span>
         {trail && trail.totalMin > 0 ? <span className="chip">墙钟 {fmtMin(trail.totalMin)}</span> : null}
@@ -559,7 +563,7 @@ function DayDetailCard({ date, reloadKey, onEditEntry, onAdd, dayPlans, categori
           </span>
         ) : null}
         <div className="flex-1" />
-        <button className="glass-btn !px-2.5 !py-1 text-[11px]" onClick={onAdd} title="为该日补录时段">
+        <button className="glass-btn !px-2.5 !py-1 text-xs" onClick={onAdd} title="为该日补录时段">
           <Icon name="plus" size={12} /> 补录
         </button>
       </div>
@@ -567,7 +571,7 @@ function DayDetailCard({ date, reloadKey, onEditEntry, onAdd, dayPlans, categori
       {dayPlans.length > 0 ? (
         <div className="mt-3">
           <div className="mb-1.5 flex items-center justify-between">
-            <div className="text-[10px] uppercase tracking-wider text-slate-600">当日计划</div>
+            <div className="text-2xs uppercase tracking-wider text-slate-600">当日计划</div>
             {planProg.total > 0 ? (
               <div className="h-1 w-24 overflow-hidden rounded-full bg-white/[0.06]">
                 <div
@@ -587,12 +591,12 @@ function DayDetailCard({ date, reloadKey, onEditEntry, onAdd, dayPlans, categori
               return (
                 <div
                   key={p.id}
-                  className="flex items-center gap-2 rounded-lg border border-white/[0.05] bg-white/[0.02] px-2.5 py-1.5 text-[11.5px]"
+                  className="flex items-center gap-2 rounded-lg border border-white/[0.05] bg-white/[0.02] px-2.5 py-1.5 text-xs"
                 >
                   <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
                   <span className={`min-w-0 flex-1 truncate ${p.status === 'done' ? 'text-slate-500 line-through' : 'text-slate-300'}`}>{p.title}</span>
-                  <span className="shrink-0 text-[10px] text-slate-500">{PLAN_STATUS_SHORT[p.status]}</span>
-                  <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-slate-500">{Math.round(ratio * 100)}%</span>
+                  <span className="shrink-0 text-2xs text-slate-500">{PLAN_STATUS_SHORT[p.status]}</span>
+                  <span className="w-10 shrink-0 text-right text-2xs tabular-nums text-slate-500">{Math.round(ratio * 100)}%</span>
                 </div>
               )
             })}
@@ -603,29 +607,29 @@ function DayDetailCard({ date, reloadKey, onEditEntry, onAdd, dayPlans, categori
       <div className="mt-3 flex flex-col gap-2">
         {projMin.length ? (
           <div>
-            <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-600">项目进展</div>
+            <div className="mb-1 text-2xs uppercase tracking-wider text-slate-600">项目进展</div>
             {projMin.map((r) => (
-              <div key={r.name} className="flex items-center gap-2 py-0.5 text-[11.5px]">
+              <div key={r.name} className="flex items-center gap-2 py-0.5 text-xs">
                 <span className="min-w-0 flex-1 truncate text-slate-300">{r.name}</span>
-                {r.progress !== null ? <span className="shrink-0 text-[10px] tabular-nums text-[var(--teal-deep)]">{r.progress}%</span> : null}
-                <span className="shrink-0 text-[10px] tabular-nums text-slate-500">{r.min}m</span>
+                {r.progress !== null ? <span className="shrink-0 text-2xs tabular-nums text-[var(--teal-deep)]">{r.progress}%</span> : null}
+                <span className="shrink-0 text-2xs tabular-nums text-slate-500">{r.min}m</span>
               </div>
             ))}
           </div>
         ) : null}
         {slackMin > 0 ? (
-          <div className="flex items-center gap-2 text-[11.5px]">
+          <div className="flex items-center gap-2 text-xs">
             <span className="text-slate-500">🐟 摸鱼</span>
             <span className="tabular-nums text-[#fbbf24]">{slackMin}m</span>
           </div>
         ) : null}
         {focusActs.length ? (
           <div>
-            <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-600">专注干了哪些活</div>
+            <div className="mb-1 text-2xs uppercase tracking-wider text-slate-600">专注干了哪些活</div>
             {focusActs.map((a, i) => (
-              <div key={i} className="flex items-center gap-2 py-0.5 text-[11.5px]">
+              <div key={i} className="flex items-center gap-2 py-0.5 text-xs">
                 <span className="min-w-0 flex-1 truncate text-slate-300">{a.title}</span>
-                <span className="shrink-0 text-[10px] tabular-nums text-slate-500">{a.min}m</span>
+                <span className="shrink-0 text-2xs tabular-nums text-slate-500">{a.min}m</span>
               </div>
             ))}
           </div>
@@ -634,14 +638,14 @@ function DayDetailCard({ date, reloadKey, onEditEntry, onAdd, dayPlans, categori
       {/* 当日条目（手动/AI/导入）：点击进入编辑 */}
       <div className="mt-2.5 flex flex-col gap-1">
         {entries.length === 0 ? (
-          <div className="text-[11px] text-slate-600">暂无手动记录 · 点击右上角「补录」添加时段</div>
+          <div className="text-xs text-slate-600">暂无手动记录 · 点击右上角「补录」添加时段</div>
         ) : (
           entries.map((e) => {
             const meta = WORK_STATES[e.state ?? 'idle'] ?? WORK_STATES.idle
             return (
               <button
                 key={e.id}
-                className="flex items-center gap-2 rounded-lg border border-white/[0.05] bg-white/[0.02] px-2.5 py-1.5 text-left text-[11.5px] transition-colors hover:border-white/[0.1] hover:bg-white/[0.05]"
+                className="flex items-center gap-2 rounded-lg border border-white/[0.05] bg-white/[0.02] px-2.5 py-1.5 text-left text-xs transition-colors hover:border-white/[0.1] hover:bg-white/[0.05]"
                 onClick={() => onEditEntry(e)}
                 title="点击编辑该时段"
               >
@@ -649,7 +653,7 @@ function DayDetailCard({ date, reloadKey, onEditEntry, onAdd, dayPlans, categori
                 <span className="w-24 shrink-0 tabular-nums text-slate-500">{clockOf(e.startMin)}–{clockOf(e.endMin)}</span>
                 <span className="min-w-0 flex-1 truncate text-slate-300">{e.title || '（未命名）'}</span>
                 <span className="shrink-0 text-slate-500">{fmtMin(e.endMin - e.startMin)}</span>
-                <span className="shrink-0 text-[10px] text-slate-600">{SOURCE_LABEL[e.source]}</span>
+                <span className="shrink-0 text-2xs text-slate-600">{SOURCE_LABEL[e.source]}</span>
               </button>
             )
           })
@@ -658,7 +662,7 @@ function DayDetailCard({ date, reloadKey, onEditEntry, onAdd, dayPlans, categori
       {/* 底部：当日分类占比堆叠条 + 图例（与监控页状态分布堆叠彩条同款式） */}
       {cats.length > 0 && catTotal > 0 ? (
         <div className="mt-3 border-t border-white/[0.05] pt-2.5">
-          <div className="mb-1.5 text-[10px] text-slate-500">当日分类占比</div>
+          <div className="mb-1.5 text-2xs text-slate-500">当日分类占比</div>
           <div className="flex h-3.5 w-full overflow-hidden rounded-full border border-white/[0.06] bg-white/[0.03]">
             {cats.map(({ cat, min }) => (
               <div
@@ -671,7 +675,7 @@ function DayDetailCard({ date, reloadKey, onEditEntry, onAdd, dayPlans, categori
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1">
             {cats.map(({ cat, min }) => (
-              <span key={cat} className="flex items-center gap-1 text-[10.5px] text-slate-400">
+              <span key={cat} className="flex items-center gap-1 text-2xs text-slate-400">
                 <span className="inline-block h-2 w-2 rounded-full" style={{ background: CATEGORY_META[cat].color }} />
                 {CATEGORY_META[cat].label}
                 <span className="tabular-nums text-slate-500">{fmtMin(min)}</span>
@@ -680,7 +684,7 @@ function DayDetailCard({ date, reloadKey, onEditEntry, onAdd, dayPlans, categori
           </div>
         </div>
       ) : (
-        <div className="mt-3 border-t border-white/[0.05] pt-2.5 text-[10.5px] text-slate-600">当日暂无监控轨迹，分类占比将在采集到活动后展示。</div>
+        <div className="mt-3 border-t border-white/[0.05] pt-2.5 text-2xs text-slate-600">当日暂无监控轨迹，分类占比将在采集到活动后展示。</div>
       )}
     </div>
   )
@@ -846,13 +850,13 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
       <div className="view-enter flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
           <button
-            className="glass-btn !px-2.5 !py-1 text-[12px]"
+            className="glass-btn !px-2.5 !py-1 text-xs"
             onClick={() => setDayView(null)}
             title="返回月视图"
           >
             <Icon name="chevronLeft" size={13} /> 返回月视图
           </button>
-          <span className="text-[14px] font-semibold text-slate-200">{fmtDateLabel(dayView)}</span>
+          <span className="text-base font-semibold text-slate-200">{fmtDateLabel(dayView)}</span>
           {(() => {
             const hol = holidayOf(dayView)
             return hol ? (
@@ -892,57 +896,56 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
 
   return (
     <div className="view-enter flex flex-col gap-4">
-      {/* AI 周回顾 hero 卡（aura 渐变 = AI 专属，白字） */}
-      <div className="anim-fade-up relative overflow-hidden rounded-2xl p-5 text-white" style={{ background: 'var(--aura)', boxShadow: 'var(--glow-i)' }}>
-        <span className="pointer-events-none absolute -right-3 -top-7 select-none text-[96px] leading-none text-white/15">✦</span>
-        <div className="relative flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <div className="text-[15px] font-bold tracking-wide">✦ AI 周回顾</div>
-            {weekCtx ? (
-              <>
-                <div className="mt-1.5 text-[13.5px] font-semibold">
-                  本周专注 {fmtMin(weekCtx.thisMin)}，较上周（{fmtMin(weekCtx.lastMin)}）{deltaPct >= 0 ? '提升' : '下降'} {Math.abs(deltaPct)}%
-                  {deltaPct >= 0 ? ' ▲' : ' ▼'}
-                </div>
-                <div className="mt-1 text-[11.5px] text-white/85">
-                  最佳专注日 {weekCtx.bestLabel}（{fmtMin(weekCtx.bestMin)}）· AI 协作约占专注 {aiPct}% · 由最近两周监控轨迹推算
-                </div>
-              </>
-            ) : (
-              <div className="mt-1.5 flex items-center gap-2 text-[12px] text-white/85">
-                <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-white" />
-                正在聚合本周 / 上周专注数据…
-              </div>
-            )}
-            {review ? (
-              <div className="mt-2.5 whitespace-pre-wrap rounded-xl bg-white/15 p-3 text-[11.5px] leading-relaxed">{review}</div>
-            ) : null}
+      {/* 周回顾：中性灰面 + 一句话结论，不再整块渐变 */}
+      <div className="anim-fade-up glass-card flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <Icon name="sparkles" size={14} /> 本周回顾
           </div>
-          <button
-            className="glass-btn ai shrink-0"
-            style={{ border: '1px solid rgba(255,255,255,0.35)' }}
-            disabled={!weekCtx || generating}
-            onClick={generateReview}
-            title="基于本周/上周监控轨迹生成 AI 回顾（本地推导）"
-          >
-            <Icon name="sparkles" size={13} /> {generating ? '生成中…' : '生成回顾'}
-          </button>
+          {weekCtx ? (
+            <>
+              <div className="mt-2 text-xl font-semibold tracking-tight text-slate-100">
+                本周专注 {fmtMin(weekCtx.thisMin)}，较上周{deltaPct >= 0 ? '多' : '少'} {Math.abs(deltaPct)}%
+              </div>
+              <div className="mt-1 text-xs text-slate-500">
+                最佳专注日 {weekCtx.bestLabel}（{fmtMin(weekCtx.bestMin)}）· AI 协作约占专注 {aiPct}%
+              </div>
+            </>
+          ) : (
+            <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+              <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full" style={{ background: 'var(--text-3)' }} />
+              正在聚合本周 / 上周专注数据…
+            </div>
+          )}
+          {review ? (
+            <div className="mt-3 whitespace-pre-wrap rounded-xl p-3 text-sm leading-relaxed text-slate-300" style={{ background: 'var(--surface-2)' }}>
+              {review}
+            </div>
+          ) : null}
         </div>
+        <button
+          className="glass-btn primary shrink-0"
+          disabled={!weekCtx || generating}
+          onClick={generateReview}
+          title="基于本周/上周监控轨迹生成本地回顾"
+        >
+          <Icon name="sparkles" size={13} /> {generating ? '生成中…' : '生成回顾'}
+        </button>
       </div>
 
       {/* 计划标签月历：每格 = 日期 + 进度 + 彩色计划 pill（参考时间轴摘要） */}
       <div className="glass-card hoverable anim-fade-up" style={{ animationDelay: '80ms' }}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 text-[15px] font-semibold text-slate-200">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-200">
             <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[9px] bg-[var(--teal-soft)] text-[var(--teal)]">
               <Icon name="calendar" size={14} />
             </span>
             {monthLabelOf(yearMonth)} 计划月历
           </h2>
-          <span className="text-[11px] text-slate-500">悬停标签看详情 · 点击日期进入日视图</span>
+          <span className="text-xs text-slate-500">悬停标签看详情 · 点击日期进入日视图</span>
         </div>
         {/* 星期表头（周一开头） */}
-        <div className="mb-1.5 grid grid-cols-7 gap-1.5 text-center text-[10px] text-slate-500">
+        <div className="mb-1.5 grid grid-cols-7 gap-1.5 text-center text-2xs text-slate-500">
           {WEEK_LABELS.map((l) => (
             <span key={l}>{l}</span>
           ))}
@@ -979,7 +982,7 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
               >
                 <div className="flex items-center justify-between gap-1">
                   <span
-                    className={`flex h-5 w-5 items-center justify-center rounded-md text-[11px] font-semibold tabular-nums ${
+                    className={`flex h-5 w-5 items-center justify-center rounded-md text-xs font-semibold tabular-nums ${
                       isToday ? 'bg-[var(--teal)] text-white' : 'text-slate-300'
                     }`}
                   >
@@ -987,7 +990,7 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
                   </span>
                   {hol ? (
                     <span
-                      className={`rounded px-1 py-px text-[9px] font-bold ${
+                      className={`rounded px-1 py-px text-2xs font-bold ${
                         hol.type === 'holiday'
                           ? 'bg-red-500/15 text-red-400'
                           : 'bg-sky-500/15 text-sky-400'
@@ -998,7 +1001,7 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
                     </span>
                   ) : prog.total > 0 ? (
                     <span
-                      className={`text-[9px] tabular-nums ${
+                      className={`text-2xs tabular-nums ${
                         prog.pct >= 100 ? 'text-neon-green' : prog.pct > 0 ? 'text-[var(--teal)]' : 'text-slate-500'
                       }`}
                     >
@@ -1019,7 +1022,7 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
                 ) : null}
                 <div className="mt-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
                   {visible.length === 0 ? (
-                    <span className="text-[9px] text-slate-600">{stat && stat.workMin > 0 ? `专注 ${fmtMin(stat.workMin)}` : '—'}</span>
+                    <span className="text-2xs text-slate-600">{stat && stat.workMin > 0 ? `专注 ${fmtMin(stat.workMin)}` : '—'}</span>
                   ) : (
                     <>
                       {visible.map((p) => (
@@ -1034,7 +1037,7 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
                           onLeave={clearPlanHoverSoon}
                         />
                       ))}
-                      {more > 0 ? <span className="text-[8.5px] text-slate-500">+{more}</span> : null}
+                      {more > 0 ? <span className="text-2xs text-slate-500">+{more}</span> : null}
                     </>
                   )}
                 </div>
@@ -1049,7 +1052,7 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
           })}
         </div>
         {/* 底部色阶图例 + 本月累计 */}
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-[10.5px] text-slate-500">
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-2xs text-slate-500">
           <span>专注热力</span>
           <span>少</span>
           <div className="flex items-center gap-1">
@@ -1064,7 +1067,7 @@ function MonthBoard({ yearMonth }: { yearMonth: string }) {
         </div>
       </div>
 
-      <div className="text-center text-[11px] text-slate-600">点击日期格进入日视图 · 悬停彩色标签查看待办详情</div>
+      <div className="text-center text-xs text-slate-600">点击日期格进入日视图 · 悬停彩色标签查看待办详情</div>
 
       {planHover ? (
         <PlanHoverCard
@@ -1123,7 +1126,7 @@ function HourPreviewCard({ apps, rect, hour, day, visuals }: {
         pointerEvents: 'none'
       }}
     >
-      <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: 'var(--pop-text)' }}>
+      <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold" style={{ color: 'var(--pop-text)' }}>
         <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
         {day} {String(hour).padStart(2, '0')}:00 主要操作
       </div>
@@ -1135,10 +1138,10 @@ function HourPreviewCard({ apps, rect, hour, day, visuals }: {
               {v ? (
                 <img src={v.iconDataUrl} alt="" className="h-4 w-4 shrink-0 rounded-[3px]" style={{ background: 'rgba(0,0,0,0.05)' }} />
               ) : (
-                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] text-[9px]" style={{ background: 'rgba(0,0,0,0.05)' }}>·</span>
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] text-2xs" style={{ background: 'rgba(0,0,0,0.05)' }}>·</span>
               )}
-              <span className="min-w-0 flex-1 truncate text-[11px]" style={{ color: 'var(--pop-text-strong)' }}>{displayApp(a.app)}</span>
-              <span className="shrink-0 text-[10px] tabular-nums" style={{ color: 'var(--pop-text-muted)' }}>{Math.round(a.min)}m</span>
+              <span className="min-w-0 flex-1 truncate text-xs" style={{ color: 'var(--pop-text-strong)' }}>{displayApp(a.app)}</span>
+              <span className="shrink-0 text-2xs tabular-nums" style={{ color: 'var(--pop-text-muted)' }}>{Math.round(a.min)}m</span>
             </div>
           )
         })}
@@ -1183,11 +1186,11 @@ function DayAppIcons({ trail, visuals }: {
             {v ? (
               <img src={v.iconDataUrl} alt="" className="h-4 w-4 rounded-[3px]" style={{ background: 'rgba(255,255,255,0.06)' }} />
             ) : (
-              <span className="text-[9px] text-slate-500">{displayApp(a.app)}</span>
+              <span className="text-2xs text-slate-500">{displayApp(a.app)}</span>
             )}
             {/* 宽度不足时默认显示主要工作（第一个应用的名称） */}
             {i === 0 ? (
-              <span className="max-w-[40px] overflow-hidden text-ellipsis whitespace-nowrap text-[9px] text-slate-500">{displayApp(a.app)}</span>
+              <span className="max-w-[40px] overflow-hidden text-ellipsis whitespace-nowrap text-2xs text-slate-500">{displayApp(a.app)}</span>
             ) : null}
           </span>
         )
@@ -1244,7 +1247,7 @@ export default function CalendarView() {
             <button className="glass-btn !px-2" onClick={() => navigateMonth(1)}>
               <Icon name="chevronRight" size={14} />
             </button>
-            <span className="ml-1 text-[16px] font-semibold tabular-nums text-slate-100">
+            <span className="ml-1 text-lg font-semibold tabular-nums text-slate-100">
               {monthLabel}
             </span>
           </>
@@ -1254,7 +1257,7 @@ export default function CalendarView() {
           {MODES.map((m) => (
             <button
               key={m.key}
-              className={`rounded-full px-4 py-1.5 text-[12px] ${
+              className={`rounded-full px-4 py-1.5 text-xs ${
                 mode === m.key ? 'bg-white/[0.08] text-slate-200' : 'text-slate-500 hover:text-slate-300'
               }`}
               onClick={() => {
@@ -1270,7 +1273,7 @@ export default function CalendarView() {
 
       {mode === 'heat' ? (
         <div className="glass-card hoverable anim-fade-up" style={{ animationDelay: '120ms' }}>
-          <h2 className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-slate-200">
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-slate-200">
             <Icon name="flame" size={15} className="text-neon-amber" />
             {monthLabel} 工作热度
           </h2>

@@ -23,6 +23,7 @@ import type {
 import type { ProjectBinding } from './attributions'
 import type { DirActivity } from './dirWatcher'
 import type { ConfirmMemory } from './attributions'
+import type { ReviewIgnore } from './review'
 import type { ChainDayReport } from '@shared/chain'
 import { dateKey } from '@shared/trail'
 import { getSettings } from './settings'
@@ -67,6 +68,7 @@ interface JsonData {
   lifeGoals: LifeGoal[] // 人生预期目标（轨迹引擎）
   goalDayStates: GoalDayState[] // 目标每日归因结算（goalId:date 唯一）
   chatSessions: ChatSession[] // v10 会话：消息归档可续问
+  reviewIgnores: ReviewIgnore[] // 一分钟校对：按 date+app 忽略「与工作无关」
 }
 
 const EMPTY: JsonData = {
@@ -76,6 +78,7 @@ const EMPTY: JsonData = {
   reportTemplates: [], ocrSnapshots: [], chains: [], categoryInferences: [], segmentPlans: [],
   projects: [], projectTasks: [], projectTimeLinks: [], automations: [], projectBindings: [], confirmMemory: [], dirActivity: [], processDrafts: [],
   lifeGoals: [], goalDayStates: [], chatSessions: [],
+  reviewIgnores: [],
   ocrShots: [],
   motions: [],
   pointsLedger: []

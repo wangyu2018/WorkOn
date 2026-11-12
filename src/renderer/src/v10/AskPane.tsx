@@ -13,6 +13,7 @@ import { detectStructured, StructuredCard } from './structured'
 import { MindMap } from './mindmap'
 import { Shrinkable } from './Shrinkable'
 import { SESSION_CONTEXTS, type ContextKey } from './sessionContext'
+import { TraceTunnel } from '../components/TraceTunnel'
 
 /** 你的话/AI 的话 */
 export interface ChatMsg {
@@ -24,6 +25,8 @@ export interface ChatMsg {
   picked?: string
   attach?: 'flowmap' | 'mindmap'
   attachSrc?: string
+  /** AI 处理轨迹 id（L2 隧道下钻入口） */
+  traceId?: string
 }
 
 /** 引用芯片（v10）：拖消息/折下卡进来，发送时自动附为上下文 */
@@ -280,6 +283,7 @@ export function AskPane(props: {
   activeContext?: ContextKey
   onSetContext?: (k: ContextKey) => void
 }): JSX.Element {
+  const [traceId, setTraceId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [dropHot, setDropHot] = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -501,6 +505,24 @@ export function AskPane(props: {
             ) : (
               m.text
             )}
+            {m.role === 'ai' && m.traceId ? (
+              <button
+                onClick={() => setTraceId(m.traceId as string)}
+                title="查看本次处理用到的插件与耗时"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  padding: 0,
+                  marginTop: 4,
+                  color: 'var(--text-3)',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit'
+                }}
+              >
+                ◇ 过程
+              </button>
+            ) : null}
             <MsgActions
               idx={i}
               open={menuIdx === i}
@@ -602,6 +624,7 @@ export function AskPane(props: {
           }}
         />
       </div>
+      <TraceTunnel traceId={traceId} onClose={() => setTraceId(null)} />
     </aside>
   )
 }

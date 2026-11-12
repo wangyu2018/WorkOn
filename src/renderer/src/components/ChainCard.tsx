@@ -50,21 +50,21 @@ function ChainRow({ chain, index }: { chain: WorkChain; index: number }) {
         tentative ? 'border-amber-400/25 bg-amber-400/[0.07]' : 'border-white/[0.06] bg-white/[0.02]'
       }`}
     >
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
         <span className="font-medium text-slate-500">链路{index + 1}</span>
-        <span className="rounded-full bg-neon-cyan/15 px-2 py-0.5 text-[10px] font-medium text-neon-cyan">
+        <span className="rounded-full bg-neon-cyan/15 px-2 py-0.5 text-2xs font-medium text-neon-cyan">
           {TYPE_LABEL[chain.type]} · {chain.templateName}
         </span>
         <span className="text-slate-400">{timeRange}</span>
         <span className="text-slate-300">{fmtMin(chain.totalMin)}</span>
         {chain.hasOutput ? (
-          <span className="text-neon-green">✅ 产出</span>
+          <span className="text-emerald-600">有产出</span>
         ) : (
-          <span className="text-amber-400">⚠️ 无产出</span>
+          <span className="text-amber-600">无产出</span>
         )}
-        {tentative ? <span className="ml-auto rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] text-amber-300">待确认</span> : null}
+        {tentative ? <span className="ml-auto rounded-full bg-amber-400/15 px-2 py-0.5 text-2xs text-amber-300">待确认</span> : null}
       </div>
-      <div className="text-[11px] leading-relaxed text-slate-400">
+      <div className="text-xs leading-relaxed text-slate-400">
         {chain.steps.map((s, i) => (
           <span key={i}>
             {i > 0 ? <span className="mx-1 text-slate-600">→</span> : null}
@@ -73,7 +73,7 @@ function ChainRow({ chain, index }: { chain: WorkChain; index: number }) {
           </span>
         ))}
       </div>
-      <div className="flex items-center gap-3 text-[10px] text-slate-500">
+      <div className="flex items-center gap-3 text-2xs text-slate-500">
         <span>切换效率 {pct(chain.switchEfficiency)}</span>
         <span>置信度 {pct(chain.confidence)}</span>
         {!chain.hasOutput ? <span className="text-amber-400/80">⚠️ 未形成闭环</span> : null}
@@ -109,7 +109,7 @@ export function ChainCard({ date }: { date: string }) {
     return (
       <section className="glass-card anim-fade-up" style={{ animationDelay: '90ms' }}>
         <SectionTitle icon="activity" title="今日作业链路" />
-        <div className="flex items-center gap-2 py-4 text-[12px] text-slate-500">
+        <div className="flex items-center gap-2 py-4 text-xs text-slate-500">
           <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-neon-cyan" />
           链路识别中…
         </div>
@@ -120,7 +120,7 @@ export function ChainCard({ date }: { date: string }) {
     return (
       <section className="glass-card anim-fade-up" style={{ animationDelay: '90ms' }}>
         <SectionTitle icon="activity" title="今日作业链路" />
-        <p className="py-3 text-center text-[12px] text-slate-500">暂未识别出完整的跨应用作业链路，再多工作一会儿试试。</p>
+        <p className="py-3 text-center text-xs text-slate-500">暂未识别出完整的跨应用作业链路，再多工作一会儿试试。</p>
       </section>
     )
   }
@@ -138,7 +138,7 @@ export function ChainCard({ date }: { date: string }) {
         ))}
       </div>
       {/* 链路统计 */}
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-white/[0.05] pt-3 text-[11px] text-slate-400">
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-white/[0.05] pt-3 text-xs text-slate-400">
         <span>
           完成 <span className="font-medium text-slate-200">{withOutput}/{m.chainCount}</span>
         </span>
@@ -152,7 +152,7 @@ export function ChainCard({ date }: { date: string }) {
           切换效率 <span className="font-medium text-slate-200">{pct(m.switchEfficiency)}</span>
         </span>
       </div>
-      {insight ? <p className="mt-2.5 rounded-lg bg-neon-cyan/[0.06] px-3 py-2 text-[11px] leading-relaxed text-slate-400">💡 {insight}</p> : null}
+      {insight ? <p className="mt-2.5 rounded-lg bg-neon-cyan/[0.06] px-3 py-2 text-xs leading-relaxed text-slate-400">💡 {insight}</p> : null}
     </section>
   )
 }

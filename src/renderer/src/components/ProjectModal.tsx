@@ -202,7 +202,7 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
     } catch (e) { setReview({ loading: false, text: `复盘失败：${(e as Error).message || ''}` }) }
   }
 
-  const inputCls = 'w-full rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[12px] text-slate-200 outline-none focus:border-[var(--border-active)]'
+  const inputCls = 'w-full rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-[var(--border-active)]'
 
   return (
     <div className="anim-fade-in fixed inset-0 z-[80] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
@@ -214,14 +214,14 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
         {/* 头 */}
         <div className="flex items-center gap-2 border-b border-[var(--line)] px-4 py-3">
           <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: project.color ?? 'var(--teal)' }} />
-          <b className="min-w-0 flex-1 truncate text-[14px] text-slate-100">{draft.name || project.name}</b>
-          <span className="shrink-0 rounded-full bg-white/5 px-2 py-0.5 text-[9.5px] font-bold text-slate-400">{PROJ_STATUS[project.status]}</span>
+          <b className="min-w-0 flex-1 truncate text-base text-slate-100">{draft.name || project.name}</b>
+          <span className="shrink-0 rounded-full bg-white/5 px-2 py-0.5 text-2xs font-bold text-slate-400">{PROJ_STATUS[project.status]}</span>
           {days !== null ? (
-            <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${days < 0 ? 'bg-[rgba(239,68,68,0.12)] text-[#f87171]' : days <= 7 ? 'bg-[rgba(245,158,11,0.12)] text-[#fbbf24]' : 'bg-[var(--teal-soft)] text-[var(--teal-deep)]'}`}>
+            <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-bold ${days < 0 ? 'bg-[rgba(239,68,68,0.12)] text-[#f87171]' : days <= 7 ? 'bg-[rgba(245,158,11,0.12)] text-[#fbbf24]' : 'bg-[var(--teal-soft)] text-[var(--teal-deep)]'}`}>
               {days < 0 ? `超期${-days}天` : `↦${days}天上线`}
             </span>
           ) : null}
-          {liveHere ? <span className="shrink-0 text-[10px] font-bold text-[var(--teal-deep)]">● 正在干</span> : null}
+          {liveHere ? <span className="shrink-0 text-2xs font-bold text-[var(--teal-deep)]">● 正在干</span> : null}
           <button className="text-slate-500 transition-colors hover:text-slate-200" onClick={onClose}>✕</button>
         </div>
 
@@ -230,7 +230,7 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
           {([['view', '查看'], ['manage', '管理']] as [Tab, string][]).map(([k, label]) => (
             <button
               key={k}
-              className={`rounded-lg px-3 py-1 text-[11.5px] transition-colors ${tab === k ? 'bg-[var(--surface-3)] text-[var(--teal-deep)]' : 'text-slate-500 hover:text-slate-200'}`}
+              className={`rounded-lg px-3 py-1 text-xs transition-colors ${tab === k ? 'bg-[var(--surface-3)] text-[var(--teal-deep)]' : 'text-slate-500 hover:text-slate-200'}`}
               onClick={() => setTab(k)}
             >
               {label}
@@ -242,8 +242,8 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
           {/* ── 查看：概览仪表盘，不堆编辑件 ── */}
           {tab === 'view' && (
             <div className="flex flex-col gap-3">
-              {err ? <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-1.5 text-[11px] text-red-300">{err}</div> : null}
-              {tip ? <div className="rounded-lg border border-[var(--teal-border)] bg-[var(--teal-wash)] px-3 py-1.5 text-[11px] text-[var(--teal-deep)]">{tip}</div> : null}
+              {err ? <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-1.5 text-xs text-red-300">{err}</div> : null}
+              {tip ? <div className="rounded-lg border border-[var(--teal-border)] bg-[var(--teal-wash)] px-3 py-1.5 text-xs text-[var(--teal-deep)]">{tip}</div> : null}
 
               {/* 概览头：进度环 + 目标 + 关键数字一行 */}
               <div className="flex items-center gap-3.5 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-4 py-3">
@@ -253,14 +253,14 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
                       <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="4" />
                       <circle cx="24" cy="24" r="20" fill="none" stroke={project.color ?? 'var(--teal)'} strokeWidth="4" strokeLinecap="round" strokeDasharray={2 * Math.PI * 20} strokeDashoffset={2 * Math.PI * 20 * (1 - pct / 100)} />
                     </svg>
-                    <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold tabular-nums text-slate-100">{pct}%</span>
+                    <span className="absolute inset-0 flex items-center justify-center text-xs font-bold tabular-nums text-slate-100">{pct}%</span>
                   </div>
                 ) : null}
                 <div className="min-w-0 flex-1">
-                  {project.goal ? <p className="line-clamp-2 text-[12px] leading-relaxed text-slate-300">{project.goal}</p> : <p className="text-[12px] text-slate-600">还没写期待结果 · 去管理页补一句</p>}
+                  {project.goal ? <p className="line-clamp-2 text-xs leading-relaxed text-slate-300">{project.goal}</p> : <p className="text-xs text-slate-600">还没写期待结果 · 去管理页补一句</p>}
                 </div>
               </div>
-              <div className="flex items-center gap-4 px-1 text-[11px] text-slate-400">
+              <div className="flex items-center gap-4 px-1 text-xs text-slate-400">
                 <span>今日投入 <b className="tabular-nums text-slate-200">{todayMin > 0 ? fmtMin(todayMin) : '未动'}</b></span>
                 <span>剩余 <b className="tabular-nums text-slate-200">{left} 项</b></span>
                 {dirAct ? <span>改动 <b className="tabular-nums text-slate-200">{dirAct.changedFiles} 文件{dirAct.hotspot ? ` · ${dirAct.hotspot}/` : ''}</b></span> : null}
@@ -273,30 +273,30 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
                 onClick={() => setTab('manage')}
                 title="去管理页编辑对接线索"
               >
-                <span className="text-[10px] uppercase tracking-wider text-slate-500">🔌 对接</span>
-                {liveHere ? <span className="text-[10px] font-bold text-[var(--teal-deep)]">● 正在归因{attr?.app ? `：${displayApp(attr.app)}` : ''}</span> : null}
-                <span className="min-w-0 flex-1 truncate text-[11px] text-slate-400">
+                <span className="text-2xs uppercase tracking-wider text-slate-500">🔌 对接</span>
+                {liveHere ? <span className="text-2xs font-bold text-[var(--teal-deep)]">● 正在归因{attr?.app ? `：${displayApp(attr.app)}` : ''}</span> : null}
+                <span className="min-w-0 flex-1 truncate text-xs text-slate-400">
                   {bind && (bind.apps.length + bind.keywords.length + bind.dirs.length) > 0
                     ? `${bind.apps.length ? `应用${bind.apps.length}` : ''}${bind.apps.length && (bind.keywords.length || bind.dirs.length) ? ' · ' : ''}${bind.keywords.length ? `关键词${bind.keywords.length}` : ''}${bind.keywords.length && bind.dirs.length ? ' · ' : ''}${bind.dirs.length ? `目录${bind.dirs.length}` : ''}`
                     : '还没有绑定线索'}
                   {timedApps.length ? ` · 计时归类 ${timedApps.map(displayApp).join('、')}` : ''}
                 </span>
-                <span className="shrink-0 text-[10px] text-slate-500">编辑 ›</span>
+                <span className="shrink-0 text-2xs text-slate-500">编辑 ›</span>
               </button>
 
               {/* 任务（里程碑并进列表，◆ 前缀区分） */}
               <div>
                 <div className="mb-1 flex items-center gap-2">
-                  <span className="text-[10px] uppercase tracking-wider text-slate-500">任务 · {left} 待办</span>
+                  <span className="text-2xs uppercase tracking-wider text-slate-500">任务 · {left} 待办</span>
                   <input
-                    className="ml-auto w-44 rounded border border-[var(--line)] bg-transparent px-2 py-0.5 text-[10.5px] text-slate-300 outline-none placeholder:text-slate-600 focus:border-[var(--border-active)]"
+                    className="ml-auto w-44 rounded border border-[var(--line)] bg-transparent px-2 py-0.5 text-2xs text-slate-300 outline-none placeholder:text-slate-600 focus:border-[var(--border-active)]"
                     placeholder="＋ 新任务，回车添加"
                     value={newTask}
                     onChange={(e) => setNewTask(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && void addTask()}
                   />
                 </div>
-                {tasks.length === 0 ? <p className="text-[11px] text-slate-600">暂无任务 · 回车加一条，或用下方 AI 拆解</p> : (
+                {tasks.length === 0 ? <p className="text-xs text-slate-600">暂无任务 · 回车加一条，或用下方 AI 拆解</p> : (
                   <div className="flex flex-col gap-0.5">
                     {tasks.map((t) => (
                       <div key={t.id} className="group flex items-center gap-2 rounded-lg px-1.5 py-1 transition-colors hover:bg-[var(--surface-3)]">
@@ -306,15 +306,15 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
                         >
                           <Icon name="check" size={10} />
                         </button>
-                        {t.isMilestone ? <span className="shrink-0 text-[10px] text-[var(--violet)]" title="里程碑">◆</span> : null}
-                        <span className={`min-w-0 flex-1 truncate text-[12px] ${t.status === 'done' ? 'text-slate-500 line-through' : 'text-slate-200'}`}>{t.title}</span>
-                        <span className="text-[9.5px] font-bold" style={{ color: STATUS_COLOR[t.status] }}>{STATUS_LABEL[t.status]}</span>
+                        {t.isMilestone ? <span className="shrink-0 text-2xs text-[var(--violet)]" title="里程碑">◆</span> : null}
+                        <span className={`min-w-0 flex-1 truncate text-xs ${t.status === 'done' ? 'text-slate-500 line-through' : 'text-slate-200'}`}>{t.title}</span>
+                        <span className="text-2xs font-bold" style={{ color: STATUS_COLOR[t.status] }}>{STATUS_LABEL[t.status]}</span>
                         {t.status !== 'done' ? (
                           pushedIds.has(t.id) ? (
-                            <span className="shrink-0 text-[9.5px] font-bold text-[var(--teal-deep)]" title="已在今日安排中">✓ 已排今日</span>
+                            <span className="shrink-0 text-2xs font-bold text-[var(--teal-deep)]" title="已在今日安排中">✓ 已排今日</span>
                           ) : (
                             <button
-                              className="hidden shrink-0 rounded-md bg-[var(--surface-3)] px-1.5 py-0.5 text-[9.5px] text-slate-300 group-hover:block"
+                              className="hidden shrink-0 rounded-md bg-[var(--surface-3)] px-1.5 py-0.5 text-2xs text-slate-300 group-hover:block"
                               disabled={pushing === t.id}
                               title="写入今日安排（去「计划」页可见）"
                               onClick={() => void pushTaskToToday(t)}
@@ -331,7 +331,7 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
               {Object.keys(project.attrs ?? {}).length ? (
                 <div className="flex flex-wrap items-center gap-1.5">
                   {(project.attrOrder ?? Object.keys(project.attrs ?? {})).map((k) => (
-                    <span key={k} className="rounded-lg border border-[var(--line)] px-2 py-0.5 text-[10.5px]">
+                    <span key={k} className="rounded-lg border border-[var(--line)] px-2 py-0.5 text-2xs">
                       <span className="text-slate-500">{k}</span> <b className="text-slate-200">{String(project.attrs?.[k] ?? '')}</b>
                     </span>
                   ))}
@@ -340,23 +340,23 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
 
               {/* 行动区：图标按钮，就地展开 */}
               <div className="flex flex-wrap items-center gap-1.5 border-t border-[var(--line)] pt-2.5">
-                <button className="glass-btn !px-2.5 !py-1 !text-[11px]" onClick={() => void exportProgressCard()} title="复制反哺提示词：贴给 Cursor/开发 AI，要进展+下一步计划"><Icon name="send" size={11} /> 反哺提示词</button>
-                <button className="glass-btn !px-2.5 !py-1 !text-[11px]" onClick={() => setProgressIn((s) => ({ ...s, open: !s.open, diff: null }))} title="把开发 AI 的回复贴回来：写入进展 + 导入下一步待办"><Icon name="refresh" size={11} /> 粘贴回传</button>
-                <button className="glass-btn !px-2.5 !py-1 !text-[11px]" onClick={() => setBreakdown((b) => ({ ...b, open: !b.open }))}><Icon name="sparkles" size={11} /> AI 拆解</button>
-                <button className="glass-btn !px-2.5 !py-1 !text-[11px]" onClick={() => void doReview()} disabled={review.loading}><Icon name="chart" size={11} /> {review.loading ? '复盘中…' : 'AI 复盘'}</button>
+                <button className="glass-btn !px-2.5 !py-1 !text-xs" onClick={() => void exportProgressCard()} title="复制反哺提示词：贴给 Cursor/开发 AI，要进展+下一步计划"><Icon name="send" size={11} /> 反哺提示词</button>
+                <button className="glass-btn !px-2.5 !py-1 !text-xs" onClick={() => setProgressIn((s) => ({ ...s, open: !s.open, diff: null }))} title="把开发 AI 的回复贴回来：写入进展 + 导入下一步待办"><Icon name="refresh" size={11} /> 粘贴回传</button>
+                <button className="glass-btn !px-2.5 !py-1 !text-xs" onClick={() => setBreakdown((b) => ({ ...b, open: !b.open }))}><Icon name="sparkles" size={11} /> AI 拆解</button>
+                <button className="glass-btn !px-2.5 !py-1 !text-xs" onClick={() => void doReview()} disabled={review.loading}><Icon name="chart" size={11} /> {review.loading ? '复盘中…' : 'AI 复盘'}</button>
               </div>
 
               {progressIn.open ? <ProgressInBox projectId={project.id} state={progressIn} setState={setProgressIn} onApplied={async () => { await reloadTasks(); onSaved() }} onError={setErr} onTip={flash} /> : null}
               {breakdown.open ? (
                 <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-2">
-                  <textarea className="glass-input !py-1 !text-[11px]" rows={2} placeholder="描述今日目的或要优化的方面，AI 会整理成 2～5 条粗目标…" value={breakdown.req} onChange={(e) => setBreakdown((b) => ({ ...b, req: e.target.value }))} />
+                  <textarea className="glass-input !py-1 !text-xs" rows={2} placeholder="描述今日目的或要优化的方面，AI 会整理成 2～5 条粗目标…" value={breakdown.req} onChange={(e) => setBreakdown((b) => ({ ...b, req: e.target.value }))} />
                   <div className="mt-1.5 flex justify-end gap-1.5">
-                    <button className="glass-btn !px-2 !py-1 !text-[10px]" onClick={() => setBreakdown((b) => ({ ...b, open: false }))}>取消</button>
-                    <button className="glass-btn primary !px-2 !py-1 !text-[10px]" disabled={breakdown.loading || !breakdown.req.trim()} onClick={() => void doBreakdown()}>{breakdown.loading ? '拆解中…' : '生成任务'}</button>
+                    <button className="glass-btn !px-2 !py-1 !text-2xs" onClick={() => setBreakdown((b) => ({ ...b, open: false }))}>取消</button>
+                    <button className="glass-btn primary !px-2 !py-1 !text-2xs" disabled={breakdown.loading || !breakdown.req.trim()} onClick={() => void doBreakdown()}>{breakdown.loading ? '拆解中…' : '生成任务'}</button>
                   </div>
                 </div>
               ) : null}
-              {review.text ? <div className="whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-2 text-[11px] leading-relaxed text-slate-300">{review.text}</div> : null}
+              {review.text ? <div className="whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-2 text-xs leading-relaxed text-slate-300">{review.text}</div> : null}
             </div>
           )}
 
@@ -364,20 +364,20 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
           {tab === 'manage' && (
             <div className="flex flex-col gap-3">
               <label className="flex flex-col gap-1">
-                <span className="text-[10px] uppercase tracking-wider text-slate-500">名称</span>
+                <span className="text-2xs uppercase tracking-wider text-slate-500">名称</span>
                 <input className={inputCls} value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} />
               </label>
               <label className="flex flex-col gap-1">
-                <span className="text-[10px] uppercase tracking-wider text-slate-500">期待结果（目标）</span>
+                <span className="text-2xs uppercase tracking-wider text-slate-500">期待结果（目标）</span>
                 <textarea rows={2} className={`${inputCls} resize-none leading-relaxed`} value={draft.goal ?? ''} onChange={(e) => setDraft((d) => ({ ...d, goal: e.target.value }))} />
               </label>
               <div className="flex gap-3">
                 <label className="flex flex-1 flex-col gap-1">
-                  <span className="text-[10px] uppercase tracking-wider text-slate-500">上线目标日</span>
+                  <span className="text-2xs uppercase tracking-wider text-slate-500">上线目标日</span>
                   <input type="date" className={inputCls} value={draft.deadline ?? ''} onChange={(e) => setDraft((d) => ({ ...d, deadline: e.target.value }))} />
                 </label>
                 <label className="flex w-24 flex-col gap-1">
-                  <span className="text-[10px] uppercase tracking-wider text-slate-500">优先级</span>
+                  <span className="text-2xs uppercase tracking-wider text-slate-500">优先级</span>
                   <select className={inputCls} value={draft.priority} onChange={(e) => setDraft((d) => ({ ...d, priority: e.target.value as Project['priority'] }))}>
                     <option value="high">高</option>
                     <option value="medium">中</option>
@@ -385,7 +385,7 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
                   </select>
                 </label>
                 <label className="flex w-24 flex-col gap-1">
-                  <span className="text-[10px] uppercase tracking-wider text-slate-500">状态</span>
+                  <span className="text-2xs uppercase tracking-wider text-slate-500">状态</span>
                   <select className={inputCls} value={draft.status} onChange={(e) => setDraft((d) => ({ ...d, status: e.target.value as Project['status'] }))}>
                     <option value="active">进行中</option>
                     <option value="paused">暂停</option>
@@ -395,7 +395,7 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
                 </label>
               </div>
               <div className="flex flex-col gap-1">
-                <span className="text-[10px] uppercase tracking-wider text-slate-500">工作域（这个项目说什么行话）</span>
+                <span className="text-2xs uppercase tracking-wider text-slate-500">工作域（这个项目说什么行话）</span>
                 <div className="flex flex-wrap items-center gap-1.5">
                   {PRESET_DOMAINS.map((d) => {
                     const on = draft.domain === d || (!draft.domain && d === defaultDomainOfUserType(userType))
@@ -405,7 +405,7 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
                         key={d}
                         type="button"
                         title={meta?.desc}
-                        className={`rounded-full border px-2 py-0.5 text-[10.5px] transition-colors ${
+                        className={`rounded-full border px-2 py-0.5 text-2xs transition-colors ${
                           draft.domain === d
                             ? 'border-[var(--teal-border)] bg-[var(--teal-soft)] text-[var(--teal-deep)]'
                             : on && d === defaultDomainOfUserType(userType)
@@ -420,12 +420,12 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
                     )
                   })}
                   {customDomain || draft.domain && !PRESET_DOMAINS.includes(draft.domain) ? (
-                    <span className="rounded-full border border-[var(--line)] bg-[var(--surface-2)] px-2 py-0.5 text-[10.5px] text-slate-300">
+                    <span className="rounded-full border border-[var(--line)] bg-[var(--surface-2)] px-2 py-0.5 text-2xs text-slate-300">
                       ✳ {draft.domain && !PRESET_DOMAINS.includes(draft.domain) ? draft.domain : customDomain}
                     </span>
                   ) : null}
                   <input
-                    className="w-24 rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-1.5 py-0.5 text-[10.5px] text-slate-200 placeholder:text-slate-600"
+                    className="w-24 rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-1.5 py-0.5 text-2xs text-slate-200 placeholder:text-slate-600"
                     placeholder="自定义域…"
                     value={customDomain}
                     onChange={(e) => {
@@ -438,7 +438,7 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
                 {domainGuess ? (
                   <button
                     type="button"
-                    className="self-start text-[10.5px] text-[var(--teal)] hover:underline"
+                    className="self-start text-2xs text-[var(--teal)] hover:underline"
                     onClick={() => {
                       setDraft((dd) => ({ ...dd, domain: domainGuess }))
                       if (PRESET_DOMAINS.includes(domainGuess)) setCustomDomain('')
@@ -447,21 +447,21 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
                     看起来像「{DOMAIN_META[domainGuess]?.label ?? domainGuess}」的活？点一下标上
                   </button>
                 ) : null}
-                <span className="text-[10px] text-slate-600">
+                <span className="text-2xs text-slate-600">
                   当前词汇：{resolveTerm(draft.domain, 'project')} · {resolveTerm(draft.domain, 'step')} · {resolveTerm(draft.domain, 'statusCard')}
                 </span>
               </div>
-              <button className="glass-btn primary self-end !py-1 text-[11px]" onClick={() => void saveHeader()}>保存信息</button>
+              <button className="glass-btn primary self-end !py-1 text-xs" onClick={() => void saveHeader()}>保存信息</button>
 
               {/* 对接编辑：归属引擎线索（应用/关键词/目录）+ 计时归类 */}
               <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2.5">
-                <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">🔌 对接（归属引擎按这些线索把干活归到本项目）</div>
+                <div className="mb-1.5 text-2xs uppercase tracking-wider text-slate-500">🔌 对接（归属引擎按这些线索把干活归到本项目）</div>
                 <BindGroup label="应用" kind="apps" items={bind?.apps ?? []} fmt={displayApp} onRemove={removeBindItem} addBind={addBind} setAddBind={setAddBind} onAdd={addBindItem} />
                 <BindGroup label="关键词" kind="keywords" items={bind?.keywords ?? []} onRemove={removeBindItem} addBind={addBind} setAddBind={setAddBind} onAdd={addBindItem} />
                 <BindGroup label="目录" kind="dirs" items={bind?.dirs ?? []} onRemove={removeBindItem} addBind={addBind} setAddBind={setAddBind} onAdd={addBindItem} mono />
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5 border-t border-dashed border-[var(--line)] pt-1.5">
-                  <span className="w-12 shrink-0 text-[10px] text-slate-500">计时归类</span>
-                  {timedApps.length === 0 && addTimed === null ? <span className="text-[10.5px] text-slate-600">无（该应用当日时长才计入本项目）</span> : null}
+                  <span className="w-12 shrink-0 text-2xs text-slate-500">计时归类</span>
+                  {timedApps.length === 0 && addTimed === null ? <span className="text-2xs text-slate-600">无（该应用当日时长才计入本项目）</span> : null}
                   {timedApps.map((a) => (
                     <span key={a} className="chip !py-0">
                       {displayApp(a)}
@@ -473,7 +473,7 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
                       <input
                         autoFocus
                         list={`tl-apps-${project.id}`}
-                        className="w-32 rounded border border-[var(--border-active)] bg-transparent px-1.5 py-0.5 text-[10.5px] text-slate-200 outline-none"
+                        className="w-32 rounded border border-[var(--border-active)] bg-transparent px-1.5 py-0.5 text-2xs text-slate-200 outline-none"
                         placeholder="应用名，如 code / cursor"
                         value={addTimed}
                         onChange={(e) => setAddTimed(e.target.value)}
@@ -485,18 +485,18 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
                       <button className="text-[var(--teal-deep)]" onClick={() => void linkTimedApp(addTimed)}>✓</button>
                     </span>
                   ) : (
-                    <button className="rounded border border-dashed border-[var(--line)] px-1.5 py-0 text-[9.5px] text-slate-500 hover:text-slate-200" title="把某应用的今日时长归入本项目" onClick={() => setAddTimed('')}>＋</button>
+                    <button className="rounded border border-dashed border-[var(--line)] px-1.5 py-0 text-2xs text-slate-500 hover:text-slate-200" title="把某应用的今日时长归入本项目" onClick={() => setAddTimed('')}>＋</button>
                   )}
-                  {todayMin > 0 ? <span className="text-[10px] text-neon-cyan">今日已计 {fmtMin(todayMin)}</span> : null}
+                  {todayMin > 0 ? <span className="text-2xs text-neon-cyan">今日已计 {fmtMin(todayMin)}</span> : null}
                 </div>
               </div>
 
               <div className="border-t border-[var(--line)] pt-2.5">
-                <div className="mb-1.5 text-[10px] uppercase tracking-wider text-slate-500">属性袋（自由维度）</div>
+                <div className="mb-1.5 text-2xs uppercase tracking-wider text-slate-500">属性袋（自由维度）</div>
                 <div className="flex flex-col gap-1.5">
                   {Object.entries(draft.attrs ?? {}).map(([k, v]) => (
                     <div key={k} className="flex items-center gap-1.5">
-                      <span className="w-20 shrink-0 truncate text-[11px] text-slate-500">{k}</span>
+                      <span className="w-20 shrink-0 truncate text-xs text-slate-500">{k}</span>
                       <input
                         className={inputCls}
                         value={String(v)}
@@ -515,7 +515,7 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
                   ))}
                   <AttrAdd onAdd={(k, v) => setDraft((d) => ({ ...d, attrs: { ...(d.attrs ?? {}), [k]: v } }))} />
                 </div>
-                <button className="glass-btn primary mt-2 self-end !py-1 text-[11px]" onClick={() => void saveHeader()}>保存属性</button>
+                <button className="glass-btn primary mt-2 self-end !py-1 text-xs" onClick={() => void saveHeader()}>保存属性</button>
               </div>
             </div>
           )}
@@ -540,10 +540,10 @@ function BindGroup({ label, kind, items, fmt, onRemove, addBind, setAddBind, onA
   const adding = addBind?.kind === kind
   return (
     <div className="flex flex-wrap items-center gap-1.5 py-0.5">
-      <span className="w-12 shrink-0 text-[10px] text-slate-500">{label}</span>
-      {items.length === 0 && !adding ? <span className="text-[10.5px] text-slate-600">—</span> : null}
+      <span className="w-12 shrink-0 text-2xs text-slate-500">{label}</span>
+      {items.length === 0 && !adding ? <span className="text-2xs text-slate-600">—</span> : null}
       {items.map((x) => (
-        <span key={x} className={`chip !py-0 ${mono ? 'font-mono !text-[9.5px]' : ''}`} title={x}>
+        <span key={x} className={`chip !py-0 ${mono ? 'font-mono !text-2xs' : ''}`} title={x}>
           {fmt ? fmt(x) : x}
           <button className="ml-1 text-[var(--text-3)] hover:text-red-400" title="移除线索" onClick={() => onRemove(kind, x)}>✕</button>
         </span>
@@ -552,7 +552,7 @@ function BindGroup({ label, kind, items, fmt, onRemove, addBind, setAddBind, onA
         <span className="flex items-center gap-1">
           <input
             autoFocus
-            className={`w-32 rounded border border-[var(--border-active)] bg-transparent px-1.5 py-0.5 text-[10.5px] text-slate-200 outline-none ${mono ? 'font-mono' : ''}`}
+            className={`w-32 rounded border border-[var(--border-active)] bg-transparent px-1.5 py-0.5 text-2xs text-slate-200 outline-none ${mono ? 'font-mono' : ''}`}
             placeholder={kind === 'dirs' ? '路径片段，如 D:\\proj' : kind === 'apps' ? '应用名，如 cursor' : '标题关键词'}
             value={addBind.text}
             onChange={(e) => setAddBind({ kind, text: e.target.value })}
@@ -561,7 +561,7 @@ function BindGroup({ label, kind, items, fmt, onRemove, addBind, setAddBind, onA
           <button className="text-[var(--teal-deep)]" onClick={onAdd}>✓</button>
         </span>
       ) : (
-        <button className="rounded border border-dashed border-[var(--line)] px-1.5 py-0 text-[9.5px] text-slate-500 hover:text-slate-200" onClick={() => setAddBind({ kind, text: '' })}>＋</button>
+        <button className="rounded border border-dashed border-[var(--line)] px-1.5 py-0 text-2xs text-slate-500 hover:text-slate-200" onClick={() => setAddBind({ kind, text: '' })}>＋</button>
       )}
     </div>
   )
@@ -612,16 +612,16 @@ function ProgressInBox({ projectId, state, setState, onApplied, onError, onTip }
   }
   return (
     <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-2">
-      <div className="mb-1 text-[10px] text-slate-500">贴回开发 AI 回复 → 写入进展与未实现，并把「今日粗目标」导入待办</div>
+      <div className="mb-1 text-2xs text-slate-500">贴回开发 AI 回复 → 写入进展与未实现，并把「今日粗目标」导入待办</div>
       <textarea
-        className="glass-input !py-1 !text-[11px]"
+        className="glass-input !py-1 !text-xs"
         rows={4}
         placeholder="把开发工具补完后的内容贴在这里…"
         value={state.text}
         onChange={(e) => setState((s) => ({ ...s, text: e.target.value, diff: null }))}
       />
       {state.diff ? (
-        <div className="mt-1.5 space-y-0.5 rounded-md border border-[var(--line)] p-2 text-[11px]">
+        <div className="mt-1.5 space-y-0.5 rounded-md border border-[var(--line)] p-2 text-xs">
           {state.diff.summary ? <div className="text-slate-300">摘要：{state.diff.summary}</div> : null}
           {state.diff.progressNote ? <div className="whitespace-pre-wrap text-slate-300">进展：{state.diff.progressNote}</div> : null}
           {state.diff.completed.map((t, i) => <div key={`c${i}`} className="text-[var(--teal-deep)]">☑ 待办完成：{t}</div>)}
@@ -632,9 +632,9 @@ function ProgressInBox({ projectId, state, setState, onApplied, onError, onTip }
         </div>
       ) : null}
       <div className="mt-1.5 flex justify-end gap-1.5">
-        <button className="glass-btn !px-2 !py-1 !text-[10px]" onClick={() => setState(() => ({ open: false, text: '', loading: false, diff: null }))}>取消</button>
-        <button className="glass-btn !px-2 !py-1 !text-[10px]" disabled={state.loading || !state.text.trim()} onClick={() => void summarize()}>{state.loading ? '整理中…' : 'AI 整理'}</button>
-        <button className="glass-btn primary !px-2 !py-1 !text-[10px]" disabled={!state.diff} onClick={() => void apply()}>应用更新</button>
+        <button className="glass-btn !px-2 !py-1 !text-2xs" onClick={() => setState(() => ({ open: false, text: '', loading: false, diff: null }))}>取消</button>
+        <button className="glass-btn !px-2 !py-1 !text-2xs" disabled={state.loading || !state.text.trim()} onClick={() => void summarize()}>{state.loading ? '整理中…' : 'AI 整理'}</button>
+        <button className="glass-btn primary !px-2 !py-1 !text-2xs" disabled={!state.diff} onClick={() => void apply()}>应用更新</button>
       </div>
     </div>
   )
@@ -651,9 +651,9 @@ function AttrAdd({ onAdd }: { onAdd: (k: string, v: string) => void }) {
   }
   return (
     <div className="flex items-center gap-1.5">
-      <input className="w-20 rounded border border-dashed border-[var(--line)] bg-transparent px-1.5 py-0.5 text-[11px] text-slate-300 outline-none" placeholder="字段名" value={k} onChange={(e) => setK(e.target.value)} />
+      <input className="w-20 rounded border border-dashed border-[var(--line)] bg-transparent px-1.5 py-0.5 text-xs text-slate-300 outline-none" placeholder="字段名" value={k} onChange={(e) => setK(e.target.value)} />
       <span className="text-slate-600">:</span>
-      <input className="min-w-0 flex-1 rounded border border-dashed border-[var(--line)] bg-transparent px-1.5 py-0.5 text-[11px] text-slate-300 outline-none" placeholder="值" value={v} onChange={(e) => setV(e.target.value)} />
+      <input className="min-w-0 flex-1 rounded border border-dashed border-[var(--line)] bg-transparent px-1.5 py-0.5 text-xs text-slate-300 outline-none" placeholder="值" value={v} onChange={(e) => setV(e.target.value)} />
       <button className="shrink-0 text-slate-500 hover:text-slate-200" onClick={commit}>＋</button>
     </div>
   )

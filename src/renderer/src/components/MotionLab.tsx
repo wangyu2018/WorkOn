@@ -48,17 +48,17 @@ export function MotionLab() {
   return (
     <div className="mt-4 border-t border-white/[0.06] pt-3">
       <div className="flex items-center justify-between">
-        <div className="text-[10px] uppercase text-slate-600">动作工坊</div>
-        <div className="text-[11px] text-amber-300/90">⭐ 积分 {points.balance}</div>
+        <div className="text-2xs uppercase text-slate-600">动作工坊</div>
+        <div className="text-xs text-amber-300/90">⭐ 积分 {points.balance}</div>
       </div>
       <div className="mt-2 flex items-center gap-2">
         <button
-          className="rounded-lg border border-neon-violet/30 bg-neon-violet/10 px-3 py-1 text-[11px] text-neon-violet transition-all hover:bg-neon-violet/20"
+          className="rounded-lg border border-neon-violet/30 bg-neon-violet/10 px-3 py-1 text-xs text-neon-violet transition-all hover:bg-neon-violet/20"
           onClick={() => window.api?.motionStudioOpen?.()}
         >
           🎬 打开动作工坊
         </button>
-        <span className="text-[10px] text-slate-500">视频/摄像头录制 → 动作 → 桌宠播放</span>
+        <span className="text-2xs text-slate-500">视频/摄像头录制 → 动作 → 桌宠播放</span>
       </div>
 
       {motions.length > 0 ? (
@@ -68,10 +68,10 @@ export function MotionLab() {
             return (
               <div key={m.id} className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5">
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[12px] text-slate-200">
+                  <div className="truncate text-xs text-slate-200">
                     {locked ? '🔒 ' : '🎬 '}{m.name}
                   </div>
-                  <div className="text-[10px] text-slate-500">
+                  <div className="text-2xs text-slate-500">
                     {m.duration.toFixed(1)}s · {m.fps}fps{m.cost > 0 ? ` · ${m.cost} 积分` : ' · 免费'}
                   </div>
                 </div>
@@ -79,7 +79,7 @@ export function MotionLab() {
                   {locked ? (
                     <button
                       disabled={busy}
-                      className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-2.5 py-1 text-[11px] text-amber-300 hover:bg-amber-300/20 disabled:opacity-40"
+                      className="rounded-lg border border-amber-300/30 bg-amber-300/10 px-2.5 py-1 text-xs text-amber-300 hover:bg-amber-300/20 disabled:opacity-40"
                       onClick={() => void act(() => window.api?.motionsRedeem?.(m.id), `已解锁「${m.name}」✓`)}
                     >
                       ⭐ {m.cost} 兑换
@@ -87,7 +87,7 @@ export function MotionLab() {
                   ) : (
                     <button
                       disabled={busy}
-                      className="rounded-lg border border-neon-cyan/30 bg-neon-cyan/10 px-2.5 py-1 text-[11px] text-neon-cyan hover:bg-neon-cyan/20 disabled:opacity-40"
+                      className="rounded-lg border border-neon-cyan/30 bg-neon-cyan/10 px-2.5 py-1 text-xs text-neon-cyan hover:bg-neon-cyan/20 disabled:opacity-40"
                       onClick={() => void act(() => window.api?.motionsPlay?.(m.id))}
                     >
                       ▶ 播放
@@ -96,7 +96,7 @@ export function MotionLab() {
                   {m.cost === 0 ? (
                     <button
                       disabled={busy}
-                      className="rounded-lg border border-white/10 px-2 py-1 text-[11px] text-slate-500 hover:bg-white/5 disabled:opacity-40"
+                      className="rounded-lg border border-white/10 px-2 py-1 text-xs text-slate-500 hover:bg-white/5 disabled:opacity-40"
                       onClick={() => void act(() => window.api?.motionsRemove?.(m.id), '已删除')}
                     >
                       ✕
@@ -107,17 +107,17 @@ export function MotionLab() {
             )
           })}
           {points.ledger.length > 0 ? (
-            <div className="mt-1 border-t border-white/[0.06] pt-2 text-[10px] text-slate-500">
+            <div className="mt-1 border-t border-white/[0.06] pt-2 text-2xs text-slate-500">
               最近流水：{points.ledger.slice(0, 3).map((e) => `${e.delta > 0 ? '+' : ''}${e.delta}(${e.reason === 'focus' ? '专注' : e.reason.split(':')[0]})`).join(' · ')}
             </div>
           ) : null}
         </div>
       ) : (
-        <div className="mt-2 text-[10px] leading-relaxed text-slate-500">
+        <div className="mt-2 text-2xs leading-relaxed text-slate-500">
           还没有自定义动作。打开工坊，录一段 10 秒的舞蹈/手势，保存后桌宠就能做这个动作。专注工作会自动累积积分（1 分钟 = 1 积分）。
         </div>
       )}
-      {tip ? <div className="mt-2 rounded-lg bg-neon-cyan/10 px-2.5 py-1.5 text-[11px] text-neon-cyan">{tip}</div> : null}
+      {tip ? <div className="mt-2 rounded-lg bg-neon-cyan/10 px-2.5 py-1.5 text-xs text-neon-cyan">{tip}</div> : null}
     </div>
   )
 }

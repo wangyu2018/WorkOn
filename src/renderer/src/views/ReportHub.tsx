@@ -13,11 +13,12 @@ import { EmptyState } from '../components/EmptyState'
 import { Seg } from '../components/ui/Seg'
 import AnalysisView from './AnalysisView'
 import SmartReportView from './SmartReportView'
+import KnowledgeView from './KnowledgeView'
 import { useSettingsStore } from '../stores/settingsStore'
 import { displayApp } from '@shared/appDisplayName'
 import { WEEK_LABELS, addDays, fmtMin, todayKey } from '../components/utils'
 
-type Tab = 'smart' | 'smartWeekly' | 'ai'
+type Tab = 'smart' | 'smartWeekly' | 'ai' | 'knowledge'
 
 /** 状态分布甜甜圈（纯 SVG） */
 function Donut({ data }: { data: { state: WorkState; value: number }[] }) {
@@ -58,7 +59,7 @@ function sumWork(t: MergedTrail | null): number {
 /** 加载占位 */
 function Loading() {
   return (
-    <div className="flex items-center justify-center gap-2 py-10 text-[12px] text-slate-500">
+    <div className="flex items-center justify-center gap-2 py-10 text-xs text-slate-500">
       <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-neon-cyan" />
       加载中…
     </div>
@@ -80,7 +81,7 @@ function PinButton({ id }: { id: string }) {
       localStorage.setItem('pinnedWidgets', arr.join(','))
     } catch {}
   }
-  return <button onClick={toggle} className={`text-[11px] ${pinned ? 'text-neon-cyan' : 'text-slate-600 hover:text-slate-400'}`} title={pinned ? '已投送' : '投送到主页'}>{pinned ? '📌' : '📍'}</button>
+  return <button onClick={toggle} className={`text-xs ${pinned ? 'text-neon-cyan' : 'text-slate-600 hover:text-slate-400'}`} title={pinned ? '已投送' : '投送到主页'}>{pinned ? '📌' : '📍'}</button>
 }
 
 /* ── 注意力评分组件（Radar / AttentionDailyCard / SectionTitle / DIM_META / Delta）已抽至 ../components/AttentionCard ── */
@@ -135,16 +136,16 @@ function AttentionWeeklyCard({ scores }: { scores: AttentionScore[] }) {
       {/* 顶部：周均分 + 等级 + 环比上周 */}
       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="text-2xl font-bold leading-tight text-slate-100">{weekAvg}</span>
-        <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: `${gm.color}22`, color: gm.color }}>
+        <span className="rounded-full px-2 py-0.5 text-2xs font-semibold" style={{ background: `${gm.color}22`, color: gm.color }}>
           {gradeOf(weekAvg)} · {gm.label}
         </span>
-        <span className="text-[10px] text-slate-500">周均分（{thisWeek.length} 天有记录）</span>
+        <span className="text-2xs text-slate-500">周均分（{thisWeek.length} 天有记录）</span>
         {lastAvg !== null && weekAvg - lastAvg !== 0 ? (
-          <span className="flex items-center gap-1 text-[10px] text-slate-500">
+          <span className="flex items-center gap-1 text-2xs text-slate-500">
             <Delta v={weekAvg - lastAvg} /> vs 上周均值
           </span>
         ) : null}
-        <span className="ml-auto flex items-center gap-3 text-[10px] text-slate-500">
+        <span className="ml-auto flex items-center gap-3 text-2xs text-slate-500">
           <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 rounded bg-neon-cyan" /> 综合分</span>
           <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 rounded bg-slate-500" /> 五维均值</span>
         </span>
@@ -184,7 +185,7 @@ function AttentionWeeklyCard({ scores }: { scores: AttentionScore[] }) {
           const prev = dimAvgOf(lastWeek, d.key)
           const delta = cur !== null && prev !== null ? cur - prev : null
           return (
-            <span key={d.key} className="flex items-center gap-1 text-[10px] text-slate-500">
+            <span key={d.key} className="flex items-center gap-1 text-2xs text-slate-500">
               {d.label}
               <span className="font-medium text-slate-300">{cur ?? '—'}</span>
               {delta !== null && delta !== 0 ? <Delta v={delta} /> : null}
@@ -312,7 +313,7 @@ function DailyReport() {
     <div className="flex flex-col gap-5">
       {/* 工具行：排除摸鱼 + 复制日报 */}
       <div className="flex items-center gap-3">
-        <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-slate-400 transition-colors hover:border-white/[0.12] hover:text-slate-300">
+        <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 text-xs text-slate-400 transition-colors hover:border-white/[0.12] hover:text-slate-300">
           <input
             type="checkbox"
             className="accent-cyan-400"
@@ -322,37 +323,37 @@ function DailyReport() {
           排除摸鱼数据
         </label>
         {excludeSlack && slackMin > 0 ? (
-          <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] text-slate-500">
+          <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-2xs text-slate-500">
             已排除摸鱼 {fmtMin(slackMin)}
           </span>
         ) : null}
         <div className="flex-1" />
-        <button className={`glass-btn !px-2.5 !py-1 !text-[11px] ${copied ? 'primary' : ''}`} onClick={copyReport}>
+        <button className={`glass-btn !px-2.5 !py-1 !text-xs ${copied ? 'primary' : ''}`} onClick={copyReport}>
           {copied ? '已复制 ✓' : '📋 复制日报'}
         </button>
       </div>
       {/* 总览 */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="glass-card anim-fade-up text-center">
-          <div className="text-[26px] font-extrabold leading-tight tracking-tight text-slate-100">{fmtMin(trail.totalMin)}</div>
-          <div className="mt-1 text-[11px] text-slate-500">总时长（墙钟）</div>
+          <div className="text-2xl font-extrabold leading-tight tracking-tight text-slate-100">{fmtMin(trail.totalMin)}</div>
+          <div className="mt-1 text-xs text-slate-500">总时长（墙钟）</div>
           {pva && pva.plannedMin > 0 ? (
-            <div className="mt-1.5 inline-block rounded-full bg-neon-cyan/15 px-2 py-0.5 text-[10px] text-neon-cyan">
+            <div className="mt-1.5 inline-block rounded-full bg-neon-cyan/15 px-2 py-0.5 text-2xs text-neon-cyan">
               计划 {fmtMin(pva.plannedMin)} · 达成 {Math.round(pva.achievement)}%
             </div>
           ) : null}
         </div>
         <div className="glass-card anim-fade-up text-center" style={{ animationDelay: '60ms' }}>
-          <div className="text-[26px] font-extrabold leading-tight tracking-tight text-neon-green">{fmtMin(workMin)}</div>
-          <div className="mt-1 text-[11px] text-slate-500">工作</div>
+          <div className="text-2xl font-extrabold leading-tight tracking-tight text-neon-green">{fmtMin(workMin)}</div>
+          <div className="mt-1 text-xs text-slate-500">工作</div>
         </div>
         <div className="glass-card anim-fade-up text-center" style={{ animationDelay: '120ms' }}>
-          <div className="text-[26px] font-extrabold leading-tight tracking-tight text-neon-pink">{fmtMin(slackMin)}</div>
-          <div className="mt-1 text-[11px] text-slate-500">摸鱼</div>
+          <div className="text-2xl font-extrabold leading-tight tracking-tight text-neon-pink">{fmtMin(slackMin)}</div>
+          <div className="mt-1 text-xs text-slate-500">摸鱼</div>
         </div>
         <div className="glass-card anim-fade-up text-center" style={{ animationDelay: '180ms' }}>
-          <div className="text-[26px] font-extrabold leading-tight tracking-tight text-neon-cyan">{fmtMin(trail.dualMin)}</div>
-          <div className="mt-1 text-[11px] text-slate-500">双屏并行（{Math.round(trail.dualRatio * 100)}%）</div>
+          <div className="text-2xl font-extrabold leading-tight tracking-tight text-neon-cyan">{fmtMin(trail.dualMin)}</div>
+          <div className="mt-1 text-xs text-slate-500">双屏并行（{Math.round(trail.dualRatio * 100)}%）</div>
         </div>
       </div>
 
@@ -366,19 +367,19 @@ function DailyReport() {
             >
               <Icon name="target" size={13} />
             </span>
-            <h3 className="text-[13px] font-semibold text-slate-200">项目耗时</h3>
-            <span className="text-[11px] text-slate-500">按项目归类应用累计</span>
+            <h3 className="text-sm font-semibold text-slate-200">项目耗时</h3>
+            <span className="text-xs text-slate-500">按项目归类应用累计</span>
           </div>
           <div className="flex flex-col gap-1.5">
             {projectTimes.map((pt) => {
               const maxMin = projectTimes[0].min || 1
               return (
                 <div key={pt.id} className="flex items-center gap-2">
-                  <span className="w-24 shrink-0 truncate text-[12px] text-slate-300" title={pt.name}>{pt.name}</span>
+                  <span className="w-24 shrink-0 truncate text-xs text-slate-300" title={pt.name}>{pt.name}</span>
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
                     <div className="h-full rounded-full" style={{ width: `${(pt.min / maxMin) * 100}%`, background: pt.color }} />
                   </div>
-                  <span className="w-14 shrink-0 text-right text-[12px] tabular-nums text-slate-400">{fmtMin(pt.min)}</span>
+                  <span className="w-14 shrink-0 text-right text-xs tabular-nums text-slate-400">{fmtMin(pt.min)}</span>
                 </div>
               )
             })}
@@ -390,7 +391,7 @@ function DailyReport() {
       {!attentionLoaded ? (
         <section className="glass-card anim-fade-up" style={{ animationDelay: '60ms' }}>
           <SectionTitle icon="activity" title="今日注意力评分" />
-          <div className="flex items-center gap-2 py-5 text-[12px] text-slate-500">
+          <div className="flex items-center gap-2 py-5 text-xs text-slate-500">
             <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full bg-neon-cyan" />
             评分计算中…
           </div>
@@ -398,7 +399,7 @@ function DailyReport() {
       ) : !attention || (attention.today.finalScore === 0 && trail.totalMin < 30) ? (
         <section className="glass-card anim-fade-up" style={{ animationDelay: '60ms' }}>
           <SectionTitle icon="activity" title="今日注意力评分" />
-          <p className="py-4 text-center text-[12px] text-slate-500">今天还没有足够的活动数据，先去专注工作一会儿，评分稍后就会出现在这里。</p>
+          <p className="py-4 text-center text-xs text-slate-500">今天还没有足够的活动数据，先去专注工作一会儿，评分稍后就会出现在这里。</p>
         </section>
       ) : (
         <AttentionDailyCard score={attention.today} yesterday={yesterdayScore} pin={<PinButton id="attention" />} />
@@ -408,7 +409,7 @@ function DailyReport() {
         {/* 状态分布 */}
         <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '120ms' }}>
           <SectionTitle icon="chart" title="状态分布" />
-          <PinButton id="state" /> <span className="text-[10px] text-slate-500 ml-1">📌 投送主页</span>
+          <PinButton id="state" /> <span className="text-2xs text-slate-500 ml-1">📌 投送主页</span>
           <div className="flex items-start gap-4">
             <div className="shrink-0">
               <Donut data={dist.map(([state, value]) => ({ state, value }))} />
@@ -480,7 +481,7 @@ export default function ReportHub() {
   const aiEnabled = useSettingsStore((s) => s.settings.aiEnabled)
   const settings = useSettingsStore((s) => s.settings)
   const patch = useSettingsStore((s) => s.patch)
-  const [tab, setTab] = useState<Tab>('ai')
+  const [tab, setTab] = useState<Tab>('smart')
   const [showSettings, setShowSettings] = useState(false)
   const [lastSyncAt, setLastSyncAt] = useState<number>(Date.now())
   const [syncing, setSyncing] = useState(false)
@@ -507,10 +508,11 @@ export default function ReportHub() {
     return () => window.removeEventListener('workon:goto-report', onGoto)
   }, [])
   const pollRef = useRef<number | null>(null)
-  const TABS: { key: Tab; label: string; icon: 'chart' | 'calendar' | 'sparkles' | 'brain' }[] = [
-    { key: 'smart', label: '智能日报', icon: 'sparkles' },
-    { key: 'smartWeekly', label: '智能周报', icon: 'sparkles' },
-    ...(aiEnabled ? [{ key: 'ai' as Tab, label: 'AI 洞察', icon: 'brain' as const }] : [])
+  const TABS: { key: Tab; label: string; icon: 'chart' | 'calendar' | 'sparkles' | 'brain' | 'book' }[] = [
+    { key: 'smart', label: '今日回顾', icon: 'calendar' },
+    { key: 'smartWeekly', label: '本周', icon: 'calendar' },
+    ...(aiEnabled ? [{ key: 'ai' as Tab, label: 'AI 分析', icon: 'brain' as const }] : []),
+    { key: 'knowledge', label: '知识沉淀', icon: 'book' as const }
   ]
 
   const handleRefresh = () => {
@@ -549,7 +551,7 @@ export default function ReportHub() {
   return (
     <div className="view-enter flex flex-col gap-5">
       {/* 页面标题区 */}
-      <PageHeader icon="chart" title="报表中心" desc="日报、周报与 AI 洞察，一眼看懂你的时间去向" />
+      <PageHeader icon="chart" title="回顾" desc="今天、本周做了什么，以及沉淀下来的东西" />
 
       {/* 报表入口：分段选择器（v6 Seg，图标化） */}
       <div className="anim-fade-up flex flex-wrap items-center gap-2" style={{ animationDelay: '60ms' }}>
@@ -567,14 +569,15 @@ export default function ReportHub() {
           onChange={(v) => setTab(v as Tab)}
         />
         <div className="flex-1" />
-        <span className="text-[11px] text-slate-500">上次同步 {relativeTime(lastSyncAt)}</span>
+        <span className="text-xs text-slate-500">上次同步 {relativeTime(lastSyncAt)}</span>
         <button
-          className={`glass-btn ${syncing ? 'primary' : ''}`}
-          title="手动刷新"
+          className="ui-icon-btn"
+          title="刷新"
+          aria-label="刷新"
           onClick={handleRefresh}
           disabled={syncing}
         >
-          <Icon name="refresh" size={13} className={syncing ? 'animate-spin' : ''} />
+          <Icon name="refresh" size={14} className={syncing ? 'animate-spin' : ''} />
         </button>
         {/* 报表设置（从设置中心迁入：排除摸鱼 / 导出模板） */}
         <button className={`glass-btn ${showSettings ? 'primary' : ''}`} title="报表设置" onClick={() => setShowSettings((v) => !v)}>
@@ -583,7 +586,7 @@ export default function ReportHub() {
       </div>
       {showSettings ? (
         <div className="glass-card anim-fade-in flex flex-col gap-3 !p-4">
-          <label className="flex cursor-pointer items-center gap-2 text-[12px] text-slate-300">
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-300">
             <input
               type="checkbox"
               className="accent-cyan-400"
@@ -592,10 +595,10 @@ export default function ReportHub() {
             />
             排除摸鱼数据（状态分布与 TOP 应用榜不计入，仅底部标注）
           </label>
-          <label className="flex cursor-pointer items-center gap-2 text-[12px] text-slate-300">
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-300">
             <span className="whitespace-nowrap text-slate-400">自动刷新</span>
             <select
-              className="glass-input !py-1 !text-[11px]"
+              className="glass-input !py-1 !text-xs"
               value={settings.reportAutoRefreshMin ?? 120}
               onChange={(e) => void patch({ reportAutoRefreshMin: Number(e.target.value) })}
             >
@@ -607,13 +610,13 @@ export default function ReportHub() {
             </select>
           </label>
           <div>
-            <div className="mb-1 text-[12px] font-medium text-slate-300">日报导出模板</div>
-            <div className="mb-1.5 text-[10px] leading-relaxed text-slate-500">
+            <div className="mb-1 text-xs font-medium text-slate-300">日报导出模板</div>
+            <div className="mb-1.5 text-2xs leading-relaxed text-slate-500">
               变量：<code className="rounded bg-white/[0.05] px-1 py-0.5 text-neon-cyan/80">{'{{date}} {{totalMin}} {{workMin}} {{slackMin}} {{focusMin}} {{topApps}} {{achievement}}'}</code>
               ，留空用默认格式
             </div>
             <textarea
-              className="glass-input h-24 w-full resize-y !text-[12px] leading-relaxed"
+              className="glass-input h-24 w-full resize-y !text-xs leading-relaxed"
               placeholder={'📊 日报（{{date}}）\n工作 {{workMin}} · 摸鱼 {{slackMin}} · 达成 {{achievement}}\n\n{{topApps}}'}
               value={settings.reportTemplate}
               onChange={(e) => void patch({ reportTemplate: e.target.value })}
@@ -626,6 +629,8 @@ export default function ReportHub() {
           <SmartReportView mode="day" onSynced={handleSynced} onGoWeekly={() => setTab('smartWeekly')} focusKpi={kpi as never} />
         ) : tab === 'smartWeekly' ? (
           <SmartReportView mode="week" onSynced={handleSynced} />
+        ) : tab === 'knowledge' ? (
+          <KnowledgeView />
         ) : (
           <AnalysisView />
         )}

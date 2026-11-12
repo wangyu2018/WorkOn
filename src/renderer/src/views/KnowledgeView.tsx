@@ -7,6 +7,7 @@ import type { KnowledgeItem, KnowledgeLink, MemoRecord, PlanItem, ProcessDraft, 
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState } from '../components/EmptyState'
+import { Modal } from '../components/ui/Modal'
 
 function fmtTs(ts: number): string {
   const d = new Date(ts)
@@ -42,6 +43,7 @@ export default function KnowledgeView() {
   const [linkPlanId, setLinkPlanId] = useState('')
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [pasteHint, setPasteHint] = useState(false)
   /** 新建笔记时从文件带入的文件名（保存后记为上传来源） */
   const [draftFileName, setDraftFileName] = useState('')
@@ -53,6 +55,8 @@ export default function KnowledgeView() {
   const [processPreview, setProcessPreview] = useState<{ title: string; body: string } | null>(null)
   const [sideNote, setSideNote] = useState('')
   const [listFilter, setListFilter] = useState<'all' | 'process'>('all')
+  /** 编辑区默认收起：知识库首先是「读」，不是「录」 */
+  const [composing, setComposing] = useState(false)
 
   const api = window.api as {
     listKnowledge?: () => Promise<KnowledgeItem[]>
@@ -128,6 +132,7 @@ export default function KnowledgeView() {
   }, [selected?.id])
 
   const clearDraft = (): void => {
+    setComposing(false)
     setSelectedId(null)
     setDraftTitle('')
     setDraftBody('')
@@ -284,7 +289,7 @@ export default function KnowledgeView() {
 
   const removeSelected = async (): Promise<void> => {
     if (!selected) return
-    if (!window.confirm('删除这条笔记？')) return
+    setConfirmDelete(false)
     setBusy(true)
     try {
       await api.removeKnowledge?.(selected.id)
@@ -534,12 +539,12 @@ export default function KnowledgeView() {
         desc="本地笔记 · 可上传文件、粘贴截图识别 · 之后再同步到知识库产品"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className="glass-btn !text-[11px]" disabled={busy} onClick={() => void importFiles()}>
+            <button type="button" className="glass-btn !text-xs" disabled={busy} onClick={() => void importFiles()}>
               <Icon name="folder" size={12} /> 上传文件
             </button>
             <button
               type="button"
-              className="glass-btn !text-[11px]"
+              className="glass-btn !text-xs"
               disabled={busy}
               onClick={() => void ingestClipboard()}
               title="读取剪贴板文字或截图，OCR 后写成一条笔记"
@@ -550,10 +555,12 @@ export default function KnowledgeView() {
         }
       />
 
+      {/* 粘贴/拖拽提示：只在拖拽悬停时高亮，平时不占一行说明文字 */}
       <div
-        className={`rounded-xl border border-dashed px-3 py-2 text-[11px] leading-relaxed transition-colors ${
-          pasteHint ? 'border-[var(--border-active)] bg-[var(--accent-softer)]' : 'border-[var(--line)] text-slate-500'
+        className={`rounded-xl border border-dashed px-3 py-1.5 text-xs transition-colors ${
+          pasteHint ? 'border-[var(--border-active)] bg-[var(--accent-softer)] text-slate-300' : 'border-transparent text-transparent'
         }`}
+        style={pasteHint ? undefined : { height: 0, paddingTop: 0, paddingBottom: 0, borderWidth: 0, overflow: 'hidden' }}
         onDragOver={(e) => {
           e.preventDefault()
           setPasteHint(true)
@@ -566,25 +573,25 @@ export default function KnowledgeView() {
           void importFiles()
         }}
       >
-        在本页空白处按 Ctrl+V：剪贴板文字或截图会识别后写成一条笔记。也可点「上传文件」（txt/md/图片等，图片自动识字）。
+        Ctrl+V 贴剪贴板、拖文件到这里，都会直接写成一条笔记
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[260px_minmax(0,1fr)_280px]">
         <section className="glass-card flex max-h-[min(70vh,640px)] flex-col !p-3">
           <div className="mb-2 flex shrink-0 items-center gap-2">
-            <span className="text-[12px] font-semibold text-slate-200">全部笔记</span>
-            <span className="text-[10px] text-slate-500">{items.length}</span>
+            <span className="text-xs font-semibold text-slate-200">全部笔记</span>
+            <span className="text-2xs text-slate-500">{items.length}</span>
             <div className="ml-auto flex gap-1">
               <button
                 type="button"
-                className={`rounded-md px-1.5 py-0.5 text-[10px] ${listFilter === 'all' ? 'bg-[var(--accent-softer)] text-[var(--teal-deep)]' : 'text-slate-500'}`}
+                className={`rounded-md px-1.5 py-0.5 text-2xs ${listFilter === 'all' ? 'bg-[var(--accent-softer)] text-[var(--teal-deep)]' : 'text-slate-500'}`}
                 onClick={() => setListFilter('all')}
               >
                 全部
               </button>
               <button
                 type="button"
-                className={`rounded-md px-1.5 py-0.5 text-[10px] ${listFilter === 'process' ? 'bg-[var(--accent-softer)] text-[var(--teal-deep)]' : 'text-slate-500'}`}
+                className={`rounded-md px-1.5 py-0.5 text-2xs ${listFilter === 'process' ? 'bg-[var(--accent-softer)] text-[var(--teal-deep)]' : 'text-slate-500'}`}
                 onClick={() => setListFilter('process')}
               >
                 过程案卷
@@ -592,14 +599,14 @@ export default function KnowledgeView() {
             </div>
           </div>
           <input
-            className="mb-2 w-full shrink-0 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[12px] text-slate-200 outline-none placeholder:text-slate-600 focus:border-[var(--border-active)]"
+            className="mb-2 w-full shrink-0 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1.5 text-xs text-slate-200 outline-none placeholder:text-slate-600 focus:border-[var(--border-active)]"
             placeholder="搜索标题或正文"
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
           <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5">
             {!loaded ? (
-              <div className="py-8 text-center text-[11px] text-slate-600">加载中…</div>
+              <div className="py-8 text-center text-xs text-slate-600">加载中…</div>
             ) : filtered.length === 0 ? (
               <EmptyState title="还没有笔记" hint="中间写一段、上传文件，或 Ctrl+V 贴截图" />
             ) : (
@@ -614,8 +621,8 @@ export default function KnowledgeView() {
                       : 'border-transparent hover:bg-[var(--surface-2)]'
                   }`}
                 >
-                  <div className="truncate text-[12px] font-medium text-slate-100">{it.title || '未命名'}</div>
-                  <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-slate-500">
+                  <div className="truncate text-xs font-medium text-slate-100">{it.title || '未命名'}</div>
+                  <div className="mt-0.5 flex items-center gap-1.5 text-2xs text-slate-500">
                     <span className="truncate">{sourceLabel(it)}</span>
                     <span>·</span>
                     <span className="shrink-0">{fmtTs(it.sedimentedAt || it.ts || Date.now())}</span>
@@ -627,16 +634,26 @@ export default function KnowledgeView() {
         </section>
 
         <section className="glass-card flex flex-col gap-3 !p-4">
+          {!selected && !composing && !draftTitle && !draftBody ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 py-10 text-center">
+              <div className="text-sm text-slate-300">从左侧选一条笔记</div>
+              <div className="text-xs text-slate-500">或直接在本页 Ctrl+V 贴文字/截图，自动成为一条笔记</div>
+              <button className="glass-btn primary" onClick={() => setComposing(true)}>
+                <Icon name="plus" size={14} /> 新建笔记
+              </button>
+            </div>
+          ) : (
+          <>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[12px] font-semibold text-slate-200">
+            <span className="text-xs font-semibold text-slate-200">
               {selected ? '编辑笔记' : '新建笔记'}
             </span>
             {selected ? (
-              <span className="text-[10px] text-slate-500">{sourceLabel(selected)}</span>
+              <span className="text-2xs text-slate-500">{sourceLabel(selected)}</span>
             ) : null}
             <button
               type="button"
-              className="ml-auto glass-btn !text-[11px]"
+              className="ml-auto glass-btn !text-xs"
               disabled={busy}
               onClick={() => void uploadIntoDraft()}
               title="选择 txt/md/图片等，图片会自动识字并填入正文"
@@ -645,12 +662,12 @@ export default function KnowledgeView() {
             </button>
           </div>
           {draftFileName && !selected ? (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[11px] text-slate-400">
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1.5 text-xs text-slate-400">
               <Icon name="folder" size={12} />
               <span className="truncate">来自文件：{draftFileName}</span>
               <button
                 type="button"
-                className="ml-auto text-[10px] text-slate-500 hover:text-slate-300"
+                className="ml-auto text-2xs text-slate-500 hover:text-slate-300"
                 onClick={() => setDraftFileName('')}
               >
                 清除标记
@@ -658,23 +675,23 @@ export default function KnowledgeView() {
             </div>
           ) : null}
           <input
-            className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-[13px] text-slate-100 outline-none focus:border-[var(--border-active)]"
+            className="w-full rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-sm text-slate-100 outline-none focus:border-[var(--border-active)]"
             placeholder="标题（可空，上传文件会自动带上）"
             value={draftTitle}
             onChange={(e) => setDraftTitle(e.target.value)}
           />
           <textarea
-            className="min-h-[160px] max-h-[360px] w-full resize-y rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-[13px] leading-relaxed text-slate-200 outline-none focus:border-[var(--border-active)]"
+            className="min-h-[160px] max-h-[360px] w-full resize-y rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-sm leading-relaxed text-slate-200 outline-none focus:border-[var(--border-active)]"
             placeholder="正文内容… 也可点右上角「上传文件」从文档/截图填入"
             value={draftBody}
             onChange={(e) => setDraftBody(e.target.value)}
           />
 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <label className="flex flex-col gap-1 text-[10px] text-slate-500">
+            <label className="flex flex-col gap-1 text-2xs text-slate-500">
               关联项目（可选）
               <select
-                className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-[12px] text-slate-200"
+                className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-xs text-slate-200"
                 value={linkProjectId}
                 onChange={(e) => setLinkProjectId(e.target.value)}
               >
@@ -686,10 +703,10 @@ export default function KnowledgeView() {
                 ))}
               </select>
             </label>
-            <label className="flex flex-col gap-1 text-[10px] text-slate-500">
+            <label className="flex flex-col gap-1 text-2xs text-slate-500">
               关联今日计划（可选）
               <select
-                className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-[12px] text-slate-200"
+                className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-xs text-slate-200"
                 value={linkPlanId}
                 onChange={(e) => setLinkPlanId(e.target.value)}
               >
@@ -705,11 +722,11 @@ export default function KnowledgeView() {
 
           {linkProjectId ? (
             <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-2">
-              <div className="mb-1.5 text-[10px] font-medium text-slate-400">过程笔记分类（本项目）</div>
+              <div className="mb-1.5 text-2xs font-medium text-slate-400">过程笔记分类（本项目）</div>
               <div className="flex flex-wrap gap-1.5">
                 <button
                   type="button"
-                  className={`rounded-md border px-2 py-0.5 text-[10px] ${
+                  className={`rounded-md border px-2 py-0.5 text-2xs ${
                     !draftCategoryId ? 'border-[var(--border-active)] text-[var(--teal-deep)]' : 'border-[var(--line)] text-slate-400'
                   }`}
                   onClick={() => {
@@ -723,7 +740,7 @@ export default function KnowledgeView() {
                   <button
                     key={c.id}
                     type="button"
-                    className={`rounded-md border px-2 py-0.5 text-[10px] ${
+                    className={`rounded-md border px-2 py-0.5 text-2xs ${
                       draftCategoryId === c.id
                         ? 'border-[var(--border-active)] text-[var(--teal-deep)]'
                         : 'border-[var(--line)] text-slate-400'
@@ -739,14 +756,14 @@ export default function KnowledgeView() {
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <input
-                  className="min-w-0 flex-1 rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 py-1 text-[11px] text-slate-200 outline-none"
+                  className="min-w-0 flex-1 rounded-md border border-[var(--line)] bg-[var(--surface)] px-2 py-1 text-xs text-slate-200 outline-none"
                   placeholder="新建分类名"
                   value={newCatName}
                   onChange={(e) => setNewCatName(e.target.value)}
                 />
                 <button
                   type="button"
-                  className="glass-btn !text-[10px]"
+                  className="glass-btn !text-2xs"
                   disabled={busy || !newCatName.trim()}
                   onClick={() => void createCategory(newCatName)}
                 >
@@ -754,7 +771,7 @@ export default function KnowledgeView() {
                 </button>
                 <button
                   type="button"
-                  className="glass-btn !text-[10px]"
+                  className="glass-btn !text-2xs"
                   disabled={busy || !draftBody.trim()}
                   onClick={() => void refreshCategorySuggest(draftBody)}
                 >
@@ -762,7 +779,7 @@ export default function KnowledgeView() {
                 </button>
               </div>
               {catSuggest ? (
-                <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
+                <div className="mt-1.5 flex flex-wrap items-center gap-2 text-2xs text-slate-400">
                   <span>
                     建议新分类「{catSuggest.name}」· {catSuggest.reason}
                   </span>
@@ -780,7 +797,7 @@ export default function KnowledgeView() {
               ) : null}
             </div>
           ) : (
-            <div className="text-[10px] text-slate-600">关联项目后，可为过程笔记建分类 / 接受识别建议</div>
+            <div className="text-2xs text-slate-600">关联项目后，可为过程笔记建分类 / 接受识别建议</div>
           )}
 
           <div className="flex flex-wrap items-center gap-2">
@@ -789,10 +806,10 @@ export default function KnowledgeView() {
                 <button type="button" className="glass-btn primary" disabled={busy} onClick={() => void saveSelected()}>
                   保存
                 </button>
-                <button type="button" className="glass-btn" disabled={busy} onClick={clearDraft}>
+                <button type="button" className="glass-btn" disabled={busy} onClick={() => { clearDraft(); setComposing(true) }}>
                   新建
                 </button>
-                <button type="button" className="glass-btn" disabled={busy} onClick={() => void removeSelected()}>
+                <button type="button" className="glass-btn" disabled={busy} onClick={() => setConfirmDelete(true)}>
                   <Icon name="trash" size={12} /> 删除
                 </button>
               </>
@@ -801,23 +818,25 @@ export default function KnowledgeView() {
                 <Icon name="plus" size={12} /> 保存笔记
               </button>
             )}
-            {status ? <span className="text-[11px] text-slate-500">{status}</span> : null}
+            {status ? <span className="text-xs text-slate-500">{status}</span> : null}
           </div>
+          </>
+          )}
         </section>
 
         <div className="flex flex-col gap-3">
           <section className="glass-card flex flex-col gap-2 !p-3">
             <div className="flex items-center gap-2">
-              <span className="text-[12px] font-semibold text-slate-200">今日过程草稿</span>
-              <span className="text-[10px] text-slate-500">
+              <span className="text-xs font-semibold text-slate-200">今日过程草稿</span>
+              <span className="text-2xs text-slate-500">
                 {(processDraft?.notes?.length ?? 0) + (processDraft?.aiSnippets?.length ?? 0)} 条痕迹
               </span>
             </div>
-            <p className="text-[10px] leading-relaxed text-slate-500">
+            <p className="text-2xs leading-relaxed text-slate-500">
               监控在默默收软件/窗口；旁记与 AI 问答也会进来。末尾合并成一条「过程案卷」进知识库。
             </p>
             {processDraft ? (
-              <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-[10px] text-slate-400">
+              <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-2xs text-slate-400">
                 <div>软件：{(processDraft.apps ?? []).slice(0, 5).join('、') || '—'}</div>
                 {processDraft.pathHints?.length ? (
                   <div className="truncate">路径：{processDraft.pathHints.slice(0, 2).join('；')}</div>
@@ -825,25 +844,25 @@ export default function KnowledgeView() {
                 <div>项目：{processDraft.projectName || '未挂'}</div>
               </div>
             ) : (
-              <div className="text-[11px] text-slate-600">还没有过程痕迹，干活或写旁记后会出现</div>
+              <div className="text-xs text-slate-600">还没有过程痕迹，干活或写旁记后会出现</div>
             )}
             <textarea
-              className="min-h-[64px] w-full resize-y rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-[12px] text-slate-200 outline-none"
+              className="min-h-[64px] w-full resize-y rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-xs text-slate-200 outline-none"
               placeholder="过程旁记（可带上面选的分类）…"
               value={sideNote}
               onChange={(e) => setSideNote(e.target.value)}
               onBlur={() => void refreshCategorySuggest(sideNote)}
             />
             <div className="flex flex-wrap gap-1.5">
-              <button type="button" className="glass-btn !text-[10px]" disabled={busy} onClick={() => void addSideNoteToProcess()}>
+              <button type="button" className="glass-btn !text-2xs" disabled={busy} onClick={() => void addSideNoteToProcess()}>
                 写入草稿
               </button>
-              <button type="button" className="glass-btn !text-[10px]" disabled={busy} onClick={() => void previewProcess()}>
+              <button type="button" className="glass-btn !text-2xs" disabled={busy} onClick={() => void previewProcess()}>
                 预览合并
               </button>
               <button
                 type="button"
-                className="glass-btn primary !text-[10px]"
+                className="glass-btn primary !text-2xs"
                 disabled={busy}
                 onClick={() => void confirmProcess()}
               >
@@ -852,35 +871,35 @@ export default function KnowledgeView() {
             </div>
             {processPreview ? (
               <div className="max-h-40 overflow-y-auto rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2 py-1.5">
-                <div className="mb-1 text-[11px] font-medium text-slate-200">{processPreview.title}</div>
-                <pre className="whitespace-pre-wrap text-[10px] leading-relaxed text-slate-400">{processPreview.body.slice(0, 1200)}</pre>
+                <div className="mb-1 text-xs font-medium text-slate-200">{processPreview.title}</div>
+                <pre className="whitespace-pre-wrap text-2xs leading-relaxed text-slate-400">{processPreview.body.slice(0, 1200)}</pre>
               </div>
             ) : null}
           </section>
 
           <section className="glass-card flex max-h-[min(40vh,360px)] flex-col !p-3">
             <div className="mb-2 flex shrink-0 items-center gap-2">
-              <span className="text-[12px] font-semibold text-slate-200">待转入</span>
-              <span className="text-[10px] text-slate-500">{pendingMemos.length}</span>
+              <span className="text-xs font-semibold text-slate-200">待转入</span>
+              <span className="text-2xs text-slate-500">{pendingMemos.length}</span>
             </div>
-            <p className="mb-2 shrink-0 text-[10px] leading-relaxed text-slate-500">
+            <p className="mb-2 shrink-0 text-2xs leading-relaxed text-slate-500">
               以前只存成「备忘」、还没进知识库的内容。点转入即可变成一条笔记。
             </p>
             <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto">
               {pendingMemos.length === 0 ? (
-                <div className="py-6 text-center text-[11px] text-slate-600">暂无待转入内容</div>
+                <div className="py-6 text-center text-xs text-slate-600">暂无待转入内容</div>
               ) : (
                 pendingMemos.map((m) => (
                   <div
                     key={m.id}
                     className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-2"
                   >
-                    <div className="line-clamp-3 text-[11px] leading-relaxed text-slate-300">{m.text}</div>
+                    <div className="line-clamp-3 text-xs leading-relaxed text-slate-300">{m.text}</div>
                     <div className="mt-1.5 flex items-center gap-2">
-                      <span className="text-[9px] text-slate-600">{fmtTs(m.ts)}</span>
+                      <span className="text-2xs text-slate-600">{fmtTs(m.ts)}</span>
                       <button
                         type="button"
-                        className="ml-auto rounded-md border border-[var(--teal-border)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--teal-deep)] hover:bg-[var(--teal-soft)]"
+                        className="ml-auto rounded-md border border-[var(--teal-border)] px-1.5 py-0.5 text-2xs font-medium text-[var(--teal-deep)] hover:bg-[var(--teal-soft)]"
                         disabled={busy}
                         onClick={() => void sedimentMemo(m)}
                       >
@@ -893,7 +912,7 @@ export default function KnowledgeView() {
             </div>
           </section>
           <div
-            className="rounded-xl px-3 py-2.5 text-[10px] leading-relaxed"
+            className="rounded-xl px-3 py-2.5 text-2xs leading-relaxed"
             style={{
               background: 'var(--accent-softer)',
               border: '1px solid var(--border-active)',
@@ -904,6 +923,21 @@ export default function KnowledgeView() {
           </div>
         </div>
       </div>
+
+      <Modal
+        open={confirmDelete}
+        title="删除这条笔记？"
+        size="sm"
+        onClose={() => setConfirmDelete(false)}
+        footer={
+          <>
+            <button className="glass-btn" onClick={() => setConfirmDelete(false)}>取消</button>
+            <button className="glass-btn danger" onClick={() => void removeSelected()}>删除</button>
+          </>
+        }
+      >
+        「{selected?.title || '未命名笔记'}」删除后不可恢复。
+      </Modal>
     </div>
   )
 }

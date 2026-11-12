@@ -12,7 +12,7 @@ interface StateBadgeProps {
 export function StateBadge({ state, size = 'md', pulse = false }: StateBadgeProps) {
   const meta = WORK_STATES[state]
   const emojiSize = size === 'lg' ? 'text-xl' : size === 'sm' ? 'text-xs' : 'text-sm'
-  const labelSize = size === 'lg' ? 'text-base font-semibold' : size === 'sm' ? 'text-[11px]' : 'text-[13px]'
+  const labelSize = size === 'lg' ? 'text-base font-semibold' : size === 'sm' ? 'text-xs' : 'text-sm'
   return (
     <span className="inline-flex items-center gap-1.5">
       <span

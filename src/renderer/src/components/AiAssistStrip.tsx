@@ -55,12 +55,12 @@ export function AiAssistStrip({
       title="AI 助手监控 · 在设置里拖入/拖出名单"
     >
       {!compact ? (
-        <span className="text-[10px] uppercase tracking-wider text-slate-600">AI 助手</span>
+        <span className="text-2xs uppercase tracking-wider text-slate-600">AI 助手</span>
       ) : null}
       {items.map((it) => (
         <span
           key={it.key}
-          className={`inline-flex max-w-[9rem] items-center gap-1 text-[11px] ${
+          className={`inline-flex max-w-[9rem] items-center gap-1 text-xs ${
             it.status === 'done' ? 'text-emerald-300' : it.status === 'busy' ? 'text-amber-200' : 'text-slate-400'
           }`}
           title={it.title || it.label}
@@ -69,7 +69,7 @@ export function AiAssistStrip({
           <span className="truncate">{it.label}</span>
         </span>
       ))}
-      {flash ? <span className="text-[10px] text-emerald-500/80">有完成</span> : null}
+      {flash ? <span className="text-2xs text-emerald-500/80">有完成</span> : null}
     </div>
   )
 }
@@ -111,7 +111,7 @@ export function AiAssistRing({ item, size = 32 }: { item: AiAssistItem; size?: n
         </svg>
         {/* 内圈：工具标识 */}
         <span
-          className="absolute inset-0 flex items-center justify-center text-[10px] font-bold"
+          className="absolute inset-0 flex items-center justify-center text-2xs font-bold"
           style={{ color: busy ? '#10B981' : justDone ? '#EF4444' : 'var(--text-3)' }}
         >{emoji}</span>
       </div>
@@ -120,8 +120,8 @@ export function AiAssistRing({ item, size = 32 }: { item: AiAssistItem; size?: n
         className="pointer-events-none absolute bottom-full left-1/2 z-40 mb-2 hidden w-40 -translate-x-1/2 rounded-xl border border-[var(--line)] p-2 text-left group-hover/ring:block"
         style={{ background: 'var(--bg-surface)', boxShadow: 'var(--shadow-md)' }}
       >
-        <b className="text-[11px] text-slate-100">{item.label}</b>
-        <div className="mt-0.5 text-[10px] text-slate-500">{busy ? '处理中' : justDone ? '刚完成' : '空闲'}</div>
+        <b className="text-xs text-slate-100">{item.label}</b>
+        <div className="mt-0.5 text-2xs text-slate-500">{busy ? '处理中' : justDone ? '刚完成' : '空闲'}</div>
       </div>
     </div>
   )

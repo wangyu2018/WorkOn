@@ -62,16 +62,16 @@ export function DailyLineCard({ kind }: { kind: 'quote' | 'soup' }) {
   return (
     <section className="glass-card hoverable">
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-[13px]">{isQuote ? '💬' : '🍵'}</span>
-        <h3 className="text-[13px] font-semibold text-slate-200">{isQuote ? '每日一句' : '毒鸡汤'}</h3>
+        <span className="text-sm">{isQuote ? '💬' : '🍵'}</span>
+        <h3 className="text-sm font-semibold text-slate-200">{isQuote ? '每日一句' : '毒鸡汤'}</h3>
         <button
-          className="ml-auto rounded-full border border-dashed border-[var(--line)] px-2 py-0.5 text-[10px] text-slate-500 transition-colors hover:text-slate-200"
+          className="ml-auto rounded-full border border-dashed border-[var(--line)] px-2 py-0.5 text-2xs text-slate-500 transition-colors hover:text-slate-200"
           onClick={refresh}
         >
           {isQuote ? '换一句' : '换一碗'}
         </button>
       </div>
-      <p className="text-[12.5px] leading-relaxed text-slate-300">「{list[idx]}」</p>
+      <p className="text-sm leading-relaxed text-slate-300">「{list[idx]}」</p>
     </section>
   )
 }
@@ -106,17 +106,17 @@ export function AlmanacCard() {
   return (
     <section className="glass-card hoverable">
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-[13px]">📜</span>
-        <h3 className="text-[13px] font-semibold text-slate-200">今日黄历</h3>
-        <span className="ml-auto text-[10px] text-slate-500">{a.wx} · 冲{a.chong} · {a.sx}年</span>
+        <span className="text-sm">📜</span>
+        <h3 className="text-sm font-semibold text-slate-200">今日黄历</h3>
+        <span className="ml-auto text-2xs text-slate-500">{a.wx} · 冲{a.chong} · {a.sx}年</span>
       </div>
-      <div className="flex flex-col gap-1 text-[12px]">
+      <div className="flex flex-col gap-1 text-xs">
         <div className="flex items-center gap-2">
-          <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400">宜</span>
+          <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-2xs font-bold text-emerald-400">宜</span>
           <span className="min-w-0 truncate text-slate-300">{a.yi.join('、')}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="shrink-0 rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-bold text-red-400">忌</span>
+          <span className="shrink-0 rounded bg-red-500/15 px-1.5 py-0.5 text-2xs font-bold text-red-400">忌</span>
           <span className="min-w-0 truncate text-slate-400">{a.ji.join('、')}</span>
         </div>
       </div>
@@ -179,10 +179,10 @@ export function CountdownCard() {
   return (
     <section className="glass-card hoverable">
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-[13px]">⏳</span>
-        <h3 className="text-[13px] font-semibold text-slate-200">倒数日</h3>
+        <span className="text-sm">⏳</span>
+        <h3 className="text-sm font-semibold text-slate-200">倒数日</h3>
         <button
-          className="ml-auto rounded-full border border-dashed border-[var(--line)] px-2 py-0.5 text-[10px] text-slate-500 transition-colors hover:text-slate-200"
+          className="ml-auto rounded-full border border-dashed border-[var(--line)] px-2 py-0.5 text-2xs text-slate-500 transition-colors hover:text-slate-200"
           onClick={() => setAdding((v) => !v)}
         >
           {adding ? '收起' : '＋ 事件'}
@@ -191,7 +191,7 @@ export function CountdownCard() {
       {adding ? (
         <div className="mb-2 flex flex-wrap items-center gap-1.5">
           <input
-            className="min-w-0 flex-1 rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1 text-[11px] text-slate-200 outline-none placeholder:text-slate-600"
+            className="min-w-0 flex-1 rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1 text-xs text-slate-200 outline-none placeholder:text-slate-600"
             placeholder="事件名，如：项目上线"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -199,16 +199,16 @@ export function CountdownCard() {
           />
           <input
             type="date"
-            className="rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1 text-[11px] text-slate-200 outline-none"
+            className="rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1 text-xs text-slate-200 outline-none"
             value={date}
             onChange={(e) => setDate(e.target.value)}
           />
-          <button className="glass-btn primary !px-2 !py-1 !text-[10px]" onClick={add}>加</button>
+          <button className="glass-btn primary !px-2 !py-1 !text-2xs" onClick={add}>加</button>
         </div>
       ) : null}
       <div className="flex flex-col gap-1">
         {rows.map((c) => (
-          <div key={c.id} className="group flex items-center gap-2 text-[12px]">
+          <div key={c.id} className="group flex items-center gap-2 text-xs">
             <span className="min-w-0 flex-1 truncate text-slate-300">{c.name}</span>
             <span
               className="shrink-0 tabular-nums font-bold"
@@ -223,7 +223,7 @@ export function CountdownCard() {
             >✕</button>
           </div>
         ))}
-        {!rows.length ? <div className="py-1 text-center text-[11px] text-slate-600">还没有倒数事件</div> : null}
+        {!rows.length ? <div className="py-1 text-center text-xs text-slate-600">还没有倒数事件</div> : null}
       </div>
     </section>
   )

@@ -61,14 +61,14 @@ export function ConfirmDialog({
           >
             <Icon name="alert" size={15} />
           </span>
-          <h3 className="text-[14px] font-semibold leading-tight text-slate-100">{title}</h3>
+          <h3 className="text-base font-semibold leading-tight text-slate-100">{title}</h3>
         </div>
         {message ? (
-          <div className="mt-2.5 pl-[42px] text-[12px] leading-relaxed text-slate-400">{message}</div>
+          <div className="mt-2.5 pl-[42px] text-xs leading-relaxed text-slate-400">{message}</div>
         ) : null}
         {impactNote ? (
           <div
-            className="mt-2.5 ml-[42px] rounded-lg px-2.5 py-2 font-mono text-[10.5px] leading-relaxed"
+            className="mt-2.5 ml-[42px] rounded-lg px-2.5 py-2 font-mono text-2xs leading-relaxed"
             style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#fca5a5' }}
           >
             {impactNote}

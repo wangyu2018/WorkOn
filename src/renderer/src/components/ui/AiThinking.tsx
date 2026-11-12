@@ -18,7 +18,7 @@ export function AiThinking({ hints = DEFAULT_HINTS, progress }: AiThinkingProps)
   return (
     <div className="flex items-center gap-3">
       <span
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-[13px] text-white"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] text-sm text-white"
         style={{ background: 'var(--aura)', boxShadow: 'var(--glow-i)' }}
       >
         ✦
@@ -29,7 +29,7 @@ export function AiThinking({ hints = DEFAULT_HINTS, progress }: AiThinkingProps)
           <i />
           <i />
         </div>
-        <div className="mt-1 text-[10.5px] text-slate-400">
+        <div className="mt-1 text-2xs text-slate-400">
           {hints[idx]}
           {typeof progress === 'number' ? ` ${Math.round(progress * 100)}%` : ''}
         </div>

@@ -498,7 +498,7 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
       >
         <header className="flex items-start justify-between gap-3 border-b border-[var(--line)] px-4 py-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[14px] font-semibold text-slate-100">
+            <div className="flex items-center gap-2 text-base font-semibold text-slate-100">
               <span
                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border"
                 style={{
@@ -511,7 +511,7 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
               </span>
               粘贴识别
             </div>
-            <p className="mt-1 pl-9 text-[11px] text-slate-500">
+            <p className="mt-1 pl-9 text-xs text-slate-500">
               左侧标题标签可拖到右侧树 · 拖过目标会高亮 · 分拣后即时写入
             </p>
           </div>
@@ -524,7 +524,7 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
           {/* ── 左：标签 ── */}
           <section className="flex min-h-0 flex-col border-b border-[var(--line)] md:border-b-0 md:border-r">
             <div className="flex items-center justify-between gap-2 border-b border-[var(--line)] px-3 py-2">
-              <span className="text-[11px] font-medium text-slate-400">
+              <span className="text-xs font-medium text-slate-400">
                 解析标签
                 <span className="ml-1.5 tabular-nums text-slate-600">
                   {pendingTags.length}/{tags.length}
@@ -532,7 +532,7 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
                 </span>
               </span>
               <button
-                className="glass-btn !px-2 !py-0.5 !text-[10px]"
+                className="glass-btn !px-2 !py-0.5 !text-2xs"
                 disabled={loading}
                 onClick={() => void reparse()}
               >
@@ -556,7 +556,7 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
                       draggable
                       onDragStart={(e) => onTagDragStart(e, tag)}
                       onDragEnd={onTagDragEnd}
-                      className={`max-w-full cursor-grab rounded-lg border px-2.5 py-1.5 text-left text-[12px] font-medium leading-snug text-slate-100 active:cursor-grabbing ${
+                      className={`max-w-full cursor-grab rounded-lg border px-2.5 py-1.5 text-left text-xs font-medium leading-snug text-slate-100 active:cursor-grabbing ${
                         dragTagId === tag.id
                           ? 'border-[var(--accent)] bg-[var(--accent-softer)] opacity-70'
                           : 'border-[var(--border-active)] bg-[var(--surface-3)] hover:border-[var(--accent)]'
@@ -568,21 +568,21 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
                   ))}
                 </div>
               ) : (
-                <div className="rounded-xl border border-dashed border-[var(--line)] px-3 py-6 text-center text-[11px] text-slate-600">
+                <div className="rounded-xl border border-dashed border-[var(--line)] px-3 py-6 text-center text-xs text-slate-600">
                   {loading ? '解析中…' : '暂无待分拣标签'}
                 </div>
               )}
 
               {tags.some((t) => t.placed) ? (
                 <div className="space-y-1">
-                  <div className="text-[10px] uppercase tracking-wider text-slate-600">已分拣</div>
+                  <div className="text-2xs uppercase tracking-wider text-slate-600">已分拣</div>
                   <div className="flex flex-wrap gap-1.5">
                     {tags
                       .filter((t) => t.placed)
                       .map((tag) => (
                         <span
                           key={tag.id}
-                          className="rounded-md border border-[var(--line)] bg-transparent px-2 py-1 text-[11px] text-slate-500 line-through"
+                          className="rounded-md border border-[var(--line)] bg-transparent px-2 py-1 text-xs text-slate-500 line-through"
                         >
                           {tag.title}
                           <span className="ml-1 no-underline opacity-70">
@@ -596,27 +596,27 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
 
               <button
                 type="button"
-                className="text-[10.5px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
+                className="text-2xs text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
                 onClick={() => setShowRaw((v) => !v)}
               >
                 {showRaw ? '收起原文' : '展开原文 / 手动改'}
               </button>
               {showRaw ? (
                 <textarea
-                  className="glass-input min-h-[100px] w-full resize-y !py-2 text-[11px] leading-relaxed"
+                  className="glass-input min-h-[100px] w-full resize-y !py-2 text-xs leading-relaxed"
                   placeholder="OCR/粘贴原文…"
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                 />
               ) : null}
 
-              {status ? <div className="text-[11px] text-slate-500">{status}</div> : null}
+              {status ? <div className="text-xs text-slate-500">{status}</div> : null}
             </div>
           </section>
 
           {/* ── 右：三树同时可见 ── */}
           <section className="flex min-h-0 flex-col">
-            <div className="border-b border-[var(--line)] px-3 py-2 text-[11px] text-slate-500">
+            <div className="border-b border-[var(--line)] px-3 py-2 text-xs text-slate-500">
               拖到下方任一树 · 目标会高亮
             </div>
 
@@ -631,7 +631,7 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
                 onDragLeave={clearDrop}
                 onDrop={(e) => void onDropTarget(e, { tree: 'todo', id: 'root' })}
               >
-                <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-slate-300">
+                <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-300">
                   <Icon name="check" size={12} />
                   今日待办
                   <span className="font-normal text-slate-600">· 拖到空白处新建</span>
@@ -644,7 +644,7 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
                       return (
                         <li key={p.id}>
                           <div
-                            className={`rounded-lg border px-2 py-1.5 text-[12px] text-slate-300 transition-all ${dropClass(
+                            className={`rounded-lg border px-2 py-1.5 text-xs text-slate-300 transition-all ${dropClass(
                               dragging,
                               over
                             )}`}
@@ -657,13 +657,13 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
                             {kids.length ? (
                               <ul className="mt-1 space-y-0.5 border-l border-[var(--line)] pl-2">
                                 {kids.map((c) => (
-                                  <li key={c.id} className="truncate text-[11px] text-slate-500">
+                                  <li key={c.id} className="truncate text-xs text-slate-500">
                                     {c.title}
                                   </li>
                                 ))}
                               </ul>
                             ) : dragging ? (
-                              <div className="mt-0.5 text-[10px] text-slate-600">松手 → 挂为子待办</div>
+                              <div className="mt-0.5 text-2xs text-slate-600">松手 → 挂为子待办</div>
                             ) : null}
                           </div>
                         </li>
@@ -671,7 +671,7 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
                     })}
                   </ul>
                 ) : (
-                  <div className="py-2 text-center text-[11px] text-slate-600">
+                  <div className="py-2 text-center text-xs text-slate-600">
                     {dragging ? '松手即可加入今日待办' : '今日还没有待办'}
                   </div>
                 )}
@@ -679,7 +679,7 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
 
               {/* 项目树 */}
               <div className="space-y-1">
-                <div className="px-0.5 text-[11px] font-semibold text-slate-300">
+                <div className="px-0.5 text-xs font-semibold text-slate-300">
                   <span className="inline-flex items-center gap-1.5">
                     <Icon name="folder" size={12} />
                     项目树
@@ -705,7 +705,7 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
-                            className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-[12px] font-medium text-slate-200"
+                            className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs font-medium text-slate-200"
                             onClick={() => void toggleProject(p.id)}
                           >
                             <span className="text-slate-500">{openNode ? '▾' : '▸'}</span>
@@ -714,15 +714,15 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
                               style={{ background: p.color || 'var(--accent)' }}
                             />
                             <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                            <span className="shrink-0 text-[9px]" style={{ color: PRIO_META[p.priority ?? 'medium'].color }} title={`优先级：${PRIO_META[p.priority ?? 'medium'].label}`}>{PRIO_META[p.priority ?? 'medium'].mark}</span>
-                            <span className="text-[10px] font-normal text-slate-600">
+                            <span className="shrink-0 text-2xs" style={{ color: PRIO_META[p.priority ?? 'medium'].color }} title={`优先级：${PRIO_META[p.priority ?? 'medium'].label}`}>{PRIO_META[p.priority ?? 'medium'].mark}</span>
+                            <span className="text-2xs font-normal text-slate-600">
                               {dragging ? '松手 → 加任务' : tasks.length ? String(tasks.length) : ''}
                             </span>
                           </button>
                           {pendingTags.length && !dragging ? (
                             <button
                               type="button"
-                              className="shrink-0 rounded border border-dashed border-[var(--line)] px-1.5 py-0 text-[9.5px] text-slate-500 hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                              className="shrink-0 rounded border border-dashed border-[var(--line)] px-1.5 py-0 text-2xs text-slate-500 hover:border-[var(--accent)] hover:text-[var(--accent)]"
                               title={`把剩余 ${pendingTags.length} 个标签全部归为「${p.name}」任务`}
                               onClick={() => void addAllToProject(p.id)}
                             >
@@ -734,12 +734,12 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
                           <ul className="mt-1 space-y-0.5 border-l border-[var(--line)] pl-3">
                             {tasks.length ? (
                               tasks.slice(0, 12).map((t) => (
-                                <li key={t.id} className="truncate text-[11px] text-slate-500">
+                                <li key={t.id} className="truncate text-xs text-slate-500">
                                   {t.title}
                                 </li>
                               ))
                             ) : (
-                              <li className="text-[10px] text-slate-600">暂无任务</li>
+                              <li className="text-2xs text-slate-600">暂无任务</li>
                             )}
                           </ul>
                         ) : null}
@@ -747,7 +747,7 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
                     )
                   })
                 ) : (
-                  <div className="py-3 text-center text-[11px] text-slate-600">还没有项目</div>
+                  <div className="py-3 text-center text-xs text-slate-600">还没有项目</div>
                 )}
               </div>
 
@@ -761,7 +761,7 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
                 onDragLeave={clearDrop}
                 onDrop={(e) => void onDropTarget(e, { tree: 'knowledge', id: 'root' })}
               >
-                <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-slate-300">
+                <div className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-300">
                   <Icon name="book" size={12} />
                   知识库
                   <span className="font-normal text-slate-600">· 拖到此处新建笔记</span>
@@ -770,12 +770,12 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
                   <div className="space-y-2">
                     {knowledgeGroups.map(([cat, items]) => (
                       <div key={cat}>
-                        <div className="mb-0.5 text-[10px] uppercase tracking-wider text-slate-600">
+                        <div className="mb-0.5 text-2xs uppercase tracking-wider text-slate-600">
                           {cat}
                         </div>
                         <ul className="space-y-0.5">
                           {items.slice(0, 6).map((it) => (
-                            <li key={it.id} className="truncate text-[11px] text-slate-500">
+                            <li key={it.id} className="truncate text-xs text-slate-500">
                               {it.title}
                             </li>
                           ))}
@@ -784,7 +784,7 @@ export function PasteInboxModal({ open, onClose }: PasteInboxModalProps) {
                     ))}
                   </div>
                 ) : (
-                  <div className="py-2 text-center text-[11px] text-slate-600">
+                  <div className="py-2 text-center text-xs text-slate-600">
                     {dragging ? '松手即可写入笔记' : '知识库还是空的'}
                   </div>
                 )}

@@ -69,31 +69,31 @@ export function ActivityHoverCard({ a, sticky, onMouseEnter, onMouseLeave, onExc
       onMouseLeave={onMouseLeave}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[12px] font-semibold truncate">{a.app || '活动'}</span>
-        <span className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+        <span className="text-xs font-semibold truncate">{a.app || '活动'}</span>
+        <span className="shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-medium"
           style={{ color: `rgb(${sense.rgb})`, background: `rgb(${sense.rgb}/0.14)` }}>
           {sense.label}
         </span>
       </div>
-      <div className="mt-1 text-[11px] leading-snug" style={{ color: 'var(--pop-text-strong)' }}>
+      <div className="mt-1 text-xs leading-snug" style={{ color: 'var(--pop-text-strong)' }}>
         {a.title || '（未命名）'}
       </div>
       {(a.operation || a.microActivity) && (
-        <div className="mt-1 flex items-start gap-1 text-[11px] leading-snug">
+        <div className="mt-1 flex items-start gap-1 text-xs leading-snug">
           <span className="mt-px shrink-0" style={{ color: `rgb(${sense.rgb})` }}>▸</span>
           <span className="min-w-0 flex-1" style={{ color: 'var(--pop-badge-text)' }}>{a.operation || a.microActivity}</span>
           {a.microActivity && !a.operation ? (
-            <span className="shrink-0 text-[10px]" style={{ color: 'var(--pop-text-muted)' }}>· 推断</span>
+            <span className="shrink-0 text-2xs" style={{ color: 'var(--pop-text-muted)' }}>· 推断</span>
           ) : null}
         </div>
       )}
       {(a.counterpart || a.topic) ? (
-        <div className="mt-1 text-[11px] leading-snug" style={{ color: 'var(--pop-text-muted)' }}>
+        <div className="mt-1 text-xs leading-snug" style={{ color: 'var(--pop-text-muted)' }}>
           {a.counterpart ? <span>与 <b style={{ color: 'var(--pop-text-strong)' }}>{a.counterpart}</b> 沟通</span> : null}
           {a.topic ? <span>查看：<b style={{ color: 'var(--pop-text-strong)' }}>{a.topic}</b></span> : null}
         </div>
       ) : null}
-      <div className="mt-1.5 flex items-center gap-2 text-[10px]" style={{ color: 'var(--pop-text-muted)' }}>
+      <div className="mt-1.5 flex items-center gap-2 text-2xs" style={{ color: 'var(--pop-text-muted)' }}>
         <span>{a.startText} – {a.endText}</span>
         <span style={{ color: 'var(--pop-text-muted)' }}>·</span>
         <span>{a.durationText}</span>
@@ -101,7 +101,7 @@ export function ActivityHoverCard({ a, sticky, onMouseEnter, onMouseLeave, onExc
       </div>
       {onExclude ? (
         <button
-          className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-white/10 py-1 text-[10px] text-slate-400 transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-400"
+          className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-white/10 py-1 text-2xs text-slate-400 transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-400"
           onClick={(e) => { e.stopPropagation(); onExclude() }}
         >
           ⛔ 不再记录该程序

@@ -1076,7 +1076,8 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           ?.askQA?.(quoted)
           .then((r) => {
             const content = typeof r === 'string' ? r : ((r as { content?: string })?.content ?? '（没有回答）')
-            pushAI([{ role: 'ai', text: content, options: content.includes('这个问题需要 AI') ? ['⚙ 去配置 AI'] : undefined }])
+            const tid = typeof r === 'object' ? (r as { traceId?: string })?.traceId : undefined
+            pushAI([{ role: 'ai', text: content, options: content.includes('这个问题需要 AI') ? ['⚙ 去配置 AI'] : undefined, traceId: tid }])
           })
           .catch(() => {
             pushAI([{ role: 'ai', text: '这个问题暂时答不上来。' }])
@@ -1104,6 +1105,8 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       const offDone = window.api?.onAIStreamDone?.((raw) => {
         // payload 兼容：非流式回退=裸字符串；流式=无 payload（用 chunk 累计）
         const content = (typeof raw === 'string' ? raw : (raw as { content?: string })?.content) || acc || ''
+        // L2 隧道：本次处理的轨迹 id 挂到消息上，供「过程」下钻
+        const tid = typeof raw === 'object' ? (raw as { traceId?: string })?.traceId : undefined
         // 兜底回答（本地模式）带「去配置 AI」快捷回复——AI 接入入口
         const needsAI = content.includes('这个问题需要 AI')
         const opts = needsAI ? ['⚙ 去配置 AI'] : undefined
@@ -1111,12 +1114,12 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           const idx = c.findIndex((m) => m.id === streamId)
           if (idx >= 0) {
             const next = [...c]
-            next[idx] = { ...next[idx], text: content, options: opts }
+            next[idx] = { ...next[idx], text: content, options: opts, traceId: tid || next[idx].traceId }
             if (opts) optionsRef.current = { msgIndex: idx, options: opts }
             return next
           }
           if (opts) optionsRef.current = { msgIndex: c.length, options: opts }
-          return [...c, { id: streamId, role: 'ai' as const, text: content, options: opts }]
+          return [...c, { id: streamId, role: 'ai' as const, text: content, options: opts, traceId: tid }]
         })
         window.clearTimeout(askingGuard)
         offChunk?.()

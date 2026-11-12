@@ -41,11 +41,12 @@ export const HOME_BLOCK_META: {
   ...MONITOR_SECTION_META.map((m) => ({ ...m, group: '监控' as const }))
 ]
 
+/** 默认顺序按「此刻 → 今天做了什么 → 为什么」讲：计划 → 时间轴 → 洞察 → 监控明细 */
 export const DEFAULT_HOME_ORDER: HomeBlockKey[] = [
-  ...MONITOR_SECTION_META.map((m) => m.key),
   'dayplan',
-  'insight',
   'timeline',
+  'insight',
+  ...MONITOR_SECTION_META.map((m) => m.key),
   'starmap',
   'quote',
   'soup',
@@ -62,8 +63,8 @@ export function isMonitorBlockKey(k: string): k is MonitorSectionKey {
 }
 
 export function defaultHomeWidgets(): HomeWidgets {
-  // 默认精简（审计 A1）：核心三件套 + 监控三块，共 6 块；其余进编辑抽屉按需开。
-  // 概览/评分与「今日洞察」重复、监控时间轴与「工作时间轴」重复，默认去重关闭。
+  // v8 默认只留三块：今日计划 / 时间轴 / 洞察。
+  // 监控明细（概览、评分、分布、双屏、TOP 应用）骨架重复且压垮首屏，默认关闭，编辑布局里可开。
   return {
     dayplan: true,
     insight: true,
@@ -78,9 +79,12 @@ export function defaultHomeWidgets(): HomeWidgets {
     planahead: false,
     goal: false,
     ...DEFAULT_MONITOR_SECTIONS,
+    presence: false,
     overview: false,
     attention: false,
+    dist: false,
     screens: false,
+    topApps: false,
     trail: false
   }
 }
@@ -88,7 +92,7 @@ export function defaultHomeWidgets(): HomeWidgets {
 export function loadHomeWidgets(): HomeWidgets {
   const base = defaultHomeWidgets()
   try {
-    const s = localStorage.getItem('homeWidgets')
+    const s = localStorage.getItem('homeWidgetsV8')
     if (!s) return base
     const parsed = JSON.parse(s) as Partial<HomeWidgets> & { monitor?: boolean }
     const next = { ...base, ...parsed }
@@ -106,7 +110,8 @@ export function loadHomeWidgets(): HomeWidgets {
 export function loadHomeOrder(): HomeBlockKey[] {
   const valid = new Set(HOME_BLOCK_META.map((m) => m.key))
   try {
-    const s = localStorage.getItem('homeWidgetOrder')
+    // v8：默认顺序改为「计划 → 时间轴 → 洞察 → 监控」，旧顺序作废（模块显隐仍保留）
+    const s = localStorage.getItem('homeWidgetOrderV8')
     if (s) {
       const parsed = JSON.parse(s) as string[]
       const cleaned = parsed.filter((k): k is HomeBlockKey => valid.has(k as HomeBlockKey))
@@ -125,8 +130,8 @@ export function loadHomeOrder(): HomeBlockKey[] {
 
 export function saveHomeLayout(widgets: HomeWidgets, order: HomeBlockKey[]): void {
   try {
-    localStorage.setItem('homeWidgets', JSON.stringify(widgets))
-    localStorage.setItem('homeWidgetOrder', JSON.stringify(order))
+    localStorage.setItem('homeWidgetsV8', JSON.stringify(widgets))
+    localStorage.setItem('homeWidgetOrderV8', JSON.stringify(order))
   } catch { /* ignore */ }
 }
 

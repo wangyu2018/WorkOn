@@ -8,9 +8,9 @@ import type { MergedTrail, TrailSegment, WorkState, PlanItem, AttentionScore } f
 import { dateKey } from '@shared/trail'
 import { ActivityHoverCard } from '../components/ActivityHoverCard'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { TodayBrief } from '../components/TodayBrief'
+import { ReviewSheet } from '../components/ReviewSheet'
 import { Icon } from '../components/Icon'
-import { InsightCard } from '../components/ui/InsightCard'
-import { Seg } from '../components/ui/Seg'
 import { displayApp } from '@shared/appDisplayName'
 import { matchesExcludedApp } from '@shared/stateMeta'
 import { useSettingsStore } from '../stores/settingsStore'
@@ -30,6 +30,7 @@ import {
 } from '../lib/homeLayout'
 import { usePerspective } from '../lib/usePerspective'
 import { DailyLineCard, AlmanacCard, CountdownCard } from '../components/homeWidgets/LifeWidgets'
+import { NarrativeAxis } from '../components/homeWidgets/NarrativeAxis'
 import { FestivalCard, HabitCard, PlanAheadCard, GoalProgressCard } from '../components/homeWidgets/MoreLifeWidgets'
 import { PERSPECTIVE_HOME } from '../lib/perspective'
 import { PERSPECTIVE_META } from '@shared/perspective'
@@ -345,6 +346,9 @@ export default function HomeView() {
   const [widgets, setWidgets] = useState<HomeWidgets>(() => loadHomeWidgets())
   const [homeOrder, setHomeOrder] = useState<HomeBlockKey[]>(() => loadHomeOrder())
   const [editing, setEditing] = useState(false)
+  /** 一分钟校对：首屏结论条 → 弹层队列 */
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const [reviewRefresh, setReviewRefresh] = useState(0)
   const [dragKey, setDragKey] = useState<HomeBlockKey | null>(null)
   const [dragOverKey, setDragOverKey] = useState<HomeBlockKey | null>(null)
 /** KPI 卡点击 → 跳转报表对应页签 */
@@ -403,10 +407,6 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
   const [projectColors, setProjectColors] = useState<Record<string, string>>({})
   const [projectAppMap, setProjectAppMap] = useState<Record<string, string>>({}) // app(小写) → projectId
   const [projPrio, setProjPrio] = useState<Record<string, string>>({}) // projectId → priority
-  /** 项目趋势：活跃项目任务完成率 + 上线倒计时（晨间排布参考） */
-  const [projectTrend, setProjectTrend] = useState<
-    { id: string; name: string; color: string; pct: number | null; done: number; total: number; daysLeft: number | null }[]
-  >([])
   useEffect(() => {
     void (async () => {
       try {
@@ -420,21 +420,6 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
         const prioMap: Record<string, string> = {}
         ;(ps as { id: string; priority?: string }[]).forEach((x) => { prioMap[x.id] = x.priority ?? 'medium' })
         setProjPrio(prioMap)
-        // 项目趋势：按优先级取前 5 个活跃项目，算任务完成率
-        const actives = (ps as { id: string; name: string; status?: string; color?: string; deadline?: string; priority?: string }[])
-          .filter((p) => (p.status ?? 'active') === 'active')
-          .sort((a, b) => prioW(a.priority) - prioW(b.priority))
-          .slice(0, 5)
-        const trend = await Promise.all(
-          actives.map(async (p) => {
-            const tasks = (await window.api.listProjectTasks?.(p.id).catch(() => [])) as { status: string }[] | undefined
-            const total = tasks?.length ?? 0
-            const done = tasks?.filter((t) => t.status === 'done').length ?? 0
-            const daysLeft = p.deadline ? Math.ceil((new Date(`${p.deadline}T23:59:59`).getTime() - Date.now()) / 86400000) : null
-            return { id: p.id, name: p.name, color: p.color ?? '#22D3EE', pct: total ? Math.round((done / total) * 100) : null, done, total, daysLeft }
-          })
-        )
-        setProjectTrend(trend)
       } catch { /* ignore */ }
     })()
   }, [])
@@ -1027,13 +1012,13 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
           )}
         </div>
         <span
-          className="mt-1 max-w-[104px] truncate text-center text-[10px] leading-tight"
+          className="mt-1 max-w-[104px] truncate text-center text-2xs leading-tight"
           style={{ color: hovered ? (isDarkMode ? '#f1f5f9' : '#0f172a') : nameColor, pointerEvents: 'none' }}
         >
           {displayApp(p.app)}
         </span>
         <span
-          className="mt-0.5 rounded-full px-1.5 text-[9px] leading-4 tabular-nums"
+          className="mt-0.5 rounded-full px-1.5 text-2xs leading-4 tabular-nums"
           style={{
             background: isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.06)',
             color: starClusterRgba('work', isDarkMode ? 0.95 : 0.9),
@@ -1047,17 +1032,20 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
   }
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-auto">
+    <div className="flex h-full flex-col gap-8 overflow-auto">
+      {/* 首屏结论：一句话说清今天干了什么 + 唯一行动点（一分钟校对） */}
+      <TodayBrief onReview={() => setReviewOpen(true)} refreshKey={reviewRefresh} />
+
       {/* 编辑布局：大卡片 + 拖拽排序 */}
       {editing ? (
         <div className="glass-card anim-scale-in sticky top-0 z-20 flex flex-col gap-3 !p-4" style={{ boxShadow: 'var(--shadow-md)' }}>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[13px] font-semibold text-slate-100">首页布局</span>
-            <span className="text-[11px] text-slate-500">
+            <span className="text-sm font-semibold text-slate-100">首页布局</span>
+            <span className="text-xs text-slate-500">
               拖拽左侧把手调整顺序 · 点开关显隐 · 自动记住
               {perspectiveBlocks ? ` · 当前${PERSPECTIVE_META[perspective].label}视角已收敛` : ''}
             </span>
-            <button className="glass-btn primary ml-auto !px-3 !py-1 !text-[11px]" onClick={() => setEditing(false)}>
+            <button className="glass-btn primary ml-auto !px-3 !py-1 !text-xs" onClick={() => setEditing(false)}>
               完成
             </button>
           </div>
@@ -1101,13 +1089,13 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
                     title="拖动排序"
                     aria-label="拖动排序"
                   >
-                    <span className="select-none text-[14px] leading-none tracking-tighter">⠿</span>
+                    <span className="select-none text-base leading-none tracking-tighter">⠿</span>
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[13px] font-semibold text-slate-100">{meta.label}</span>
+                      <span className="text-sm font-semibold text-slate-100">{meta.label}</span>
                       <span
-                        className="rounded-md px-1.5 py-0.5 text-[10px] font-bold"
+                        className="rounded-md px-1.5 py-0.5 text-2xs font-bold"
                         style={{
                           background: meta.size === '整行' ? 'var(--teal-wash-strong)' : 'rgba(139,92,246,0.18)',
                           color: meta.size === '整行' ? 'var(--teal-deep)' : '#c4b5fd'
@@ -1115,20 +1103,20 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
                       >
                         {meta.size}
                       </span>
-                      <span className="rounded-md border border-white/[0.08] px-1.5 py-0.5 text-[10px] text-slate-500">
+                      <span className="rounded-md border border-white/[0.08] px-1.5 py-0.5 text-2xs text-slate-500">
                         {meta.group}
                       </span>
                       {perspectiveBlocks && !perspectiveBlocks.includes(key) ? (
-                        <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-400">
+                        <span className="rounded-md border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-2xs text-amber-400">
                           本视角隐藏
                         </span>
                       ) : null}
                     </div>
-                    <div className="mt-0.5 text-[11px] leading-snug text-slate-500">{meta.desc}</div>
+                    <div className="mt-0.5 text-xs leading-snug text-slate-500">{meta.desc}</div>
                   </div>
                   <button
                     type="button"
-                    className={`shrink-0 self-center rounded-lg border px-2.5 py-1 text-[11px] font-semibold ${
+                    className={`shrink-0 self-center rounded-lg border px-2.5 py-1 text-xs font-semibold ${
                       on
                         ? 'border-[var(--teal-border)] bg-[var(--teal-soft)] text-[var(--teal-deep)]'
                         : 'border-white/10 text-slate-500'
@@ -1144,7 +1132,7 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
           <div className="flex flex-wrap gap-2 border-t border-white/[0.06] pt-2">
             <button
               type="button"
-              className="glass-btn !text-[11px]"
+              className="glass-btn !text-xs"
               onClick={() => {
                 const next = { ...widgets }
                 for (const m of HOME_BLOCK_META) next[m.key] = true
@@ -1155,7 +1143,7 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
             </button>
             <button
               type="button"
-              className="glass-btn !text-[11px]"
+              className="glass-btn !text-xs"
               onClick={() => {
                 const next = { ...widgets }
                 for (const m of HOME_BLOCK_META) next[m.key] = false
@@ -1166,7 +1154,7 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
             </button>
             <button
               type="button"
-              className="glass-btn !text-[11px]"
+              className="glass-btn !text-xs"
               onClick={() => persistLayout(widgets, [...HOME_BLOCK_META.map((m) => m.key)])}
             >
               恢复默认顺序
@@ -1211,44 +1199,17 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
           const isNow = (p: PlanItem) => p.startMin != null && p.endMin != null && nowMin >= p.startMin && nowMin < p.endMin
           const shown = sortedPlans.slice(0, 8)
           const carriedPlans = sortedPlans.filter((p) => p.carried)
-          // 昨日回顾：压缩 24h 色条（recentTrails 倒序，[0]=昨天）
-          const yTrail = recentTrails[0]
-          const yInfo = (() => {
-            if (!yTrail?.segments?.length) return null
-            let work = 0, slack = 0, first = Infinity, last = 0
-            const marks: { x: number; w: number; sense: SenseKind }[] = []
-            for (const s of yTrail.segments) {
-              if (s.glance) continue
-              const st = new Date(s.startTs)
-              const startM = st.getHours() * 60 + st.getMinutes()
-              const durM = Math.max(1, (s.endTs - s.startTs) / 60000)
-              const sense = senseOf(s.mainState)
-              if (sense === 'work') work += durM
-              else if (sense === 'slack') slack += durM
-              if (s.mainState !== 'idle' && s.mainState !== 'away') {
-                first = Math.min(first, startM)
-                last = Math.max(last, startM + durM)
-              }
-              marks.push({ x: (startM / 1440) * 100, w: (durM / 1440) * 100, sense })
-            }
-            return { marks, work, slack, first, last }
-          })()
           return (
             <section key="dayplan" className="glass-card hoverable" style={hideStyle}>
-              <div className="mb-2.5 flex items-center gap-2.5">
-                <span
-                  className="flex h-6 w-6 items-center justify-center rounded-lg border"
-                  style={{ background: 'var(--accent-softer)', borderColor: 'var(--border-active)', color: 'var(--accent)' }}
-                >
-                  <span className="text-[13px] leading-none">🗓</span>
-                </span>
-                <h3 className="text-[13px] font-semibold text-slate-200">今日计划</h3>
+              <div className="mb-3 flex items-center gap-2.5">
+                <Icon name="calendar" size={15} className="text-slate-500" />
+                <h3 className="text-base font-semibold text-slate-100">今日计划</h3>
                 {plans.length > 0 ? (
-                  <span className="text-[11px] text-slate-500">{doneCount}/{plans.length} 完成</span>
+                  <span className="text-xs text-slate-500">{doneCount}/{plans.length} 完成</span>
                 ) : null}
                 <button
                   type="button"
-                  className="ml-auto rounded-md px-2 py-0.5 text-[11px] text-slate-500 transition-colors hover:bg-[var(--surface-2)] hover:text-slate-300"
+                  className="ml-auto rounded-md px-2 py-0.5 text-xs text-slate-500 hover:bg-[var(--surface-2)] hover:text-slate-200"
                   onClick={() => useAppStore.getState().setView('plan')}
                 >
                   去编排 →
@@ -1258,11 +1219,11 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
               {plans.length > 0 ? (
                 top3.length > 0 ? (
                   <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                    <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-600">三件事</span>
+                    <span className="text-2xs font-medium uppercase tracking-[0.12em] text-slate-600">三件事</span>
                     {top3.map((p, i) => (
                       <span
                         key={p.id}
-                        className="max-w-[220px] truncate rounded-full border px-2 py-0.5 text-[11px]"
+                        className="max-w-[220px] truncate rounded-full border px-2 py-0.5 text-xs"
                         style={{
                           borderColor: 'var(--border-active)',
                           background: 'var(--accent-softer)',
@@ -1275,93 +1236,40 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
                     ))}
                   </div>
                 ) : (
-                  <div className="mb-2 text-[11px] text-slate-500">今日计划全部完成 ✓</div>
+                  <div className="mb-2 text-xs text-slate-500">今日计划全部完成 ✓</div>
                 )
               ) : null}
 
-              {/* 昨日回顾：压缩 24h 状态色条 + 工作/摸鱼时长 + 起止 */}
-              {yInfo ? (
-                <div className="mb-2 flex items-center gap-2.5">
-                  <span className="w-[42px] shrink-0 text-[10px] font-medium uppercase tracking-[0.12em] text-slate-600">昨日</span>
-                  <div className="relative h-2.5 min-w-0 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--surface-2)' }}>
-                    {yInfo.marks.map((m, i) => (
-                      <span
-                        key={i}
-                        className="absolute bottom-0 top-0"
-                        style={{
-                          left: `${m.x}%`,
-                          width: `${m.w}%`,
-                          background:
-                            m.sense === 'work' ? 'var(--teal)' : m.sense === 'slack' ? '#f59e0b' : 'rgba(100,116,139,0.35)'
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <span className="shrink-0 text-[10px] tabular-nums text-slate-500">
-                    工作 {fmtDur(yInfo.work)} · 摸鱼 {fmtDur(yInfo.slack)}
-                    {yInfo.first < yInfo.last ? ` · ${fmtHHMM(Math.round(yInfo.first))}–${fmtHHMM(Math.min(1439, Math.round(yInfo.last)))}` : ''}
-                  </span>
-                </div>
-              ) : null}
+              {/* 昨日回顾与项目趋势已移出今天页（见回顾页） */}
 
               {/* 顺延遗留：前几日未完成带入今天的项 */}
               {carriedPlans.length > 0 ? (
                 <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                  <span className="w-[42px] shrink-0 text-[10px] font-medium uppercase tracking-[0.12em] text-amber-500/80">
+                  <span className="w-[42px] shrink-0 text-2xs font-medium uppercase tracking-[0.12em] text-amber-500/80">
                     顺延 {carriedPlans.length}
                   </span>
                   {carriedPlans.slice(0, 5).map((p) => (
                     <span
                       key={p.id}
-                      className="max-w-[200px] truncate rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-300/90"
+                      className="max-w-[200px] truncate rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-300/90"
                       title={p.title}
                     >
                       {p.title}
                     </span>
                   ))}
                   {carriedPlans.length > 5 ? (
-                    <span className="text-[10px] text-amber-500/70">+{carriedPlans.length - 5}</span>
+                    <span className="text-2xs text-amber-500/70">+{carriedPlans.length - 5}</span>
                   ) : null}
-                </div>
-              ) : null}
-
-              {/* 项目趋势：活跃项目任务完成率 + 上线倒计时 */}
-              {projectTrend.length > 0 ? (
-                <div className="mb-2 flex flex-col gap-1">
-                  <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-600">项目趋势</span>
-                  {projectTrend.map((p) => (
-                    <div key={p.id} className="flex items-center gap-2 px-1">
-                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: p.color }} />
-                      <span className="w-[132px] shrink-0 truncate text-[11px] text-slate-300">{p.name}</span>
-                      <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--surface-2)' }}>
-                        {p.pct != null ? (
-                          <div className="h-full rounded-full" style={{ width: `${p.pct}%`, background: p.color }} />
-                        ) : null}
-                      </div>
-                      <span className="w-[76px] shrink-0 text-right text-[10px] tabular-nums text-slate-500">
-                        {p.pct != null ? `${p.done}/${p.total} · ${p.pct}%` : '未拆任务'}
-                      </span>
-                      {p.daysLeft != null ? (
-                        <span
-                          className={`w-[46px] shrink-0 text-right text-[10px] tabular-nums ${
-                            p.daysLeft < 0 ? 'text-red-400' : p.daysLeft <= 3 ? 'text-amber-400' : 'text-slate-500'
-                          }`}
-                        >
-                          {p.daysLeft < 0 ? '已逾期' : `剩${p.daysLeft}d`}
-                        </span>
-                      ) : null}
-                    </div>
-                  ))}
                 </div>
               ) : null}
 
               {/* 计划清单 / 空态 */}
               {plans.length === 0 ? (
                 <div className="flex items-center gap-3 py-2">
-                  <span className="text-[12px] text-slate-500">今天还没有计划</span>
+                  <span className="text-xs text-slate-500">今天还没有计划</span>
                   <button
                     type="button"
-                    className="glass-btn primary !px-3 !py-1 !text-[11px]"
+                    className="glass-btn"
                     onClick={() => useAppStore.getState().setView('plan')}
                   >
                     排一下今天 →
@@ -1375,14 +1283,14 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
                         className="flex items-center gap-2.5 rounded-lg px-2 py-1.5"
                         style={isNow(p) ? { background: 'var(--accent-softer)' } : undefined}
                       >
-                        <span className="w-[84px] shrink-0 text-[11px] tabular-nums text-slate-500">
+                        <span className="w-[84px] shrink-0 text-xs tabular-nums text-slate-500">
                           {p.startMin != null ? `${fmtHHMM(p.startMin)}${p.endMin != null ? `–${fmtHHMM(p.endMin)}` : ''}` : '全天'}
                         </span>
                         <button
                           type="button"
                           title={p.status === 'done' ? '标记为待办' : '标记完成'}
                           onClick={() => void window.api?.setPlanStatus?.(p.id, p.status === 'done' ? 'planned' : 'done')}
-                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[9px] leading-none transition-colors ${
+                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-2xs leading-none transition-colors ${
                             p.status === 'done'
                               ? 'border-emerald-400/60 bg-emerald-400/15 text-emerald-300'
                               : 'border-white/20 text-transparent hover:border-emerald-400/60 hover:text-emerald-300/70'
@@ -1391,7 +1299,7 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
                           ✓
                         </button>
                         <span
-                          className={`min-w-0 flex-1 truncate text-[12px] ${
+                          className={`min-w-0 flex-1 truncate text-xs ${
                             p.status === 'done' || p.status === 'cancelled'
                               ? 'text-slate-500 line-through'
                               : isNow(p)
@@ -1401,16 +1309,16 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
                         >
                           {p.title}
                         </span>
-                        {p.carried ? <span className="shrink-0 text-[10px] text-amber-400">顺延</span> : null}
+                        {p.carried ? <span className="shrink-0 text-2xs text-amber-400">顺延</span> : null}
                         {isNow(p) ? (
-                          <span className="shrink-0 text-[10px]" style={{ color: 'var(--accent)' }}>进行中</span>
+                          <span className="shrink-0 text-2xs" style={{ color: 'var(--accent)' }}>进行中</span>
                         ) : null}
                       </div>
                     ))}
                     {sortedPlans.length > shown.length ? (
                       <button
                         type="button"
-                        className="mt-0.5 self-start rounded-md px-2 py-1 text-[11px] text-slate-500 transition-colors hover:bg-[var(--surface-2)] hover:text-slate-300"
+                        className="mt-0.5 self-start rounded-md px-2 py-1 text-xs text-slate-500 transition-colors hover:bg-[var(--surface-2)] hover:text-slate-300"
                         onClick={() => useAppStore.getState().setView('plan')}
                       >
                         +{sortedPlans.length - shown.length} 项 · 去计划页 →
@@ -1423,539 +1331,43 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
         }
         if (slot.key === 'insight') {
           return (
-      <div key="insight" style={hideStyle}>
-      {/* 今日洞察 */}
-      <section className="glass-card hoverable">
-        <div className="mb-2.5 flex items-center gap-2.5">
-          <span
-            className="flex h-6 w-6 items-center justify-center rounded-lg border"
-            style={{ background: 'var(--accent-softer)', borderColor: 'var(--border-active)', color: 'var(--accent)' }}
-          >
-            <span className="text-[13px] leading-none">💡</span>
-          </span>
-          <h3 className="text-[13px] font-semibold text-slate-200">今日洞察</h3>
-          {plans.length > 0 ? (
-            <span className="text-[11px] text-slate-500">
-              计划 {plans.filter((p) => p.status === 'done').length}/{plans.length} 完成
-            </span>
-          ) : null}
-        </div>
-        {insightData ? (
-          <>
-            {/* KPI 三卡（v6 InsightCard）：专注 / 摸鱼 / AI 综合评分（无评分数据时回退「今日 AI 协作时长」） */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <InsightCard
-                tone="teal"
-                highlight
-                icon={<Icon name="target" size={14} />}
-                label="专注时长"
-                onClick={() => gotoReport('smart')}
-                big={<span className="tabular-nums">{fmtMin(kpi.focus.today)}</span>}
-                trend={(() => {
-                  const d = kpi.focus.delta[baselineKey]
-                  return d === null ? undefined : { dir: d >= 0 ? ('up' as const) : ('down' as const), text: `${Math.round(Math.abs(d))}% vs ${BASELINE_SHORT[baselineKey]}`, good: d >= 0 }
-                })()}
-                base={baselineSource(baselineKey, kpi.focus.base[baselineKey]) + (insightData.windowMin > 0 ? ` · 自 ${insightData.startedAt} 起` : '')}
-                spark={kpi.focus.spark}
-              />
-              <InsightCard
-                tone="red"
-                icon={<Icon name="activity" size={14} />}
-                label="摸鱼 / 分心"
-                onClick={() => gotoReport('smart')}
-                big={<span className="tabular-nums">{fmtMin(kpi.slack.today)}</span>}
-                trend={(() => {
-                  const d = kpi.slack.delta[baselineKey]
-                  return d === null ? undefined : { dir: d >= 0 ? ('up' as const) : ('down' as const), text: `${Math.round(Math.abs(d))}% vs ${BASELINE_SHORT[baselineKey]}`, good: d <= 0 }
-                })()}
-                base={baselineSource(baselineKey, kpi.slack.base[baselineKey])}
-                spark={kpi.slack.spark}
-              />
-              {attention?.today ? (
-                <InsightCard
-                  tone="ai"
-                  highlight
-                  icon={<span className="text-[13px] leading-none">✦</span>}
-                  label="AI 综合评分"
-                  onClick={() => gotoReport('ai')}
-                  big={
-                    <span className="tabular-nums">
-                      {attention.today.finalScore}
-                      <span className="ml-1 text-[11px] font-bold text-slate-500">/ 1000</span>
+            <div
+              key="insight"
+              style={hideStyle}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-slate-500"
+            >
+              {insightData ? (
+                <>
+                  <span>
+                    专注 <b className="tabular-nums text-slate-200">{fmtMin(kpi.focus.today)}</b>
+                  </span>
+                  <span>
+                    摸鱼 <b className="tabular-nums text-slate-200">{fmtMin(kpi.slack.today)}</b>
+                  </span>
+                  {attention?.today ? (
+                    <span>
+                      评分 <b className="tabular-nums text-slate-200">{attention.today.finalScore}</b>
                     </span>
-                  }
-                  trend={(() => {
-                    const v = attention.today.vsYesterday
-                    return { dir: v >= 0 ? ('up' as const) : ('down' as const), text: `${v >= 0 ? '+' : ''}${Math.round(v)} 分 vs 昨日`, good: v >= 0 }
-                  })()}
-                  base={`五维加权注意力分 · 等级 ${attention.today.grade} · vs 上周均值 ${attention.today.vsLastWeekAvg >= 0 ? '+' : ''}${Math.round(attention.today.vsLastWeekAvg)}`}
-                  spark={scoreSpark}
-                />
+                  ) : null}
+                  <button
+                    type="button"
+                    className="ml-auto rounded-md px-2 py-0.5 text-slate-500 transition-colors hover:bg-[var(--surface-2)] hover:text-slate-200"
+                    onClick={() => gotoReport('smart')}
+                  >
+                    完整回顾 →
+                  </button>
+                </>
               ) : (
-                <InsightCard
-                  tone="ai"
-                  highlight
-                  icon={<span className="text-[13px] leading-none">✦</span>}
-                  label="今日 AI 协作时长"
-                  big={<span className="tabular-nums">{fmtMin(kpi.ai.today)}</span>}
-                  trend={(() => {
-                    const d = kpi.ai.delta[baselineKey]
-                    return d === null ? undefined : { dir: d >= 0 ? ('up' as const) : ('down' as const), text: `${Math.round(Math.abs(d))}% vs ${BASELINE_SHORT[baselineKey]}`, good: d >= 0 }
-                  })()}
-                  base={baselineSource(baselineKey, kpi.ai.base[baselineKey])}
-                  spark={kpi.ai.spark}
-                />
+                <span>数据加载中…</span>
               )}
             </div>
-
-            {/* 对标基线切换（v6 Seg 分段选择器，联动专注/摸鱼卡趋势徽章） */}
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span className="text-[11px] text-slate-500">对标基线：</span>
-              <Seg
-                options={[
-                  { value: 'yest', label: '昨日同期' },
-                  { value: 'week', label: '近7天同期' },
-                  { value: 'd30', label: '近30天均值' },
-                  { value: 'best', label: '高效日同期' }
-                ]}
-                value={baselineKey}
-                onChange={(v) => setBaselineKey(v as BaselineKey)}
-              />
-            </div>
-
-            {/* 节奏预测 */}
-            {insightData.forecastMin ? (
-              <div className="mt-2.5 border-t border-dashed border-white/[0.08] pt-2.5 text-[12px] text-slate-500">
-                📈 节奏预测：按当前效率，预计全天 ≈ <b className="text-neon-cyan tabular-nums">{Math.round(insightData.forecastMin)} 分</b>（窗口法外推）
-              </div>
-            ) : null}
-
-            {/* TOP 应用 */}
-            {insightData.topApps.length > 0 ? (
-              <div className="mt-3 flex gap-2">
-                {insightData.topApps.map((a) => {
-                  const ak = a.app.trim().toLowerCase().replace(/\.exe$/i, '')
-                  const cat = categoryOfWithOverride(a.app, override)
-                  const maxMin = insightData.topApps[0].min || 1
-                  return (
-                    <div key={a.app} className="min-w-0 flex-1 rounded-lg border border-white/[0.06] px-2.5 py-2" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                      <div className="flex items-center gap-1.5 text-[12px] font-semibold text-slate-200">
-                        {appVisuals[ak] ? <img src={appVisuals[ak].iconDataUrl} alt="" className="h-3.5 w-3.5 rounded-[3px]" /> : null}
-                        <span className="truncate">{displayApp(a.app)}</span>
-                      </div>
-                      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/[0.06]">
-                        <div className="h-full rounded-full" style={{ width: `${(a.min / maxMin) * 100}%`, background: CATEGORY_META[cat].color }} />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <p className="text-[13px] text-slate-400 leading-relaxed">加载中...</p>
-        )}
-      </section>
-      </div>
           )
         }
         if (slot.key === 'timeline') {
           return (
-      <div key="timeline" style={hideStyle}>
-      <PinnedWidgets trail={trail} />
-      {/* 时间轴 — 水平泳道 */}
-      <section className="glass-card">
-        <div className="mb-3 flex items-center gap-2.5">
-          <span
-            className="flex h-6 w-6 items-center justify-center rounded-lg border"
-            style={{ background: 'var(--accent-softer)', borderColor: 'var(--border-active)', color: 'var(--accent)' }}
-          >
-            <Icon name="clock" size={13} />
-          </span>
-          <span className="text-[13px] font-semibold text-slate-200">时间轴</span>
-          <span className="text-[12px] text-slate-500">{plans.length} 计划 · {fmtDur(items.reduce((a, i) => a + i.seg.durationMin, 0))}</span>
-          <div className="ml-auto flex items-center gap-2">
-            <div className="flex items-center gap-0.5 rounded-lg p-0.5"
-              style={{ background: 'var(--tl-lane-today-bg)', border: '0.5px solid var(--tl-lane-border)' }}>
-              {ZOOM_STOPS.map((z) => {
-                const active = Math.round(rangeHi - rangeLo) === z.span
-                return (
-                  <button
-                    key={z.span}
-                    onClick={() => zoomToSpan(z.span)}
-                    style={{
-                      borderRadius: 5,
-                      padding: '2px 8px',
-                      fontSize: 11,
-                      fontWeight: active ? 500 : 400,
-                      background: active ? 'var(--tl-accent)' : 'transparent',
-                      color: active ? '#ffffff' : 'var(--tl-ruler-label)',
-                      border: 'none',
-                      cursor: 'pointer',
-                      transition: 'all .12s',
-                    }}
-                  >
-                    {z.label}
-                  </button>
-                )
-              })}
+            <div key="timeline" style={hideStyle}>
+              <NarrativeAxis trail={trail} plans={plans} override={override} />
             </div>
-            <button onClick={centerOnNow}
-              style={{ height: 28, padding: '0 12px', borderRadius: 6, border: '0.5px solid var(--tl-now)', background: 'transparent', color: 'var(--tl-now)', fontSize: 11, fontWeight: 500, cursor: 'pointer' }}
-              title="回到当前时间">现在</button>
-          </div>
-        </div>
-          <div ref={timelineScrollRef}
-            style={{ overflowX: 'auto', overflowY: 'visible', position: 'relative' }}>
-            <div className="relative" style={{ width: LABEL_W + laneW }}>
-            <div className="flex items-center mb-1.5">
-              <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-ruler-label)', paddingLeft: 8 }} className="shrink-0">{fmtHHMM(rangeLo)}–{fmtHHMM(rangeHi)}</span>
-                <div ref={rangeRef} className="relative"
-                  style={{ width: laneW, height: 26, cursor: panRef.current ? 'grabbing' : 'grab', touchAction: 'none' }}
-                onPointerDown={onRulerPointerDown}
-                onPointerMove={onRulerPointerMove}
-                onPointerUp={onRulerPointerUp}
-                onPointerCancel={onRulerPointerUp}
-                title="按住拖动平移时间轴 · 滚轮缩放">
-                <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2" style={{ height: 0.5, background: 'var(--tl-ruler-line)' }} />
-                {halfHourTicks.map(t => (
-                  <div key={'h' + t} className="absolute top-0 bottom-0" style={{ left: ruler.minToX(t) }}>
-                    <span className="absolute" style={{ top: 18, left: '50%', transform: 'translateX(-50%)', width: 1, height: 6, background: 'var(--tl-ruler-line)' }} />
-                  </div>
-                ))}
-                {hourTicks.map(t => (
-                  <div key={t} className="absolute top-0 bottom-0" style={{ left: ruler.minToX(t) }}>
-                    <span className="absolute" style={{ top: 16, left: '50%', transform: 'translateX(-50%)', fontSize: 11, color: 'var(--tl-ruler-label)', fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)', fontVariantNumeric: 'tabular-nums' }}>
-                      {String(Math.floor(t / 60))}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {/* 今日操作区 header：与全局 Section 风格一致，与上方刻度区用分隔线隔开 */}
-            <div className="mt-3 mb-2 flex items-center gap-2.5 border-t border-white/[0.05] pt-3">
-              <span
-                className="flex h-6 w-6 items-center justify-center rounded-lg border"
-                style={{ background: 'var(--accent-softer)', borderColor: 'var(--border-active)', color: 'var(--accent)' }}
-              >
-                <Icon name="activity" size={13} />
-              </span>
-              <span className="text-[13px] font-semibold text-slate-200">今日操作</span>
-              <span className="text-[11px] text-slate-500">按分类聚合 · 可展开应用泳道 · 拖拽归类</span>
-            </div>
-            {todayByApp.length === 0 ? (
-              <div className="flex items-center mb-1.5">
-                <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-other-text)', paddingLeft: 8 }} className="shrink-0">今日</span>
-                <div className="relative" style={{
-                     width: laneW, height: 30, overflow: 'hidden',
-                     background: 'transparent',
-                     borderBottom: '0.5px solid var(--tl-lane-border)',
-                   }}
-                  onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane('today') }}
-                  onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverLane(null) }}
-                  onDrop={e => {
-                    e.preventDefault(); setDragOverLane(null)
-                    const ts = parseInt(e.dataTransfer.getData('text/start-ts'))
-                    if (!isNaN(ts)) handleAssignPlan(null, ts)
-                  }}>
-                  <span style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--tl-ruler-label)' }}>今日活动已全部归入计划 ✓</span>
-                </div>
-              </div>
-            ) : (
-              <>
-                {/* 时间轴按分类聚合：泳道 = 分类，段块按真实时间铺，hover 显示应用详情 */}
-                {todayByCategory.map(({ cat, apps, min }) => {
-                  const meta = CATEGORY_META[cat]
-                  const open = openCats.has(cat)
-                  return (
-                    <div key={cat} className="mb-1">
-                      <div className="flex items-center">
-                        {/* 分类标签列：图标 + 分类名 + 时长（点击分类名可展开/收起，拖入归类） */}
-                        <span
-                          className="flex shrink-0 cursor-pointer items-center gap-1.5 py-1 pr-1"
-                          style={{ width: LABEL_W, fontSize: 11, color: meta.color }}
-                          onClick={() => toggleCat(cat)}
-                          onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
-                          onDrop={(e) => {
-                            e.preventDefault()
-                            const app = e.dataTransfer.getData('text/app-cat')
-                            if (app) setAppCategory(app, cat)
-                            setCatDragApp(null)
-                          }}
-                          title={`${meta.label} · ${apps.length} 个应用 · ${fmtDur(min)} · 点击展开应用泳道，拖入应用可归类`}
-                        >
-                          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ color: meta.color, flexShrink: 0 }}>
-                            <use href={`#cat-${cat}`} />
-                          </svg>
-                          <span className="overflow-hidden text-ellipsis whitespace-nowrap">{meta.label}</span>
-                          <span className="shrink-0 text-[10px]" style={{ color: 'var(--tl-ruler-label)' }}>{fmtDur(min)}</span>
-                        </span>
-                        {/* 分类泳道：段块按真实时间铺 */}
-                        <div
-                          className="relative"
-                          style={{
-                            width: laneW, height: 30, overflow: 'hidden',
-                            background: hexBg(meta.color, 0.14),
-                            borderBottom: '1px dashed rgba(255,255,255,0.05)',
-                            transition: 'background .12s',
-                          }}
-                        >
-                          {apps.flatMap(([, segsArr]) => segsArr.map((s) => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 0.5))))}
-                        </div>
-                        {/* 尾部展开按钮 */}
-                        <button
-                          className="ml-1 flex shrink-0 items-center gap-0.5 rounded px-1.5 py-1 text-[10px] text-slate-500 transition-colors hover:bg-white/[0.05] hover:text-slate-200"
-                          onClick={() => toggleCat(cat)}
-                          title={open ? '收起应用泳道' : '展开各应用泳道'}
-                        >
-                          {open ? '收起' : '展开'}
-                          <span className={`text-[8px] transition-transform duration-200 ${open ? '' : '-rotate-90'}`}>▶</span>
-                        </button>
-                      </div>
-                      {/* 展开：该分类下各应用独立泳道（每应用一行，段块按真实时间铺） */}
-                      {open ? (
-                        <div className="anim-fade-in ml-2 mt-0.5 flex flex-col gap-0.5 border-l-2 pl-2" style={{ borderColor: hexBg(meta.color, 0.5) }}>
-                          {apps.map(([app, segsArr]) => {
-                            const ak = app.trim().toLowerCase().replace(/\.exe$/i, '')
-                            const v = appVisuals[ak]
-                            const appMin = segsArr.reduce((s, g) => s + g.seg.durationMin, 0)
-                            return (
-                              <div key={app} className="flex items-center">
-                                {/* 应用名标签列（可拖拽归类） */}
-                                <span
-                                  draggable
-                                  onDragStart={(e) => { e.dataTransfer.setData('text/app-cat', app); e.dataTransfer.effectAllowed = 'move'; setCatDragApp(app) }}
-                                  onDragEnd={() => setCatDragApp(null)}
-                                  className="flex shrink-0 cursor-grab items-center gap-1.5 py-1 pr-1"
-                                  style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-other-text)', opacity: catDragApp === app ? 0.4 : 1 }}
-                                  title={`${displayApp(app)}（${meta.label}）· 拖到其他分类可重新归类`}
-                                >
-                                  {v ? (
-                                    <img src={v.iconDataUrl} alt="" className="h-3.5 w-3.5 shrink-0 rounded-[3px]" style={{ background: 'rgba(0,0,0,0.05)' }} draggable={false} />
-                                  ) : (
-                                    <span className="h-3.5 w-3.5 shrink-0 rounded-[3px]" style={{ background: hexBg(meta.color, 0.3) }} />
-                                  )}
-                                  <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{displayApp(app)}</span>
-                                  <span className="shrink-0 text-[10px]" style={{ color: 'var(--tl-ruler-label)' }}>{fmtDur(appMin)}</span>
-                                </span>
-                                {/* 应用泳道：段块按真实时间铺 */}
-                                <div
-                                  className="relative"
-                                  style={{
-                                    width: laneW, height: 26, overflow: 'hidden',
-                                    background: 'transparent',
-                                    borderBottom: '1px dashed rgba(255,255,255,0.04)',
-                                  }}
-                                >
-                                  {segsArr.map((s) => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 0.5)))}
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      ) : null}
-                    </div>
-                  )
-                })}
-              </>
-            )}
-            {/* 里程碑 · 提醒轨道 */}
-            {reminders.length > 0 && (
-              <>
-                <div className="flex items-center gap-1.5 mb-2 mt-3">
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#A78BFA', display: 'inline-block' }} />
-                  <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--tl-ruler-label)' }}>里程碑 · 提醒</span>
-                </div>
-                <div className="flex items-center mb-1.5">
-                  <span style={{ width: LABEL_W, fontSize: 11, color: 'var(--tl-ruler-label)', paddingLeft: 8 }} className="shrink-0">定时提醒</span>
-                  <div className="relative" style={{ width: laneW, height: 24, overflow: 'hidden', background: 'transparent', borderBottom: '0.5px dashed var(--tl-lane-border)' }}>
-                    {reminders.map(r => {
-                      const t = r.startMin
-                      if (t === undefined) return null
-                      const x = ruler.minToX(t)
-                      const rDone = r.status === 'done'
-                      const rCancelled = r.status === 'cancelled'
-                      return (
-                        <div key={r.id} title={`${r.title} · ${fmtHHMM(t)}${rDone ? ' · 已完成' : ''}`}
-                             style={{ position: 'absolute', left: x - 5, top: 2, bottom: 2, display: 'flex', alignItems: 'center', gap: 3, pointerEvents: 'auto', cursor: 'pointer' }}
-                             onClick={() => void window.api?.setPlanStatus?.(r.id, rDone ? 'planned' : 'done')}>
-                          <div style={{ width: 10, height: 10, transform: 'rotate(45deg)', background: rDone ? 'var(--tl-lane-plan-bg)' : '#A78BFA', border: `1px solid ${rDone ? 'var(--tl-lane-border)' : '#7C3AED'}`, borderRadius: 2, opacity: rCancelled ? 0.4 : 1 }} />
-                          <span style={{ fontSize: 11, color: rDone ? 'var(--tl-ruler-label)' : '#A78BFA', textDecoration: rDone ? 'line-through' : 'none', whiteSpace: 'nowrap', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {fmtHHMM(t)} {r.title}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              </>
-            )}
-            {/* 计划泳道区 header */}
-            <div className="flex items-center gap-1.5 mb-2 mt-3">
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--tl-now)', display: 'inline-block' }} />
-              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--tl-ruler-label)' }}>计划泳道</span>
-            </div>
-            {phasePlans.map(plan => {
-              const segs = getPlanSegs(plan.id)
-              const covered = segs.reduce((a, s) => a + (s.seg.durationMin || 0), 0)
-              return (
-                <div key={plan.id} className="flex items-center mb-1.5">
-                  <span style={{ width: LABEL_W, fontSize: 11, color: STATUS_TEXT[plan.status] || 'var(--tl-other-text)', paddingLeft: 8, display: 'flex', alignItems: 'center', gap: 6 }} className="shrink-0">
-                    <i style={{ width: 6, height: 6, borderRadius: '50%', background: STATUS_BORDER[plan.status] || 'var(--tl-lane-border)', flexShrink: 0, display: 'inline-block' }} />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{plan.title}</span>
-                  </span>
-                  <div className="relative" style={{
-                           width: laneW, height: 30, overflow: 'hidden',
-                           background: dragOverLane === plan.id ? 'rgba(55,138,221,0.08)' : 'transparent',
-                           borderBottom: '0.5px solid var(--tl-lane-border)',
-                           boxShadow: dragOverLane === plan.id ? 'inset 0 -1.5px 0 var(--tl-accent)' : 'none',
-                           transition: 'background .12s, box-shadow .12s',
-                         }}
-                    onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverLane(plan.id) }}
-                    onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverLane(null) }}
-                    onDrop={e => {
-                      e.preventDefault(); setDragOverLane(null)
-                      const ts = parseInt(e.dataTransfer.getData('text/start-ts'))
-                      if (!isNaN(ts)) handleAssignPlan(plan.id, ts)
-                    }}>
-                    {dragOverLane === plan.id && (
-                      <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', background: 'var(--tl-accent)', color: '#fff', fontSize: 11, fontWeight: 500, borderRadius: 999, padding: '2px 8px' }}>松开归入 · {plan.title}</span>
-                    )}
-                    <div style={{ position: 'absolute', left: ruler.minToX(plan.startMin ?? 0), width: ruler.durToW(plan.durationMin ?? 60),
-                                 top: 5, bottom: 5, background: `${STATUS_BG[plan.status] || 'var(--tl-lane-today-bg)'}40`,
-                                 borderRadius: 999 }} />
-                    {segs.map(s => renderSegBlock(s.seg, ruler.minToX(startMinOf(s.seg)), ruler.durToW(s.seg.durationMin || 0.5)))}
-                    <span style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', fontSize: 11, color: 'var(--tl-ruler-label)' }}>
-                      {[
-                        plan.startMin != null ? fmtHHMM(plan.startMin) : null,
-                        plan.durationMin != null ? `${covered}/${plan.durationMin}m` : null,
-                        (plan.completionRatio != null && plan.completionRatio > 0) ? `${Math.round(plan.completionRatio * 100)}%` : null
-                      ].filter(Boolean).join(' · ') || '待办'}
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
-            {nowMin >= rangeLo && nowMin <= rangeHi && (() => {
-              const x = LABEL_W + ruler.minToX(nowMin)
-              return (
-                <div style={{ position: 'absolute', left: x, top: 0, bottom: 0,
-                              width: 2, background: '#ef4444', borderRadius: 1,
-                              boxShadow: '0 0 8px rgba(239,68,68,0.55)',
-                              zIndex: 50, pointerEvents: 'none' }}>
-                  <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
-                                width: 8, height: 8, borderRadius: '50%', background: '#ef4444',
-                                boxShadow: '0 0 6px rgba(239,68,68,0.8)' }} />
-                  <div style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)',
-                                background: '#ef4444', color: '#ffffff',
-                                fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
-                                padding: '1px 6px', borderRadius: 8, whiteSpace: 'nowrap' }}>
-                    NOW
-                  </div>
-                  <div style={{ position: 'absolute', top: 25, left: '50%', transform: 'translateX(-50%)',
-                                background: 'rgba(239,68,68,0.14)', color: '#ef4444',
-                                fontSize: 10, fontWeight: 600, padding: '0 5px', borderRadius: 6,
-                                fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)',
-                                fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                    {String(Math.floor(nowMin / 60)).padStart(2,'0')}:{String(nowMin % 60).padStart(2,'0')}
-                  </div>
-                  <div style={{ position: 'absolute', bottom: 0, left: -2, width: 6, height: 22,
-                                background: 'linear-gradient(to bottom, transparent, #ef4444)', opacity: 0.85 }} />
-                </div>
-              )
-            })()}
-            {/* 提醒时间点竖线：与当前时间线一致，临近时闪烁 */}
-            {reminders.map(r => {
-              const t = r.startMin
-              if (t === undefined || t < rangeLo || t > rangeHi || r.status === 'cancelled') return null
-              const x = LABEL_W + ruler.minToX(t)
-              const color = STATUS_BORDER[r.status] || '#A78BFA'
-              const deltaMin = t - nowMin
-              const upcoming = deltaMin >= 0 && deltaMin <= 60
-              const dur = upcoming ? Math.max(0.4, deltaMin / 12) : 0
-              return (
-                <div key={`rem-line-${r.id}`} style={{
-                  position: 'absolute', left: x, top: 0, bottom: 0, width: 1,
-                  background: color, zIndex: 40, pointerEvents: 'none',
-                  opacity: r.status === 'done' ? 0.3 : upcoming ? undefined : 0.5,
-                  animation: upcoming ? `tl-reminder-pulse ${dur.toFixed(2)}s ease-in-out infinite` : 'none',
-                }}>
-                  <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
-                                  width: 5, height: 5, borderRadius: '50%', background: color }} />
-                </div>
-              )
-            })}
-            {/* 图例行：色块语义 + 今日各分类时长合计（todayByCategory 聚合） */}
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-2.5" style={{ borderTop: '0.5px dashed var(--tl-lane-border)' }}>
-              <span className="flex items-center gap-1.5 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
-                <i className="inline-block h-2.5 w-6 rounded-full" style={{ background: 'linear-gradient(90deg, var(--teal), var(--teal-border))' }} />工作
-              </span>
-              <span className="flex items-center gap-1.5 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
-                <i className="inline-block h-2.5 w-6 rounded-full" style={{ background: 'linear-gradient(90deg,#f59e0b,#fbbf24)' }} />摸鱼
-              </span>
-              <span className="flex items-center gap-1.5 text-[10.5px]" style={{ color: 'var(--text-3)' }}>
-                <i className="inline-block h-2.5 w-6 rounded-full" style={{ background: 'var(--surface-3)', border: '0.5px solid var(--tl-lane-border)' }} />其他
-              </span>
-              <span className="h-3 w-px" style={{ background: 'var(--tl-lane-border)' }} />
-              {todayByCategory.map(({ cat, min }) => (
-                <span key={cat} className="flex items-center gap-1 text-[10.5px]" style={{ color: 'var(--text-3)' }} title={`${CATEGORY_META[cat].label} · 今日合计`}>
-                  <i className="inline-block h-2 w-2 rounded-full" style={{ background: CATEGORY_META[cat].color }} />
-                  {CATEGORY_META[cat].label}
-                  <b className="tabular-nums" style={{ color: 'var(--text-2)', fontWeight: 600 }}>{fmtDur(min)}</b>
-                </span>
-              ))}
-            </div>
-            {/* 已停止记录：与隐私页排除列表双向联动，可一键恢复 */}
-            {excludedApps.length > 0 && (
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-2"
-                style={{ borderTop: '0.5px solid var(--tl-lane-border)' }}>
-                <span className="text-[11px]" style={{ color: 'var(--tl-ruler-label)' }}>
-                  <span style={{ color: 'var(--tl-accent)' }}>⛔</span> 已停止记录（点击 ✕ 恢复，与「隐私」页同步）
-                </span>
-                {excludedApps.map((a) => (
-                  <span
-                    key={a}
-                    className="chip"
-                    title={`点击恢复「${displayApp(a)}」的记录`}
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => restoreExcluded(a)}
-                  >
-                    {displayApp(a)}
-                    <span className="ml-0.5 text-slate-500 transition-colors hover:text-slate-200">✕</span>
-                  </span>
-                ))}
-              </div>
-            )}
-            </div>
-          </div>
-      </section>
-
-      {tlHover && createPortal(
-        <ActivityHoverCard
-          sticky
-          onMouseEnter={() => { if (hoverLeaveTimer.current) { window.clearTimeout(hoverLeaveTimer.current); hoverLeaveTimer.current = null } }}
-          onMouseLeave={() => setTlHover(null)}
-          onExclude={() => setConfirmExclude(tlHover.seg)}
-          a={{
-            app: displayApp(tlHover.seg.mainApp),
-            title: tlHover.seg.mainTitle ?? '(未命名)',
-            state: tlHover.seg.mainState,
-            startText: fmtTime(tlHover.seg.startTs),
-            endText: fmtTime(tlHover.seg.endTs),
-            durationText: fmtDur(tlHover.seg.durationMin),
-            source: '监控',
-            microActivity: (tlHover.seg as any).microActivity ?? null,
-            operation: (tlHover.seg as any).operation ?? null,
-            counterpart: (tlHover.seg as any).counterpart ?? undefined,
-            topic: (tlHover.seg as any).topic ?? undefined,
-            mode: 'fixed',
-            pos: { x: tlHover.rect.left + tlHover.rect.width / 2, y: tlHover.rect.top },
-          }}
-        />,
-        document.body
-      )}
-
-      </div>
           )
         }
         if (slot.key === 'starmap') {
@@ -1971,10 +1383,10 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
             >
               <Icon name="chart" size={13} />
             </span>
-            <h3 className="text-[13px] font-semibold text-slate-200">应用星图</h3>
-            <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>节点大小=时长 · 连线=切换频次</span>
+            <h3 className="text-sm font-semibold text-slate-200">应用星图</h3>
+            <span className="text-xs" style={{ color: 'var(--text-3)' }}>节点大小=时长 · 连线=切换频次</span>
           </div>
-          <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>近 {starGraph?.days ?? 7} 天聚合</span>
+          <span className="text-xs" style={{ color: 'var(--text-3)' }}>近 {starGraph?.days ?? 7} 天聚合</span>
         </div>
         {/* 星空画布：深色=radial 星云底 + 星点；亮色=淡底 + 低透明星点 */}
         <div
@@ -2000,9 +1412,9 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
             />
           ))}
           {starGraph === null ? (
-            <p className="absolute inset-0 flex items-center justify-center text-[12px]" style={{ color: 'var(--text-3)' }}>星图加载中… ✦</p>
+            <p className="absolute inset-0 flex items-center justify-center text-xs" style={{ color: 'var(--text-3)' }}>星图加载中… ✦</p>
           ) : starPlanets.length === 0 ? (
-            <p className="absolute inset-0 flex items-center justify-center text-[12px]" style={{ color: 'var(--text-3)' }}>近 7 天暂无应用数据 ✦</p>
+            <p className="absolute inset-0 flex items-center justify-center text-xs" style={{ color: 'var(--text-3)' }}>近 7 天暂无应用数据 ✦</p>
           ) : (
             <>
               {/* 切换连线：亮度/粗细 ∝ count；hover 节点时相连边高亮、其余降到 0.08 */}
@@ -2027,7 +1439,7 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
           )}
         </div>
         {/* 图例 */}
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[11px]" style={{ color: 'var(--text-3)' }}>
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs" style={{ color: 'var(--text-3)' }}>
           <span className="flex items-center gap-1.5">
             <svg width="26" height="6" className="shrink-0">
               <line x1="1" y1="3" x2="25" y2="3" stroke="rgba(139,92,246,0.85)" strokeWidth="2.5" strokeLinecap="round" />
@@ -2053,7 +1465,7 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
       {!editing ? (
       <div className="flex items-center justify-center py-1">
         <button
-          className="glass-btn !px-3 !py-1.5 !text-[12px]"
+          className="glass-btn !px-3 !py-1.5 !text-xs"
           onClick={() => setEditing(true)}
           title="拖拽调整首页模块顺序与显隐"
         >
@@ -2073,6 +1485,13 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
         onCancel={() => setConfirmExclude(null)}
       />
 
+      {/* 一分钟校对弹层：确认/改归属/无关，处理完自动刷新首屏结论 */}
+      <ReviewSheet
+        open={reviewOpen}
+        onClose={() => setReviewOpen(false)}
+        onChanged={() => setReviewRefresh((n) => n + 1)}
+      />
+
     </div>
   )
 }
@@ -2087,9 +1506,9 @@ function AttentionPin() {
   }, [])
   return (
     <div className="glass-card p-3">
-      <h4 className="text-[11px] text-slate-400 mb-2">注意力评分</h4>
-      <div className="text-[20px] font-extrabold tabular-nums text-neon-green">{score ?? '—'}</div>
-      <div className="text-[10px] text-slate-500">五维综合（0-1000）</div>
+      <h4 className="text-xs text-slate-400 mb-2">注意力评分</h4>
+      <div className="text-xl font-extrabold tabular-nums text-neon-green">{score ?? '—'}</div>
+      <div className="text-2xs text-slate-500">五维综合（0-1000）</div>
     </div>
   )
 }
@@ -2102,13 +1521,14 @@ function PinnedWidgets({ trail }: { trail: MergedTrail | null }) {
 
   return (
     <section className="glass-card hoverable">
-      <div className="flex items-center gap-2 mb-3">
-        <span>📌</span><h3 className="text-[13px] font-semibold text-slate-200">投送的 Widget</h3>
-        <span className="text-[11px] text-slate-500 ml-auto">来自报表页的模块</span>
+      <div className="mb-3 flex items-center gap-2">
+        <Icon name="sliders" size={14} className="text-slate-500" />
+        <h3 className="text-sm font-semibold text-slate-200">投送的 Widget</h3>
+        <span className="ml-auto text-xs text-slate-500">来自报表页的模块</span>
       </div>
       <div className="grid gap-3 lg:grid-cols-2">
-        {pins.includes('state') && <div className="glass-card p-3"><h4 className="text-[11px] text-slate-400 mb-2">状态分布</h4>{Object.entries(stateMinutes).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([s,m])=><div key={s} className="flex justify-between text-[11px] text-slate-300"><span>{s}</span><span>{Math.round(m)}m</span></div>)}</div>}
-        {pins.includes('topapps') && <div className="glass-card p-3"><h4 className="text-[11px] text-slate-400 mb-2">TOP 应用</h4>{topApps.map(a=><div key={a.app} className="flex justify-between text-[11px] text-slate-300"><span>{a.app}</span><span>{Math.round(a.minutes)}m</span></div>)}</div>}
+        {pins.includes('state') && <div className="glass-card p-3"><h4 className="text-xs text-slate-400 mb-2">状态分布</h4>{Object.entries(stateMinutes).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([s,m])=><div key={s} className="flex justify-between text-xs text-slate-300"><span>{s}</span><span>{Math.round(m)}m</span></div>)}</div>}
+        {pins.includes('topapps') && <div className="glass-card p-3"><h4 className="text-xs text-slate-400 mb-2">TOP 应用</h4>{topApps.map(a=><div key={a.app} className="flex justify-between text-xs text-slate-300"><span>{a.app}</span><span>{Math.round(a.minutes)}m</span></div>)}</div>}
         {pins.includes('attention') && <AttentionPin />}
       </div>
     </section>

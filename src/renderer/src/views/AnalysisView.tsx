@@ -73,8 +73,8 @@ function TrendSection() {
   return (
     <section className="glass-card hoverable">
       <div className="mb-2 flex items-center gap-2">
-        <h3 className="text-[13px] font-semibold text-slate-300">近 7 天专注趋势</h3>
-        <span className="ml-auto text-[10px] text-slate-500">日均 {Math.round(t.days.reduce((a, d) => a + d.focusMin, 0) / 7)}m</span>
+        <h3 className="text-sm font-semibold text-slate-300">近 7 天专注趋势</h3>
+        <span className="ml-auto text-2xs text-slate-500">日均 {Math.round(t.days.reduce((a, d) => a + d.focusMin, 0) / 7)}m</span>
       </div>
       <div className="flex items-start gap-4">
         <svg viewBox={`0 0 ${W} ${H}`} className="h-16 flex-1">
@@ -89,22 +89,22 @@ function TrendSection() {
           <circle cx={(peakIdx * step).toFixed(1)} cy={(H - 6 - (t.days[peakIdx].focusMin / max) * (H - 14)).toFixed(1)} r="3.4" style={{ fill: 'var(--teal)' }} stroke="#fff" strokeWidth="1.6" />
         </svg>
         <div className="w-[42%] shrink-0">
-          <div className="mb-1.5 text-[10px] font-bold text-slate-500">时间去哪了 · Top 3</div>
+          <div className="mb-1.5 text-2xs font-bold text-slate-500">时间去哪了 · Top 3</div>
           <div className="flex flex-col gap-1.5">
             {t.topApps.map((a, i) => (
               <div key={a.app} className="flex items-center gap-1.5">
-                <span className="w-20 truncate text-[10.5px] text-slate-300" title={a.app}>{a.app}</span>
+                <span className="w-20 truncate text-2xs text-slate-300" title={a.app}>{a.app}</span>
                 <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/5">
                   <div className="h-full rounded-full" style={{ width: `${Math.round((a.min / (t.topApps[0]?.min || 1)) * 100)}%`, background: barColors[i] }} />
                 </div>
-                <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-slate-500">{a.min >= 60 ? `${Math.floor(a.min / 60)}h` : `${Math.round(a.min)}m`}</span>
+                <span className="w-10 shrink-0 text-right text-2xs tabular-nums text-slate-500">{a.min >= 60 ? `${Math.floor(a.min / 60)}h` : `${Math.round(a.min)}m`}</span>
               </div>
             ))}
-            {!t.topApps.length ? <span className="text-[10px] text-slate-600">—</span> : null}
+            {!t.topApps.length ? <span className="text-2xs text-slate-600">—</span> : null}
           </div>
         </div>
       </div>
-      <div className="mt-2 flex items-center gap-1.5 text-[10px] text-slate-500">
+      <div className="mt-2 flex items-center gap-1.5 text-2xs text-slate-500">
         <span>{t.days[0]?.label}</span>
         <div className="flex flex-1 justify-between px-6">
           {t.days.slice(1, -1).map((d) => (
@@ -115,7 +115,7 @@ function TrendSection() {
       </div>
       {total > 0 ? (
         <div
-          className="mt-2.5 flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] text-slate-300"
+          className="mt-2.5 flex items-center gap-2 rounded-xl px-3 py-2 text-xs text-slate-300"
           style={{ background: 'var(--aura-soft)', border: '1px solid rgba(139,92,246,0.25)' }}
         >
           <span className="shrink-0" style={{ color: 'var(--violet)' }}>✦</span>
@@ -174,7 +174,7 @@ export default function AnalysisView() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-[15px] font-semibold text-slate-200">AI 工作画像</h2>
+        <h2 className="text-lg font-semibold text-slate-200">AI 工作画像</h2>
         <button className="glass-btn primary" disabled={loading} onClick={() => void refresh()}>
           <Icon name="refresh" size={13} className={loading ? 'animate-spin' : ''} />
           {loading ? '分析中…' : '刷新画像'}
@@ -198,26 +198,26 @@ export default function AnalysisView() {
                 <ProgressRing value={p?.focusScore ?? 0} size={92} stroke={8} color={scoreColor(p?.focusScore ?? 0)}>
                   <div className="text-2xl font-bold text-slate-100">{p?.focusScore ?? 0}</div>
                 </ProgressRing>
-                <div className="mt-2 text-[12px] text-slate-400">专注力</div>
+                <div className="mt-2 text-xs text-slate-400">专注力</div>
               </div>
               <div className="text-center">
                 <ProgressRing value={p?.efficiencyScore ?? 0} size={92} stroke={8} color={scoreColor(p?.efficiencyScore ?? 0)}>
                   <div className="text-2xl font-bold text-slate-100">{p?.efficiencyScore ?? 0}</div>
                 </ProgressRing>
-                <div className="mt-2 text-[12px] text-slate-400">效率</div>
+                <div className="mt-2 text-xs text-slate-400">效率</div>
               </div>
             </section>
             <section className="glass-card lg:col-span-2">
-              <div className="mb-2 flex items-center gap-2 text-[12px] text-slate-500">
+              <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
                 <Icon name="sparkles" size={13} className="text-neon-violet" />
                 当日小结
                 <span className="chip !py-0">{analysis.source === 'llm' ? 'LLM' : '本地规则'}</span>
               </div>
-              <p className="text-[13px] leading-relaxed text-slate-300">{analysis.daily || '—'}</p>
+              <p className="text-sm leading-relaxed text-slate-300">{analysis.daily || '—'}</p>
               {analysis.patterns.length > 0 ? (
                 <div className="mt-3 flex flex-col gap-1">
                   {analysis.patterns.map((pt, i) => (
-                    <div key={i} className="flex items-start gap-1.5 text-[12px] text-slate-400">
+                    <div key={i} className="flex items-start gap-1.5 text-xs text-slate-400">
                       <span className="text-neon-cyan">·</span> {pt}
                     </div>
                   ))}
@@ -232,8 +232,8 @@ export default function AnalysisView() {
           {/* 画像细节 */}
           <div className="grid gap-4 lg:grid-cols-2">
             <section className="glass-card hoverable">
-              <h3 className="mb-3 text-[13px] font-semibold text-slate-300">行为特征</h3>
-              <div className="flex flex-col gap-3 text-[12px]">
+              <h3 className="mb-3 text-sm font-semibold text-slate-300">行为特征</h3>
+              <div className="flex flex-col gap-3 text-xs">
                 <div>
                   <div className="mb-1 text-slate-500">高频类别</div>
                   <div className="flex flex-wrap gap-1.5">
@@ -280,9 +280,9 @@ export default function AnalysisView() {
             </section>
 
             <section className="glass-card hoverable">
-              <h3 className="mb-3 text-[13px] font-semibold text-slate-300">双屏画像</h3>
+              <h3 className="mb-3 text-sm font-semibold text-slate-300">双屏画像</h3>
               {p?.dualScreen ? (
-                <div className="flex flex-col gap-2 text-[12px] text-slate-400">
+                <div className="flex flex-col gap-2 text-xs text-slate-400">
                   <div className="flex justify-between">
                     <span>常态双屏</span>
                     <span className={p.dualScreen.isRegularDual ? 'text-neon-green' : 'text-slate-500'}>
@@ -309,7 +309,7 @@ export default function AnalysisView() {
                   </div>
                 </div>
               ) : (
-                <div className="text-[12px] text-slate-600">—</div>
+                <div className="text-xs text-slate-600">—</div>
               )}
             </section>
           </div>
@@ -317,45 +317,45 @@ export default function AnalysisView() {
           {/* 优势 / 风险 / 建议 */}
           <div className="grid gap-4 lg:grid-cols-3">
             <section className="glass-card hoverable">
-              <h3 className="mb-2 text-[13px] font-semibold text-neon-green">优势</h3>
+              <h3 className="mb-2 text-sm font-semibold text-neon-green">优势</h3>
               {p?.strengths.length ? (
                 <ul className="flex flex-col gap-1.5">
                   {p.strengths.map((s, i) => (
-                    <li key={i} className="flex items-start gap-1.5 text-[12px] text-slate-300">
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-slate-300">
                       <Icon name="check" size={13} className="mt-0.5 shrink-0 text-neon-green" /> {s}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <div className="text-[12px] text-slate-600">—</div>
+                <div className="text-xs text-slate-600">—</div>
               )}
             </section>
             <section className="glass-card hoverable">
-              <h3 className="mb-2 text-[13px] font-semibold text-neon-amber">风险</h3>
+              <h3 className="mb-2 text-sm font-semibold text-neon-amber">风险</h3>
               {p?.risks.length ? (
                 <ul className="flex flex-col gap-1.5">
                   {p.risks.map((s, i) => (
-                    <li key={i} className="flex items-start gap-1.5 text-[12px] text-slate-300">
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-slate-300">
                       <Icon name="alert" size={13} className="mt-0.5 shrink-0 text-neon-amber" /> {s}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <div className="text-[12px] text-slate-600">—</div>
+                <div className="text-xs text-slate-600">—</div>
               )}
             </section>
             <section className="glass-card hoverable">
-              <h3 className="mb-2 text-[13px] font-semibold text-neon-violet">建议</h3>
+              <h3 className="mb-2 text-sm font-semibold text-neon-violet">建议</h3>
               {analysis.suggestions.length ? (
                 <ul className="flex flex-col gap-1.5">
                   {analysis.suggestions.map((s, i) => (
-                    <li key={i} className="flex items-start gap-1.5 text-[12px] text-slate-300">
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-slate-300">
                       <Icon name="sparkles" size={13} className="mt-0.5 shrink-0 text-neon-violet" /> {s}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <div className="text-[12px] text-slate-600">—</div>
+                <div className="text-xs text-slate-600">—</div>
               )}
             </section>
           </div>
@@ -366,35 +366,35 @@ export default function AnalysisView() {
         {/* AI 用量卡（仅启用时显示） */}
         {aiEnabled ? (
         <section className="glass-card hoverable">
-          <h3 className="mb-3 text-[13px] font-semibold text-slate-300">今日 AI 用量</h3>
+          <h3 className="mb-3 text-sm font-semibold text-slate-300">今日 AI 用量</h3>
           <div className="grid grid-cols-3 gap-3 text-center">
             <div className="rounded-xl bg-white/[0.03] p-3">
               <div className="text-lg font-bold text-neon-cyan">{totalTokens.toLocaleString()}</div>
-              <div className="mt-0.5 text-[11px] text-slate-500">tokens</div>
+              <div className="mt-0.5 text-xs text-slate-500">tokens</div>
             </div>
             <div className="rounded-xl bg-white/[0.03] p-3">
               <div className="text-lg font-bold text-slate-100">{totalQa}</div>
-              <div className="mt-0.5 text-[11px] text-slate-500">问答次数</div>
+              <div className="mt-0.5 text-xs text-slate-500">问答次数</div>
             </div>
             <div className="rounded-xl bg-white/[0.03] p-3">
               <div className="text-lg font-bold text-neon-amber">${totalCost.toFixed(4)}</div>
-              <div className="mt-0.5 text-[11px] text-slate-500">估算花费</div>
+              <div className="mt-0.5 text-xs text-slate-500">估算花费</div>
             </div>
           </div>
           {usage.length > 0 ? (
-            <div className="mt-2 text-right text-[10px] text-slate-600">模型：{usage.map((u) => u.model).join(' / ')}</div>
+            <div className="mt-2 text-right text-2xs text-slate-600">模型：{usage.map((u) => u.model).join(' / ')}</div>
           ) : null}
         </section>
         ) : null}
 
         {/* 派生待办 */}
         <section className="glass-card hoverable">
-          <h3 className="mb-3 text-[13px] font-semibold text-slate-300">派生待办</h3>
+          <h3 className="mb-3 text-sm font-semibold text-slate-300">派生待办</h3>
           {todos.length ? (
             <ul className="flex flex-col gap-2">
               {todos.map((t, i) => (
-                <li key={i} className="flex items-start gap-2 rounded-lg bg-white/[0.03] px-3 py-2 text-[12px] text-slate-300">
-                  <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border border-neon-cyan/40 text-[10px] text-neon-cyan">
+                <li key={i} className="flex items-start gap-2 rounded-lg bg-white/[0.03] px-3 py-2 text-xs text-slate-300">
+                  <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border border-neon-cyan/40 text-2xs text-neon-cyan">
                     {i + 1}
                   </span>
                   {t}

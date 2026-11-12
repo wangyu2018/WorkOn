@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { PlanItem, Project } from '@shared/types'
 import { FESTIVAL_PRESETS, resolveFestDate, lunarLabel, type FestRule } from '@shared/cnFestivals'
+import { Icon } from '../Icon'
 
 const pad = (n: number): string => String(n).padStart(2, '0')
 const todayStr = (): string => {
@@ -80,10 +81,10 @@ export function FestivalCard() {
   return (
     <section className="glass-card hoverable">
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-[13px]">🎆</span>
-        <h3 className="text-[13px] font-semibold text-slate-200">节日倒数</h3>
+        <span className="text-sm">🎆</span>
+        <h3 className="text-sm font-semibold text-slate-200">节日倒数</h3>
         <button
-          className="ml-auto rounded-full border border-dashed border-[var(--line)] px-2 py-0.5 text-[10px] text-slate-500 transition-colors hover:text-slate-200"
+          className="ml-auto rounded-full border border-dashed border-[var(--line)] px-2 py-0.5 text-2xs text-slate-500 transition-colors hover:text-slate-200"
           onClick={() => setAdding((v) => !v)}
         >
           {adding ? '收起' : '＋ 事件'}
@@ -92,7 +93,7 @@ export function FestivalCard() {
       {adding ? (
         <div className="mb-2 flex flex-wrap items-center gap-1.5">
           <input
-            className="min-w-0 flex-1 rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1 text-[11px] text-slate-200 outline-none placeholder:text-slate-600"
+            className="min-w-0 flex-1 rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1 text-xs text-slate-200 outline-none placeholder:text-slate-600"
             placeholder="事件名"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -100,24 +101,24 @@ export function FestivalCard() {
           />
           <input
             type="date"
-            className="rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1 text-[11px] text-slate-200 outline-none"
+            className="rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1 text-xs text-slate-200 outline-none"
             value={date}
             onChange={(e) => setDate(e.target.value)}
           />
-          <button className="glass-btn primary !px-2 !py-1 !text-[10px]" onClick={add}>加</button>
+          <button className="glass-btn primary !px-2 !py-1 !text-2xs" onClick={add}>加</button>
         </div>
       ) : null}
       <div className="flex flex-col gap-1">
         {visible.map((f) => {
           const tone = daysLabel(f.diff)
           return (
-            <div key={f.id} className="group flex items-center gap-2 text-[12px]">
+            <div key={f.id} className="group flex items-center gap-2 text-xs">
               <span className="min-w-0 flex-1 truncate text-slate-300">
                 {f.name}
-                {f.lunarMd ? <span className="ml-1 text-[10px] text-slate-600">农历{lunarLabel(f.lunarMd)}</span> : null}
+                {f.lunarMd ? <span className="ml-1 text-2xs text-slate-600">农历{lunarLabel(f.lunarMd)}</span> : null}
               </span>
-              <span className="shrink-0 text-[10px] tabular-nums text-slate-600">{f.date.slice(5)}</span>
-              <span className="w-[62px] shrink-0 text-right text-[11px] font-bold tabular-nums" style={{ color: tone.tone }}>
+              <span className="shrink-0 text-2xs tabular-nums text-slate-600">{f.date.slice(5)}</span>
+              <span className="w-[62px] shrink-0 text-right text-xs font-bold tabular-nums" style={{ color: tone.tone }}>
                 {tone.text}
               </span>
               {f.custom ? (
@@ -133,7 +134,7 @@ export function FestivalCard() {
       </div>
       {rows.length > 5 ? (
         <button
-          className="mt-1.5 w-full text-center text-[10px] text-slate-600 transition-colors hover:text-slate-400"
+          className="mt-1.5 w-full text-center text-2xs text-slate-600 transition-colors hover:text-slate-400"
           onClick={() => setShowAll((v) => !v)}
         >
           {showAll ? '收起' : `展开全部（${rows.length}）`}
@@ -185,28 +186,28 @@ export function HabitCard() {
   return (
     <section className="glass-card hoverable">
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-[13px]">🔥</span>
-        <h3 className="text-[13px] font-semibold text-slate-200">习惯打卡</h3>
-        <span className="ml-auto text-[10px] text-slate-500">今天不打，连击就断</span>
+        <span className="text-sm">🔥</span>
+        <h3 className="text-sm font-semibold text-slate-200">习惯打卡</h3>
+        <span className="ml-auto text-2xs text-slate-500">今天不打，连击就断</span>
       </div>
       <div className="mb-2 flex items-center gap-1.5">
         <input
-          className="min-w-0 flex-1 rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1 text-[11px] text-slate-200 outline-none placeholder:text-slate-600"
+          className="min-w-0 flex-1 rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1 text-xs text-slate-200 outline-none placeholder:text-slate-600"
           placeholder="加一个习惯，如：睡前读书"
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') add() }}
         />
-        <button className="glass-btn primary !px-2 !py-1 !text-[10px]" onClick={add}>加</button>
+        <button className="glass-btn primary !px-2 !py-1 !text-2xs" onClick={add}>加</button>
       </div>
       <div className="flex flex-col gap-1">
         {list.map((h) => {
           const done = h.last === today
           return (
-            <div key={h.id} className="group flex items-center gap-2 text-[12px]">
+            <div key={h.id} className="group flex items-center gap-2 text-xs">
               <span className="min-w-0 flex-1 truncate text-slate-300">{h.name}</span>
               <span
-                className="shrink-0 text-[10px] font-bold tabular-nums"
+                className="shrink-0 text-2xs font-bold tabular-nums"
                 style={{ color: h.streak >= 3 ? '#fbbf24' : '#94a3b8' }}
                 title={`连续 ${h.streak} 天`}
               >
@@ -215,7 +216,7 @@ export function HabitCard() {
               <button
                 type="button"
                 disabled={done}
-                className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                className={`shrink-0 rounded-md px-2 py-0.5 text-2xs font-medium transition-colors ${
                   done
                     ? 'bg-[var(--teal-soft)] text-[var(--teal-deep)]'
                     : 'border border-[var(--line)] text-slate-400 hover:border-[var(--teal-border)] hover:text-slate-200'
@@ -232,7 +233,7 @@ export function HabitCard() {
             </div>
           )
         })}
-        {!list.length ? <div className="py-1 text-center text-[11px] text-slate-600">还没有习惯，加一个开始连击</div> : null}
+        {!list.length ? <div className="py-1 text-center text-xs text-slate-600">还没有习惯，加一个开始连击</div> : null}
       </div>
     </section>
   )
@@ -273,33 +274,33 @@ export function PlanAheadCard() {
   return (
     <section className="glass-card hoverable">
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-[13px]">🗓️</span>
-        <h3 className="text-[13px] font-semibold text-slate-200">计划倒数</h3>
-        <span className="ml-auto text-[10px] text-slate-500">未来 7 天 · 来自计划页</span>
+        <Icon name="calendar" size={14} className="text-slate-500" />
+        <h3 className="text-sm font-semibold text-slate-200">计划倒数</h3>
+        <span className="ml-auto text-2xs text-slate-500">未来 7 天 · 来自计划页</span>
       </div>
       <div className="flex flex-col gap-1">
         {rows.map((p) => {
           const diff = daysTo(p.date)
           const when = diff === 0 ? '今天' : diff === 1 ? '明天' : `${diff} 天后`
           return (
-            <div key={p.id} className="flex items-center gap-2 text-[12px]">
+            <div key={p.id} className="flex items-center gap-2 text-xs">
               <span
-                className="w-[34px] shrink-0 text-right text-[10px] font-bold tabular-nums"
+                className="w-[34px] shrink-0 text-right text-2xs font-bold tabular-nums"
                 style={{ color: diff === 0 ? 'var(--teal)' : '#94a3b8' }}
               >
                 {when}
               </span>
               <span className="min-w-0 flex-1 truncate text-slate-300">{p.title}</span>
               {p.startMin !== undefined ? (
-                <span className="shrink-0 text-[10px] tabular-nums text-slate-600">
+                <span className="shrink-0 text-2xs tabular-nums text-slate-600">
                   {Math.floor(p.startMin / 60)}:{pad(p.startMin % 60)}
                 </span>
               ) : null}
             </div>
           )
         })}
-        {loaded && !rows.length ? <div className="py-1 text-center text-[11px] text-slate-600">未来 7 天没有排期，去计划页安排</div> : null}
-        {!loaded ? <div className="py-1 text-center text-[11px] text-slate-600">加载中…</div> : null}
+        {loaded && !rows.length ? <div className="py-1 text-center text-xs text-slate-600">未来 7 天没有排期，去计划页安排</div> : null}
+        {!loaded ? <div className="py-1 text-center text-xs text-slate-600">加载中…</div> : null}
       </div>
     </section>
   )
@@ -354,10 +355,10 @@ export function GoalProgressCard() {
   return (
     <section className="glass-card hoverable">
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-[13px]">🎯</span>
-        <h3 className="text-[13px] font-semibold text-slate-200">目标进度</h3>
+        <Icon name="target" size={14} className="text-slate-500" />
+        <h3 className="text-sm font-semibold text-slate-200">目标进度</h3>
         <select
-          className="ml-auto max-w-[130px] rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-1.5 py-0.5 text-[10.5px] text-slate-300 outline-none"
+          className="ml-auto max-w-[130px] rounded-md border border-[var(--line)] bg-[var(--surface-2)] px-1.5 py-0.5 text-2xs text-slate-300 outline-none"
           value={pid}
           onChange={(e) => setPid(e.target.value)}
           title="选择要盯着的主线"
@@ -368,17 +369,17 @@ export function GoalProgressCard() {
           ))}
         </select>
       </div>
-      {!loaded ? <div className="py-1 text-center text-[11px] text-slate-600">加载中…</div> : null}
+      {!loaded ? <div className="py-1 text-center text-xs text-slate-600">加载中…</div> : null}
       {loaded && !proj ? (
-        <div className="py-1 text-center text-[11px] text-slate-600">去「主线」页建一条主线，这里盯它的进度</div>
+        <div className="py-1 text-center text-xs text-slate-600">去「主线」页建一条主线，这里盯它的进度</div>
       ) : null}
       {loaded && proj ? (
         <>
           <div className="mb-2 flex items-center gap-3">
             <div className="min-w-0 flex-1">
               <div className="mb-1 flex items-baseline gap-2">
-                <span className="truncate text-[13px] font-semibold" style={{ color: proj.color ?? '#22D3EE' }}>{proj.name}</span>
-                {pct !== null ? <span className="text-[18px] font-extrabold tabular-nums text-neon-green">{pct}%</span> : <span className="text-[10px] text-slate-500">还没有任务</span>}
+                <span className="truncate text-sm font-semibold" style={{ color: proj.color ?? '#22D3EE' }}>{proj.name}</span>
+                {pct !== null ? <span className="text-xl font-extrabold tabular-nums text-neon-green">{pct}%</span> : <span className="text-2xs text-slate-500">还没有任务</span>}
               </div>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-3)]">
                 <div
@@ -390,9 +391,9 @@ export function GoalProgressCard() {
           </div>
           {left.length ? (
             <div className="flex flex-col gap-0.5">
-              <span className="text-[10px] text-slate-500">下一步</span>
+              <span className="text-2xs text-slate-500">下一步</span>
               {left.map((x, i) => (
-                <div key={i} className="flex items-center gap-1.5 text-[11.5px] text-slate-400">
+                <div key={i} className="flex items-center gap-1.5 text-xs text-slate-400">
                   <span className="text-[var(--teal)]">○</span>
                   <span className="min-w-0 truncate">{x.title}</span>
                 </div>

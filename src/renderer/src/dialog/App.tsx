@@ -214,7 +214,7 @@ export default function DialogApp() {
           ).map(([k, label]) => (
             <button
               key={k}
-              className={`serif-tab px-2.5 py-1.5 text-[12px] transition-all ${
+              className={`serif-tab px-2.5 py-1.5 text-xs transition-all ${
                 mode === k
                   ? 'text-[var(--text-1)] font-semibold'
                   : 'text-slate-500 hover:text-slate-300'
@@ -225,7 +225,7 @@ export default function DialogApp() {
               {label}
             </button>
           ))}
-          <span className="ml-auto text-[10px] text-slate-600">Alt+Space</span>
+          <span className="ml-auto text-2xs text-slate-600">Alt+Space</span>
         </div>
 
         {mode === 'chat' ? (
@@ -235,14 +235,14 @@ export default function DialogApp() {
                 <div key={i} className={`mb-2 flex ${m.role === 'user' ? 'justify-end' : 'gap-2'}`}>
                   {m.role === 'assistant' ? (
                     <span
-                      className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[10px] text-white"
+                      className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-2xs text-white"
                       style={{ background: 'var(--aura)' }}
                     >
                       ✦
                     </span>
                   ) : null}
                   <div
-                    className={`max-w-[82%] whitespace-pre-wrap rounded-xl px-3 py-2 text-[12px] leading-relaxed ${
+                    className={`max-w-[82%] whitespace-pre-wrap rounded-xl px-3 py-2 text-xs leading-relaxed ${
                       m.role === 'user' ? 'text-white' : 'border border-[var(--line)] bg-[var(--surface-2)] text-slate-200'
                     }`}
                     style={m.role === 'user' ? { background: 'var(--aura)', borderTopRightRadius: 4 } : undefined}
@@ -251,19 +251,19 @@ export default function DialogApp() {
                   </div>
                 </div>
               ))}
-              {busy ? <div className="pl-7 text-[11px] text-slate-500">✦ 思考中…</div> : null}
+              {busy ? <div className="pl-7 text-xs text-slate-500">✦ 思考中…</div> : null}
               <div ref={bottomRef} />
             </div>
             <div className="flex items-center gap-2 border-t border-[var(--line)] p-2.5">
               <input
                 autoFocus
-                className="min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-[12px] text-slate-200 outline-none focus:border-[var(--border-active)]"
+                className="min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-xs text-slate-200 outline-none focus:border-[var(--border-active)]"
                 placeholder="说个想法，或切到「回传整理」贴进度…"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && void send()}
               />
-              <button className="glass-btn ai !px-3 !py-2 text-[11px]" disabled={busy} onClick={() => void send()}>
+              <button className="glass-btn ai !px-3 !py-2 text-xs" disabled={busy} onClick={() => void send()}>
                 ➤
               </button>
             </div>
@@ -272,7 +272,7 @@ export default function DialogApp() {
 
         {mode === 'cardOut' ? (
           <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
-            <div className="text-[11px] leading-relaxed text-slate-500">
+            <div className="text-xs leading-relaxed text-slate-500">
               选项目复制「反哺提示词」→ 贴给 Cursor / 开发 AI（要进展 + 下一步细计划）→ 把回复贴回「回传整理」，WorkOn 会写入进展并导入今日待办。
             </div>
             {projects.map((p) => (
@@ -281,23 +281,23 @@ export default function DialogApp() {
                 className="flex items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-left transition-all hover:border-[rgba(15,181,164,0.4)]"
                 onClick={() => void genCard(p.id)}
               >
-                <span className="min-w-0 flex-1 truncate text-[12px] text-slate-200">{p.name}</span>
-                <span className="shrink-0 text-[10px] text-[var(--teal-deep)]">生成并复制</span>
+                <span className="min-w-0 flex-1 truncate text-xs text-slate-200">{p.name}</span>
+                <span className="shrink-0 text-2xs text-[var(--teal-deep)]">生成并复制</span>
               </button>
             ))}
-            {!projects.length ? <div className="text-[11px] text-slate-600">还没有活跃项目。</div> : null}
+            {!projects.length ? <div className="text-xs text-slate-600">还没有活跃项目。</div> : null}
             {cardMd ? (
               <>
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-500">预览（已在剪贴板）</span>
+                  <span className="text-2xs text-slate-500">预览（已在剪贴板）</span>
                   <button
-                    className="text-[10px] text-[var(--teal-deep)] hover:underline"
+                    className="text-2xs text-[var(--teal-deep)] hover:underline"
                     onClick={() => void navigator.clipboard.writeText(cardMd).then(() => flash('已再次复制'))}
                   >
                     再复制一次
                   </button>
                 </div>
-                <pre className="whitespace-pre-wrap rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-2.5 text-[10.5px] leading-relaxed text-slate-300">
+                <pre className="whitespace-pre-wrap rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-2.5 text-2xs leading-relaxed text-slate-300">
                   {cardMd}
                 </pre>
               </>
@@ -307,9 +307,9 @@ export default function DialogApp() {
 
         {mode === 'cardIn' ? (
           <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
-            <div className="text-[11px] text-slate-500">把开发工具的回复贴回来，整理成今日待办、项目任务，并更新「最近进展」。</div>
+            <div className="text-xs text-slate-500">把开发工具的回复贴回来，整理成今日待办、项目任务，并更新「最近进展」。</div>
             <select
-              className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[12px] text-slate-200 outline-none"
+              className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1.5 text-xs text-slate-200 outline-none"
               value={cardProjectId}
               onChange={(e) => {
                 setCardProjectId(e.target.value)
@@ -322,7 +322,7 @@ export default function DialogApp() {
               ))}
             </select>
             <textarea
-              className="min-h-[140px] w-full rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-2.5 text-[11.5px] leading-relaxed text-slate-200 outline-none focus:border-[var(--border-active)]"
+              className="min-h-[140px] w-full rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-2.5 text-xs leading-relaxed text-slate-200 outline-none focus:border-[var(--border-active)]"
               placeholder="粘贴 Cursor / IDE / Chat 的回复（自由文本或带 - [x] / - [ ] 均可）…"
               value={cardMd}
               onChange={(e) => {
@@ -331,11 +331,11 @@ export default function DialogApp() {
               }}
             />
             {cardDiff ? (
-              <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-2.5 text-[11.5px]">
+              <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-2.5 text-xs">
                 <div className="mb-1 font-bold text-slate-300">整理预览</div>
                 {cardDiff.summary ? <div className="mb-1.5 text-slate-400">摘要：{cardDiff.summary}</div> : null}
                 {cardDiff.progressNote ? (
-                  <div className="mb-1.5 whitespace-pre-wrap rounded-lg bg-black/20 p-2 text-[11px] text-slate-300">
+                  <div className="mb-1.5 whitespace-pre-wrap rounded-lg bg-black/20 p-2 text-xs text-slate-300">
                     进展：{cardDiff.progressNote}
                   </div>
                 ) : null}
@@ -363,17 +363,17 @@ export default function DialogApp() {
               </div>
             ) : null}
             <div className="mt-auto flex justify-end gap-2">
-              <button className="glass-btn !py-1.5 text-[11px]" disabled={busy} onClick={() => void summarize()}>
+              <button className="glass-btn !py-1.5 text-xs" disabled={busy} onClick={() => void summarize()}>
                 {busy ? '整理中…' : 'AI 整理待办/进度'}
               </button>
-              <button className="glass-btn primary !py-1.5 text-[11px]" disabled={!cardDiff} onClick={() => void applyDiff()}>
+              <button className="glass-btn primary !py-1.5 text-xs" disabled={!cardDiff} onClick={() => void applyDiff()}>
                 应用更新
               </button>
             </div>
           </div>
         ) : null}
 
-        {tip ? <div className="border-t border-[var(--line)] px-3 py-1.5 text-[11px] text-[var(--teal-deep)]">{tip}</div> : null}
+        {tip ? <div className="border-t border-[var(--line)] px-3 py-1.5 text-xs text-[var(--teal-deep)]">{tip}</div> : null}
     </div>
   )
 }

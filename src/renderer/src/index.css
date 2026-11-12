@@ -4,17 +4,18 @@
 
 /* ── CSS 变量体系（深邃黑默认 · 强调色仍走 theme） ── */
 :root {
-  --bg-deep: #050505;
-  --bg-surface: #0c0c0c;
-  --bg-elevated: #141414;
-  --border-subtle: #222222;
-  --surface-2: #121212;
-  --surface-3: #1a1a1a;
-  --line: #242424;
-  --line-strong: #333333;
-  --text-1: #f2f2f2;
-  --text-2: #a3a3a3;
-  --text-3: #6b6b6b;
+  /* Today 风格：近黑底 + 中性灰阶，文字对比靠字重与留白，不靠彩色 */
+  --bg-deep: #0b0b0d;
+  --bg-surface: #161618;
+  --bg-elevated: #1c1c1f;
+  --border-subtle: #262629;
+  --surface-2: #1a1a1d;
+  --surface-3: #232327;
+  --line: #2a2a2e;
+  --line-strong: #3a3a40;
+  --text-1: #f4f4f5;
+  --text-2: #a4a4ac;
+  --text-3: #86868f;
   /* 双品牌：teal = 功能/数据色；aura 渐变 = AI 专属（✦ 日报/搭子/AI 拆解） */
   --teal: #0fb5a4;
   --teal-deep: #0a8f82;
@@ -28,15 +29,16 @@
   --glow-i: 0 8px 26px rgba(124, 58, 237, 0.3);
   --glow-v: 0 6px 24px rgba(139, 92, 246, 0.35);
   --glow-c: 0 6px 24px rgba(6, 182, 212, 0.35);
-  --shadow-sm: 0 1px 3px rgba(0,0,0,.45), 0 4px 14px rgba(0,0,0,.2);
-  --shadow-md: 0 4px 12px rgba(0,0,0,.35), 0 12px 36px rgba(0,0,0,.28);
-  --shadow-lg: 0 14px 44px rgba(0,0,0,.55), 0 28px 72px rgba(0,0,0,.4);
+  --shadow-sm: none;
+  --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.5);
   --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
   --ease-soft: cubic-bezier(.23, 1, .32, 1);
+  /* 圆角：卡片 20 / 控件 12 / 胶囊 999（三档，不再出现第四种） */
   --r-sm: 10px;
-  --r-md: 14px;
-  --r-lg: 18px;
-  --r-xl: 22px;
+  --r-md: 12px;
+  --r-lg: 20px;
+  --r-xl: 20px;
   /* 星图语义色（RGB通道，方便rgba(var(--star-x)/opacity)派生） */
   --star-work: 16 185 129;
   --star-life: 251 191 36;
@@ -152,16 +154,13 @@ body {
     system-ui,
     -apple-system,
     sans-serif;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.55;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   user-select: none;
-  /* WorkOn 深邃黑底：极弱点缀光，避免偏蓝 */
-  background:
-    radial-gradient(900px 420px at 80% -10%, rgba(15, 181, 164, 0.05), transparent 58%),
-    radial-gradient(720px 360px at 10% 110%, rgba(255, 255, 255, 0.02), transparent 55%),
-    linear-gradient(165deg, #080808 0%, #050505 48%, #000000 100%);
+  /* 石墨底：干净单色，不用装饰性光斑（光斑是「花」的来源之一） */
+  background: var(--bg-deep);
 }
 
 html[data-tone='navy']:not([data-mode='light']) body {
@@ -234,23 +233,16 @@ textarea {
 }
 
 @layer components {
-  /* 玻璃卡片：柔边框 + 细腻投影 + 极轻顶部提亮 */
+  /* 内容块：一档灰面上浮在纸面，20px 圆角、无边框无阴影（Today 语言） */
   .glass-card {
-    @apply border p-4;
+    @apply border-0 p-6;
     border-radius: var(--r-lg);
     background: var(--bg-surface);
-    border-color: var(--line);
-    box-shadow: var(--shadow-sm);
-    transition:
-      border-color var(--t-hover),
-      transform var(--t-hover),
-      box-shadow var(--t-hover);
-    transform-style: preserve-3d;
+    box-shadow: none;
+    transition: background-color var(--t-hover);
   }
   .glass-card.hoverable:hover {
-    border-color: var(--line-strong);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
+    background: var(--surface-2);
   }
 
   /* 卡片内的次级面板（统一此前三种并存的手写子卡） */
@@ -261,110 +253,70 @@ textarea {
   }
 
   .glass-btn {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-1.5 text-[13px] text-slate-300;
-    background: var(--surface-2);
-    border-color: var(--line);
-    transition: all var(--t-hover);
+    @apply inline-flex items-center justify-center gap-1.5 px-3.5 text-sm text-slate-400;
+    border-radius: 999px;
+    background: transparent;
+    border: 0;
+    min-height: 34px;
+    transition:
+      background-color var(--t-hover),
+      color var(--t-hover),
+      transform 120ms var(--ease-soft);
   }
   .glass-btn:hover {
-    border-color: var(--line-strong);
-    background: var(--surface-3);
+    background: var(--surface-2);
     color: var(--text-1);
   }
   .glass-btn:active {
     transform: scale(0.97);
   }
   .glass-btn:disabled {
-    opacity: 0.45;
+    opacity: 0.4;
     pointer-events: none;
   }
-  /* 功能主按钮：青绿渐变 + 白字 + 青绿辉光 + 扫光（数据/工作类动作） */
+  /* 主动作：浅色下黑底白字，暗色下白底黑字（Today 式反色） */
   .glass-btn.primary {
-    position: relative;
-    overflow: hidden;
-    background: linear-gradient(135deg, #0fb5a4, #0d9e8f);
-    border-color: transparent;
-    color: #fff;
+    background: var(--accent);
+    color: var(--bg-deep);
     font-weight: 500;
-    box-shadow: var(--glow-t);
-  }
-  .glass-btn.primary::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -80%;
-    width: 50%;
-    height: 100%;
-    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.35), transparent);
-    transform: skewX(-18deg);
-    transition: left 0.5s;
-    pointer-events: none;
-  }
-  .glass-btn.primary:hover::before {
-    left: 150%;
+    box-shadow: none;
   }
   .glass-btn.primary:hover {
-    background: linear-gradient(135deg, #14ccba, #0fb5a4);
-    border-color: transparent;
-    color: #fff;
-    transform: translateY(-2px);
-    filter: brightness(1.06);
-    box-shadow: 0 8px 26px rgba(15, 181, 164, 0.45);
+    background: var(--accent);
+    color: var(--bg-deep);
+    filter: brightness(0.92);
   }
-  /* AI 专属按钮：aura 三色渐变（✦ 生成日报 / 问 AI / AI 拆解等，双品牌语义） */
+  /* AI 动作：同样走中性反色，AI 感只靠 ✦ 图标表达 */
   .glass-btn.ai {
-    position: relative;
-    overflow: hidden;
-    background: var(--aura);
-    border-color: transparent;
-    color: #fff;
+    background: var(--accent);
+    color: var(--bg-deep);
     font-weight: 500;
-    box-shadow: var(--glow-i);
-  }
-  .glass-btn.ai::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -80%;
-    width: 50%;
-    height: 100%;
-    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.35), transparent);
-    transform: skewX(-18deg);
-    transition: left 0.5s;
-    pointer-events: none;
-  }
-  .glass-btn.ai:hover::before {
-    left: 150%;
+    box-shadow: none;
   }
   .glass-btn.ai:hover {
-    background: var(--aura);
-    border-color: transparent;
-    color: #fff;
-    transform: translateY(-2px);
-    filter: brightness(1.08);
-    box-shadow: 0 8px 26px rgba(124, 58, 237, 0.45);
+    background: var(--accent);
+    color: var(--bg-deep);
+    filter: brightness(0.92);
   }
   .glass-btn.danger {
-    border-color: rgba(239, 68, 68, 0.3);
-    color: #f87171;
+    background: transparent;
+    color: #dc2626;
+    border: 1px solid rgba(220, 38, 38, 0.28);
   }
   .glass-btn.danger:hover {
-    border-color: rgba(239, 68, 68, 0.5);
-    background: rgba(239, 68, 68, 0.12);
-    color: #f87171;
+    border-color: rgba(220, 38, 38, 0.5);
+    background: rgba(220, 38, 38, 0.08);
+    color: #dc2626;
   }
 
   .glass-input {
-    @apply w-full rounded-lg border px-3 py-1.5 text-[13px] text-slate-200 outline-none;
-    background: var(--surface-2);
-    border-color: var(--line);
-    transition:
-      border-color var(--t-hover),
-      box-shadow var(--t-hover);
+    @apply w-full rounded-lg px-3 py-2 text-sm text-slate-200 outline-none;
+    background: var(--bg-deep);
+    border: 0;
+    transition: box-shadow var(--t-hover);
   }
   .glass-input:focus {
-    border-color: var(--border-active);
-    box-shadow: 0 0 0 3px var(--accent-softer);
+    box-shadow: 0 0 0 2px var(--accent-softer);
   }
   .glass-input::placeholder {
     color: var(--text-muted);
@@ -375,10 +327,13 @@ textarea {
   }
 
   .chip {
-    @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-slate-300;
+    @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-2xs text-slate-300;
     border-color: var(--line);
     background: var(--surface-2);
-    transition: all var(--t-hover);
+    transition:
+      background-color var(--t-hover),
+      border-color var(--t-hover),
+      color var(--t-hover);
   }
   .chip:hover {
     background: var(--surface-3);
@@ -386,10 +341,13 @@ textarea {
 
   /* 选项胶囊（设置/隐私等单选按钮组的统一写法） */
   .pill-btn {
-    @apply rounded-lg border px-2.5 py-1.5 text-[12px] text-slate-400;
+    @apply rounded-lg border px-2.5 py-1.5 text-xs text-slate-400;
     border-color: var(--line);
     background: transparent;
-    transition: all var(--t-hover);
+    transition:
+      background-color var(--t-hover),
+      border-color var(--t-hover),
+      color var(--t-hover);
   }
   .pill-btn:hover {
     border-color: var(--line-strong);
@@ -401,6 +359,75 @@ textarea {
     color: var(--accent);
     box-shadow: 0 0 0 1px var(--accent-softer);
   }
+
+  /* 图标按钮：最小 28×28 点击区（此前 h-4/h-5 小图标 20 处不可点） */
+  .ui-icon-btn {
+    @apply inline-flex shrink-0 items-center justify-center rounded-lg text-slate-400;
+    width: 28px;
+    height: 28px;
+    transition:
+      background-color var(--t-hover),
+      color var(--t-hover);
+  }
+  .ui-icon-btn:hover {
+    background: var(--surface-3);
+    color: var(--text-1);
+  }
+  .ui-icon-btn[aria-pressed='true'] {
+    background: var(--accent-softer);
+    color: var(--accent);
+  }
+
+  /* 分段切换：无边框灰胶囊组（Today 式） */
+  .ui-tabs {
+    @apply inline-flex items-center gap-0.5 rounded-full p-0.5;
+    background: var(--surface-2);
+  }
+  .ui-tab {
+    @apply rounded-full px-3 py-1 text-sm text-slate-500;
+    transition:
+      background-color var(--t-hover),
+      color var(--t-hover);
+  }
+  .ui-tab:hover {
+    color: var(--text-1);
+  }
+  .ui-tab[aria-selected='true'] {
+    background: var(--bg-deep);
+    color: var(--text-1);
+    box-shadow: var(--shadow-md);
+  }
+
+  /* 卡片标题层级（页面内所有分组标题走这一套，不再各写字号） */
+  .ui-card-title {
+    @apply text-sm font-semibold text-slate-100;
+  }
+  .ui-label {
+    @apply text-2xs text-slate-500;
+  }
+  .ui-metric {
+    @apply text-2xl font-semibold tracking-tight text-slate-100;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ── 键盘焦点：全局可见焦点环（此前全站 0 处 focus-visible，键盘完全不可操作） ── */
+:where(button, a, [role='button'], [tabindex]:not([tabindex='-1'])):focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+:where(button, a, [role='button']):focus:not(:focus-visible) {
+  outline: none;
+}
+/* 弹层面板本身可聚焦（焦点陷阱起点），但不应显示焦点框 */
+[role='dialog']:focus,
+[role='dialog']:focus-visible {
+  outline: none;
 }
 
 /* ── 3 级动效 ── */
@@ -656,72 +683,90 @@ textarea {
 [data-theme='green'] input[type='range']::-webkit-slider-thumb { background: #34d399; box-shadow: 0 0 6px rgba(52, 211, 153, 0.45); }
 [data-theme='amber'] input[type='range']::-webkit-slider-thumb { background: #fbbf24; box-shadow: 0 0 6px rgba(251, 191, 36, 0.45); }
 
-/* ── 墨与琥珀主题（data-theme=ink）：暖纸/真墨双基底，琥珀=注意，青瓷=数据 ── */
-/* 青瓷系主题变量：border/wash/chip 三档透明度随主题走，视图层禁止硬编码 rgba(15,181,164,…) */
-:root {
-  --teal-border: rgba(15, 181, 164, 0.45);
-  --teal-wash: rgba(15, 181, 164, 0.08);
-  --teal-chip: rgba(15, 181, 164, 0.12);
-  --teal-glow: rgba(15, 181, 164, 0.3);
-  --teal-wash-strong: rgba(15, 181, 164, 0.18);
-  --teal-rgb: 15 181 164;
-}
+/* ── Today 主题（data-theme=ink）：纯黑/纯白强调，不做彩色品牌 ── */
 [data-theme='ink'] {
-  --teal-border: rgba(13, 115, 119, 0.45);
-  --teal-wash: rgba(13, 115, 119, 0.08);
-  --teal-chip: rgba(13, 115, 119, 0.12);
-  --teal-glow: rgba(13, 115, 119, 0.3);
-  --teal-wash-strong: rgba(13, 115, 119, 0.18);
-  --teal-rgb: 13 115 119;
+  --accent: #f4f4f5;
+  --accent-soft: rgba(244, 244, 245, 0.14);
+  --accent-softer: rgba(244, 244, 245, 0.08);
+  --accent-glow: rgba(244, 244, 245, 0.18);
+  --border-active: rgba(244, 244, 245, 0.24);
+  --teal: #f4f4f5;
+  --teal-deep: #d4d4d8;
+  --teal-soft: rgba(244, 244, 245, 0.1);
+  --teal-border: rgba(244, 244, 245, 0.22);
+  --teal-wash: rgba(244, 244, 245, 0.06);
+  --teal-chip: rgba(244, 244, 245, 0.09);
+  --teal-glow: rgba(244, 244, 245, 0.16);
+  --teal-wash-strong: rgba(244, 244, 245, 0.14);
+  --teal-rgb: 244 244 245;
+  --violet: #a1a1aa;
 }
-[data-theme='ink'] {
-  --accent: #C2410C;
-  --accent-soft: rgba(194, 65, 12, 0.12);
-  --accent-softer: rgba(194, 65, 12, 0.08);
-  --accent-glow: rgba(194, 65, 12, 0.3);
-  --border-active: rgba(194, 65, 12, 0.35);
-  --teal: #0D7377;
-  --teal-deep: #0A5C5F;
-  --teal-soft: rgba(13, 115, 119, 0.1);
-  --violet: #6D5BD0;
-  /* 暖纸/暖墨基底（双模式各自覆盖表面） */
-}
+/* Today · 浅色：纯白纸面 + 灰面卡片 + 黑字 */
 [data-theme='ink'][data-mode='light'] {
-  --paper: #F7F4EE;
-  --paper-2: #EFEBE2;
-  --ink: #1A1814;
-  /* 背景保持暖纸粉肉色；卡片层用青瓷绿，绿卡浮在暖纸上 */
-  --bg-deep: #F7F4EE;
-  --bg-surface: #E9F1EC;
-  --bg-elevated: #E4EEE8;
-  --surface-2: #E6EFE9;
-  --surface-3: #DCE8E1;
-  --line: #E2DCCF;
-  --line-strong: #D3CCBC;
-  --text-1: #1A1814;
-  --text-2: #57503F;
-  --text-3: #8A8270;
-  --border-subtle: #E2DCCF;
-  --text-primary: #1A1814;
-  --text-secondary: #57503F;
-  --text-muted: #8A8270;
+  --paper: #ffffff;
+  --paper-2: #f6f6f7;
+  --ink: #1c1c1f;
+  --bg-deep: #ffffff;
+  --bg-surface: #f7f7f8;
+  --bg-elevated: #f7f7f8;
+  --surface-2: #f2f2f4;
+  --surface-3: #e9e9ec;
+  --line: #ececef;
+  --line-strong: #dcdce1;
+  --text-1: #1c1c1f;
+  --text-2: #4f4f57;
+  --text-3: #6f6f78;
+  --border-subtle: #ececef;
+  --text-primary: #1c1c1f;
+  --text-secondary: #4f4f57;
+  --text-muted: #6f6f78;
+  --accent: #111114;
+  --accent-soft: rgba(17, 17, 20, 0.1);
+  --accent-softer: rgba(17, 17, 20, 0.05);
+  --accent-glow: rgba(17, 17, 20, 0.14);
+  --border-active: rgba(17, 17, 20, 0.18);
+  --teal: #111114;
+  --teal-deep: #111114;
+  --teal-soft: rgba(17, 17, 20, 0.06);
+  --teal-border: rgba(17, 17, 20, 0.16);
+  --teal-wash: rgba(17, 17, 20, 0.04);
+  --teal-chip: rgba(17, 17, 20, 0.06);
+  --teal-wash-strong: rgba(17, 17, 20, 0.1);
+  --teal-rgb: 17 17 20;
+  --violet: #6b6b73;
+  --shadow-sm: none;
+  --shadow-md: 0 1px 2px rgba(17, 17, 20, 0.05);
+  --shadow-lg: 0 16px 40px rgba(17, 17, 20, 0.12);
 }
+/* Today · 暗色：近黑纸面，表面靠一档灰分出层次，不用边框线描 */
 [data-theme='ink'][data-mode='dark'] {
-  /* 暗色同构：背景回暖墨，卡片层青瓷墨 */
-  --bg-deep: #0E0D0B;
-  --bg-surface: #14201B;
-  --bg-elevated: #182621;
-  --surface-2: #172420;
-  --surface-3: #1D2C26;
-  --line: #2E2A22;
-  --line-strong: #3D382D;
-  --text-1: #EDE8DE;
-  --text-2: #B8B0A0;
-  --text-3: #7D7565;
-  --border-subtle: #2E2A22;
-  --text-primary: #EDE8DE;
-  --text-secondary: #B8B0A0;
-  --text-muted: #7D7565;
+  --bg-deep: #0b0b0d;
+  --bg-surface: #161618;
+  --bg-elevated: #1a1a1d;
+  --surface-2: #1a1a1d;
+  --surface-3: #232327;
+  --line: #2a2a2e;
+  --line-strong: #3a3a40;
+  --text-1: #f4f4f5;
+  --text-2: #a4a4ac;
+  --text-3: #86868f;
+  --border-subtle: #2a2a2e;
+  --text-primary: #f4f4f5;
+  --text-secondary: #a4a4ac;
+  --text-muted: #86868f;
+  --accent: #f4f4f5;
+  --accent-soft: rgba(244, 244, 245, 0.14);
+  --accent-softer: rgba(244, 244, 245, 0.08);
+  --accent-glow: rgba(244, 244, 245, 0.18);
+  --border-active: rgba(244, 244, 245, 0.24);
+  --teal: #f4f4f5;
+  --teal-deep: #d4d4d8;
+  --teal-soft: rgba(244, 244, 245, 0.1);
+  --teal-border: rgba(244, 244, 245, 0.22);
+  --teal-wash: rgba(244, 244, 245, 0.06);
+  --teal-chip: rgba(244, 244, 245, 0.09);
+  --teal-wash-strong: rgba(244, 244, 245, 0.14);
+  --teal-rgb: 244 244 245;
 }
 [data-theme='ink'] body,
 [data-theme='ink'] {
@@ -729,22 +774,17 @@ textarea {
 }
 /* 墨主题：全局悬浮面磨砂变量（监控窗/待办树/对话框共用） */
 [data-theme='ink'] {
-  --float-bg: rgba(22, 20, 15, 0.88);
+  --float-bg: rgba(19, 20, 23, 0.9);
   --float-blur: blur(40px) saturate(1.6);
-  --float-border: rgba(194, 65, 12, 0.12);
-  --float-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  --float-border: rgba(255, 255, 255, 0.08);
+  --float-shadow: 0 8px 32px rgba(0, 0, 0, 0.28);
 }
 [data-theme='ink'][data-mode='light'] {
-  --float-bg: rgba(247, 244, 238, 0.92);
-  --float-border: rgba(194, 65, 12, 0.1);
+  --float-bg: rgba(255, 255, 255, 0.92);
+  --float-border: rgba(15, 17, 21, 0.08);
 }
 
-/* 墨与琥珀：卡片语言 = 直角 + 发丝线（悬浮窗 overlay 窗口不参与，保持胶囊圆角） */
-html[data-theme='ink']:not([data-overlay='1']) .glass-card,
-html[data-theme='ink']:not([data-overlay='1']) .rounded-2xl,
-html[data-theme='ink']:not([data-overlay='1']) .rounded-xl {
-  border-radius: 0;
-}
+/* 卡片语言统一：圆角走 --r-lg，靠发丝线 + 极轻阴影分层（不再有直角/大圆角两套并存） */
 
 /* 左侧导航栏默认：半透明混合（默认主题） */
 .app-sidebar {
@@ -782,25 +822,22 @@ html[data-theme='ink']:not([data-overlay='1']) .app-sidebar {
 
 /* ── 亮色模式（data-mode=light，覆盖少量硬编码工具类） ── */
 [data-mode='light'] body {
-  background:
-    radial-gradient(1100px 480px at 78% -12%, rgba(15, 181, 164, 0.07), transparent 62%),
-    radial-gradient(880px 420px at 8% 112%, rgba(139, 92, 246, 0.05), transparent 60%),
-    linear-gradient(165deg, #f2f5f7 0%, #eef3f5 52%, #eef3f5 100%);
-  color: #10242b;
+  background: var(--bg-deep);
+  color: var(--text-1);
 }
-/* 亮色模式重映射 Token（对齐 workon-redesign-v6 亮色） */
+/* 亮色模式重映射 Token（中性冷灰，与 Graphite 主题一致） */
 [data-mode='light'] {
-  --bg-deep: #f2f5f7;
+  --bg-deep: #f6f7f9;
   --bg-surface: #ffffff;
-  --bg-elevated: #f7fafb;
-  --surface-2: #f7fafb;
-  --surface-3: #eef3f5;
-  --line: #e2e9ec;
-  --line-strong: #d4d9ea;
-  --border-subtle: #e2e9ec;
-  --text-1: #10242b;
-  --text-2: #4c6068;
-  --text-3: #8aa0a8;
+  --bg-elevated: #ffffff;
+  --surface-2: #f4f5f7;
+  --surface-3: #eceef1;
+  --line: #e5e7eb;
+  --line-strong: #d3d7dd;
+  --border-subtle: #e5e7eb;
+  --text-1: #0f1115;
+  --text-2: #575d68;
+  --text-3: #8b919c;
   --shadow-sm: 0 1px 3px rgba(16, 36, 43, 0.06), 0 4px 14px rgba(16, 36, 43, 0.05);
   --shadow-md: 0 4px 12px rgba(16, 36, 43, 0.07), 0 12px 36px rgba(16, 36, 43, 0.08);
   --shadow-lg: 0 14px 44px rgba(16, 36, 43, 0.12), 0 28px 72px rgba(16, 36, 43, 0.1);
@@ -856,9 +893,8 @@ html[data-theme='ink']:not([data-overlay='1']) .app-sidebar {
 [data-mode='light'] .bg-ink-800\/95 { background-color: rgba(255, 255, 255, 0.92) !important; }
 [data-mode='light'] .bg-ink-900\/60 { background-color: rgba(255, 255, 255, 0.6) !important; }
 [data-mode='light'] .glass-card {
-  background: #ffffff;
-  border-color: var(--line);
-  box-shadow: var(--shadow-sm);
+  background: var(--bg-surface);
+  box-shadow: none;
 }
 /* 墨主题亮色：glass-card 不吃上面的纯白，回到青瓷纸底 */
 html[data-theme='ink'][data-mode='light']:not([data-overlay='1']) .glass-card {
@@ -873,19 +909,33 @@ html[data-theme='ink'][data-mode='light']:not([data-overlay='1']) .glass-card {
   border-color: var(--line);
 }
 [data-mode='light'] .glass-btn {
-  background: #ffffff;
-  border-color: var(--line);
+  background: transparent;
+  border: 0;
   color: var(--text-2);
 }
+/* 浅色下主按钮/AI 按钮保持反色实心（黑底白字），不被上面的浅灰覆盖 */
+[data-mode='light'] .glass-btn.primary,
+[data-mode='light'] .glass-btn.primary:hover,
+[data-mode='light'] .glass-btn.ai,
+[data-mode='light'] .glass-btn.ai:hover {
+  background: var(--accent);
+  border: 0;
+  color: var(--bg-deep);
+}
+[data-mode='light'] .glass-btn.danger {
+  background: transparent;
+  border: 1px solid rgba(220, 38, 38, 0.28);
+  color: #dc2626;
+}
 [data-mode='light'] .glass-btn:hover {
-  border-color: var(--line-strong);
-  background: var(--surface-3);
+  border-color: transparent;
+  background: var(--surface-2);
   color: var(--text-1);
 }
 [data-mode='light'] .glass-input {
   background: #ffffff;
-  border-color: var(--line);
-  color: #171c2e;
+  border: 0;
+  color: var(--text-1);
 }
 [data-mode='light'] .glass-input::placeholder { color: var(--text-3); }
 [data-mode='light'] select.glass-input option { background: #ffffff; color: #171c2e; }

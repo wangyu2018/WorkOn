@@ -62,28 +62,28 @@ export function WeatherCard() {
         onClick={() => setOpen((o) => !o)}
       >
         <span>☁️</span>
-        {now ? <span className="text-[12px] font-semibold tabular-nums">{Math.round(now.tempC)}°</span> : <span className="text-[12px]">天气</span>}
+        {now ? <span className="text-xs font-semibold tabular-nums">{Math.round(now.tempC)}°</span> : <span className="text-xs">天气</span>}
       </button>
       {open ? (
         <div
-          className="absolute right-0 top-full z-[70] mt-1.5 w-64 overflow-hidden rounded-2xl border border-[var(--line)] p-3 text-[12px]"
+          className="absolute right-0 top-full z-[70] mt-1.5 w-64 overflow-hidden rounded-2xl border border-[var(--line)] p-3 text-xs"
           style={{ background: 'var(--bg-surface)', boxShadow: 'var(--shadow-lg)' }}
         >
           {/* 现在 */}
           <div className="flex items-baseline justify-between">
-            <span className="text-[10px] uppercase tracking-wider text-slate-500">现在</span>
-            <span className="text-[10px] text-slate-500">{now?.text}</span>
+            <span className="text-2xs uppercase tracking-wider text-slate-500">现在</span>
+            <span className="text-2xs text-slate-500">{now?.text}</span>
           </div>
-          <div className="text-[22px] font-extrabold leading-tight text-slate-100">{now ? `${Math.round(now.tempC)}°` : '—'}</div>
+          <div className="text-xl font-extrabold leading-tight text-slate-100">{now ? `${Math.round(now.tempC)}°` : '—'}</div>
           {/* 未来几小时 */}
           <div className="mt-2.5 border-t border-[var(--line)] pt-2">
-            <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-500">未来几小时</div>
+            <div className="mb-1 text-2xs uppercase tracking-wider text-slate-500">未来几小时</div>
             <div className="flex justify-between gap-1">
               {nextHours.map((h) => (
-                <div key={h.ts} className="flex flex-col items-center gap-0.5 text-[10.5px] text-slate-400">
+                <div key={h.ts} className="flex flex-col items-center gap-0.5 text-2xs text-slate-400">
                   <span>{h.hour}时</span>
                   <span className="font-semibold text-slate-200">{Math.round(h.tempC)}°</span>
-                  {h.chanceOfRain >= 30 ? <span className="text-[9px] text-sky-400">雨{h.chanceOfRain}%</span> : <span className="text-[9px] text-slate-600">{h.text.slice(0, 2)}</span>}
+                  {h.chanceOfRain >= 30 ? <span className="text-2xs text-sky-400">雨{h.chanceOfRain}%</span> : <span className="text-2xs text-slate-600">{h.text.slice(0, 2)}</span>}
                 </div>
               ))}
               {!nextHours.length ? <span className="text-slate-600">—</span> : null}
@@ -91,7 +91,7 @@ export function WeatherCard() {
           </div>
           {/* 未来几天 */}
           <div className="mt-2.5 border-t border-[var(--line)] pt-2">
-            <div className="mb-1 text-[10px] uppercase tracking-wider text-slate-500">未来几天</div>
+            <div className="mb-1 text-2xs uppercase tracking-wider text-slate-500">未来几天</div>
             <div className="flex flex-col gap-1">
               {dayKeys.map((k) => {
                 const list = byDay.get(k)!
@@ -110,9 +110,9 @@ export function WeatherCard() {
           </div>
           {/* 城市切换 */}
           <div className="mt-2.5 flex items-center gap-1.5 border-t border-[var(--line)] pt-2">
-            <span className="shrink-0 text-[10px] uppercase tracking-wider text-slate-500">城市</span>
+            <span className="shrink-0 text-2xs uppercase tracking-wider text-slate-500">城市</span>
             <input
-              className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-transparent px-2 py-1 text-[11px] text-slate-300 outline-none focus:border-[var(--border-active)]"
+              className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-transparent px-2 py-1 text-xs text-slate-300 outline-none focus:border-[var(--border-active)]"
               placeholder="留空跟随全局设置"
               defaultValue={city}
               onKeyDown={(e) => {

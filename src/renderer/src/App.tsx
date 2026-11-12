@@ -1,5 +1,5 @@
 /**
- * 主窗口壳：左侧分组导航 + 内容区
+ * 主窗口壳：左侧固定 5 个主入口 + 「更多」折叠 + 内容区
  * 设计：静谧深空 · accent 变量驱动的选中态（换主题自动联动）
  */
 import { memo, useEffect, useMemo, useState, type CSSProperties } from 'react'
@@ -9,7 +9,6 @@ import { useSettingsStore } from './stores/settingsStore'
 import { Icon, type IconName } from './components/Icon'
 import { WeatherCard } from './components/WeatherCard'
 import { CATEGORY_META, categoryOfWithOverride, type AppCategory } from '@shared/appCategory'
-import { WORK_STATES } from '@shared/stateMeta'
 import { displayApp } from '@shared/appDisplayName'
 import workonLogo from './assets/workon-logo.png'
 import HomeView from './views/HomeView'
@@ -25,10 +24,8 @@ import ProfileView from './views/ProfileView'
 import PrivacyView from './views/PrivacyView'
 import SettingsView from './views/SettingsView'
 import { PasteInboxModal } from './components/PasteInboxModal'
+import { ModalShell } from './components/ui/Modal'
 import { usePerspective } from './lib/usePerspective'
-import { PERSPECTIVE_NAV } from './lib/perspective'
-import { PERSPECTIVES, PERSPECTIVE_META } from '@shared/perspective'
-import V10Surface from './v10/V10Surface'
 import { EdgeDockBar } from './v10/EdgeDockBar'
 
 interface NavItem {
@@ -37,48 +34,23 @@ interface NavItem {
   icon: IconName
 }
 
-interface NavGroup {
-  label: string
-  items: NavItem[]
-}
-
-const NAV_GROUPS: NavGroup[] = [
-  {
-    label: '工作区',
-    items: [
-      { key: 'home', label: '首页', icon: 'home' },
-      { key: 'calendar', label: '日历', icon: 'calendar' },
-      { key: 'plan', label: '计划', icon: 'target' },
-      { key: 'mainline', label: '主线', icon: 'folder' },
-      { key: 'report', label: '报表', icon: 'chart' },
-      { key: 'knowledge', label: '知识库', icon: 'book' },
-      { key: 'buddy', label: '桌搭', icon: 'cat' }
-    ]
-  },
-  {
-    label: '洞察',
-    items: [
-      { key: 'qa', label: '问答', icon: 'message' },
-      { key: 'profile', label: '画像', icon: 'eye' },
-      { key: 'privacy', label: '隐私', icon: 'shield' }
-    ]
-  }
+/** 一级入口：对应「一天里的三个时刻」——现在 / 要做什么 / 做完了看什么 */
+const PRIMARY_NAV: NavItem[] = [
+  { key: 'home', label: '今天', icon: 'home' },
+  { key: 'plan', label: '计划', icon: 'target' },
+  { key: 'report', label: '回顾', icon: 'chart' }
 ]
 
-const VIEW_TITLES: Record<ViewKey, string> = {
-  home: '首页',
-  monitor: '监控',
-  knowledge: '知识库',
-  calendar: '日历',
-  plan: '计划',
-  mainline: '主线',
-  report: '报表',
-  buddy: '桌搭',
-  qa: '问答',
-  profile: '画像',
-  privacy: '隐私',
-  settings: '设置'
-}
+/** 二级入口：低频但能力不丢，收进「更多」 */
+const SECONDARY_NAV: NavItem[] = [
+  { key: 'calendar', label: '日历', icon: 'calendar' },
+  { key: 'knowledge', label: '知识', icon: 'book' },
+  { key: 'mainline', label: '主线', icon: 'folder' },
+  { key: 'qa', label: '问答', icon: 'message' },
+  { key: 'profile', label: '画像', icon: 'eye' },
+  { key: 'buddy', label: '桌面搭子', icon: 'cat' },
+  { key: 'privacy', label: '隐私', icon: 'shield' }
+]
 
 const VIEWS: Record<ViewKey, () => JSX.Element> = {
   home: HomeView,
@@ -95,27 +67,19 @@ const VIEWS: Record<ViewKey, () => JSX.Element> = {
   settings: SettingsView
 }
 
-function NavButton({ item, active, onClick }: { item: NavItem; active: boolean; onClick: () => void }) {
+/** 顶部文字导航：选中=黑字加粗，未选中=灰字，不用背景块 */
+function TopTab({ item, active, onClick }: { item: NavItem; active: boolean; onClick: () => void }) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={`group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13px] transition-all duration-150 ${
-        active ? 'text-slate-100' : 'text-slate-400 hover:bg-[var(--surface-2)] hover:text-slate-200'
+      aria-current={active ? 'page' : undefined}
+      className={`rounded-full px-3 py-1.5 text-sm transition-colors ${
+        active ? 'font-medium text-slate-100' : 'text-slate-500 hover:text-slate-200'
       }`}
-      style={active ? { background: 'var(--surface-2)', boxShadow: 'var(--shadow-sm)' } : undefined}
+      style={active ? { background: 'var(--surface-2)' } : undefined}
     >
-      {/* active 左侧指示条 */}
-      <span
-        className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full transition-opacity duration-150"
-        style={{ background: 'var(--accent)', opacity: active ? 1 : 0, boxShadow: active ? '0 0 8px var(--accent-glow)' : 'none' }}
-      />
-      <Icon
-        name={item.icon}
-        size={16}
-        className="shrink-0 transition-colors duration-150"
-        style={active ? { color: 'var(--accent)' } : undefined}
-      />
-      <span className={active ? 'font-medium' : ''}>{item.label}</span>
+      {item.label}
     </button>
   )
 }
@@ -141,18 +105,10 @@ export default function App() {
       ? '此平台暂不支持窗口采集（Windows 完整支持）'
       : '等待采集…'
 
-  // 日视角：晨·架构师 / 昼·工作者 / 晚·管理者（手动锁 ∥ 时钟自动）
-  const { perspective, locked, lock } = usePerspective()
+  // 日视角仅用于首页块编排（usePerspective 内部仍会写 localStorage），导航保持恒定
+  usePerspective()
   const [moreOpen, setMoreOpen] = useState(false)
-  const { navGroups, moreItems } = useMemo(() => {
-    const allow = new Set<ViewKey>(PERSPECTIVE_NAV[perspective])
-    return {
-      navGroups: NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => allow.has(i.key)) })).filter(
-        (g) => g.items.length > 0
-      ),
-      moreItems: NAV_GROUPS.flatMap((g) => g.items).filter((i) => !allow.has(i.key))
-    }
-  }, [perspective])
+  const inSecondary = useMemo(() => SECONDARY_NAV.some((i) => i.key === view), [view])
 
   // 强调色主题 + 亮暗模式应用到根节点
   useEffect(() => {
@@ -241,11 +197,6 @@ export default function App() {
   // 托盘快速问答等外部跳转请求
   useEffect(() => {
     const off = window.api.onNavView?.((v) => {
-      // v10 表面盖住旧版——导航先退 v10（BUG-25：⚙ 设置在 v10 模式下不可达）
-      if (window.localStorage.getItem('v10surface') === '1') {
-        window.localStorage.removeItem('v10surface')
-        setV10Surface(false)
-      }
       if (typeof v !== 'string') return
       // 监控已迁入首页模块；旧入口落到首页
       useAppStore.getState().setView(v === 'monitor' ? 'home' : (v as never))
@@ -279,249 +230,187 @@ export default function App() {
   // memo 化当前视图：presence 每 2s 更新时不再整页重渲染（修复时间轴/星图卡顿）
   const ActiveView = useMemo(() => memo(VIEWS[view]), [view])
 
-  // v10「一面一角色」新表面：URL 参数 ?v10=1 开（写入 localStorage 持久），
-  // ?v10=0 关；开关切换即整面替换，旧版 16 视图结构零改动（docs/UI-DESIGN-SPEC-v10.md）
   // EdgeDock 边缘分组（2026-11-02）：?edgedock=top|left|right → 渲染 Dock 条
   const edgeDockMode = useMemo(() => {
     const q = new URLSearchParams(window.location.search).get('edgedock')
     return q === 'top' || q === 'left' || q === 'right' ? q : null
   }, [])
-
-  const [v10Surface, setV10Surface] = useState((): boolean => {
-    try {
-      const q = new URLSearchParams(window.location.search).get('v10')
-      if (q === '1') { window.localStorage.setItem('v10surface', '1'); return true }
-      if (q === '0') { window.localStorage.removeItem('v10surface'); return false }
-      return window.localStorage.getItem('v10surface') === '1'
-    } catch { return false }
-  })
   // EdgeDock 路由优先
   if (edgeDockMode) {
     return <EdgeDockBar edge={edgeDockMode} />
   }
 
-  if (v10Surface) return <V10Surface onExit={() => setV10Surface(false)} />
-
   return (
-    <div className="flex h-screen w-screen overflow-hidden text-slate-200" style={{ background: 'var(--bg-deep)' }}>
+    <div className="flex h-screen w-screen flex-col overflow-hidden text-slate-200" style={{ background: 'var(--bg-deep)' }}>
       <PasteInboxModal open={pasteInboxOpen} onClose={() => setPasteInboxOpen(false)} />
-      <aside
-        className="app-sidebar flex w-[212px] shrink-0 flex-col border-r border-white/[0.06] px-3 pb-3 pt-3"
+
+      {/* 顶部导航（Today 式）：品牌 + 文字 tab + 状态/窗口操作，不再有左侧大栏 */}
+      <header
+        className="app-drag relative z-30 flex h-16 shrink-0 items-center gap-6 px-6"
+        style={{ borderBottom: '1px solid var(--line)', background: 'var(--bg-deep)' }}
       >
-        {/* 品牌区 */}
-        <div className="mb-5 flex items-center gap-2.5 px-1.5 pt-1">
-          <img
-            src={workonLogo}
-            alt="WorkOn"
-            className="h-7 w-7 rounded-lg"
-            style={{ boxShadow: '0 0 14px var(--accent-glow)' }}
-          />
-          <div className="leading-tight">
-            <div className="text-[14px] font-semibold tracking-wide text-slate-100">WorkOn</div>
-            <div className="text-[10px] text-slate-500">看得见的专注</div>
-          </div>
+        <div className="flex shrink-0 items-center gap-2.5">
+          <img src={workonLogo} alt="WorkOn" className="h-6 w-6 rounded-md" />
+          <span className="text-sm font-semibold tracking-tight text-slate-100">WorkOn</span>
         </div>
 
-        {/* 日视角切换：点选=锁定该视角，再点已激活项或「自动」回到时钟驱动 */}
-        <div className="mb-4 flex flex-col gap-1.5 px-1.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-600">视角</span>
+        <nav className="app-no-drag flex items-center gap-1">
+          {PRIMARY_NAV.map((item) => (
+            <TopTab key={item.key} item={item} active={view === item.key} onClick={() => setView(item.key)} />
+          ))}
+          <div className="relative">
             <button
               type="button"
-              onClick={() => lock(locked ? null : perspective)}
-              title={locked ? '已锁定 · 点击回到按时钟自动切换' : '按时钟自动切换 · 点击锁定当前视角'}
-              className="rounded-md px-1.5 py-0.5 text-[10px] transition-colors"
-              style={{
-                color: locked ? 'var(--accent)' : 'var(--text-3, #64748b)',
-                background: locked ? 'var(--accent-softer)' : 'transparent'
-              }}
+              onClick={() => setMoreOpen((o) => !o)}
+              aria-expanded={moreOpen}
+              className={`rounded-full px-3 py-1.5 text-sm transition-colors ${
+                inSecondary ? 'font-medium text-slate-100' : 'text-slate-500 hover:text-slate-200'
+              }`}
+              style={inSecondary ? { background: 'var(--surface-2)' } : undefined}
             >
-              {locked ? '已锁定' : '自动'}
+              更多
             </button>
-          </div>
-          <div className="grid grid-cols-3 gap-1">
-            {PERSPECTIVES.map((p) => {
-              const m = PERSPECTIVE_META[p]
-              const active = perspective === p
-              return (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => lock(active && locked ? null : p)}
-                  title={`${m.emoji} ${m.label}视角 · ${m.desc}（自动时段 ${m.range}）`}
-                  className={`rounded-lg py-1 text-[11px] transition-all duration-150 ${
-                    active ? 'font-semibold' : 'text-slate-500 hover:text-slate-300'
-                  }`}
-                  style={
-                    active
-                      ? {
-                          background: 'var(--accent-softer)',
-                          color: 'var(--accent)',
-                          boxShadow: 'inset 0 0 0 1px var(--border-active)'
-                        }
-                      : undefined
-                  }
+            {moreOpen ? (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
+                <div
+                  className="anim-fade-in absolute left-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-xl p-1"
+                  style={{ background: 'var(--bg-surface)', border: '1px solid var(--line)', boxShadow: 'var(--shadow-lg)' }}
                 >
-                  {m.emoji} {m.short}
-                </button>
-              )
-            })}
-          </div>
-          <div className="px-0.5 text-[10px] leading-snug text-slate-600">
-            {PERSPECTIVE_META[perspective].label}视角 · {PERSPECTIVE_META[perspective].desc}
-          </div>
-        </div>
-
-        {/* 分组导航（按当前视角收敛；其余入口收进「更多」） */}
-        <nav className="flex flex-col gap-4">
-          {navGroups.map((g) => (
-            <div key={g.label}>
-              <div className="mb-1 px-2.5 text-[10px] font-medium uppercase tracking-[0.14em] text-slate-600">
-                {g.label}
-              </div>
-              <div className="flex flex-col gap-0.5">
-                {g.items.map((item) => (
-                  <NavButton key={item.key} item={item} active={view === item.key} onClick={() => setView(item.key)} />
-                ))}
-              </div>
-            </div>
-          ))}
-          {moreItems.length > 0 ? (
-            <div>
-              <button
-                type="button"
-                onClick={() => setMoreOpen((o) => !o)}
-                className="mb-1 flex w-full items-center justify-between px-2.5 text-[10px] font-medium uppercase tracking-[0.14em] text-slate-600 transition-colors hover:text-slate-400"
-              >
-                <span>更多</span>
-                <span>{moreOpen ? '▾' : '▸'}</span>
-              </button>
-              {moreOpen ? (
-                <div className="flex flex-col gap-0.5">
-                  {moreItems.map((item) => (
-                    <NavButton key={item.key} item={item} active={view === item.key} onClick={() => setView(item.key)} />
+                  {SECONDARY_NAV.map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => {
+                        setView(item.key)
+                        setMoreOpen(false)
+                      }}
+                      className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm ${
+                        view === item.key ? 'bg-[var(--surface-3)] text-slate-100' : 'text-slate-400 hover:bg-[var(--surface-2)] hover:text-slate-200'
+                      }`}
+                    >
+                      <Icon name={item.icon} size={14} className="shrink-0 opacity-70" />
+                      {item.label}
+                    </button>
                   ))}
                 </div>
-              ) : null}
-            </div>
-          ) : null}
+              </>
+            ) : null}
+          </div>
         </nav>
 
-        <div className="flex-1" />
+        <div className="flex min-w-0 flex-1" />
 
-        {/* v10「一面一角色」新表面入口（数据互通，随时切回） */}
-        <button
-          className="mb-1 w-full rounded-lg border border-white/10 px-3 py-1.5 text-left text-[11.5px] text-zinc-400 transition hover:bg-white/5 hover:text-zinc-200"
-          onClick={() => {
-            window.localStorage.setItem('v10surface', '1')
-            window.location.reload()
-          }}
-          title="切换到 v10 一面一角色版面（左问右表）"
-        >
-          ✦ 体验 v10 版面
-        </button>
-        <NavButton item={{ key: 'settings', label: '设置', icon: 'settings' }} active={view === 'settings'} onClick={() => setView('settings')} />
-      </aside>
-
-      <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-11 shrink-0 items-center justify-between border-b border-white/[0.06] px-4">
-          <div className="app-drag flex min-w-0 flex-1 items-baseline gap-2 self-stretch pl-1">
-            <span className="self-center text-[13px] font-semibold text-slate-200">{VIEW_TITLES[view]}</span>
-            <span
-              className="self-center rounded-md px-1.5 py-0.5 text-[10px] text-slate-500"
-              style={{ background: 'var(--surface-2)' }}
-              title={`${PERSPECTIVE_META[perspective].desc}${locked ? '（已锁定）' : '（自动）'}`}
-            >
-              {PERSPECTIVE_META[perspective].emoji} {PERSPECTIVE_META[perspective].label}
-            </span>
-          </div>
-          <div
-            className="app-no-drag flex shrink-0 items-center gap-2"
-            style={{ WebkitAppRegion: 'no-drag' } as CSSProperties}
+        <div className="app-no-drag flex shrink-0 items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as CSSProperties}>
+          <span className="hidden min-w-0 max-w-[260px] truncate text-xs text-slate-500 sm:block">
+            {mainCat ? `${CATEGORY_META[mainCat].label} · ` : ''}
+            {currentAppLabel}
+          </span>
+          <WeatherCard />
+          <button
+            type="button"
+            className="ui-icon-btn"
+            title="设置"
+            aria-label="设置"
+            onClick={() => setView('settings')}
           >
-            {/* 天气卡（现在 / 未来几小时 / 未来几天） */}
-            <WeatherCard />
-            {/* 窗口控制（独立，与状态胶囊分开） */}
-            <button
-              type="button"
-              className="flex h-7 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.08] hover:text-slate-200"
-              style={{ WebkitAppRegion: 'no-drag' } as CSSProperties}
-              title="最小化"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                window.api?.minimize?.()
-              }}
-            >
-              <span className="mb-0.5 text-sm">–</span>
-            </button>
-            <button
-              type="button"
-              className="flex h-7 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.08] hover:text-slate-200"
-              style={{ WebkitAppRegion: 'no-drag' } as CSSProperties}
-              title="最大化/还原"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                window.api?.maximize?.()
-              }}
-            >
-              <span className="text-[11px]">▢</span>
-            </button>
-            <button
-              type="button"
-              className="flex h-7 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-red-500/80 hover:text-white"
-              style={{ WebkitAppRegion: 'no-drag' } as CSSProperties}
-              title="关闭（最小化到托盘）"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                window.api?.closeWindow?.()
-              }}
-            >
-              <span className="text-[11px]">✕</span>
-            </button>
-          </div>
-        </header>
-        <div className="min-h-0 flex-1 overflow-auto p-5">
+            <Icon name="settings" size={15} />
+          </button>
+          <span className="mx-1 h-4 w-px" style={{ background: 'var(--line)' }} />
+          <button
+            type="button"
+            className="ui-icon-btn"
+            title="最小化"
+            aria-label="最小化"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              window.api?.minimize?.()
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 12 12" aria-hidden>
+              <path d="M2 6h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="ui-icon-btn"
+            title="最大化/还原"
+            aria-label="最大化或还原"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              window.api?.maximize?.()
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 12 12" aria-hidden>
+              <rect x="2.2" y="2.2" width="7.6" height="7.6" rx="1.4" fill="none" stroke="currentColor" strokeWidth="1.3" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="ui-icon-btn hover:!bg-red-500 hover:!text-white"
+            title="关闭（最小化到托盘）"
+            aria-label="关闭窗口"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              window.api?.closeWindow?.()
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      {/* 内容：单列居中，最宽 1120，留白由这里统一控制 */}
+      <main className="min-h-0 flex-1 overflow-auto">
+        <div className="mx-auto w-full max-w-[1120px] px-8 pb-16 pt-10">
           <ActiveView />
         </div>
       </main>
 
       {/* 全局错误横幅（主进程异常通知：写入失败/目录不可写等） */}
       {errorBanner ? (
-        <div className="anim-fade-in fixed left-1/2 top-3 z-[80] -translate-x-1/2 rounded-xl border border-red-500/30 bg-red-500/15 px-4 py-2 text-[12px] text-red-300 shadow-glass backdrop-blur">
-          ⚠️ {errorBanner}
+        <div
+          role="alert"
+          className="anim-fade-in fixed left-1/2 top-3 z-[80] -translate-x-1/2 rounded-xl border px-4 py-2 text-xs shadow-glass backdrop-blur"
+          style={{ borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.15)', color: '#fca5a5' }}
+        >
+          {errorBanner}
         </div>
       ) : null}
 
       {/* 首启隐私同意门（审计 F1）：同意后主进程才启动窗口/键鼠/目录采集 */}
-      {showConsent ? (
-        <div className="anim-fade-in fixed inset-0 z-[90] flex items-center justify-center bg-black/55 backdrop-blur-sm">
-          <div className="w-[540px] rounded-2xl border border-white/10 bg-[#131b2b] p-6 shadow-glass">
-            <div className="mb-1 text-[17px] font-semibold text-zinc-100">欢迎使用 WorkOn</div>
-            <div className="mb-4 text-[12.5px] leading-relaxed text-zinc-400">
-              这是一台<strong className="text-zinc-200">本地优先</strong>的工作陪伴器。允许采集后，它会记录：前台窗口标题、键鼠活动计数（只计数，不记录内容）、项目目录变动——
-              <strong className="text-zinc-200">全部数据只存在你的电脑上</strong>；云端 AI 需要你自己配置 Key 才会启用，发送前经过脱敏。
-              你也可以先不采集，待办、报表、桌宠等手动功能照常可用，之后随时在设置里更改。
-            </div>
-            <div className="flex gap-3">
-              <button
-                className="flex-1 rounded-lg bg-emerald-500/90 px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-emerald-500"
-                onClick={() => answerConsent('granted')}
-              >
-                开始使用，允许采集
-              </button>
-              <button
-                className="flex-1 rounded-lg border border-white/15 px-4 py-2.5 text-[13px] text-zinc-300 transition hover:bg-white/5"
-                onClick={() => answerConsent('declined')}
-              >
-                先不采集（仅手动功能）
-              </button>
-            </div>
+      <ModalShell open={showConsent} onClose={() => setConsentDismissed(true)} labelledBy="consent-title" bare>
+        <div
+          className="w-[560px] p-7"
+          style={{
+            background: 'var(--bg-deep)',
+            borderRadius: 'var(--r-lg)',
+            boxShadow: 'var(--shadow-lg)'
+          }}
+        >
+          <div id="consent-title" className="text-xl font-semibold tracking-tight text-slate-100">
+            欢迎使用 WorkOn
+          </div>
+          <div className="mb-6 mt-2.5 text-sm leading-relaxed text-slate-500">
+            这是一台<strong className="text-slate-200">本地优先</strong>的工作陪伴器。允许采集后，它会记录：前台窗口标题、键鼠活动计数（只计数，不记录内容）、项目目录变动——
+            <strong className="text-slate-200">全部数据只存在你的电脑上</strong>；云端 AI 需要你自己配置 Key 才会启用，发送前经过脱敏。
+            你也可以先不采集，待办、报表、桌面搭子等手动功能照常可用，之后随时在设置里更改。
+          </div>
+          <div className="flex gap-3">
+            <button className="glass-btn primary flex-1 py-2.5" onClick={() => answerConsent('granted')}>
+              开始使用，允许采集
+            </button>
+            <button className="glass-btn flex-1 py-2.5" onClick={() => answerConsent('declined')}>
+              先不采集
+            </button>
           </div>
         </div>
-      ) : null}
+      </ModalShell>
     </div>
   )
 }

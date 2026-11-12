@@ -64,8 +64,8 @@ function dayGroupLabel(ts: number): string {
 function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="-mx-2 flex items-center gap-4 rounded-lg px-2 py-2 transition-colors hover:bg-white/[0.03]">
-      <span className="w-28 shrink-0 text-[12px] text-slate-500">{label}</span>
-      <div className="min-w-0 flex-1 text-[13px] text-slate-300">{children}</div>
+      <span className="w-28 shrink-0 text-xs text-slate-500">{label}</span>
+      <div className="min-w-0 flex-1 text-sm text-slate-300">{children}</div>
     </div>
   )
 }
@@ -78,7 +78,7 @@ function MeterBar({ value, color }: { value: number; color: string }) {
       <span className="h-1.5 w-28 overflow-hidden rounded-full bg-white/[0.06]">
         <span className="block h-full rounded-full transition-all duration-300" style={{ width: `${pct}%`, background: color, boxShadow: `0 0 6px ${color}66` }} />
       </span>
-      <span className="tabular-nums text-[11px] text-slate-500">{pct}</span>
+      <span className="tabular-nums text-xs text-slate-500">{pct}</span>
     </span>
   )
 }
@@ -86,10 +86,10 @@ function MeterBar({ value, color }: { value: number; color: string }) {
 /** 来源 chip：[手动] / [自动 0.82] */
 function SourceChip({ field }: { field: ProfileField<unknown> }) {
   if (field.source === 'manual') {
-    return <span className="rounded border border-neon-green/25 bg-neon-green/10 px-1.5 py-0.5 text-[10px] text-neon-green">手动</span>
+    return <span className="rounded border border-neon-green/25 bg-neon-green/10 px-1.5 py-0.5 text-2xs text-neon-green">手动</span>
   }
   return (
-    <span className="rounded border border-white/[0.08] bg-white/[0.04] px-1.5 py-0.5 text-[10px] tabular-nums text-slate-500" title={`自动采集 · 置信度 ${field.confidence.toFixed(2)}`}>
+    <span className="rounded border border-white/[0.08] bg-white/[0.04] px-1.5 py-0.5 text-2xs tabular-nums text-slate-500" title={`自动采集 · 置信度 ${field.confidence.toFixed(2)}`}>
       自动 {field.confidence.toFixed(2)}
     </span>
   )
@@ -100,8 +100,8 @@ function SettingRow({ label, desc, children }: { label: string; desc?: string; c
   return (
     <div className="-mx-2 flex flex-col gap-2 rounded-lg px-2 py-2 transition-colors hover:bg-white/[0.03]">
       <div className="min-w-0">
-        <div className="text-[13px] text-slate-300">{label}</div>
-        {desc ? <div className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{desc}</div> : null}
+        <div className="text-sm text-slate-300">{label}</div>
+        {desc ? <div className="mt-0.5 text-xs leading-relaxed text-slate-500">{desc}</div> : null}
       </div>
       <div className="shrink-0">{children}</div>
     </div>
@@ -153,7 +153,7 @@ function NumberSetting({
           if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
         }}
       />
-      {suffix ? <span className="text-[11px] text-slate-500">{suffix}</span> : null}
+      {suffix ? <span className="text-xs text-slate-500">{suffix}</span> : null}
     </span>
   )
 }
@@ -189,12 +189,12 @@ function FieldRow<T extends string>({
   }
   return (
     <div className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-white/[0.03]">
-      <span className="w-28 shrink-0 text-[12px] text-slate-500">{label}</span>
+      <span className="w-28 shrink-0 text-xs text-slate-500">{label}</span>
       <div className="min-w-0 flex-1">
         {editing ? (
           options ? (
             <select
-              className="glass-input !w-40 !py-1 !text-[12px]"
+              className="glass-input !w-40 !py-1 !text-xs"
               autoFocus
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -213,7 +213,7 @@ function FieldRow<T extends string>({
             </select>
           ) : (
             <input
-              className="glass-input !w-48 !py-1 !text-[12px]"
+              className="glass-input !w-48 !py-1 !text-xs"
               autoFocus
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -225,12 +225,12 @@ function FieldRow<T extends string>({
             />
           )
         ) : field ? (
-          <span className="flex flex-wrap items-center gap-2 text-[13px] text-slate-300">
+          <span className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
             {valueLabel}
             <SourceChip field={field} />
           </span>
         ) : (
-          <button className="inline-flex items-center gap-1 text-[12px] text-neon-cyan/70 transition-colors hover:text-neon-cyan" onClick={startEdit}>
+          <button className="inline-flex items-center gap-1 text-xs text-neon-cyan/70 transition-colors hover:text-neon-cyan" onClick={startEdit}>
             <Icon name="plus" size={11} /> 填写
           </button>
         )}
@@ -239,7 +239,7 @@ function FieldRow<T extends string>({
         <span className="flex shrink-0 items-center gap-1.5">
           {field && !field.userConfirmed && field.source !== 'manual' ? (
             <button
-              className="rounded-md border border-neon-green/25 px-1.5 py-0.5 text-[10px] text-neon-green transition-all hover:border-neon-green/50 hover:bg-neon-green/10"
+              className="rounded-md border border-neon-green/25 px-1.5 py-0.5 text-2xs text-neon-green transition-all hover:border-neon-green/50 hover:bg-neon-green/10"
               title="确认该自动采集的值（置信度置为 1）"
               onClick={onConfirm}
             >
@@ -248,7 +248,7 @@ function FieldRow<T extends string>({
           ) : null}
           {field ? (
             <button
-              className="rounded-md border border-white/[0.08] px-1.5 py-0.5 text-[10px] text-slate-400 transition-all hover:border-neon-cyan/40 hover:text-neon-cyan"
+              className="rounded-md border border-white/[0.08] px-1.5 py-0.5 text-2xs text-slate-400 transition-all hover:border-neon-cyan/40 hover:text-neon-cyan"
               onClick={startEdit}
             >
               编辑
@@ -267,12 +267,12 @@ function LayerBanner({ layerKey }: { layerKey: PersonaLayerKey }) {
   return (
     <div className="mb-3 flex items-start gap-2.5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5">
       <span
-        className="mt-0.5 shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium"
+        className="mt-0.5 shrink-0 rounded-md border px-1.5 py-0.5 text-2xs font-medium"
         style={{ color: pm.color, borderColor: `${pm.color}44`, background: `${pm.color}14` }}
       >
         {meta.level} {pm.label}
       </span>
-      <div className="min-w-0 text-[11px] leading-relaxed text-slate-500">
+      <div className="min-w-0 text-xs leading-relaxed text-slate-500">
         <span className="text-slate-400">{meta.desc}。</span> AI 访问方式：{meta.aiUsage}
       </div>
     </div>
@@ -375,10 +375,10 @@ function RhythmSection() {
   return (
     <section className="glass-card hoverable">
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <h3 className="text-[14px] font-semibold text-slate-200">⏱ 注意力节律</h3>
-        <span className="text-[11px] text-slate-500">近 14 天工作时段分布 · 越亮代表该小时平均投入越深</span>
+        <h3 className="text-base font-semibold text-slate-200">⏱ 注意力节律</h3>
+        <span className="text-xs text-slate-500">近 14 天工作时段分布 · 越亮代表该小时平均投入越深</span>
         {/* 图例：少 → 多 */}
-        <span className="ml-auto flex items-center gap-1 text-[10px] text-slate-500">
+        <span className="ml-auto flex items-center gap-1 text-2xs text-slate-500">
           少
           {[0, 1, 2, 3, 4].map((t) => (
             <span key={t} className="h-3 w-3 rounded-[4px]" style={{ background: cellBg(t), border: '1px solid var(--line)' }} />
@@ -387,7 +387,7 @@ function RhythmSection() {
         </span>
       </div>
       {!data ? (
-        <div className="flex h-16 items-center justify-center text-[12px] text-slate-500">
+        <div className="flex h-16 items-center justify-center text-xs text-slate-500">
           <span className="pulse-dot mr-2 h-1.5 w-1.5 rounded-full" style={{ background: 'var(--teal)' }} /> 节律计算中…
         </div>
       ) : (
@@ -395,7 +395,7 @@ function RhythmSection() {
           <div className="flex flex-col gap-1.5">
             {(['工作日', '周末'] as const).map((rowLabel, row) => (
               <div key={rowLabel} className="flex items-center gap-2">
-                <span className="w-11 shrink-0 text-right text-[11px] text-slate-500">{rowLabel}</span>
+                <span className="w-11 shrink-0 text-right text-xs text-slate-500">{rowLabel}</span>
                 <div className="grid min-w-0 flex-1 gap-1" style={{ gridTemplateColumns: 'repeat(15, minmax(0, 1fr))' }}>
                   {RHYTHM_HOURS.map((h, i) => {
                     const v = data.avg[row][i]
@@ -417,14 +417,14 @@ function RhythmSection() {
             <span className="w-11 shrink-0" />
             <div className="grid min-w-0 flex-1" style={{ gridTemplateColumns: 'repeat(15, minmax(0, 1fr))' }}>
               {RHYTHM_HOURS.map((h) => (
-                <span key={h} className="text-center text-[9px] tabular-nums text-slate-600">
+                <span key={h} className="text-center text-2xs tabular-nums text-slate-600">
                   {h % 2 === 0 ? h : ''}
                 </span>
               ))}
             </div>
           </div>
           {/* 结论行 */}
-          <div className="mt-2.5 rounded-lg border px-3 py-2 text-[12px] text-slate-300" style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }}>
+          <div className="mt-2.5 rounded-lg border px-3 py-2 text-xs text-slate-300" style={{ borderColor: 'var(--line)', background: 'var(--surface-2)' }}>
             {data.peak ? (
               <>
                 ⭐ 你的节律峰值{' '}
@@ -596,7 +596,7 @@ export default function ProfileView() {
 
   if (!persona) {
     return (
-      <div className="flex h-full items-center justify-center text-[12px] text-slate-500">
+      <div className="flex h-full items-center justify-center text-xs text-slate-500">
         <span className="pulse-dot mr-2 h-1.5 w-1.5 rounded-full bg-neon-cyan" /> 画像加载中…
       </div>
     )
@@ -613,9 +613,9 @@ export default function ProfileView() {
       <LayerBanner layerKey="basicInfo" />
       <div className="flex flex-col divide-y divide-white/[0.05]">
         <div className="-mx-2 flex items-center gap-4 rounded-lg px-2 py-2 transition-colors hover:bg-white/[0.03]">
-          <span className="w-28 shrink-0 text-[12px] text-slate-500">昵称</span>
+          <span className="w-28 shrink-0 text-xs text-slate-500">昵称</span>
           <input
-            className="glass-input !w-48 !py-1 !text-[12px]"
+            className="glass-input !w-48 !py-1 !text-xs"
             value={nick}
             maxLength={20}
             onChange={(e) => setNick(e.target.value)}
@@ -632,7 +632,7 @@ export default function ProfileView() {
         <InfoRow label="用户类型">
           <span className="flex flex-wrap items-center gap-2">
             <span className="chip">{ut?.emoji} {ut?.label ?? persona.basicInfo.userType}</span>
-            <button className="text-[11px] text-neon-cyan/70 transition-colors hover:text-neon-cyan" onClick={() => setSel('score')}>
+            <button className="text-xs text-neon-cyan/70 transition-colors hover:text-neon-cyan" onClick={() => setSel('score')}>
               去「注意力与评分」修改 →
             </button>
           </span>
@@ -720,18 +720,18 @@ export default function ProfileView() {
             onConfirm={() => void handleConfirm('preferences.interventionTolerance')}
           />
           <div className="-mx-2 flex items-center gap-4 rounded-lg px-2 py-2 transition-colors hover:bg-white/[0.03]">
-            <span className="w-28 shrink-0 text-[12px] text-slate-500">偏好工作时段</span>
-            <span className="flex items-center gap-2 text-[12px] text-slate-400">
+            <span className="w-28 shrink-0 text-xs text-slate-500">偏好工作时段</span>
+            <span className="flex items-center gap-2 text-xs text-slate-400">
               <input
                 type="time"
-                className="glass-input !w-28 !py-1 !text-[12px]"
+                className="glass-input !w-28 !py-1 !text-xs"
                 value={hours?.start ?? ''}
                 onChange={(e) => commitHours(e.target.value, hours?.end ?? '')}
               />
               至
               <input
                 type="time"
-                className="glass-input !w-28 !py-1 !text-[12px]"
+                className="glass-input !w-28 !py-1 !text-xs"
                 value={hours?.end ?? ''}
                 onChange={(e) => commitHours(hours?.start ?? '', e.target.value)}
               />
@@ -755,11 +755,11 @@ export default function ProfileView() {
           <InfoRow label="周末模式">{WEEKEND_LABEL[b.dailyRhythm.weekendPattern] ?? b.dailyRhythm.weekendPattern}</InfoRow>
           <InfoRow label="应用切换频率">{b.appUsagePattern.appSwitchFrequency ? `${b.appUsagePattern.appSwitchFrequency} 次/小时` : '—'}</InfoRow>
           <div className="-mx-2 rounded-lg px-2 py-2 transition-colors hover:bg-white/[0.03]">
-            <div className="mb-1.5 text-[12px] text-slate-500">主要应用（日均时长）</div>
+            <div className="mb-1.5 text-xs text-slate-500">主要应用（日均时长）</div>
             {b.appUsagePattern.primaryApps.length > 0 ? (
               <div className="flex flex-col gap-1.5">
                 {b.appUsagePattern.primaryApps.map((a) => (
-                  <div key={a.category} className="flex items-center gap-2 text-[12px]">
+                  <div key={a.category} className="flex items-center gap-2 text-xs">
                     <span className="w-20 shrink-0 truncate text-slate-400">{a.category}</span>
                     <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
                       <span
@@ -772,14 +772,14 @@ export default function ProfileView() {
                 ))}
               </div>
             ) : (
-              <div className="text-[11px] text-slate-600">暂无数据</div>
+              <div className="text-xs text-slate-600">暂无数据</div>
             )}
           </div>
           <InfoRow label="最佳连续专注">{b.focusStreakHistory.bestStreak ? `${b.focusStreakHistory.bestStreak} 天` : '—'}</InfoRow>
           <InfoRow label="日均专注">{b.focusStreakHistory.avgDailyFocusMin ? fmtMin(Math.round(b.focusStreakHistory.avgDailyFocusMin)) : '—'}</InfoRow>
           <InfoRow label="专注趋势">{TREND_LABEL[b.focusStreakHistory.focusTrend] ?? b.focusStreakHistory.focusTrend}</InfoRow>
         </div>
-        <p className="mt-3 text-[11px] text-slate-600">行为数据由系统自动采集，每日更新</p>
+        <p className="mt-3 text-xs text-slate-600">行为数据由系统自动采集，每日更新</p>
       </>
     )
   }
@@ -789,21 +789,21 @@ export default function ProfileView() {
     return (
       <>
         <LayerBanner layerKey="interests" />
-        <div className="mb-1.5 text-[12px] text-slate-500">检测到的兴趣（点击确认后不再被自动清理）</div>
+        <div className="mb-1.5 text-xs text-slate-500">检测到的兴趣（点击确认后不再被自动清理）</div>
         {it.detectedInterests.length > 0 ? (
           <div className="mb-4 flex flex-wrap gap-2">
             {it.detectedInterests.map((d) => (
               <span
                 key={d.tag}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[12px] ${
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs ${
                   d.userConfirmed ? 'border-neon-green/25 bg-neon-green/[0.06] text-slate-200' : 'border-white/[0.08] bg-white/[0.03] text-slate-300'
                 }`}
               >
                 {d.tag}
-                <span className="text-[10px] tabular-nums text-slate-500">{d.confidence.toFixed(2)}</span>
+                <span className="text-2xs tabular-nums text-slate-500">{d.confidence.toFixed(2)}</span>
                 {!d.userConfirmed ? (
                   <button
-                    className="rounded border border-neon-green/25 px-1 py-px text-[10px] text-neon-green transition-all hover:bg-neon-green/10"
+                    className="rounded border border-neon-green/25 px-1 py-px text-2xs text-neon-green transition-all hover:bg-neon-green/10"
                     title="确认该兴趣"
                     onClick={() => void handleConfirm(`interests.tag:${d.tag}`)}
                   >
@@ -821,26 +821,26 @@ export default function ProfileView() {
             ))}
           </div>
         ) : (
-          <div className="mb-4 rounded-lg border border-dashed border-white/10 bg-white/[0.02] py-3 text-center text-[11px] text-slate-500">暂无检测到的兴趣</div>
+          <div className="mb-4 rounded-lg border border-dashed border-white/10 bg-white/[0.02] py-3 text-center text-xs text-slate-500">暂无检测到的兴趣</div>
         )}
 
-        <div className="mb-1.5 text-[12px] text-slate-500">学习主题</div>
+        <div className="mb-1.5 text-xs text-slate-500">学习主题</div>
         {it.learningTopics.length > 0 ? (
           <div className="mb-4 flex flex-col divide-y divide-white/[0.05] rounded-xl border border-white/[0.06] px-3">
             {it.learningTopics.map((t) => (
-              <div key={t.topic} className="flex items-center justify-between py-2 text-[12px]">
+              <div key={t.topic} className="flex items-center justify-between py-2 text-xs">
                 <span className="text-slate-300">{t.topic}</span>
-                <span className="chip !text-[10px]">{PROGRESS_LABEL[t.progress] ?? t.progress}</span>
+                <span className="chip !text-2xs">{PROGRESS_LABEL[t.progress] ?? t.progress}</span>
               </div>
             ))}
           </div>
         ) : (
-          <div className="mb-4 rounded-lg border border-dashed border-white/10 bg-white/[0.02] py-3 text-center text-[11px] text-slate-500">暂无学习主题</div>
+          <div className="mb-4 rounded-lg border border-dashed border-white/10 bg-white/[0.02] py-3 text-center text-xs text-slate-500">暂无学习主题</div>
         )}
 
-        <div className="mb-1.5 text-[12px] text-slate-500">非工作爱好（逗号分隔，可编辑）</div>
+        <div className="mb-1.5 text-xs text-slate-500">非工作爱好（逗号分隔，可编辑）</div>
         <input
-          className="glass-input !text-[12px]"
+          className="glass-input !text-xs"
           placeholder="如：摄影, 跑步, 吉他"
           value={hobbiesDraft ?? it.hobbies.join(', ')}
           onFocus={() => setHobbiesDraft(it.hobbies.join(', '))}
@@ -866,21 +866,21 @@ export default function ProfileView() {
     return (
       <>
         <LayerBanner layerKey="capabilities" />
-        <div className="mb-1.5 text-[12px] text-slate-500">技能标签</div>
+        <div className="mb-1.5 text-xs text-slate-500">技能标签</div>
         {cap.skillTags.length > 0 ? (
           <div className="mb-4 flex flex-col divide-y divide-white/[0.05] rounded-xl border border-white/[0.06] px-3">
             {cap.skillTags.map((s) => (
               <div key={s.name} className="flex items-center gap-3 py-2.5">
-                <span className="w-28 shrink-0 truncate text-[12px] text-slate-300">{s.name}</span>
+                <span className="w-28 shrink-0 truncate text-xs text-slate-300">{s.name}</span>
                 <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
                   <span
                     className="block h-full rounded-full bg-gradient-to-r from-neon-cyan/70 to-neon-violet/50"
                     style={{ width: `${Math.max(0, Math.min(100, Math.round(s.proficiency)))}%` }}
                   />
                 </span>
-                <span className="w-8 shrink-0 text-right text-[11px] tabular-nums text-slate-500">{Math.round(s.proficiency)}</span>
+                <span className="w-8 shrink-0 text-right text-xs tabular-nums text-slate-500">{Math.round(s.proficiency)}</span>
                 <span
-                  className={`shrink-0 text-[12px] ${s.trend === 'growing' ? 'text-neon-green' : s.trend === 'declining' ? 'text-red-400' : 'text-slate-500'}`}
+                  className={`shrink-0 text-xs ${s.trend === 'growing' ? 'text-neon-green' : s.trend === 'declining' ? 'text-red-400' : 'text-slate-500'}`}
                   title={s.trend === 'growing' ? '上升中' : s.trend === 'declining' ? '下降中' : '稳定'}
                 >
                   {s.trend === 'growing' ? '↑' : s.trend === 'declining' ? '↓' : '→'}
@@ -888,7 +888,7 @@ export default function ProfileView() {
                 <span className="flex shrink-0 items-center gap-1">
                   {!s.userConfirmed ? (
                     <button
-                      className="rounded border border-neon-green/25 px-1 py-px text-[10px] text-neon-green transition-all hover:bg-neon-green/10"
+                      className="rounded border border-neon-green/25 px-1 py-px text-2xs text-neon-green transition-all hover:bg-neon-green/10"
                       title="确认该技能"
                       onClick={() => void handleConfirm(`capabilities.skill:${s.name}`)}
                     >
@@ -903,22 +903,22 @@ export default function ProfileView() {
             ))}
           </div>
         ) : (
-          <div className="mb-4 rounded-lg border border-dashed border-white/10 bg-white/[0.02] py-3 text-center text-[11px] text-slate-500">暂无技能标签</div>
+          <div className="mb-4 rounded-lg border border-dashed border-white/10 bg-white/[0.02] py-3 text-center text-xs text-slate-500">暂无技能标签</div>
         )}
 
-        <div className="mb-1.5 text-[12px] text-slate-500">学习目标</div>
+        <div className="mb-1.5 text-xs text-slate-500">学习目标</div>
         {cap.learningGoals.length > 0 ? (
           <div className="flex flex-col divide-y divide-white/[0.05] rounded-xl border border-white/[0.06] px-3">
             {cap.learningGoals.map((g) => (
-              <div key={g.goal} className="flex items-center gap-3 py-2.5 text-[12px]">
+              <div key={g.goal} className="flex items-center gap-3 py-2.5 text-xs">
                 <span className="min-w-0 flex-1 truncate text-slate-300">{g.goal}</span>
                 <MeterBar value={g.currentProgress} color="#22D3EE" />
-                <span className="shrink-0 text-[10px] text-slate-500">目标 {fmtDate(g.targetTs)}</span>
+                <span className="shrink-0 text-2xs text-slate-500">目标 {fmtDate(g.targetTs)}</span>
               </div>
             ))}
           </div>
         ) : (
-          <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] py-3 text-center text-[11px] text-slate-500">暂无学习目标</div>
+          <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] py-3 text-center text-xs text-slate-500">暂无学习目标</div>
         )}
       </>
     )
@@ -937,10 +937,10 @@ export default function ProfileView() {
           <InfoRow label="注意力风格">{ATTENTION_LABEL[psy.attentionStyle] ?? psy.attentionStyle}</InfoRow>
           <InfoRow label="精力周期">{ENERGY_LABEL[psy.energyCycle] ?? psy.energyCycle}</InfoRow>
         </div>
-        <p className="mt-3 text-[11px] text-slate-600">
+        <p className="mt-3 text-xs text-slate-600">
           分析置信度 {Math.round(psy.confidence * 100)}%{psy.lastAnalyzed ? ` · 最近分析 ${fmtDate(psy.lastAnalyzed)}` : ''}
         </p>
-        <p className="mt-1.5 rounded-lg border border-neon-amber/15 bg-neon-amber/[0.04] px-3 py-2 text-[11px] leading-relaxed text-slate-500">
+        <p className="mt-1.5 rounded-lg border border-neon-amber/15 bg-neon-amber/[0.04] px-3 py-2 text-xs leading-relaxed text-slate-500">
           AI 不会直接引用这些数值，仅用于调整交互策略
         </p>
       </>
@@ -963,8 +963,8 @@ export default function ProfileView() {
           ).map(([emoji, label, value]) => (
             <div key={label} className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 transition-all hover:border-neon-cyan/25 hover:bg-white/[0.05]">
               <div className="text-lg leading-none">{emoji}</div>
-              <div className="mt-1.5 text-[11px] text-slate-500">{label}</div>
-              <div className="mt-0.5 text-[14px] font-semibold text-neon-cyan">{value}</div>
+              <div className="mt-1.5 text-xs text-slate-500">{label}</div>
+              <div className="mt-0.5 text-base font-semibold text-neon-cyan">{value}</div>
             </div>
           ))}
         </div>
@@ -973,7 +973,7 @@ export default function ProfileView() {
           <InfoRow label="情绪稳定度"><MeterBar value={Math.round(r.emotionalHistory.emotionStability * 100)} color="#22D3EE" /></InfoRow>
           <InfoRow label="近期趋势">{EMOTION_TREND_LABEL[r.emotionalHistory.recentTrend] ?? r.emotionalHistory.recentTrend}</InfoRow>
         </div>
-        <p className="mt-3 text-[11px] text-slate-600">关系数据由系统记录，不可编辑</p>
+        <p className="mt-3 text-xs text-slate-600">关系数据由系统记录，不可编辑</p>
       </>
     )
   }
@@ -981,7 +981,7 @@ export default function ProfileView() {
   /** 注意力与评分（v2.6：用户类型决定五维权重与默认目标；从设置页迁入） */
   const renderScore = () => (
     <>
-      <div className="mb-3 text-[12px] leading-relaxed text-slate-500">
+      <div className="mb-3 text-xs leading-relaxed text-slate-500">
         用户类型决定五维权重与默认目标，是专注/效率评分的计分基准；也可交给自动识别。
       </div>
       <div className="flex flex-col divide-y divide-white/[0.05]">
@@ -994,7 +994,7 @@ export default function ProfileView() {
                 <button
                   key={t}
                   title={m.desc}
-                  className={`rounded-lg border px-2.5 py-1.5 text-[12px] transition-all ${
+                  className={`rounded-lg border px-2.5 py-1.5 text-xs transition-all ${
                     active ? 'border-white/30 bg-white/[0.08] text-slate-100' : 'border-white/[0.07] text-slate-400 hover:border-white/20'
                   }`}
                   onClick={() => void chooseType(t)}
@@ -1004,7 +1004,7 @@ export default function ProfileView() {
               )
             })}
             {settings.userTypeAuto && !settings.userType ? (
-              <span className="rounded-full border border-neon-cyan/30 bg-neon-cyan/10 px-2 py-0.5 text-[10px] text-neon-cyan">自动识别</span>
+              <span className="rounded-full border border-neon-cyan/30 bg-neon-cyan/10 px-2 py-0.5 text-2xs text-neon-cyan">自动识别</span>
             ) : null}
           </div>
         </SettingRow>
@@ -1017,7 +1017,7 @@ export default function ProfileView() {
               <button
                 key={v}
                 onClick={() => void patchSettings({ employmentMode: v })}
-                className={`rounded-lg border px-2.5 py-1.5 text-[12px] transition-all ${
+                className={`rounded-lg border px-2.5 py-1.5 text-xs transition-all ${
                   settings.employmentMode === v ? 'border-white/30 bg-white/[0.08] text-slate-100' : 'border-white/[0.07] text-slate-400 hover:border-white/20'
                 }`}
               >
@@ -1068,11 +1068,11 @@ export default function ProfileView() {
       <>
         {/* 画像完整度 + 重新分析（自设置页「用户画像」合并而来） */}
         <div className="mb-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3.5">
-          <div className="mb-1.5 flex items-center gap-2 text-[12px] text-slate-400">
+          <div className="mb-1.5 flex items-center gap-2 text-xs text-slate-400">
             <span>画像完整度</span>
             <span className="font-semibold tabular-nums text-neon-cyan">{completeness}%</span>
-            <span className="text-[10px] text-slate-500">{completenessLabel(completeness)}</span>
-            <button className="glass-btn ml-auto !px-2.5 !py-1 !text-[11px]" disabled={refreshing} onClick={() => void doRefresh()} title="基于最新行为数据重新分析画像">
+            <span className="text-2xs text-slate-500">{completenessLabel(completeness)}</span>
+            <button className="glass-btn ml-auto !px-2.5 !py-1 !text-xs" disabled={refreshing} onClick={() => void doRefresh()} title="基于最新行为数据重新分析画像">
               <Icon name="refresh" size={12} className={refreshing ? 'animate-spin' : ''} /> {refreshing ? '分析中…' : '重新分析画像'}
             </button>
           </div>
@@ -1083,17 +1083,17 @@ export default function ProfileView() {
             />
           </div>
         </div>
-        <div className="mb-3 text-[12px] leading-relaxed text-slate-500">
+        <div className="mb-3 text-xs leading-relaxed text-slate-500">
           逐层控制 AI 对你画像数据的访问。关闭后对应层数据不再进入 AI 上下文（历史访问记录见「AI 访问日志」）。点击下方层级可展开说明。
         </div>
 
         <div className="mb-4 border-t border-white/[0.06] pt-3">
-          <div className="mb-2 text-[12px] text-slate-500">数据</div>
+          <div className="mb-2 text-xs text-slate-500">数据</div>
           <div className="flex flex-col gap-2">
             <button className="glass-btn w-full !py-2 font-medium" onClick={() => void doExport()}>
               <Icon name="send" size={13} /> 导出我的全部画像数据
             </button>
-            {exportNote ? <div className="anim-fade-in break-all text-[11px] text-neon-green">{exportNote}</div> : null}
+            {exportNote ? <div className="anim-fade-in break-all text-xs text-neon-green">{exportNote}</div> : null}
             <button className="glass-btn danger w-full !py-2 font-medium" onClick={() => setConfirmClearLogs(true)}>
               <Icon name="trash" size={13} /> 清除 AI 访问日志
             </button>
@@ -1102,7 +1102,7 @@ export default function ProfileView() {
 
         {/* L0–L4：收起在页面底部，点行展开细节 */}
         <div className="mt-auto flex flex-col gap-1.5 border-t border-white/[0.06] pt-3">
-          <div className="mb-1 text-[11px] text-slate-500">隐私层级 L0–L4 · 点击展开</div>
+          <div className="mb-1 text-xs text-slate-500">隐私层级 L0–L4 · 点击展开</div>
           {cards.map(({ level, includes, example, locked }) => {
             const pm = PRIVACY_LEVEL_META[level]
             const open = openPrivacyLevel === level
@@ -1126,15 +1126,15 @@ export default function ProfileView() {
                       className={`shrink-0 text-slate-500 transition-transform duration-300 ease-out ${open ? 'rotate-90 text-slate-300' : ''}`}
                     />
                     <span
-                      className="shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium"
+                      className="shrink-0 rounded-md border px-1.5 py-0.5 text-2xs font-medium"
                       style={{ color: pm.color, borderColor: `${pm.color}44`, background: `${pm.color}14` }}
                     >
                       {level} {pm.label}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-[11px] text-slate-500">{pm.desc}</span>
+                    <span className="min-w-0 flex-1 truncate text-xs text-slate-500">{pm.desc}</span>
                   </button>
                   {locked ? (
-                    <span className="shrink-0 text-[11px] text-slate-500">🔒 已锁定</span>
+                    <span className="shrink-0 text-xs text-slate-500">🔒 已锁定</span>
                   ) : (
                     <span
                       className="shrink-0"
@@ -1148,15 +1148,15 @@ export default function ProfileView() {
                 <div className={`profile-accord ${open ? 'is-open' : ''}`}>
                   <div className="profile-accord-inner">
                     <div className="profile-accord-body border-t border-white/[0.05] px-3 pb-3 pt-2">
-                      <div className="text-[11px] leading-relaxed text-slate-500">{includes}</div>
-                      <div className="mt-1 text-[11px] leading-relaxed text-slate-600">{example}</div>
+                      <div className="text-xs leading-relaxed text-slate-500">{includes}</div>
+                      <div className="mt-1 text-xs leading-relaxed text-slate-600">{example}</div>
                       {level !== 'L4' ? (
                         <div className="mt-2 flex flex-wrap gap-1">
                           {PERSONA_LAYERS.filter((l) => l.level === level).map((l) => (
                             <button
                               key={l.key}
                               type="button"
-                              className="rounded-md border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 text-[10px] text-slate-400 transition-colors hover:border-neon-cyan/40 hover:text-neon-cyan"
+                              className="rounded-md border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 text-2xs text-slate-400 transition-colors hover:border-neon-cyan/40 hover:text-neon-cyan"
                               onClick={() => setSel(l.key)}
                             >
                               {l.emoji} {l.label}
@@ -1178,7 +1178,7 @@ export default function ProfileView() {
   const renderLogs = () => (
     <>
       <div className="mb-3 flex items-center justify-between">
-        <div className="text-[12px] text-slate-500">
+        <div className="text-xs text-slate-500">
           {logStats ? (
             <>
               近 30 天共 <span className="font-medium text-neon-cyan">{logStats.total}</span> 次引用 · 最常引用{' '}
@@ -1191,28 +1191,28 @@ export default function ProfileView() {
           )}
         </div>
         {logs.length > 0 ? (
-          <button className="glass-btn !px-2.5 !py-1 !text-[11px]" onClick={() => setConfirmClearLogs(true)}>
+          <button className="glass-btn !px-2.5 !py-1 !text-xs" onClick={() => setConfirmClearLogs(true)}>
             <Icon name="trash" size={12} /> 清除日志
           </button>
         ) : null}
       </div>
       {logGroups.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] py-6 text-center text-[11px] text-slate-500">
+        <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] py-6 text-center text-xs text-slate-500">
           当 AI 问答 / 桌宠 / 报表引用你的画像数据时，会在这里留下可追溯记录
         </div>
       ) : (
         <div className="flex flex-col gap-3">
           {logGroups.map((g) => (
             <div key={g.label}>
-              <div className="mb-1.5 text-[11px] font-medium text-slate-500">{g.label}</div>
+              <div className="mb-1.5 text-xs font-medium text-slate-500">{g.label}</div>
               <div className="flex flex-col divide-y divide-white/[0.05] rounded-xl border border-white/[0.06]">
                 {g.items.map((log) => {
                   const pm = PRIVACY_LEVEL_META[log.layer] ?? PRIVACY_LEVEL_META.L0
                   return (
-                    <div key={log.id} className="flex items-center gap-2 px-3 py-2 text-[11px] transition-colors hover:bg-white/[0.03]">
+                    <div key={log.id} className="flex items-center gap-2 px-3 py-2 text-xs transition-colors hover:bg-white/[0.03]">
                       <span className="shrink-0 tabular-nums text-slate-500">{fmtTime(log.ts)}</span>
                       <span
-                        className="shrink-0 rounded border px-1 py-px text-[10px]"
+                        className="shrink-0 rounded border px-1 py-px text-2xs"
                         style={{ color: pm.color, borderColor: `${pm.color}44`, background: `${pm.color}14` }}
                       >
                         {log.layer}
@@ -1220,7 +1220,7 @@ export default function ProfileView() {
                       <span className="shrink-0 text-slate-400">{LEVEL_LAYER_LABEL[log.layer] ?? log.layer}</span>
                       <span className="shrink-0 text-slate-600">→</span>
                       <span className="shrink-0 text-slate-300">{REQUESTER_LABEL[log.requester] ?? log.requester}</span>
-                      <span className="chip shrink-0 !px-1.5 !py-px !text-[10px]">{RULE_LABEL[log.ruleApplied] ?? log.ruleApplied}</span>
+                      <span className="chip shrink-0 !px-1.5 !py-px !text-2xs">{RULE_LABEL[log.ruleApplied] ?? log.ruleApplied}</span>
                       <span className="min-w-0 flex-1 truncate text-slate-500" title={log.output}>
                         {log.output.length > 40 ? `${log.output.slice(0, 40)}…` : log.output}
                       </span>
@@ -1259,16 +1259,16 @@ export default function ProfileView() {
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="truncate text-[16px] font-semibold text-slate-100">{persona.basicInfo.nickname || '未设置昵称'}</h1>
-                <span className="chip shrink-0 !text-[10px]">{ut?.emoji} {ut?.label ?? ''}</span>
+                <h1 className="truncate text-lg font-semibold text-slate-100">{persona.basicInfo.nickname || '未设置昵称'}</h1>
+                <span className="chip shrink-0 !text-2xs">{ut?.emoji} {ut?.label ?? ''}</span>
               </div>
-              <p className="mt-0.5 text-[11px] text-slate-500">
+              <p className="mt-0.5 text-xs text-slate-500">
                 已使用 {persona.relationship.daysTogether} 天 · 亲密度 Lv.{persona.relationship.intimacyLevel}
               </p>
             </div>
           </div>
           <div className="min-w-[220px] flex-1">
-            <div className="mb-1 flex items-center justify-between text-[11px] text-slate-500">
+            <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
               <span>画像完整度</span>
               <span>
                 <span className="font-semibold tabular-nums text-neon-cyan">{completeness}%</span> · {completenessLabel(completeness)}
@@ -1281,7 +1281,7 @@ export default function ProfileView() {
               />
             </div>
           </div>
-          <button className="glass-btn shrink-0 !px-2.5 !py-1.5 !text-[11px]" disabled={refreshing} onClick={() => void doRefresh()} title="重新采集并计算画像">
+          <button className="glass-btn shrink-0 !px-2.5 !py-1.5 !text-xs" disabled={refreshing} onClick={() => void doRefresh()} title="重新采集并计算画像">
             <Icon name="refresh" size={12} /> {refreshing ? '刷新中…' : '刷新画像'}
           </button>
         </div>
@@ -1291,7 +1291,7 @@ export default function ProfileView() {
       <div className="flex min-h-0 flex-1 gap-4">
         {/* 左导航：人物 L0–L3 可折叠；评分/隐私/日志仍在最下 */}
         <aside className="glass-card anim-fade-up flex w-44 shrink-0 flex-col overflow-y-auto !p-2" style={{ animationDelay: '60ms' }}>
-          <div className="mb-1 px-2 text-[10px] uppercase tracking-wide text-slate-600">人物层级</div>
+          <div className="mb-1 px-2 text-2xs uppercase tracking-wide text-slate-600">人物层级</div>
 
           {(['L0', 'L1', 'L2', 'L3'] as const).map((lv) => {
             const pm = PRIVACY_LEVEL_META[lv]
@@ -1302,7 +1302,7 @@ export default function ProfileView() {
               <div key={lv} className="mb-0.5">
                 <button
                   type="button"
-                  className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-[11px] transition-colors ${
+                  className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs transition-colors ${
                     groupActive || open ? 'bg-white/[0.04] text-slate-200' : 'text-slate-500 hover:bg-white/[0.03] hover:text-slate-300'
                   }`}
                   onClick={() => setOpenNavLevel((cur) => (cur === lv ? null : lv))}
@@ -1313,11 +1313,11 @@ export default function ProfileView() {
                     size={11}
                     className={`shrink-0 transition-transform duration-300 ease-out ${open ? 'rotate-90' : ''}`}
                   />
-                  <span className="rounded border px-1 py-px text-[9px]" style={{ color: pm.color, borderColor: `${pm.color}44` }}>
+                  <span className="rounded border px-1 py-px text-2xs" style={{ color: pm.color, borderColor: `${pm.color}44` }}>
                     {lv}
                   </span>
                   <span className="min-w-0 flex-1 truncate">{pm.label}</span>
-                  <span className="tabular-nums text-[9px] text-slate-600">{layers.length}</span>
+                  <span className="tabular-nums text-2xs text-slate-600">{layers.length}</span>
                 </button>
                 <div className={`profile-accord ${open ? 'is-open' : ''}`}>
                   <div className="profile-accord-inner">
@@ -1327,12 +1327,12 @@ export default function ProfileView() {
                         return (
                           <button
                             key={l.key}
-                            className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] transition-all duration-150 ${
+                            className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition-all duration-150 ${
                               active ? 'bg-neon-cyan/15 text-neon-cyan shadow-glow' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
                             }`}
                             onClick={() => setSel(l.key)}
                           >
-                            <span className="text-[13px] leading-none">{l.emoji}</span>
+                            <span className="text-sm leading-none">{l.emoji}</span>
                             <span className="min-w-0 flex-1 truncate">{l.label}</span>
                           </button>
                         )
@@ -1356,7 +1356,7 @@ export default function ProfileView() {
             return (
               <button
                 key={key}
-                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12px] transition-all duration-150 ${
+                className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-all duration-150 ${
                   active ? 'bg-neon-cyan/15 text-neon-cyan shadow-glow' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
                 }`}
                 onClick={() => setSel(key)}
@@ -1374,7 +1374,7 @@ export default function ProfileView() {
           style={{ animationDelay: '120ms' }}
           key={sel}
         >
-          <h2 className="mb-3 flex items-center gap-2 text-[14px] font-semibold text-slate-200">
+          <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-slate-200">
             {selMeta ? (
               <>
                 <span>{selMeta.emoji}</span> {selMeta.label}
@@ -1402,7 +1402,7 @@ export default function ProfileView() {
 
         {/* 右侧 AI 访问概览：L0–L3 可点开看覆盖层 */}
         <aside className="glass-card anim-fade-up hidden w-[240px] shrink-0 overflow-y-auto lg:block" style={{ animationDelay: '180ms' }}>
-          <h3 className="mb-2.5 flex items-center gap-2 text-[13px] font-semibold text-slate-200">
+          <h3 className="mb-2.5 flex items-center gap-2 text-sm font-semibold text-slate-200">
             <Icon name="eye" size={13} className="text-neon-cyan" /> AI 访问概览
           </h3>
           <div className="mb-3 flex flex-col gap-1.5">
@@ -1420,7 +1420,7 @@ export default function ProfileView() {
                 >
                   <button
                     type="button"
-                    className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[11px]"
+                    className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs"
                     onClick={() => setOpenPrivacyLevel((cur) => (cur === lv ? null : lv))}
                     aria-expanded={open}
                   >
@@ -1429,7 +1429,7 @@ export default function ProfileView() {
                       size={10}
                       className={`shrink-0 text-slate-500 transition-transform duration-300 ease-out ${open ? 'rotate-90' : ''}`}
                     />
-                    <span className="rounded border px-1 py-px text-[9px]" style={{ color: pm.color, borderColor: `${pm.color}44` }}>
+                    <span className="rounded border px-1 py-px text-2xs" style={{ color: pm.color, borderColor: `${pm.color}44` }}>
                       {lv}
                     </span>
                     <span className="min-w-0 flex-1 text-slate-400">{pm.label}</span>
@@ -1441,13 +1441,13 @@ export default function ProfileView() {
                   <div className={`profile-accord ${open ? 'is-open' : ''}`}>
                     <div className="profile-accord-inner">
                       <div className="profile-accord-body space-y-1 border-t border-white/[0.05] px-2.5 pb-2 pt-1.5">
-                        <div className="text-[10px] leading-relaxed text-slate-500">{pm.desc}</div>
+                        <div className="text-2xs leading-relaxed text-slate-500">{pm.desc}</div>
                         <div className="flex flex-wrap gap-1">
                           {layers.map((l) => (
                             <button
                               key={l.key}
                               type="button"
-                              className="rounded border border-white/[0.08] px-1.5 py-0.5 text-[10px] text-slate-400 transition-colors hover:border-neon-cyan/40 hover:text-neon-cyan"
+                              className="rounded border border-white/[0.08] px-1.5 py-0.5 text-2xs text-slate-400 transition-colors hover:border-neon-cyan/40 hover:text-neon-cyan"
                               onClick={() => setSel(l.key)}
                             >
                               {l.emoji} {l.label}
@@ -1462,16 +1462,16 @@ export default function ProfileView() {
             })}
           </div>
           <div className="border-t border-white/[0.06] pt-2.5">
-            <div className="mb-1.5 text-[11px] text-slate-500">最近 AI 引用</div>
+            <div className="mb-1.5 text-xs text-slate-500">最近 AI 引用</div>
             {recentLogs.length > 0 ? (
               <div className="flex flex-col gap-1.5">
                 {recentLogs.map((log) => {
                   const pm = PRIVACY_LEVEL_META[log.layer] ?? PRIVACY_LEVEL_META.L0
                   return (
-                    <div key={log.id} className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-2 py-1.5 text-[10px]">
+                    <div key={log.id} className="rounded-lg border border-white/[0.04] bg-white/[0.02] px-2 py-1.5 text-2xs">
                       <div className="flex items-center gap-1.5">
                         <span className="tabular-nums text-slate-500">{fmtTime(log.ts)}</span>
-                        <span className="rounded border px-1 py-px text-[9px]" style={{ color: pm.color, borderColor: `${pm.color}44` }}>
+                        <span className="rounded border px-1 py-px text-2xs" style={{ color: pm.color, borderColor: `${pm.color}44` }}>
                           {log.layer}
                         </span>
                         <span className="min-w-0 flex-1 truncate text-slate-400">{REQUESTER_LABEL[log.requester] ?? log.requester}</span>
@@ -1484,7 +1484,7 @@ export default function ProfileView() {
                 })}
               </div>
             ) : (
-              <div className="text-[10px] text-slate-600">暂无引用记录</div>
+              <div className="text-2xs text-slate-600">暂无引用记录</div>
             )}
           </div>
         </aside>
@@ -1494,10 +1494,10 @@ export default function ProfileView() {
       <RhythmSection />
 
       <section className="glass-card hoverable">
-        <h3 className="mb-3 text-[14px] font-semibold text-slate-200">📍 我的位置</h3>
+        <h3 className="mb-3 text-base font-semibold text-slate-200">📍 我的位置</h3>
         <SettingRow label="城市" desc="用于下班天气提醒、周末出行建议">
           <input
-            className="glass-input !w-36 !py-1 !text-[12px]"
+            className="glass-input !w-36 !py-1 !text-xs"
             placeholder="例：北京"
             value={city}
             onChange={(e) => setCity(e.target.value)}
@@ -1511,20 +1511,20 @@ export default function ProfileView() {
           />
         </SettingRow>
         {weather && (
-          <div className="mt-2 flex items-center gap-3 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-[12px]">
-            <span className="text-[22px] leading-none">{weather.text}</span>
+          <div className="mt-2 flex items-center gap-3 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2 text-xs">
+            <span className="text-xl leading-none">{weather.text}</span>
             <div className="flex flex-col">
-              <span className="text-[16px] font-semibold text-slate-100">{weather.tempC}°C</span>
-              <span className="text-[10px] text-slate-500">体感 {weather.feelsC}°C · {weather.minC}~{weather.maxC}°C</span>
+              <span className="text-lg font-semibold text-slate-100">{weather.tempC}°C</span>
+              <span className="text-2xs text-slate-500">体感 {weather.feelsC}°C · {weather.minC}~{weather.maxC}°C</span>
             </div>
-            <div className="ml-auto flex flex-col items-end gap-0.5 text-[10px] text-slate-500">
+            <div className="ml-auto flex flex-col items-end gap-0.5 text-2xs text-slate-500">
               <span>湿度 {weather.humidity}%</span>
               <span>风速 {weather.windKph} km/h</span>
             </div>
           </div>
         )}
         {weatherErr && (
-          <div className="mt-2 rounded-lg border border-red-500/20 bg-red-500/[0.06] px-3 py-1.5 text-[11px] text-red-400">
+          <div className="mt-2 rounded-lg border border-red-500/20 bg-red-500/[0.06] px-3 py-1.5 text-xs text-red-400">
             {weatherErr}
           </div>
         )}
@@ -1533,10 +1533,10 @@ export default function ProfileView() {
       {/* 页面最底部：L0–L4 收起条，点选向上展开说明与开关 */}
       <section className="glass-card shrink-0 !p-2.5">
         <div className="mb-1.5 flex items-center justify-between px-0.5">
-          <span className="text-[11px] text-slate-500">人物隐私层级 L0–L4</span>
+          <span className="text-xs text-slate-500">人物隐私层级 L0–L4</span>
           <button
             type="button"
-            className="text-[10px] text-slate-500 transition-colors hover:text-neon-cyan"
+            className="text-2xs text-slate-500 transition-colors hover:text-neon-cyan"
             onClick={() => {
               setSel('privacy')
               setOpenPrivacyLevel(null)
@@ -1555,7 +1555,7 @@ export default function ProfileView() {
               <button
                 key={lv}
                 type="button"
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11px] transition-all duration-200 ${
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs transition-all duration-200 ${
                   open
                     ? 'border-white/20 bg-white/[0.08] text-slate-100'
                     : 'border-white/[0.06] bg-white/[0.02] text-slate-400 hover:border-white/15 hover:text-slate-200'
@@ -1564,12 +1564,12 @@ export default function ProfileView() {
                 onClick={() => setOpenPrivacyLevel((cur) => (cur === lv ? null : lv))}
                 aria-expanded={open}
               >
-                <span className="rounded border px-1 py-px text-[9px]" style={{ color: pm.color, borderColor: `${pm.color}55` }}>
+                <span className="rounded border px-1 py-px text-2xs" style={{ color: pm.color, borderColor: `${pm.color}55` }}>
                   {lv}
                 </span>
                 <span>{pm.label}</span>
                 {locked ? (
-                  <span className="text-[9px] text-slate-600">锁</span>
+                  <span className="text-2xs text-slate-600">锁</span>
                 ) : (
                   <span className={`h-1.5 w-1.5 rounded-full ${on ? 'bg-neon-green' : 'bg-slate-600'}`} />
                 )}
@@ -1589,14 +1589,14 @@ export default function ProfileView() {
                   <div className="mt-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5">
                     <div className="flex items-start gap-2.5">
                       <span
-                        className="mt-0.5 shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium"
+                        className="mt-0.5 shrink-0 rounded-md border px-1.5 py-0.5 text-2xs font-medium"
                         style={{ color: pm.color, borderColor: `${pm.color}44`, background: `${pm.color}14` }}
                       >
                         {lv} {pm.label}
                       </span>
-                      <div className="min-w-0 flex-1 text-[11px] leading-relaxed text-slate-500">{pm.desc}</div>
+                      <div className="min-w-0 flex-1 text-xs leading-relaxed text-slate-500">{pm.desc}</div>
                       {locked ? (
-                        <span className="shrink-0 text-[11px] text-slate-500">🔒 已锁定</span>
+                        <span className="shrink-0 text-xs text-slate-500">🔒 已锁定</span>
                       ) : (
                         <Toggle checked={aiAccess[lv]} onChange={(v) => void handlePrivacy({ [lv]: v })} />
                       )}
@@ -1607,7 +1607,7 @@ export default function ProfileView() {
                           <button
                             key={l.key}
                             type="button"
-                            className="rounded-md border border-white/[0.08] bg-black/20 px-2 py-1 text-[11px] text-slate-300 transition-colors hover:border-neon-cyan/40 hover:text-neon-cyan"
+                            className="rounded-md border border-white/[0.08] bg-black/20 px-2 py-1 text-xs text-slate-300 transition-colors hover:border-neon-cyan/40 hover:text-neon-cyan"
                             onClick={() => setSel(l.key)}
                           >
                             {l.emoji} {l.label}
@@ -1615,7 +1615,7 @@ export default function ProfileView() {
                         ))}
                       </div>
                     ) : (
-                      <div className="mt-2 text-[11px] text-slate-600">核心身份信息不采集，AI 永久禁止访问。</div>
+                      <div className="mt-2 text-xs text-slate-600">核心身份信息不采集，AI 永久禁止访问。</div>
                     )}
                   </div>
                 )

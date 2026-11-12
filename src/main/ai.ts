@@ -15,6 +15,7 @@ import { getSettings } from './settings'
 import { genQuestion as genQuestionImpl, recordFeedback as recordFeedbackImpl } from './qa/questionGenerator'
 import { requestPersonaData } from './desensitize'
 import { WORKON_TOOLS, PET_TOOLS, executeTool, type ToolCall } from './tools'
+import { beginRound, endTrace, markRoute, setOutput, startTrace } from './trace'
 
 // ───────────────────────── 用量 ─────────────────────────
 
@@ -281,11 +282,13 @@ export async function llmChatWithTools(
 export async function chatWithToolLoop(
   initialMessages: ChatMessage[],
   tools: typeof WORKON_TOOLS,
-  maxToolRounds = 3
+  maxToolRounds = 3,
+  traceId?: string
 ): Promise<string | null> {
   const messages = [...initialMessages]
 
   for (let round = 0; round <= maxToolRounds; round++) {
+    if (traceId) beginRound(traceId, round, selectModel('standard'))
     const resp = await llmChatWithTools(messages, tools)
 
     // LLM 调用失败 → 回退
@@ -313,7 +316,7 @@ export async function chatWithToolLoop(
         console.warn(`[ai] 工具参数解析失败: ${tc.function.name}(${tc.function.arguments})`)
       }
       console.log(`[ai] 执行工具: ${tc.function.name}`, args)
-      const result = await executeTool(tc.function.name, args)
+      const result = await executeTool(tc.function.name, args, traceId ? { traceId } : undefined)
       messages.push({
         role: 'tool',
         content: result,
@@ -325,6 +328,7 @@ export async function chatWithToolLoop(
 
   // 超过最大轮次，用普通 llmChat 兜底
   console.warn('[ai] 工具调用轮次超限，回退普通对话')
+  markRoute(traceId, 'llm', 'round_limit')
   const fallbackMessages: ChatMsg[] = messages
     .filter((m) => m.role === 'system' || m.role === 'user' || (m.role === 'assistant' && m.content))
     .map((m) => ({ role: m.role as 'system' | 'user' | 'assistant', content: (m.content ?? '') as string }))
@@ -463,7 +467,9 @@ export async function chatWithToolLoopStream(
   onToolCall?: (toolName: string) => void,
   maxToolRounds = 3,
   /** tool 轮次重置回调：已流式的中间文本作废（渲染端清空重排） */
-  onReset?: (fullSoFar: string) => void
+  onReset?: (fullSoFar: string) => void,
+  /** 处理轨迹 id：传入后每轮与每次工具调用都会记录 */
+  traceId?: string
 ): Promise<string | null> {
   const s = getSettings()
   if (!s.aiEnabled || !s.aiApiKey) return null
@@ -472,6 +478,7 @@ export async function chatWithToolLoopStream(
   let streamedAny = false // 是否已经流式输出了文本
 
   for (let round = 0; round <= maxToolRounds; round++) {
+    if (traceId) beginRound(traceId, round, model)
     const ctrl = new AbortController()
     const t = setTimeout(() => ctrl.abort(), 60000)
     try {
@@ -536,7 +543,7 @@ export async function chatWithToolLoopStream(
         }
         console.log(`[ai] 执行工具 (stream): ${tc.function.name}`, args)
         onToolCall?.(tc.function.name)
-        const result = await executeTool(tc.function.name, args)
+        const result = await executeTool(tc.function.name, args, traceId ? { traceId } : undefined)
         messages.push({
           role: 'tool',
           content: result,
@@ -549,7 +556,8 @@ export async function chatWithToolLoopStream(
       console.warn('[ai] 流式工具调用失败:', (e as Error).message)
       if (streamedAny) return null // 已经流式输出了一些文本，不回退
       // 回退到非流式
-      return chatWithToolLoop(messages, tools, maxToolRounds - round)
+      markRoute(traceId, 'llm', 'stream_fallback')
+      return chatWithToolLoop(messages, tools, maxToolRounds - round, traceId)
     } finally {
       clearTimeout(t)
     }
@@ -557,6 +565,7 @@ export async function chatWithToolLoopStream(
 
   // 超过最大轮次，用普通 llmChat 兜底
   console.warn('[ai] 流式工具调用轮次超限，回退普通对话')
+  markRoute(traceId, 'llm', 'round_limit')
   const fallbackMessages: ChatMsg[] = messages
     .filter((m) => m.role === 'system' || m.role === 'user' || (m.role === 'assistant' && m.content))
     .map((m) => ({ role: m.role as 'system' | 'user' | 'assistant', content: (m.content ?? '') as string }))
@@ -822,8 +831,9 @@ export async function askWithContext(
   trail: MergedTrail | null,
   habits?: UserHabits | null,
   screenContext?: string
-): Promise<{ content: string | null; references: ProfileReference[] }> {
+): Promise<{ content: string | null; references: ProfileReference[]; traceId: string }> {
   insertInto<QAMessage>('qa', { id: genId('qa'), role: 'user', content: question, ts: Date.now() })
+  const traceId = startTrace('qa', question)
   // v2.7：画像引用经脱敏网关取数；LLM 成功/规则回退都带 references（system prompt 已注入画像）
   let references: ProfileReference[] = []
   try {
@@ -843,11 +853,14 @@ export async function askWithContext(
       : []),
     ...recentQA.map((q) => ({ role: q.role as 'user' | 'assistant', content: q.content.slice(0, 80) })),
     { role: 'user', content: question }
-  ], WORKON_TOOLS)
+  ], WORKON_TOOLS, 3, traceId)
   const answer = llm ?? localAnswer(question, facts, trail)
+  if (!llm) markRoute(traceId, 'local', 'llm_unavailable')
   trackUsage(getSettings().aiModel, Math.ceil((question.length + answer.length) / 4), true)
   insertInto<QAMessage>('qa', { id: genId('qa'), role: 'assistant', content: answer, ts: Date.now() })
-  return { content: answer, references }
+  setOutput(traceId, answer, { fallback: !llm })
+  endTrace(traceId)
+  return { content: answer, references, traceId }
 }
 
 /**
@@ -862,8 +875,9 @@ export async function askWithContextStream(
   onToolCall?: (toolName: string) => void,
   habits?: UserHabits | null,
   screenContext?: string
-): Promise<{ content: string; references: ProfileReference[] }> {
+): Promise<{ content: string; references: ProfileReference[]; traceId: string }> {
   insertInto<QAMessage>('qa', { id: genId('qa'), role: 'user', content: question, ts: Date.now() })
+  const traceId = startTrace('qa', question)
   let references: ProfileReference[] = []
   try {
     const { data } = requestPersonaData({ requester: 'ai_qa', layers: ['L0', 'L1', 'L2'], fields: [], intent: 'qa' })
@@ -886,12 +900,17 @@ export async function askWithContextStream(
     WORKON_TOOLS,
     onChunk,
     onToolCall,
-    3
+    3,
+    undefined,
+    traceId
   )
   const answer = llm ?? localAnswer(question, facts, trail)
+  if (!llm) markRoute(traceId, 'local', 'llm_unavailable')
   trackUsage(getSettings().aiModel, Math.ceil((question.length + answer.length) / 4), true)
   insertInto<QAMessage>('qa', { id: genId('qa'), role: 'assistant', content: answer, ts: Date.now() })
-  return { content: answer, references }
+  setOutput(traceId, answer, { fallback: !llm })
+  endTrace(traceId)
+  return { content: answer, references, traceId }
 }
 
 export function generateTodos(analysis: UserAnalysis): string[] {

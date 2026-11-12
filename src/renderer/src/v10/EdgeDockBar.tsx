@@ -17,6 +17,15 @@ export function EdgeDockBar(props: Props): JSX.Element {
   const [group, setGroup] = useState<DockGroup>({ title: '', items: [] })
   const [status, setStatus] = useState<{ running: string[]; aiBusy: string[] }>({ running: [], aiBusy: [] })
   const [collapsed, setCollapsed] = useState(false)
+  // Win11 式滑出：主进程 show/hide 窗口 → visibilitychange → 重放滑入动画（隐藏时置 false 复位）
+  const [revealed, setRevealed] = useState(false)
+
+  useEffect(() => {
+    const onVis = (): void => setRevealed(document.visibilityState === 'visible')
+    document.addEventListener('visibilitychange', onVis)
+    setRevealed(document.visibilityState === 'visible')
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [])
 
   useEffect(() => {
     const pull = (): void => {
@@ -39,14 +48,14 @@ export function EdgeDockBar(props: Props): JSX.Element {
 
   if (collapsed) {
     return (
-      <div className={`edock edock-collapsed edock-${edge}`} onClick={() => setCollapsed(false)} title="展开 Dock">
+      <div className={`edock edock-collapsed edock-${edge} ${revealed ? 'edock-reveal' : ''}`} onClick={() => setCollapsed(false)} title="展开 Dock">
         <span className="edock-edge-label">{edge === 'top' ? '▾' : edge === 'left' ? '▸' : '◂'}</span>
       </div>
     )
   }
 
   return (
-    <div className={`edock edock-${edge} ${isTop ? 'edock-h' : 'edock-v'}`}>
+    <div className={`edock edock-${edge} ${isTop ? 'edock-h' : 'edock-v'} ${revealed ? 'edock-reveal' : ''}`}>
       {/* 组标题：点击批量启动（工作分解），右键收起 */}
       <button
         className="edock-group-title"

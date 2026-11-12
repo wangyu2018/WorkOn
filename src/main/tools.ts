@@ -10,6 +10,9 @@
 
 // ───────────────────────── 类型 ─────────────────────────
 
+import { clipText, summarizeArgs } from '@shared/trace'
+import { recordToolCall } from './trace'
+
 /** OpenAI Function Calling 工具定义 */
 export interface ToolDef {
   type: 'function'
@@ -207,12 +210,12 @@ export const PET_TOOLS: ToolDef[] = [
 // ───────────────────────── 工具调度器 ─────────────────────────
 
 /**
- * 执行工具调用
+ * 工具执行器（内部实现）
  * @param name 工具函数名
  * @param args 参数对象（已从 JSON 字符串解析）
  * @returns JSON 字符串结果
  */
-export async function executeTool(name: string, args: Record<string, unknown>): Promise<string> {
+async function executeToolInner(name: string, args: Record<string, unknown>): Promise<string> {
   try {
     switch (name) {
 
@@ -463,4 +466,39 @@ export async function executeTool(name: string, args: Record<string, unknown>): 
     console.warn(`[tools] 工具 ${name} 执行失败:`, (e as Error).message)
     return JSON.stringify({ error: `工具执行失败：${(e as Error).message}` })
   }
+}
+
+/**
+ * 执行工具（带 trace 埋点）
+ *
+ * 这里是能力插件与 L2 隧道之间唯一的耦合面：
+ * 传入 traceCtx 时记录 name / 参数摘要 / 耗时 / 成败，隧道只读这份记录。
+ * 未传 traceCtx 时行为与埋点前完全一致。
+ */
+export async function executeTool(
+  name: string,
+  args: Record<string, unknown>,
+  traceCtx?: { traceId: string }
+): Promise<string> {
+  if (!traceCtx) return executeToolInner(name, args)
+  const started = Date.now()
+  const result = await executeToolInner(name, args)
+  const failed = result.startsWith('{"error"')
+  let error: string | undefined
+  if (failed) {
+    try {
+      error = (JSON.parse(result) as { error?: string }).error
+    } catch {
+      error = result
+    }
+  }
+  recordToolCall(traceCtx.traceId, {
+    name,
+    args: summarizeArgs(name, args),
+    ok: !failed,
+    ms: Date.now() - started,
+    resultPreview: clipText(result),
+    error
+  })
+  return result
 }

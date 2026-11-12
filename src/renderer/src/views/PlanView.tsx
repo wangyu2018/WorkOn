@@ -3,6 +3,7 @@ import type { CustomCategory, PlanForecast, PlanItem, PlanStatus, PlanType, Plan
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState } from '../components/EmptyState'
+import { ModalShell } from '../components/ui/Modal'
 import { ProgressRing } from '../components/ProgressRing'
 import { InsightCard } from '../components/ui/InsightCard'
 import { AiThinking } from '../components/ui/AiThinking'
@@ -164,16 +165,13 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
   }
 
   return (
-    <div className="anim-fade-in fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+    <ModalShell open onClose={onClose} bare>
       <div
         className="glass-card anim-scale-in w-[400px]"
-        style={{ borderRadius: 'var(--r-xl)', boxShadow: 'var(--shadow-lg)' }}
-        onClick={(e) => e.stopPropagation()}
+        style={{ background: 'var(--bg-deep)', borderRadius: 'var(--r-lg)', boxShadow: 'var(--shadow-lg)' }}
       >
-        <h3 className="mb-4 flex items-center gap-2.5 text-[15px] font-semibold text-[var(--text-1)]">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--teal-soft)] text-[var(--teal-deep)]">
-            <Icon name={isNew ? 'plus' : 'edit'} size={14} />
-          </span>
+        <h3 className="mb-4 flex items-center gap-2.5 text-lg font-semibold text-[var(--text-1)]">
+          <Icon name={isNew ? 'plus' : 'edit'} size={16} className="text-slate-500" />
           {isNew ? '新建计划' : '编辑计划'}
         </h3>
         <div className="flex flex-col gap-3.5">
@@ -195,7 +193,7 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
                   <Icon name="brain" size={13} /> 解析
                 </button>
               </div>
-              {smartHint ? <div className="mt-1.5 text-[11px] text-neon-cyan">{smartHint}</div> : null}
+              {smartHint ? <div className="mt-1.5 text-xs text-neon-cyan">{smartHint}</div> : null}
             </div>
           ) : null}
           <input
@@ -222,33 +220,33 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
                 onClick={() => setPlanType(t.v)}
                 className={`glass-btn !px-2 !py-2 flex flex-col items-center gap-0.5 ${planType === t.v ? '!border-neon-cyan/60 !text-neon-cyan' : ''}`}
               >
-                <span className="text-[13px] font-medium">{t.label}</span>
-                <span className="text-[10px] text-[var(--text-3)]">{t.desc}</span>
+                <span className="text-sm font-medium">{t.label}</span>
+                <span className="text-2xs text-[var(--text-3)]">{t.desc}</span>
               </button>
             ))}
           </div>
-          <label className="text-[11px] font-medium text-[var(--text-3)]">
+          <label className="text-xs font-medium text-[var(--text-3)]">
             日期
             <input type="date" className="glass-input mt-1" value={planDate} onChange={(e) => setPlanDate(e.target.value)} />
           </label>
           {planType === 'reminder' ? (
-            <label className="text-[11px] font-medium text-[var(--text-3)]">
+            <label className="text-xs font-medium text-[var(--text-3)]">
               触发时间
               <input type="time" className="glass-input mt-1" value={start} onChange={(e) => setStart(e.target.value)} />
             </label>
           ) : planType === 'phase' ? (
             <>
               <div className="grid grid-cols-2 gap-2">
-                <label className="text-[11px] font-medium text-[var(--text-3)]">
+                <label className="text-xs font-medium text-[var(--text-3)]">
                   开始（可选）
                   <input type="time" className="glass-input mt-1" value={start} onChange={(e) => setStart(e.target.value)} />
                 </label>
-                <label className="text-[11px] font-medium text-[var(--text-3)]">
+                <label className="text-xs font-medium text-[var(--text-3)]">
                   结束（可选）
                   <input type="time" className="glass-input mt-1" value={end} onChange={(e) => setEnd(e.target.value)} />
                 </label>
               </div>
-              <label className="text-[11px] font-medium text-[var(--text-3)]">
+              <label className="text-xs font-medium text-[var(--text-3)]">
                 或时长（分钟）
                 <input
                   type="number"
@@ -269,7 +267,7 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
             onChange={(e) => setNote(e.target.value)}
           />
           <div className="flex flex-col gap-1.5">
-            <span className="text-[11px] text-[var(--text-3)]">分类（工作 / 生活 / 兴趣…）</span>
+            <span className="text-xs text-[var(--text-3)]">分类（工作 / 生活 / 兴趣…）</span>
             <div className="flex flex-wrap gap-1">
               {[
                 { id: 'work-customer', label: '工作' },
@@ -288,7 +286,7 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
                 </button>
               ))}
             </div>
-            <select className="glass-input !py-1.5 text-[12px]" value={category} onChange={(e) => setCategory(e.target.value)}>
+            <select className="glass-input !py-1.5 text-xs" value={category} onChange={(e) => setCategory(e.target.value)}>
               {(catOptions.length ? catOptions : [
                 { id: 'work-customer', label: '工作', emoji: '💼' },
                 { id: 'personal', label: '生活', emoji: '🏠' },
@@ -300,15 +298,15 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
             </select>
           </div>
           <div className="flex items-center gap-2">
-            <label className="shrink-0 text-[11px] text-[var(--text-3)]">归属项目</label>
-            <select className="glass-input !py-1 text-[12px]" value={projId} onChange={(e) => { setProjId(e.target.value); setTaskId('') }}>
+            <label className="shrink-0 text-xs text-[var(--text-3)]">归属项目</label>
+            <select className="glass-input !py-1 text-xs" value={projId} onChange={(e) => { setProjId(e.target.value); setTaskId('') }}>
               <option value="">不归属（纯计划）</option>
               {projOptions.map((p) => (
                 <option key={p.id} value={p.id}>{PRIO_META[(p.priority as 'high' | 'medium' | 'low') ?? 'medium']?.mark ?? '●'} {p.name}</option>
               ))}
             </select>
             {projId && taskOptions.length ? (
-              <select className="glass-input !py-1 text-[12px]" value={taskId} onChange={(e) => setTaskId(e.target.value)}>
+              <select className="glass-input !py-1 text-xs" value={taskId} onChange={(e) => setTaskId(e.target.value)}>
                 <option value="">不挂具体任务</option>
                 {taskOptions.map((tk) => (
                   <option key={tk.id} value={tk.id}>{tk.title}</option>
@@ -316,7 +314,7 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
               </select>
             ) : null}
           </div>
-          <div className="mt-1 flex items-center justify-end gap-2 border-t border-[var(--line)] pt-3">
+          <div className="mt-1 flex items-center justify-end gap-2 pt-4">
             <button className="glass-btn" onClick={onClose}>
               取消
             </button>
@@ -326,7 +324,7 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
           </div>
         </div>
       </div>
-    </div>
+    </ModalShell>
   )
 }
 
@@ -813,7 +811,7 @@ export default function PlanView() {
               </button>
             </>
           ) : (
-            <button className="glass-btn !text-[12px]" onClick={() => setTab('plan')}>
+            <button className="glass-btn !text-xs" onClick={() => setTab('plan')}>
               回今日安排
             </button>
           )
@@ -821,79 +819,73 @@ export default function PlanView() {
       />
 
       {importMsg ? (
-        <div className="rounded-lg border border-neon-cyan/25 bg-neon-cyan/10 px-3 py-2 text-[11px] text-neon-cyan">{importMsg}</div>
+        <div className="rounded-lg border border-neon-cyan/25 bg-neon-cyan/10 px-3 py-2 text-xs text-neon-cyan">{importMsg}</div>
       ) : null}
 
       <>
 
       {scanProgress > 0 && (
         <div className="anim-fade-in">
-          <div className="flex items-center justify-between text-[11px] text-[var(--text-2)] mb-1">
+          <div className="flex items-center justify-between text-xs text-[var(--text-2)] mb-1">
             <span>扫描中...</span><span>{scanProgress}%</span>
           </div>
           <div className="h-1 rounded-full bg-[var(--surface-3)]"><div className="h-1 rounded-full bg-neon-cyan transition-all" style={{ width: `${scanProgress}%` }} /></div>
-          <p className="text-[10px] text-[var(--text-3)] mt-1 truncate">{scanFile}</p>
+          <p className="text-2xs text-[var(--text-3)] mt-1 truncate">{scanFile}</p>
         </div>
       )}
 
       {/* 日期 + 筛选控制条 */}
-      <div
-        className="anim-fade-up flex flex-col gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] p-3"
-        style={{ animationDelay: '60ms' }}
-      >
+      <div className="anim-fade-up flex flex-col gap-3" style={{ animationDelay: '60ms' }}>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center rounded-lg border border-[var(--line)] bg-black/20 p-0.5">
-            <button className="glass-btn !border-transparent !bg-transparent !px-2 !py-1" onClick={() => setDate((d) => addDays(d, -1))}>
+          <div className="ui-tabs">
+            <button className="ui-tab px-1.5" onClick={() => setDate((d) => addDays(d, -1))} aria-label="前一天">
               <Icon name="chevronLeft" size={14} />
             </button>
-            <button className="glass-btn !border-transparent !bg-transparent !px-2.5 !py-1 !text-[12px]" onClick={() => setDate(todayKey())}>
+            <button className="ui-tab" onClick={() => setDate(todayKey())}>
               今天
             </button>
-            <button className="glass-btn !border-transparent !bg-transparent !px-2 !py-1" onClick={() => setDate((d) => addDays(d, 1))}>
+            <button className="ui-tab px-1.5" onClick={() => setDate((d) => addDays(d, 1))} aria-label="后一天">
               <Icon name="chevronRight" size={14} />
             </button>
           </div>
           <div className="flex min-w-0 items-center gap-2">
-            <Icon name="calendar" size={14} className="shrink-0 text-[var(--teal-deep)]" />
-            <span className="truncate text-[14px] font-semibold tracking-wide text-[var(--text-1)]">{fmtDateLabel(date)}</span>
+            <Icon name="calendar" size={14} className="shrink-0 text-slate-500" />
+            <span className="truncate text-base font-semibold tracking-wide text-slate-100">{fmtDateLabel(date)}</span>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 border-t border-[var(--line)] pt-2.5">
-          <span className="mr-1 text-[10px] font-medium uppercase tracking-wider text-[var(--text-3)]">状态</span>
-          {(['all', 'planned', 'in_progress', 'done', 'delayed', 'cancelled'] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              className={`rounded-md px-2 py-1 text-[11px] transition-colors ${
-                statusFilter === s
-                  ? 'bg-white/[0.1] font-medium text-neon-cyan'
-                  : 'text-[var(--text-3)] hover:bg-[var(--surface-3)] hover:text-[var(--text-2)]'
-              }`}
-              onClick={() => setStatusFilter(s)}
-            >
-              {s === 'all' ? '未完成' : STATUS_LABEL[s]}
-            </button>
-          ))}
-          <span className="mx-1.5 h-3 w-px bg-[var(--surface-3)]" />
-          <span className="mr-1 text-[10px] font-medium uppercase tracking-wider text-[var(--text-3)]">范围</span>
-          {([
-            ['all', '全部'],
-            ['project', t('project')],
-            ['daily', '日常']
-          ] as const).map(([k, label]) => (
-            <button
-              key={k}
-              type="button"
-              className={`rounded-md px-2 py-1 text-[11px] transition-colors ${
-                scopeFilter === k
-                  ? 'bg-white/[0.1] font-medium text-neon-cyan'
-                  : 'text-[var(--text-3)] hover:bg-[var(--surface-3)] hover:text-[var(--text-2)]'
-              }`}
-              onClick={() => setScopeFilter(k)}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2 border-t pt-2.5" style={{ borderColor: 'var(--line)' }}>
+          <div className="ui-tabs" role="tablist" aria-label="状态筛选">
+            {(['all', 'planned', 'in_progress', 'done', 'delayed', 'cancelled'] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                role="tab"
+                aria-selected={statusFilter === s}
+                className="ui-tab"
+                onClick={() => setStatusFilter(s)}
+              >
+                {s === 'all' ? '未完成' : STATUS_LABEL[s]}
+              </button>
+            ))}
+          </div>
+          <div className="ui-tabs" role="tablist" aria-label="范围筛选">
+            {([
+              ['all', '全部'],
+              ['project', t('project')],
+              ['daily', '日常']
+            ] as const).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                role="tab"
+                aria-selected={scopeFilter === k}
+                className="ui-tab"
+                onClick={() => setScopeFilter(k)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -917,7 +909,7 @@ export default function PlanView() {
           big={
             <>
               {doneCount}
-              <span className="text-[15px] font-bold text-[var(--text-3)]">/{activePlans.length}</span>
+              <span className="text-lg font-bold text-[var(--text-3)]">/{activePlans.length}</span>
             </>
           }
           base={<>覆盖 {pva ? pva.matchedCount : 0} · 延期 {delayedCount}</>}
@@ -944,17 +936,17 @@ export default function PlanView() {
 
       {/* 快速添加：回车即入库 */}
       <div className="anim-fade-up flex items-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2" style={{ animationDelay: '120ms' }}>
-        <span className="text-[13px]" style={{ color: 'var(--teal)' }}>＋</span>
+        <span className="text-sm" style={{ color: 'var(--teal)' }}>＋</span>
         <input
           ref={quickRef}
-          className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--text-1)] outline-none placeholder:text-[var(--text-3)]"
+          className="min-w-0 flex-1 bg-transparent text-sm text-[var(--text-1)] outline-none placeholder:text-[var(--text-3)]"
           placeholder="今天要做什么？回车添加 · 支持「明天下午3点开会」"
           value={quickText}
           onChange={(e) => setQuickText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && void quickAdd()}
         />
         <select
-          className="glass-input !w-28 !py-1 !text-[11px]"
+          className="glass-input !w-28 !py-1 !text-xs"
           value={quickProj}
           onChange={(e) => setQuickProj(e.target.value)}
           title="归属项目（可选）"
@@ -964,7 +956,7 @@ export default function PlanView() {
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>
-        <button className="glass-btn ai !px-3 !py-1 text-[11px]" disabled={!quickText.trim()} onClick={() => void quickAdd()}>
+        <button className="glass-btn ai !px-3 !py-1 text-xs" disabled={!quickText.trim()} onClick={() => void quickAdd()}>
           添加
         </button>
       </div>
@@ -1000,35 +992,35 @@ export default function PlanView() {
                       className="flex min-w-0 flex-1 items-center gap-2 text-left"
                       onClick={() => setCatCollapsed((m) => ({ ...m, [group.key]: !collapsed }))}
                     >
-                      <span className="text-[11px] text-[var(--text-3)]">{collapsed ? '▸' : '▾'}</span>
+                      <span className="text-xs text-[var(--text-3)]">{collapsed ? '▸' : '▾'}</span>
                       {isProjectGroup ? (
                         <span
                           className="inline-flex h-2 w-2 shrink-0 rounded-full"
                           style={{ background: group.meta.color }}
                         />
                       ) : (
-                        <span className="text-[14px] leading-none">{group.meta.emoji}</span>
+                        <span className="text-base leading-none">{group.meta.emoji}</span>
                       )}
                       {isProjectGroup ? (
-                        <span className="shrink-0 text-[10px] font-medium uppercase tracking-wider text-[var(--text-3)]">{t('project')}</span>
+                        <span className="shrink-0 text-2xs font-medium uppercase tracking-wider text-[var(--text-3)]">{t('project')}</span>
                       ) : null}
-                      <span className="min-w-0 truncate text-[13px] font-semibold tracking-wide" style={{ color: group.meta.color }}>
+                      <span className="min-w-0 truncate text-sm font-semibold tracking-wide" style={{ color: group.meta.color }}>
                         {group.meta.label}
                       </span>
                       {isProjectGroup && group.meta.prio ? (
                         <span
-                          className="shrink-0 text-[9px] font-bold"
+                          className="shrink-0 text-2xs font-bold"
                           style={{ color: PRIO_META[(group.meta.prio as 'high' | 'medium' | 'low')]?.color ?? '#fbbf24' }}
                           title={`项目优先级：${PRIO_META[(group.meta.prio as 'high' | 'medium' | 'low')]?.label ?? '中'}`}
                         >
                           {PRIO_META[(group.meta.prio as 'high' | 'medium' | 'low')]?.mark ?? '●'}
                         </span>
                       ) : null}
-                      <span className="rounded-md bg-[var(--surface-3)] px-1.5 py-0.5 text-[10px] tabular-nums text-[var(--text-2)]">
+                      <span className="rounded-md bg-[var(--surface-3)] px-1.5 py-0.5 text-2xs tabular-nums text-[var(--text-2)]">
                         {group.items.length}
                       </span>
                       {isProjectGroup && collapsed ? (
-                        <span className="text-[10px] text-[var(--text-3)]">点击展开</span>
+                        <span className="text-2xs text-[var(--text-3)]">点击展开</span>
                       ) : null}
                     </button>
                     {!isProjectGroup && group.meta ? (
@@ -1036,7 +1028,7 @@ export default function PlanView() {
                         {bindGroupOpen === group.key ? (
                           <>
                             <select
-                              className="glass-input !w-32 !py-0.5 !text-[11px]"
+                              className="glass-input !w-32 !py-0.5 !text-xs"
                               defaultValue=""
                               autoFocus
                               onChange={(e) => {
@@ -1049,11 +1041,11 @@ export default function PlanView() {
                                 <option key={pj.id} value={pj.id}>{pj.name}</option>
                               ))}
                             </select>
-                            <button className="glass-btn !px-2 !py-0.5 !text-[10px]" onClick={() => setBindGroupOpen(null)}>取消</button>
+                            <button className="glass-btn !px-2 !py-0.5 !text-2xs" onClick={() => setBindGroupOpen(null)}>取消</button>
                           </>
                         ) : (
                           <button
-                            className="glass-btn !px-2 !py-0.5 !text-[10px]"
+                            className="glass-btn !px-2 !py-0.5 !text-2xs"
                             title={`把「${group.meta.label}」整组待办绑定到一个项目`}
                             onClick={() => setBindGroupOpen(group.key)}
                           >
@@ -1067,7 +1059,7 @@ export default function PlanView() {
                         {newCatOpen ? (
                           <>
                             <input
-                              className="glass-input !w-28 !py-0.5 !text-[11px]"
+                              className="glass-input !w-28 !py-0.5 !text-xs"
                               placeholder="新分类名"
                               value={newCatLabel}
                               autoFocus
@@ -1077,11 +1069,11 @@ export default function PlanView() {
                                 if (e.key === 'Escape') setNewCatOpen(false)
                               }}
                             />
-                            <button className="glass-btn primary !px-2 !py-0.5 !text-[10px]" onClick={() => void createCategory()}>创建</button>
-                            <button className="glass-btn !px-2 !py-0.5 !text-[10px]" onClick={() => setNewCatOpen(false)}>取消</button>
+                            <button className="glass-btn primary !px-2 !py-0.5 !text-2xs" onClick={() => void createCategory()}>创建</button>
+                            <button className="glass-btn !px-2 !py-0.5 !text-2xs" onClick={() => setNewCatOpen(false)}>取消</button>
                           </>
                         ) : (
-                          <button className="glass-btn !px-2 !py-0.5 !text-[10px]" onClick={() => setNewCatOpen(true)}>+ 分类</button>
+                          <button className="glass-btn !px-2 !py-0.5 !text-2xs" onClick={() => setNewCatOpen(true)}>+ 分类</button>
                         )}
                       </div>
                     ) : null}
@@ -1112,8 +1104,8 @@ export default function PlanView() {
                   >
                     <Icon name="check" size={10} />
                   </button>
-                  <div className={`min-w-0 flex-1 truncate text-[12px] ${done ? 'text-[var(--text-2)]' : 'text-[var(--text-3)] line-through'}`}>{p.title}</div>
-                  <span className="shrink-0 text-[10px] text-[var(--text-3)]">{done ? '已完成' : '已取消'}</span>
+                  <div className={`min-w-0 flex-1 truncate text-xs ${done ? 'text-[var(--text-2)]' : 'text-[var(--text-3)] line-through'}`}>{p.title}</div>
+                  <span className="shrink-0 text-2xs text-[var(--text-3)]">{done ? '已完成' : '已取消'}</span>
                   <button className="glass-btn !px-1.5 !py-0.5" title="编辑" onClick={() => setEditor({ plan: p, isNew: false })}>
                     <Icon name="edit" size={12} />
                   </button>
@@ -1175,7 +1167,7 @@ export default function PlanView() {
                     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                       {proj ? (
                         <span
-                          className="inline-flex max-w-[6.5rem] shrink-0 items-center truncate rounded px-1.5 py-px text-[10px] font-semibold"
+                          className="inline-flex max-w-[6.5rem] shrink-0 items-center truncate rounded px-1.5 py-px text-2xs font-semibold"
                           style={{
                             color: proj.color ?? '#22D3EE',
                             background: `${proj.color ?? '#22D3EE'}18`
@@ -1185,9 +1177,9 @@ export default function PlanView() {
                           {proj.name}
                         </span>
                       ) : null}
-                      <span className="min-w-0 truncate text-[13px] font-medium text-[var(--text-1)]">{p.title}</span>
+                      <span className="min-w-0 truncate text-sm font-medium text-[var(--text-1)]">{p.title}</span>
                       <span
-                        className="inline-flex shrink-0 items-center rounded px-1.5 py-px text-[10px] font-medium"
+                        className="inline-flex shrink-0 items-center rounded px-1.5 py-px text-2xs font-medium"
                         style={{
                           color: STATUS_COLOR[p.status],
                           background: `${STATUS_COLOR[p.status]}18`
@@ -1196,12 +1188,12 @@ export default function PlanView() {
                         {STATUS_LABEL[p.status]}
                       </span>
                     </div>
-                    <div className="mt-1 text-[11px] leading-relaxed text-[var(--text-3)]">
+                    <div className="mt-1 text-xs leading-relaxed text-[var(--text-3)]">
                       {metaBits.length ? <span>{metaBits.join(' · ')}</span> : null}
                       {metaBits.length ? <span className="text-slate-700"> · </span> : null}
                       <SourceMark plan={p} />
                     </div>
-                    {p.note ? <div className="mt-1 truncate text-[11px] text-[var(--text-3)]">{p.note}</div> : null}
+                    {p.note ? <div className="mt-1 truncate text-xs text-[var(--text-3)]">{p.note}</div> : null}
                     {ratio > 0 ? (
                       <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--surface-3)]">
                         <div
@@ -1214,7 +1206,7 @@ export default function PlanView() {
                   <div className="flex shrink-0 items-center gap-1">
                     {!done && !cancelled ? (
                       <button
-                        className="glass-btn ai !px-2 !py-1 !text-[11px]"
+                        className="glass-btn ai !px-2 !py-1 !text-xs"
                         title="AI 整理今日目的"
                         onClick={() => void doBreakdown(p)}
                       >
@@ -1243,21 +1235,21 @@ export default function PlanView() {
                   if (!kids.length) return null
                   return (
                     <div className="mt-2 space-y-1 border-t border-white/[0.04] pt-2 pl-7">
-                      <div className="text-[10px] text-[var(--text-3)]">
+                      <div className="text-2xs text-[var(--text-3)]">
                         子目标 · {kids.filter((k) => k.status === 'done').length}/{kids.length}
                       </div>
                       {kids.map((c) => (
                         <div key={c.id} className="flex items-center gap-2">
                           <button
-                            className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[9px] ${
+                            className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-2xs ${
                               c.status === 'done' ? 'border-neon-green/50 bg-neon-green/15 text-neon-green' : 'border-white/20 text-transparent hover:border-neon-green/50'
                             }`}
                             onClick={() => void toggleDone(c)}
                           >
                             <Icon name="check" size={9} />
                           </button>
-                          <span className={`min-w-0 flex-1 truncate text-[11px] ${c.status === 'done' ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{c.title}</span>
-                          <button className="text-[10px] text-[var(--text-3)] hover:text-red-400" title="删除子待办" onClick={() => void remove(c)}>
+                          <span className={`min-w-0 flex-1 truncate text-xs ${c.status === 'done' ? 'text-[var(--text-3)] line-through' : 'text-[var(--text-2)]'}`}>{c.title}</span>
+                          <button className="text-2xs text-[var(--text-3)] hover:text-red-400" title="删除子待办" onClick={() => void remove(c)}>
                             ✕
                           </button>
                         </div>
@@ -1268,14 +1260,14 @@ export default function PlanView() {
                 {isExpanded ? (
                   <div className="anim-fade-in mt-2.5 space-y-2.5 border-t border-[var(--line)] pt-2.5 pl-7">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-3)]">
+                      <span className="text-2xs font-medium uppercase tracking-wider text-[var(--text-3)]">
                         {group.key === 'other' || (!p.projectId && resolveCatId(p) === 'other') ? '归档到' : '归到'}
                       </span>
                       {QUICK_BUCKETS.map((b) => (
                         <button
                           key={b.id}
                           type="button"
-                          className={`rounded-md px-2 py-1 text-[11px] transition-colors ${
+                          className={`rounded-md px-2 py-1 text-xs transition-colors ${
                             resolveCatId(p) === b.id
                               ? 'bg-neon-cyan/15 font-medium text-neon-cyan'
                               : 'bg-[var(--surface-3)] text-[var(--text-2)] hover:text-[var(--text-1)]'
@@ -1286,7 +1278,7 @@ export default function PlanView() {
                         </button>
                       ))}
                       <select
-                        className="glass-input !w-28 !py-0.5 !px-1 !text-[10px]"
+                        className="glass-input !w-28 !py-0.5 !px-1 !text-2xs"
                         value={categories.some((c) => c.id === p.category) ? p.category : 'other'}
                         title="选择分类"
                         onChange={(e) => void setPlanCategory(p.id, e.target.value)}
@@ -1298,7 +1290,7 @@ export default function PlanView() {
                       </select>
                       {projects.length > 0 ? (
                         <select
-                          className="glass-input !w-28 !py-0.5 !px-1 !text-[10px]"
+                          className="glass-input !w-28 !py-0.5 !px-1 !text-2xs"
                           value={p.projectId ?? ''}
                           title="归属项目"
                           onChange={(e) => void setPlanProject(p.id, e.target.value || null)}
@@ -1318,20 +1310,20 @@ export default function PlanView() {
                       ) : (
                         <div className="mb-2.5 rounded-xl border border-[rgba(139,92,246,0.28)] p-2.5" style={{ background: 'var(--aura-soft)' }}>
                           <div className="mb-1 flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--violet)]">
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-[var(--violet)]">
                               <span
-                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] text-[9px] leading-none text-white"
+                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] text-2xs leading-none text-white"
                                 style={{ background: 'var(--aura)', boxShadow: 'var(--glow-i)' }}
                               >
                                 ✦
                               </span>
                               AI 粗目标
                               {breakdowns[p.id].applied ? (
-                                <span className="ml-1.5 text-[10px] font-normal text-[var(--teal-deep)]">已同步</span>
+                                <span className="ml-1.5 text-2xs font-normal text-[var(--teal-deep)]">已同步</span>
                               ) : null}
                             </div>
                             <button
-                              className="glass-btn !px-2 !py-0.5 !text-[10px]"
+                              className="glass-btn !px-2 !py-0.5 !text-2xs"
                               disabled={!parseBreakdownSteps(breakdowns[p.id].text).length}
                               onClick={() => void applyBreakdown(p)}
                               title="按当前结果再同步一次"
@@ -1339,14 +1331,14 @@ export default function PlanView() {
                               {breakdowns[p.id].applied ? '重新同步' : `同步（${parseBreakdownSteps(breakdowns[p.id].text).length}）`}
                             </button>
                           </div>
-                          <div className="whitespace-pre-wrap text-[11.5px] leading-relaxed text-[var(--text-2)]">{breakdowns[p.id].text}</div>
+                          <div className="whitespace-pre-wrap text-xs leading-relaxed text-[var(--text-2)]">{breakdowns[p.id].text}</div>
                           {parseBreakdownSteps(breakdowns[p.id].text).length ? (
                             <div className="mt-2 space-y-0.5 border-t border-[var(--line)] pt-2">
-                              <div className="mb-0.5 text-[10px] text-[var(--text-3)]">
+                              <div className="mb-0.5 text-2xs text-[var(--text-3)]">
                                 {breakdowns[p.id].applied ? '已同步' : '将同步'}
                               </div>
                               {parseBreakdownSteps(breakdowns[p.id].text).map((s, i) => (
-                                <div key={i} className="text-[11px] text-[var(--text-2)]">· {s}</div>
+                                <div key={i} className="text-xs text-[var(--text-2)]">· {s}</div>
                               ))}
                             </div>
                           ) : null}
@@ -1355,7 +1347,7 @@ export default function PlanView() {
                     ) : null}
                     {fc && (p.planType ?? 'phase') === 'phase' ? (
                       <>
-                        <div className="mb-2 flex items-center gap-3 text-[11px]">
+                        <div className="mb-2 flex items-center gap-3 text-xs">
                           <div className="flex-1">
                             <div className="mb-1 flex justify-between text-[var(--text-3)]">
                               <span>完成概率</span>
@@ -1381,7 +1373,7 @@ export default function PlanView() {
                             </div>
                           </div>
                         </div>
-                        <div className="flex flex-col gap-1 text-[11px]">
+                        <div className="flex flex-col gap-1 text-xs">
                           {fc.factors.map((f, i) => (
                             <div key={i} className="flex items-center gap-2 rounded-lg bg-[var(--surface-2)] px-2 py-1">
                               <span>{f.impact === 'positive' ? '➕' : f.impact === 'negative' ? '➖' : '➗'}</span>
@@ -1390,8 +1382,11 @@ export default function PlanView() {
                             </div>
                           ))}
                         </div>
-                        <div className="mt-2 flex items-center justify-between text-[11px]">
-                          <span className="text-neon-cyan">💡 {fc.recommendation}</span>
+                        <div className="mt-2 flex items-center justify-between text-xs">
+                          <span className="flex items-center gap-1 text-slate-400">
+                            <Icon name="sparkles" size={12} className="shrink-0 text-slate-500" />
+                            {fc.recommendation}
+                          </span>
                           {fc.estimatedEndMin !== undefined ? (
                             <span className="text-[var(--text-3)]">预计 {clockOf(Math.min(1439, fc.estimatedEndMin))} 完成</span>
                           ) : null}
@@ -1401,7 +1396,7 @@ export default function PlanView() {
                     {/* 完成比例拖动（半完成管理，仅 phase） */}
                     {(p.planType ?? 'phase') === 'phase' ? (
                       <div className="mt-2 flex items-center gap-2 border-t border-[var(--line)] pt-2.5">
-                        <span className="w-16 shrink-0 text-[11px] text-[var(--text-3)]">完成比例</span>
+                        <span className="w-16 shrink-0 text-xs text-[var(--text-3)]">完成比例</span>
                         <input
                           type="range"
                           min={0}
@@ -1427,7 +1422,7 @@ export default function PlanView() {
                             void window.api.updatePlanProgress(p.id, v / 100).then(() => void load())
                           }}
                         />
-                        <span className="w-10 text-right text-[11px] font-semibold text-neon-cyan">
+                        <span className="w-10 text-right text-xs font-semibold text-neon-cyan">
                           {Math.round((p.completionRatio ?? (done ? 1 : 0)) * 100)}%
                         </span>
                       </div>
@@ -1439,19 +1434,19 @@ export default function PlanView() {
                           <>
                             <input
                               type="date"
-                              className="glass-input !w-36 !py-1 !text-[11px]"
+                              className="glass-input !w-36 !py-1 !text-xs"
                               min={addDays(todayKey(), 1)}
                               value={delayDate}
                               onChange={(e) => setDelayDate(e.target.value)}
                             />
                             <input
-                              className="glass-input flex-1 !py-1 !text-[11px]"
+                              className="glass-input flex-1 !py-1 !text-xs"
                               placeholder="延期原因（可选）"
                               value={delayReason}
                               onChange={(e) => setDelayReason(e.target.value)}
                             />
                             <button
-                              className="glass-btn primary !px-2 !py-1 !text-[11px]"
+                              className="glass-btn primary !px-2 !py-1 !text-xs"
                               disabled={!delayDate}
                               onClick={() => {
                                 void window.api.delayPlan(p.id, delayDate, delayReason.trim() || undefined).then(() => {
@@ -1464,13 +1459,13 @@ export default function PlanView() {
                             >
                               确认延期
                             </button>
-                            <button className="glass-btn !px-2 !py-1 !text-[11px]" onClick={() => setDelayOpen(null)}>
+                            <button className="glass-btn !px-2 !py-1 !text-xs" onClick={() => setDelayOpen(null)}>
                               取消
                             </button>
                           </>
                         ) : (
                           <button
-                            className="glass-btn !px-2 !py-1 !text-[11px]"
+                            className="glass-btn !px-2 !py-1 !text-xs"
                             onClick={() => {
                               setDelayOpen(p.id)
                               setDelayDate(addDays(todayKey(), 1))
@@ -1483,7 +1478,7 @@ export default function PlanView() {
                       </div>
                     ) : null}
                     {p.status === 'delayed' && p.delayToDate ? (
-                      <div className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-neon-amber/20 bg-neon-amber/[0.06] px-2.5 py-1.5 text-[11px] text-neon-amber">
+                      <div className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-neon-amber/20 bg-neon-amber/[0.06] px-2.5 py-1.5 text-xs text-neon-amber">
                         ⏰ 已延期到 {p.delayToDate}
                         {p.delayReason ? `（${p.delayReason}）` : ''}
                       </div>
@@ -1514,24 +1509,24 @@ export default function PlanView() {
         />
       ) : null}
       {folderModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setFolderModal(false)}>
-          <div className="glass-card anim-scale-in w-[400px] max-h-[60vh] overflow-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="text-[15px] font-semibold text-[var(--text-1)] mb-3">📁 工作文件夹</h3>
-            {folderDirs.length === 0 ? (<p className="text-[12px] text-[var(--text-3)] mb-3">未配置工作目录。添加后会议纪要解析将自动生效。</p>) : (
-              folderDirs.map(d => <div key={d} className="flex items-center justify-between text-[12px] bg-[var(--surface-3)] rounded-lg px-3 py-2 mb-1"><span className="text-[var(--text-2)] truncate">{d}</span><button onClick={async () => { const next = folderDirs.filter(x => x !== d); setFolderDirs(next); await window.api?.setSettings?.({ folders: next }); await window.api?.setFolders?.(next) }} className="text-[var(--text-3)] hover:text-red-400">✕</button></div>)
+        <ModalShell open onClose={() => setFolderModal(false)} bare>
+          <div className="glass-card anim-scale-in w-[440px] max-h-[60vh] overflow-auto" style={{ background: 'var(--bg-deep)', borderRadius: 'var(--r-lg)', boxShadow: 'var(--shadow-lg)' }}>
+            <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold text-[var(--text-1)]"><Icon name="folder" size={16} className="text-slate-500" /> 工作文件夹</h3>
+            {folderDirs.length === 0 ? (<p className="mb-3 text-xs text-[var(--text-3)]">未配置工作目录。添加后会议纪要解析将自动生效。</p>) : (
+              folderDirs.map(d => <div key={d} className="mb-1 flex items-center justify-between rounded-lg bg-[var(--surface-2)] px-3 py-2 text-xs"><span className="truncate text-[var(--text-2)]">{d}</span><button aria-label="移除目录" onClick={async () => { const next = folderDirs.filter(x => x !== d); setFolderDirs(next); await window.api?.setSettings?.({ folders: next }); await window.api?.setFolders?.(next) }} className="ui-icon-btn !h-6 !w-6 hover:!text-red-500"><Icon name="x" size={12} /></button></div>)
             )}
-            <div className="flex gap-2 mt-3">
-              <button className="glass-btn primary text-[12px]" onClick={async () => {
+            <div className="mt-3 flex gap-2">
+              <button className="glass-btn primary" onClick={async () => {
                 await window.api?.getSettings?.().then(s => setFolderDirs(((s as any).folders) ?? []))
               }}>刷新</button>
-              <button className="glass-btn primary text-[12px]" onClick={async () => {
+              <button className="glass-btn primary" onClick={async () => {
                 const paths = await window.api?.selectFolders?.() as string[] | undefined
                 if (paths?.length) { const next = [...new Set([...folderDirs, ...paths])]; setFolderDirs(next); await window.api?.setSettings?.({ folders: next }); await window.api?.setFolders?.(next) }
               }}>+ 添加目录</button>
-              <button className="glass-btn text-[12px]" onClick={() => setFolderModal(false)}>关闭</button>
+              <button className="glass-btn ml-auto" onClick={() => setFolderModal(false)}>关闭</button>
             </div>
           </div>
-        </div>
+        </ModalShell>
       )}
       </>
 
@@ -1549,13 +1544,13 @@ export default function PlanView() {
         const group = (label: string, list: PlanItem[]) =>
           list.length ? (
             <div key={label} className="min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
-              <div className="mb-1.5 text-[10px] uppercase tracking-wider text-[var(--text-3)]">{label} · {list.length}</div>
+              <div className="mb-1.5 text-2xs uppercase tracking-wider text-[var(--text-3)]">{label} · {list.length}</div>
               {list.map((p) => (
                 <div key={p.id} className="flex items-center gap-2 py-1">
-                  <span className="min-w-0 flex-1 truncate text-[12px] text-[var(--text-2)]">{p.title}</span>
-                  <button className="glass-btn !px-2 !py-0.5 !text-[10px]" onClick={() => setEditor({ plan: p, isNew: false })}>编辑</button>
+                  <span className="min-w-0 flex-1 truncate text-xs text-[var(--text-2)]">{p.title}</span>
+                  <button className="glass-btn !px-2 !py-0.5 !text-2xs" onClick={() => setEditor({ plan: p, isNew: false })}>编辑</button>
                   <button
-                    className="glass-btn !px-2 !py-0.5 !text-[10px]"
+                    className="glass-btn !px-2 !py-0.5 !text-2xs"
                     title="归档后从计划列表消失，可在此区查看"
                     onClick={() => { void window.api.savePlan({ id: p.id, archived: true }); void load() }}
                   >归档</button>
@@ -1565,7 +1560,7 @@ export default function PlanView() {
           ) : null
         return (
           <div className="anim-fade-up mt-5">
-            <div className="mb-2 text-[10px] uppercase tracking-[0.14em] text-[var(--text-3)]">确认归档 · 已确认内容（可编辑 / 归档）</div>
+            <div className="mb-2 text-2xs uppercase tracking-[0.14em] text-[var(--text-3)]">确认归档 · 已确认内容（可编辑 / 归档）</div>
             <div className="flex flex-wrap items-stretch gap-3">
               {group('每日计划', daily)}
               {group('项目开发', projRel)}

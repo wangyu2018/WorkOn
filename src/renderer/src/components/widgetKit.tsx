@@ -23,7 +23,7 @@ export function StateDot({ color, size = 13, pulsing = true }: { color: string; 
 export function ChainChip({ sec, interruptions }: { sec: number; interruptions?: number }) {
   const m = Math.max(1, Math.round(sec / 60))
   return (
-    <span className="shrink-0 rounded-full bg-[var(--teal-soft)] px-1.5 py-0.5 text-[9px] font-bold tabular-nums text-[var(--teal-deep)]">
+    <span className="shrink-0 rounded-full bg-[var(--teal-soft)] px-1.5 py-0.5 text-2xs font-bold tabular-nums text-[var(--teal-deep)]">
       ⚡ {m}m{interruptions ? ` · 断${interruptions}` : ''}
     </span>
   )
@@ -34,11 +34,11 @@ export function GrainChip({ projectName, taskTitle, sec }: { projectName: string
   return (
     <span className="flex min-w-0 items-center gap-1">
       <span className="shrink-0 text-[var(--violet)]">◈</span>
-      <span className="min-w-0 truncate text-[11px] text-slate-200">
+      <span className="min-w-0 truncate text-xs text-slate-200">
         {projectName}
         {taskTitle ? <span className="text-slate-400"> · {taskTitle}</span> : null}
       </span>
-      {sec && sec > 30 ? <span className="shrink-0 text-[10px] tabular-nums text-slate-500">{Math.max(1, Math.round(sec / 60))}m</span> : null}
+      {sec && sec > 30 ? <span className="shrink-0 text-2xs tabular-nums text-slate-500">{Math.max(1, Math.round(sec / 60))}m</span> : null}
     </span>
   )
 }
@@ -46,7 +46,7 @@ export function GrainChip({ projectName, taskTitle, sec }: { projectName: string
 /** 分区细线（待办组件三分区同款） */
 export function SectionDivider({ label }: { label?: string }) {
   return (
-    <div className="my-1.5 border-t border-[var(--line)] pt-1.5 text-[10px] uppercase tracking-wider text-slate-600">
+    <div className="my-1.5 border-t border-[var(--line)] pt-1.5 text-2xs uppercase tracking-wider text-slate-600">
       {label}
     </div>
   )

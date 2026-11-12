@@ -118,7 +118,7 @@ export default function MainlineView() {
         desc="长命的事各长各的样 · 实时工作由归属引擎自动归因"
         actions={
           <button
-            className="glass-btn primary !px-3 !py-1.5 !text-[11.5px]"
+            className="glass-btn primary !px-3 !py-1.5 !text-xs"
             onClick={() => void (async () => {
               const p = (await window.api.saveProject({ name: '未命名主线' })) as Project
               setReloadTick((n) => n + 1)
@@ -149,13 +149,13 @@ export default function MainlineView() {
               >
                 {/* 行1：名称 + 优先级 + 正在干 + 上线刻度 */}
                 <div className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-100">{r.project.name}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-100">{r.project.name}</span>
                   {(() => {
                     const pm = PRIO_META[r.project.priority ?? 'medium']
                     return (
                       <button
                         type="button"
-                        className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold transition-colors"
+                        className="shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-bold transition-colors"
                         style={{ background: `${pm.color}1f`, color: pm.color }}
                         title="优先级 · 点击切换（高→中→低）；影响主线排序与计划页分组顺序"
                         onClick={() => void (async () => {
@@ -170,7 +170,7 @@ export default function MainlineView() {
                     )
                   })()}
                   {r.project.status !== 'active' ? (
-                    <span className="shrink-0 rounded-full bg-white/5 px-1.5 py-0.5 text-[9px] font-bold text-slate-500">
+                    <span className="shrink-0 rounded-full bg-white/5 px-1.5 py-0.5 text-2xs font-bold text-slate-500">
                       {r.project.status === 'paused' ? '⏸ 暂停' : r.project.status === 'done' ? '✓ 已完成' : '已归档'}
                     </span>
                   ) : null}
@@ -178,14 +178,14 @@ export default function MainlineView() {
                     (() => {
                       const days = Math.ceil((new Date(`${r.project.deadline}T23:59:59`).getTime() - Date.now()) / 86400000)
                       return (
-                        <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${days < 0 ? 'bg-[rgba(239,68,68,0.12)] text-[#f87171]' : days <= 7 ? 'bg-[rgba(245,158,11,0.12)] text-[#fbbf24]' : 'bg-[var(--teal-soft)] text-[var(--teal-deep)]'}`}>
+                        <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-bold ${days < 0 ? 'bg-[rgba(239,68,68,0.12)] text-[#f87171]' : days <= 7 ? 'bg-[rgba(245,158,11,0.12)] text-[#fbbf24]' : 'bg-[var(--teal-soft)] text-[var(--teal-deep)]'}`}>
                           {days < 0 ? `超期${-days}天` : `↦${days}天上线`}
                         </span>
                       )
                     })()
                   ) : null}
                   {active ? (
-                    <span className="shrink-0 text-[10px] font-bold text-[var(--teal-deep)]">● 正在干{attrTask ? `：${attrTask}` : ''}</span>
+                    <span className="shrink-0 text-2xs font-bold text-[var(--teal-deep)]">● 正在干{attrTask ? `：${attrTask}` : ''}</span>
                   ) : null}
                 </div>
                 {/* 偏差推演：剩余任务 vs 剩余天数 */}
@@ -194,7 +194,7 @@ export default function MainlineView() {
                   if (days < 0) return null
                   const tight = days < r.tasksLeft
                   return (
-                    <div className={`mt-1 flex items-center gap-1.5 text-[10.5px] ${tight ? 'text-[#fbbf24]' : 'text-slate-500'}`}>
+                    <div className={`mt-1 flex items-center gap-1.5 text-2xs ${tight ? 'text-[#fbbf24]' : 'text-slate-500'}`}>
                       {tight ? '⚠' : '·'} 剩 {r.tasksLeft} 项任务 / {days} 天{tight ? ' —— 节奏偏紧，考虑砍范围或加时段' : ''}
                     </div>
                   )
@@ -215,15 +215,15 @@ export default function MainlineView() {
                             style={{ background: 'var(--bg-surface)', boxShadow: 'var(--shadow-lg)' }}
                           >
                             <div className="flex items-center gap-1.5">
-                              {nt.kind === 'ms' ? <span className="text-[10px] text-[var(--violet)]">◆</span> : null}
-                              <b className="min-w-0 flex-1 truncate text-[11.5px] text-slate-100">{nt.title}</b>
+                              {nt.kind === 'ms' ? <span className="text-2xs text-[var(--violet)]">◆</span> : null}
+                              <b className="min-w-0 flex-1 truncate text-xs text-slate-100">{nt.title}</b>
                             </div>
-                            <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-500">
+                            <div className="mt-1 flex items-center gap-2 text-2xs text-slate-500">
                               <span className={nt.done ? 'text-[var(--teal-deep)]' : 'text-slate-400'}>
                                 {nt.done ? '✓ 已完成' : nt.kind === 'plan' ? '○ 计划 · 待办' : nt.kind === 'ms' ? '◇ 里程碑 · 待达成' : '○ 任务'}
                               </span>
-                              {nt.kind === 'plan' ? <span className="rounded bg-[rgba(245,158,11,0.12)] px-1 text-[9px] font-bold text-[#fbbf24]">计划</span> : null}
-                              {nt.kind === 'ms' ? <span className="rounded bg-[var(--teal-soft)] px-1 text-[9px] font-bold text-[var(--teal-deep)]">里程碑</span> : null}
+                              {nt.kind === 'plan' ? <span className="rounded bg-[rgba(245,158,11,0.12)] px-1 text-2xs font-bold text-[#fbbf24]">计划</span> : null}
+                              {nt.kind === 'ms' ? <span className="rounded bg-[var(--teal-soft)] px-1 text-2xs font-bold text-[var(--teal-deep)]">里程碑</span> : null}
                             </div>
                           </div>
                           <span
@@ -239,12 +239,12 @@ export default function MainlineView() {
                         </div>
                       ))}
                     </div>
-                    <span className="shrink-0 text-[11px] font-bold tabular-nums text-slate-400">{r.progress ?? 0}%</span>
+                    <span className="shrink-0 text-xs font-bold tabular-nums text-slate-400">{r.progress ?? 0}%</span>
                   </div>
                 ) : null}
                 {/* 行3：期待结果 + 目录活动 + 上次处理 */}
-                <div className="mt-1.5 flex items-center gap-2 text-[10.5px] text-slate-500">
-                  {isInk ? <span className="serif-num mr-1 shrink-0 text-[19px] font-bold leading-none text-[var(--amber)]">{fmtDur(r.todayMin)}</span> : null}
+                <div className="mt-1.5 flex items-center gap-2 text-2xs text-slate-500">
+                  {isInk ? <span className="serif-num mr-1 shrink-0 text-xl font-bold leading-none text-[var(--amber)]">{fmtDur(r.todayMin)}</span> : null}
                   {goal ? <span className="min-w-0 flex-1 truncate" title={r.project.goal}>◇ {goal}</span> : <span className="flex-1" />}
                   <span className="shrink-0">
                     {dirInfo
@@ -258,12 +258,12 @@ export default function MainlineView() {
                 </div>
                 {/* 里程碑 chips + 编辑入口 */}
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[10px] uppercase tracking-wider text-slate-600">◆ 里程碑</span>
+                  <span className="text-2xs uppercase tracking-wider text-slate-600">◆ 里程碑</span>
                   {r.nodes.filter((x) => x.kind === 'ms').map((x) => (
-                    <span key={x.id} className={`rounded px-1.5 py-0.5 text-[9.5px] font-bold ${x.done ? 'bg-[var(--teal-soft)] text-[var(--teal-deep)]' : 'bg-[rgba(139,92,246,0.12)] text-[var(--violet)]'}`}>{x.title}</span>
+                    <span key={x.id} className={`rounded px-1.5 py-0.5 text-2xs font-bold ${x.done ? 'bg-[var(--teal-soft)] text-[var(--teal-deep)]' : 'bg-[rgba(139,92,246,0.12)] text-[var(--violet)]'}`}>{x.title}</span>
                   ))}
                   <button
-                    className="ml-auto rounded-full border border-dashed px-2 py-0.5 text-[10px] text-slate-500 hover:text-slate-200"
+                    className="ml-auto rounded-full border border-dashed px-2 py-0.5 text-2xs text-slate-500 hover:text-slate-200"
                     onClick={() => setMsEdit({ pid: r.project.id, items: r.nodes.filter((x) => x.kind === 'ms').map((x) => x.title), msIds: r.nodes.filter((x) => x.kind === 'ms').map((x) => x.id) })}
                   >
                     编辑 / ✦ AI
@@ -272,11 +272,11 @@ export default function MainlineView() {
                 {/* 查看/管理 */}
                 <div className="mt-1.5 flex gap-1.5">
                   <button
-                    className="glass-btn !px-2 !py-0.5 !text-[10px]"
+                    className="glass-btn !px-2 !py-0.5 !text-2xs"
                     onClick={() => setModalProj({ project: r.project, tab: 'view' })}
                   >👁 查看 · 对接</button>
                   <button
-                    className="glass-btn !px-2 !py-0.5 !text-[10px]"
+                    className="glass-btn !px-2 !py-0.5 !text-2xs"
                     onClick={() => setModalProj({ project: r.project, tab: 'manage' })}
                   >⚙ 管理</button>
                 </div>
@@ -284,9 +284,9 @@ export default function MainlineView() {
                   <div className="mt-1.5 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-2">
                     {msEdit.items.map((it, i) => (
                       <div key={i} className="mb-1 flex items-center gap-1.5">
-                        <span className="text-[10px] text-[var(--violet)]">◆</span>
+                        <span className="text-2xs text-[var(--violet)]">◆</span>
                         <input
-                          className="min-w-0 flex-1 rounded border border-[var(--line)] bg-transparent px-1.5 py-0.5 text-[11px] text-slate-200 outline-none focus:border-[var(--border-active)]"
+                          className="min-w-0 flex-1 rounded border border-[var(--line)] bg-transparent px-1.5 py-0.5 text-xs text-slate-200 outline-none focus:border-[var(--border-active)]"
                           value={it}
                           onChange={(e) => setMsEdit((s) => (s ? { ...s, items: s.items.map((x, j) => (j === i ? e.target.value : x)) } : s))}
                         />
@@ -294,12 +294,12 @@ export default function MainlineView() {
                       </div>
                     ))}
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <button className="rounded-full border border-dashed px-2 py-0.5 text-[10px] text-slate-500 hover:text-slate-200" onClick={() => setMsEdit((s) => (s ? { ...s, items: [...s.items, ''] } : s))}>＋ 节点</button>
+                      <button className="rounded-full border border-dashed px-2 py-0.5 text-2xs text-slate-500 hover:text-slate-200" onClick={() => setMsEdit((s) => (s ? { ...s, items: [...s.items, ''] } : s))}>＋ 节点</button>
                     </div>
                     <div className="mt-1.5 flex justify-end gap-1.5">
-                      <button className="glass-btn !px-2 !py-0.5 !text-[10px]" onClick={() => setMsEdit(null)}>取消</button>
+                      <button className="glass-btn !px-2 !py-0.5 !text-2xs" onClick={() => setMsEdit(null)}>取消</button>
                       <button
-                        className="glass-btn primary !px-2 !py-0.5 !text-[10px]"
+                        className="glass-btn primary !px-2 !py-0.5 !text-2xs"
                         onClick={() => {
                           void (async () => {
                             for (const id of msEdit.msIds) await window.api.removeProjectTask?.(id)
@@ -319,7 +319,7 @@ export default function MainlineView() {
           })}
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-[var(--line)] px-4 py-3 text-[12px] text-slate-500">
+        <div className="rounded-xl border border-dashed border-[var(--line)] px-4 py-3 text-xs text-slate-500">
           还没有活跃主线 · 点右上角「＋ 新建主线」开一条，或等归属引擎问你在干啥时现场建
         </div>
       )}

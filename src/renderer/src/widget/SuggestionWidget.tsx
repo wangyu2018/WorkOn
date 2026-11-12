@@ -62,20 +62,20 @@ function NotificationStack({ list, onDone }: { list: WidgetNotify[]; onDone: (id
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <b className="text-[11.5px] text-[var(--text-1)]">{n.title}</b>
-                  <span className="text-[9px] text-[var(--text-3)]">刚刚</span>
+                  <b className="text-xs text-[var(--text-1)]">{n.title}</b>
+                  <span className="text-2xs text-[var(--text-3)]">刚刚</span>
                   <button
                     className="ml-auto text-[var(--text-3)] transition-colors hover:text-[var(--text-1)]"
                     onClick={() => { onDone(n.id); void window.api.notifyAction(n.id, 'dismiss') }}
                   >✕</button>
                 </div>
-                <div className="mt-0.5 text-[10.5px] leading-relaxed text-[var(--text-3)]">{n.body}</div>
+                <div className="mt-0.5 text-2xs leading-relaxed text-[var(--text-3)]">{n.body}</div>
                 {n.actions.length ? (
                   <div className="mt-1.5 flex gap-1.5">
                     {n.actions.map((a) => (
                       <button
                         key={a.action}
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition-all hover:-translate-y-px ${
+                        className={`rounded-full px-2.5 py-1 text-2xs font-semibold transition-all hover:-translate-y-px ${
                           a.primary ? 'bg-[var(--teal)] text-white' : 'border border-[var(--line-strong)] text-[var(--text-2)] hover:bg-[var(--surface-3)]'
                         }`}
                         onClick={() => { onDone(n.id); void window.api.notifyAction(n.id, a.action) }}
@@ -373,7 +373,7 @@ function dockRingFace(kind: DockRingContent, ctx: {
         title: `专注 ${Math.round(ctx.focus)}`,
         glow: true,
         center: (
-          <span className="text-[8px] font-bold tabular-nums leading-none" style={{ color: ctx.focusColor }}>
+          <span className="text-2xs font-bold tabular-nums leading-none" style={{ color: ctx.focusColor }}>
             {Math.round(ctx.focus)}
           </span>
         )
@@ -387,7 +387,7 @@ function dockRingFace(kind: DockRingContent, ctx: {
         title: `链路 ${min || 0}m`,
         glow: ctx.chainSec > 0,
         center: (
-          <span className="text-[8px] font-bold tabular-nums leading-none" style={{ color: ctx.focusColor }}>
+          <span className="text-2xs font-bold tabular-nums leading-none" style={{ color: ctx.focusColor }}>
             {min > 0 ? `${min}m` : '·'}
           </span>
         )
@@ -400,7 +400,7 @@ function dockRingFace(kind: DockRingContent, ctx: {
         color: ctx.focusColor,
         title: ctx.projectName ? `项目 · ${ctx.projectName}` : '未归属',
         center: (
-          <span className="text-[10px] font-bold leading-none" style={{ color: ctx.focusColor }}>{ch}</span>
+          <span className="text-2xs font-bold leading-none" style={{ color: ctx.focusColor }}>{ch}</span>
         )
       }
     }
@@ -412,7 +412,7 @@ function dockRingFace(kind: DockRingContent, ctx: {
         color: ctx.focusColor,
         title: `已专注 ${m} 分钟`,
         center: (
-          <span className="text-[8px] font-bold tabular-nums leading-none" style={{ color: ctx.focusColor }}>
+          <span className="text-2xs font-bold tabular-nums leading-none" style={{ color: ctx.focusColor }}>
             {m > 0 ? `${m}` : '0'}
           </span>
         )
@@ -483,7 +483,7 @@ function InsetCard({ color, title, children, className = '' }: {
       data-widget-solid
     >
       {title ? (
-        <div className="mb-1.5 text-[11px] font-medium" style={{ color }}>{title}</div>
+        <div className="mb-1.5 text-xs font-medium" style={{ color }}>{title}</div>
       ) : null}
       {children}
     </div>
@@ -512,7 +512,7 @@ function AlertShell({ color, label, collapsed, onToggle, children }: {
         <Icon name="chevronRight" size={10} style={{ transform: collapsed ? 'rotate(-90deg)' : 'rotate(90deg)' }} />
       </button>
       {collapsed ? (
-        <div className="cursor-pointer text-[11px]" style={{ color }} onClick={onToggle}>
+        <div className="cursor-pointer text-xs" style={{ color }} onClick={onToggle}>
           {label}（已收起）
         </div>
       ) : children}
@@ -538,7 +538,7 @@ function AskBar({ askState, askText, setAskText, submitAsk, onAskBlur, onEscape,
       {askState === 'input' ? (
         <input
           autoFocus
-          className="w-full rounded-lg border bg-white/[0.05] px-2.5 py-1.5 text-[11.5px] text-[var(--text-1)] outline-none placeholder:text-[var(--text-3)]"
+          className="w-full rounded-lg border bg-white/[0.05] px-2.5 py-1.5 text-xs text-[var(--text-1)] outline-none placeholder:text-[var(--text-3)]"
           style={{ borderColor: hexAlpha(accent, 0.3) }}
           placeholder="问点什么…（回车发送）"
           value={askText}
@@ -547,12 +547,12 @@ function AskBar({ askState, askText, setAskText, submitAsk, onAskBlur, onEscape,
           onBlur={onAskBlur}
         />
       ) : askState === 'thinking' ? (
-        <div className="flex items-center gap-2 rounded-lg border border-[var(--line)] bg-white/[0.04] px-2.5 py-1.5 text-[11.5px] text-[var(--text-3)]">
+        <div className="flex items-center gap-2 rounded-lg border border-[var(--line)] bg-white/[0.04] px-2.5 py-1.5 text-xs text-[var(--text-3)]">
           <span className="pulse-dot inline-block h-1.5 w-1.5 rounded-full" style={{ background: accent }} />思考中…
         </div>
       ) : (
         <div
-          className="max-h-24 overflow-y-auto rounded-lg border px-2.5 py-2 text-[11.5px] leading-relaxed text-[var(--text-1)]"
+          className="max-h-24 overflow-y-auto rounded-lg border px-2.5 py-2 text-xs leading-relaxed text-[var(--text-1)]"
           style={{ borderColor: hexAlpha(accent, 0.2), background: hexAlpha(accent, 0.06) }}
         >
           {askAnswer}
@@ -682,7 +682,7 @@ export default function SuggestionWidget() {
   /** 未归类时的操作钮（各态共用） */
   const attrBtn = (
     <button
-      className="shrink-0 rounded-full border border-[var(--line)] px-2 py-0.5 text-[10px] text-[var(--text-3)] transition-colors hover:border-[rgba(139,92,246,0.5)] hover:text-[var(--violet)]"
+      className="shrink-0 rounded-full border border-[var(--line)] px-2 py-0.5 text-2xs text-[var(--text-3)] transition-colors hover:border-[rgba(139,92,246,0.5)] hover:text-[var(--violet)]"
       title={`把当前工作挂到一个${t('project')}，时长才会计入`}
       onClick={(e) => {
         e.stopPropagation()
@@ -1131,11 +1131,11 @@ export default function SuggestionWidget() {
           <>
             {dm.focusRing ? <StateDot color={meta.color} size={11} /> : null}
             {dm.emptyHint ? (
-              <span className="min-w-0 flex-1 truncate text-[11px] text-[var(--text-3)]">做点什么，然后归到项目</span>
+              <span className="min-w-0 flex-1 truncate text-xs text-[var(--text-3)]">做点什么，然后归到项目</span>
             ) : <span className="min-w-0 flex-1" />}
             {dm.classifyBtn ? (
             <button
-              className="shrink-0 rounded-full bg-[rgba(139,92,246,0.15)] px-2 py-0.5 text-[9.5px] font-bold text-[var(--violet)]"
+              className="shrink-0 rounded-full bg-[rgba(139,92,246,0.15)] px-2 py-0.5 text-2xs font-bold text-[var(--violet)]"
               data-no-capsule-drag
               onClick={(e) => {
                 e.stopPropagation()
@@ -1206,18 +1206,18 @@ export default function SuggestionWidget() {
             <FocusRing size={44} focus={focus} color={meta.color} emoji={mainCatEmoji || meta.emoji} icon={mainCat ?? undefined} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
-                <span className="text-[14px] font-bold" style={{ color: meta.color }}>{meta.label}</span>
-                <span className="text-[10px] tabular-nums text-[var(--text-3)]">
+                <span className="text-base font-bold" style={{ color: meta.color }}>{meta.label}</span>
+                <span className="text-2xs tabular-nums text-[var(--text-3)]">
                   {chain?.active ? `⚡ 链路 ${Math.max(1, Math.round(chain.sec / 60))}min` : `专注度 ${focus}`}
                 </span>
               </div>
-              <div className="mt-0.5 truncate text-[12px] text-[var(--text-2)]">
+              <div className="mt-0.5 truncate text-xs text-[var(--text-2)]">
                 {attr?.projectId
                   ? (attr.taskTitle || attr.projectName)
                   : liveTitle || '等待采集…'}
               </div>
               {chain ? (
-                <div className="mt-0.5 truncate text-[10px] text-[var(--text-3)]">
+                <div className="mt-0.5 truncate text-2xs text-[var(--text-3)]">
                   今日 {chain.chainsToday} 段 · 最长 {Math.max(1, Math.round(chain.longestChainSecToday / 60))}m · 中断 {chain.interruptionsToday}
                 </div>
               ) : null}
@@ -1276,13 +1276,13 @@ export default function SuggestionWidget() {
         >
           <FocusRing size={44} focus={focus} color={meta.color} emoji={mainCatEmoji || meta.emoji} icon={mainCat ?? undefined} />
           <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-semibold" style={{ color: meta.color }}>
+            <div className="text-sm font-semibold" style={{ color: meta.color }}>
               {aiAssistEnabled && aiAssistItems.some((i) => i.status === 'done' && mainApp && mainApp.toLowerCase().replace(/\.exe$/i, '') === i.key) ? (
                 <span className="ai-assist-dot-done mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle" style={{ background: '#34D399' }} />
               ) : null}
               {meta.label}{' '}
               <span
-                className="text-[11px] font-normal text-[var(--text-3)]"
+                className="text-xs font-normal text-[var(--text-3)]"
                 title={presence ? `实时专注度 ${focus}（0-100）· 当前状态 ${presence.state}\n多维注意力评分见「监控/报表」页` : undefined}
               >
                 专注度 {focus}
@@ -1301,7 +1301,7 @@ export default function SuggestionWidget() {
               </div>
             ) : null}
             {presence && presence.continuousFocusSec > 60 && showFocusMinutes && df.focusMinutes && (
-              <div className="mt-0.5 text-[11px]" style={{ color: accent }}>
+              <div className="mt-0.5 text-xs" style={{ color: accent }}>
                 已专注 {Math.round(presence.continuousFocusSec / 60)} 分钟
               </div>
             )}
@@ -1314,7 +1314,7 @@ export default function SuggestionWidget() {
             >
               <span className="relative inline-flex items-center justify-center">
                 <Icon name="message" size={22} />
-                <span className="absolute inset-0 flex items-center justify-center text-[8px] font-black" style={{ color: 'var(--violet)' }}>AI</span>
+                <span className="absolute inset-0 flex items-center justify-center text-2xs font-black" style={{ color: 'var(--violet)' }}>AI</span>
               </span>
             </button>
         </div>
@@ -1324,11 +1324,11 @@ export default function SuggestionWidget() {
         {/* 归属项目今日待办（颗粒勾选） */}
         {attrPlans.length && df.attrPlans ? (
           <div className="mx-3 mb-2 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-2">
-            <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--text-3)]">{attr?.projectName} · 今日待办</div>
+            <div className="mb-1 text-2xs uppercase tracking-wider text-[var(--text-3)]">{attr?.projectName} · 今日待办</div>
             {attrPlans.map((p) => (
               <div key={p.id} className="flex items-center gap-2 py-[3px]">
                 <button
-                  className="shrink-0 text-[12px] text-[var(--text-3)] transition-colors hover:text-[var(--text-1)]"
+                  className="shrink-0 text-xs text-[var(--text-3)] transition-colors hover:text-[var(--text-1)]"
                   title="完成"
                   onClick={() => {
                     void window.api?.setPlanStatus?.(p.id, 'done')
@@ -1337,7 +1337,7 @@ export default function SuggestionWidget() {
                 >
                   ○
                 </button>
-                <span className="min-w-0 flex-1 truncate text-[11.5px] text-[var(--text-2)]">{p.title}</span>
+                <span className="min-w-0 flex-1 truncate text-xs text-[var(--text-2)]">{p.title}</span>
               </div>
             ))}
           </div>
@@ -1357,7 +1357,7 @@ export default function SuggestionWidget() {
         <div className="mx-3 mb-1 mt-2 flex max-h-[320px] flex-col gap-2 overflow-y-auto">
           {bpConfirm ? (
             <AlertShell color="#3B82F6" label="🌐 浏览器检测" collapsed={!!alertCollapsed['bp']} onToggle={() => toggleAlert('bp')}>
-              <div className="mb-1 text-[11px] font-medium" style={{ color: '#7FB0F7' }}>🌐 浏览器检测</div>
+              <div className="mb-1 text-xs font-medium" style={{ color: '#7FB0F7' }}>🌐 浏览器检测</div>
               <div className="mb-2 pr-4 text-xs leading-relaxed text-[var(--text-1)]">
                 检测到你在浏览与计划【{bpConfirm.planTitle}】相关的内容，你在做这项计划吗？
               </div>
@@ -1381,31 +1381,31 @@ export default function SuggestionWidget() {
 
           {meetingDetected ? (
             <AlertShell color="#F59E0B" label="👥 会议检测" collapsed={!!alertCollapsed['md']} onToggle={() => toggleAlert('md')}>
-              <div className="mb-1 text-[11px] font-medium" style={{ color: '#FBBF24' }}>👥 会议检测</div>
+              <div className="mb-1 text-xs font-medium" style={{ color: '#FBBF24' }}>👥 会议检测</div>
               <div className="mb-2 pr-4 text-xs leading-relaxed text-[var(--text-1)]">
                 检测到你正在使用 {meetingDetected.app.replace(/\.exe$/i, '')} 开会，选择会议模式：
               </div>
               <div className="flex gap-1.5">
                 <button
-                  className="flex-1 rounded-lg bg-white/[0.07] py-1.5 text-[11px] text-[var(--text-1)] transition-colors hover:bg-white/[0.12]"
+                  className="flex-1 rounded-lg bg-white/[0.07] py-1.5 text-xs text-[var(--text-1)] transition-colors hover:bg-white/[0.12]"
                   onClick={() => chooseMeetingMode('stealth')}
                 >
                   🤫 一键隐身
                 </button>
                 <button
-                  className="flex-1 rounded-lg bg-white/[0.07] py-1.5 text-[11px] text-[var(--text-1)] transition-colors hover:bg-white/[0.12]"
+                  className="flex-1 rounded-lg bg-white/[0.07] py-1.5 text-xs text-[var(--text-1)] transition-colors hover:bg-white/[0.12]"
                   onClick={() => chooseMeetingMode('quiet')}
                 >
                   🔇 免打扰
                 </button>
                 <button
-                  className="flex-1 rounded-lg bg-white/[0.07] py-1.5 text-[11px] text-[var(--text-1)] transition-colors hover:bg-white/[0.12]"
+                  className="flex-1 rounded-lg bg-white/[0.07] py-1.5 text-xs text-[var(--text-1)] transition-colors hover:bg-white/[0.12]"
                   onClick={() => chooseMeetingMode('assist')}
                 >
                   📝 会议辅助
                 </button>
               </div>
-              <label className="mt-2 flex cursor-pointer items-center gap-1.5 text-[10px] text-[var(--text-3)]">
+              <label className="mt-2 flex cursor-pointer items-center gap-1.5 text-2xs text-[var(--text-3)]">
                 <input type="checkbox" checked={meetingSetDefault} onChange={(e) => setMeetingSetDefault(e.target.checked)} />
                 以后都这样（可在设置中修改）
               </label>
@@ -1420,10 +1420,10 @@ export default function SuggestionWidget() {
                   <div className="text-xs font-medium" style={{ color: '#34D399' }}>
                     会议辅助中 · {Math.max(1, Math.round((Date.now() - meetingActive.sinceTs) / 60000))} 分钟
                   </div>
-                  <div className="text-[10px]" style={{ color: 'rgba(52,211,153,0.6)' }}>每 15 分钟报时提醒</div>
+                  <div className="text-2xs" style={{ color: 'rgba(52,211,153,0.6)' }}>每 15 分钟报时提醒</div>
                 </div>
                 <button
-                  className="shrink-0 rounded-lg border px-2 py-1 text-[10px] transition-colors hover:bg-white/[0.06]"
+                  className="shrink-0 rounded-lg border px-2 py-1 text-2xs transition-colors hover:bg-white/[0.06]"
                   style={{ borderColor: 'rgba(16,185,129,0.3)', color: '#34D399' }}
                   onClick={() => applyMeetingMode('assist', false, meetingActive.sinceTs)}
                 >
@@ -1436,7 +1436,7 @@ export default function SuggestionWidget() {
           {question && (question.ctx ?? '').startsWith('attrib') ? (
             <InsetCard color="#8B5CF6" title={`📂 ${t('askProjectQ')}`}>
               {question.question ? (
-                <div className="mb-2 whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-[10.5px] leading-relaxed text-[var(--text-2)]">
+                <div className="mb-2 whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-2xs leading-relaxed text-[var(--text-2)]">
                   {question.question}
                 </div>
               ) : null}
@@ -1469,7 +1469,7 @@ export default function SuggestionWidget() {
           ) : !bpConfirm ? (
             widgetCompact || !df.idleHint ? null : (
               <InsetCard color="#94A3B8" title="📋 情境确认">
-                <div className="text-center text-[11px] text-[var(--text-3)]">
+                <div className="text-center text-xs text-[var(--text-3)]">
                   暂无新的情境确认 · 越用越聪明
                 </div>
               </InsetCard>
@@ -1513,7 +1513,7 @@ function UnattrAskCard({ onDone, projects, apps, fp, date, current }: { onDone: 
     <div className="w-full">
       {current?.projectId ? (
         <div
-          className={`mb-2 rounded-lg border px-2 py-1.5 text-[10.5px] leading-relaxed ${
+          className={`mb-2 rounded-lg border px-2 py-1.5 text-2xs leading-relaxed ${
             current.stale ? 'border-[rgba(245,158,11,0.5)] text-amber-300' : 'border-[var(--line)] text-[var(--text-2)]'
           }`}
         >
@@ -1526,7 +1526,7 @@ function UnattrAskCard({ onDone, projects, apps, fp, date, current }: { onDone: 
         {projects.slice(0, 5).map((p) => (
           <button
             key={p.id}
-            className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-[11px] transition-all ${
+            className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-xs transition-all ${
               pick === p.id ? 'border-[rgba(15,181,164,0.5)] bg-[var(--teal-soft)] text-[var(--teal-deep)]' : 'border-[var(--line)] text-[var(--text-2)] hover:bg-[var(--surface-2)]'
             }`}
             onClick={() => setPick(p.id)}
@@ -1534,17 +1534,17 @@ function UnattrAskCard({ onDone, projects, apps, fp, date, current }: { onDone: 
             {pick === p.id ? '◉' : '○'} {p.name}
           </button>
         ))}
-        {!projects.length ? <div className="text-[10.5px] text-[var(--text-3)]">还没有项目</div> : null}
+        {!projects.length ? <div className="text-2xs text-[var(--text-3)]">还没有项目</div> : null}
       </div>
       <input
-        className="mb-2 w-full rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-[11px] text-[var(--text-1)] outline-none focus:border-[var(--border-active)]"
+        className="mb-2 w-full rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-xs text-[var(--text-1)] outline-none focus:border-[var(--border-active)]"
         placeholder="刚才在干什么？（如：调 DM8 连接）"
         value={doing}
         onChange={(e) => setDoing(e.target.value)}
       />
       <button
         type="button"
-        className="mb-2 w-full rounded-lg border border-[var(--line)] px-2 py-1 text-[10.5px] text-[var(--text-3)] transition-colors hover:border-[var(--border-active)] hover:text-[var(--text-1)]"
+        className="mb-2 w-full rounded-lg border border-[var(--line)] px-2 py-1 text-2xs text-[var(--text-3)] transition-colors hover:border-[var(--border-active)] hover:text-[var(--text-1)]"
         title="这段先不算任何项目；已挂的会解除"
         onClick={() => answer('no')}
       >
@@ -1553,7 +1553,7 @@ function UnattrAskCard({ onDone, projects, apps, fp, date, current }: { onDone: 
       {!pick ? (
         <div className="flex items-center gap-1.5">
           <input
-            className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-[11px] text-[var(--text-1)] outline-none focus:border-[var(--border-active)]"
+            className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-xs text-[var(--text-1)] outline-none focus:border-[var(--border-active)]"
             placeholder="或新建项目名…"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
@@ -1562,11 +1562,11 @@ function UnattrAskCard({ onDone, projects, apps, fp, date, current }: { onDone: 
       ) : null}
       </div>
       <div className="mt-2 flex justify-end gap-1.5">
-        <button className="rounded-lg bg-[var(--surface-2)] px-2.5 py-1 text-[10.5px] text-[var(--text-3)] hover:bg-[var(--surface-3)]" onClick={onDone}>
+        <button className="rounded-lg bg-[var(--surface-2)] px-2.5 py-1 text-2xs text-[var(--text-3)] hover:bg-[var(--surface-3)]" onClick={onDone}>
           忽略
         </button>
         <button
-          className="rounded-lg bg-[var(--teal)] px-2.5 py-1 text-[10.5px] font-bold text-white disabled:opacity-40"
+          className="rounded-lg bg-[var(--teal)] px-2.5 py-1 text-2xs font-bold text-white disabled:opacity-40"
           disabled={!pick && !newName.trim()}
           onClick={() => answer(pick ? 'bind' : 'create', pick ? { projectId: pick } : { projectName: newName.trim() || doing.trim() })}
         >

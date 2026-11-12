@@ -7,12 +7,12 @@ import { fmtMin } from './utils'
 /** 分区标题：图标 + 标题 + 可选说明 */
 export function SectionTitle({ icon, title, hint }: { icon: 'chart' | 'flame' | 'calendar' | 'activity'; title: string; hint?: string }) {
   return (
-    <h3 className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-slate-200">
+    <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-200">
       <span className="flex h-5 w-5 items-center justify-center rounded-md bg-neon-cyan/15 text-neon-cyan">
         <Icon name={icon} size={12} />
       </span>
       {title}
-      {hint ? <span className="ml-auto text-[10px] font-normal text-slate-500">{hint}</span> : null}
+      {hint ? <span className="ml-auto text-2xs font-normal text-slate-500">{hint}</span> : null}
     </h3>
   )
 }
@@ -53,7 +53,7 @@ const SIGNAL_META: { key: keyof AttentionScore['rawSignals']; label: string; fmt
 export function Delta({ v }: { v: number }) {
   const cls = v > 0 ? 'text-neon-green' : v < 0 ? 'text-neon-red' : 'text-slate-500'
   return (
-    <span className={`text-[10px] font-medium ${cls}`}>
+    <span className={`text-2xs font-medium ${cls}`}>
       {v > 0 ? '↑' : v < 0 ? '↓' : ''}
       {v > 0 ? `+${v}` : v}
     </span>
@@ -137,17 +137,17 @@ export function AttentionDailyCard({ score, yesterday, pin }: { score: Attention
         {/* 左：总分 + 等级徽章 + 对比 */}
         <div className="flex w-32 shrink-0 flex-col items-center gap-1.5 text-center">
           <div className="text-3xl font-bold leading-tight text-slate-100">{score.finalScore}</div>
-          <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ background: `${gm.color}22`, color: gm.color }}>
+          <span className="rounded-full px-2 py-0.5 text-2xs font-semibold" style={{ background: `${gm.color}22`, color: gm.color }}>
             {score.grade} · {gm.label}
           </span>
           <div className="flex items-center gap-1">
             <Delta v={score.vsYesterday} />
-            <span className="text-[10px] text-slate-500">vs 昨日</span>
+            <span className="text-2xs text-slate-500">vs 昨日</span>
           </div>
           {score.vsLastWeekAvg !== 0 ? (
             <div className="flex items-center gap-1">
               <Delta v={score.vsLastWeekAvg} />
-              <span className="text-[10px] text-slate-500">vs 上周均值</span>
+              <span className="text-2xs text-slate-500">vs 上周均值</span>
             </div>
           ) : null}
         </div>
@@ -161,13 +161,13 @@ export function AttentionDailyCard({ score, yesterday, pin }: { score: Attention
             const v = score.dimensions[d.key]
             const yv = yesterday?.dimensions[d.key]
             return (
-              <div key={d.key} className="flex items-center gap-2 text-[11px]">
+              <div key={d.key} className="flex items-center gap-2 text-xs">
                 <span className="w-14 shrink-0 text-slate-400">{d.label}</span>
                 <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
                   <div className="h-full rounded-full bg-gradient-to-r from-neon-cyan to-neon-blue" style={{ width: `${v}%` }} />
                 </div>
                 <span className="w-7 shrink-0 text-right font-medium text-slate-300">{v}</span>
-                <span className="w-10 shrink-0 text-right">{yv !== undefined ? <Delta v={v - yv} /> : <span className="text-[10px] text-slate-600">—</span>}</span>
+                <span className="w-10 shrink-0 text-right">{yv !== undefined ? <Delta v={v - yv} /> : <span className="text-2xs text-slate-600">—</span>}</span>
               </div>
             )
           })}
@@ -175,17 +175,16 @@ export function AttentionDailyCard({ score, yesterday, pin }: { score: Attention
       </div>
       {/* 底部：规则洞察 + 可折叠五维详情 */}
       <div className="mt-3 border-t border-white/[0.05] pt-3">
-        <p className="line-clamp-2 text-[11px] leading-relaxed text-slate-400">
-          <span className="mr-1">💡</span>
+        <p className="line-clamp-2 text-xs leading-relaxed text-slate-500">
           {insightOf(score)}
         </p>
-        <button className="mt-1.5 text-[10px] text-slate-500 transition-colors hover:text-neon-cyan" onClick={() => setShowSignals((v) => !v)}>
+        <button className="mt-1.5 text-2xs text-slate-500 transition-colors hover:text-neon-cyan" onClick={() => setShowSignals((v) => !v)}>
           {showSignals ? '▾ 收起五维详情' : '▸ 五维详情'}
         </button>
         {showSignals ? (
           <div className="anim-fade-in mt-2 grid grid-cols-2 gap-x-6 gap-y-0.5 rounded-lg border border-white/[0.05] bg-white/[0.02] px-3 py-2">
             {SIGNAL_META.map((m) => (
-              <div key={m.key} className="flex items-center justify-between gap-2 text-[10px]">
+              <div key={m.key} className="flex items-center justify-between gap-2 text-2xs">
                 <span className="text-slate-500">{m.label}</span>
                 <span className="shrink-0 font-medium text-slate-400">{m.fmt(score.rawSignals[m.key])}</span>
               </div>
