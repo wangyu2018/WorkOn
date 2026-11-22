@@ -19,6 +19,7 @@ import { ClickFeedback } from './interaction/clickFeedback'
 import { Bridge } from './bridge'
 import { pickChatter, SCENE_MIN_INTERVAL, getActiveRole, type ChatterScene } from './character/chatter'
 import type { SpatialStateName } from './spatial/stateTable'
+import { aiCredsReady } from '@shared/aiConfig'
 
 /** 互动开关（桌搭页可配，关闭即注销对应行为降低开销） */
 interface Interactions {
@@ -743,8 +744,8 @@ async function boot(): Promise<void> {
       sayInput.disabled = true
       void (async () => {
         try {
-          const s = (await window.api?.getSettings?.()) as { aiEnabled?: boolean; aiApiKey?: string } | undefined
-          if (!s?.aiEnabled || !s.aiApiKey) {
+          const s = (await window.api?.getSettings?.()) as { aiEnabled?: boolean; aiApiKey?: string; aiBaseUrl?: string } | undefined
+          if (!s?.aiEnabled || !aiCredsReady(s)) {
             bubble.show('还没配置 AI 模型哦~ 去设置里看看吧！', 5, 'character')
             return
           }

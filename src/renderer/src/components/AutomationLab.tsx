@@ -19,7 +19,10 @@ const ACTION_LABEL: Record<ActionKind, string> = {
   genReport: '📝 生成日报',
   petCelebrate: '🐱 桌宠庆祝',
   notify: '🔔 发通知',
-  addTodo: '➕ 建待办'
+  addTodo: '➕ 建待办',
+  exportReport: '📤 导出报告',
+  runWorkflow: '⚙️ 运行工作流',
+  renderDeliverable: '📦 生成交付物'
 }
 /** 积木三色：触发器 teal / 条件 amber / 动作 violet */
 const TAG_CLS: Record<'trg' | 'cnd' | 'act', string> = {

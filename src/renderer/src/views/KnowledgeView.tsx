@@ -2,8 +2,9 @@
  * 本地知识库 — 用户侧就是「一条条笔记」
  * 支持：手写、上传文件、Ctrl+V 截图 OCR；不展示结构/非结构术语。
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { KnowledgeItem, KnowledgeLink, MemoRecord, PlanItem, ProcessDraft, Project } from '@shared/types'
+import { dateKey } from '@shared/trail'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState } from '../components/EmptyState'
@@ -21,6 +22,9 @@ function sourceLabel(it: KnowledgeItem): string {
   if (it.source === 'paste') return it.fileName ? `截图 · ${it.fileName}` : '粘贴/截图'
   if (it.source === 'memo') return '备忘'
   if (it.source === 'import') return '导入'
+  if (it.source === 'workflow') return '工作流产物'
+  if (it.source === 'qa') return '问答'
+  if (it.source === 'watch') return '盯守'
   if (it.source === 'ai-tool') return 'AI'
   return it.categoryName ? `笔记 · ${it.categoryName}` : '手写'
 }
@@ -43,6 +47,8 @@ export default function KnowledgeView() {
   const [linkPlanId, setLinkPlanId] = useState('')
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
+  /** 同步防重入：busy 走 state，同一帧内连点读到的仍是旧值，会重复建计划 */
+  const busyRef = useRef(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [pasteHint, setPasteHint] = useState(false)
   /** 新建笔记时从文件带入的文件名（保存后记为上传来源） */
@@ -81,6 +87,7 @@ export default function KnowledgeView() {
     previewProcessMerge?: (draftId?: string) => Promise<{ title?: string; body?: string; error?: string }>
     confirmProcessSediment?: (p?: unknown) => Promise<{ ok: boolean; item?: KnowledgeItem; error?: string }>
     saveProject?: (p: unknown) => Promise<Project>
+    savePlan?: (p: unknown) => Promise<{ id?: string } | null>
   }
 
   const reload = useCallback(async () => {
@@ -149,6 +156,11 @@ export default function KnowledgeView() {
     () => projects.find((p) => p.id === linkProjectId) ?? null,
     [projects, linkProjectId]
   )
+  /** 当前知识已关联的计划（有则不再重复创建） */
+  const planLink = useMemo(
+    () => (selected ? safeLinks(selected).find((l) => l.type === 'plan') ?? null : null),
+    [selected]
+  )
   const projectCats = linkedProject?.noteCategories ?? []
 
   const filtered = useMemo(() => {
@@ -180,6 +192,49 @@ export default function KnowledgeView() {
       links.push({ type: 'plan', id: linkPlanId, title: pl?.title ?? '计划' })
     }
     return links
+  }
+
+  /** 知识转计划：为当前知识建一条今日待办，并把计划回写进知识关联 */
+  const toPlan = async (): Promise<void> => {
+    if (!selected || busy || busyRef.current) return
+    if (planLink) {
+      setStatus('该知识已关联计划，可到计划页调整')
+      return
+    }
+    const title = (draftTitle.trim() || selected.title || draftBody.trim()).slice(0, 60)
+    if (!title) {
+      setStatus('先补一个标题再转计划')
+      return
+    }
+    busyRef.current = true
+    setBusy(true)
+    try {
+      const plan = await api.savePlan?.({
+        date: dateKey(Date.now()),
+        title,
+        category: 'other',
+        status: 'planned',
+        source: 'knowledge',
+        planType: 'task',
+        note: (draftBody.trim() || selected.body || '').slice(0, 300)
+      })
+      const planId = plan?.id
+      if (planId) {
+        const links = [
+          ...safeLinks(selected).filter((l) => l.type !== 'plan'),
+          { type: 'plan' as const, id: planId, title }
+        ]
+        await api.updateKnowledge?.(selected.id, { links })
+      }
+      setStatus(planId ? '已创建今日计划并关联' : '计划创建失败')
+      await reload()
+      if (planId) setLinkPlanId(planId)
+    } catch {
+      setStatus('转计划失败')
+    } finally {
+      busyRef.current = false
+      setBusy(false)
+    }
   }
 
   const createNote = async (): Promise<void> => {
@@ -805,6 +860,9 @@ export default function KnowledgeView() {
               <>
                 <button type="button" className="glass-btn primary" disabled={busy} onClick={() => void saveSelected()}>
                   保存
+                </button>
+                <button type="button" className="glass-btn" disabled={busy || !!planLink} onClick={() => void toPlan()}>
+                  {planLink ? '已关联计划' : '转为今日计划'}
                 </button>
                 <button type="button" className="glass-btn" disabled={busy} onClick={() => { clearDraft(); setComposing(true) }}>
                   新建

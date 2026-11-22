@@ -12,10 +12,32 @@ import { WORK_LIKE_STATES, SLACK_STATES, STATE_LABEL, ALL_STATES } from '@shared
 import { dateKey, buildMergedTrail } from '@shared/trail'
 import { col, insertInto, updateIn, listActivities } from './db'
 import { getSettings } from './settings'
+import { aiCredsReady, isLocalAiBaseUrl } from '@shared/aiConfig'
 import { genQuestion as genQuestionImpl, recordFeedback as recordFeedbackImpl } from './qa/questionGenerator'
 import { requestPersonaData } from './desensitize'
 import { WORKON_TOOLS, PET_TOOLS, executeTool, type ToolCall } from './tools'
+import { nodePromptSection } from './nodes'
+import { A2UI_PROMPT_HINT } from '@shared/a2ui'
 import { beginRound, endTrace, markRoute, setOutput, startTrace } from './trace'
+
+/** 请求头：有 Key 才带 Authorization（本机 Ollama 等无鉴权服务不需要） */
+function aiHeaders(apiKey: string): Record<string, string> {
+  const key = apiKey.trim()
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (key) headers.Authorization = `Bearer ${key}`
+  return headers
+}
+
+/**
+ * 本机/内网模型（Ollama 等）补充请求参数：默认关闭显式思考。
+ * Ollama 的 thinking 模型在 /v1 上不认 think:false，会先输出大段 reasoning：
+ * 短请求 content 为空，长请求容易拖满超时；reasoning_effort:'none' 可让其直接回答。
+ * 远程接口不加，避免不支持的厂商报错；问答需要展示思考链时传 allowThinking=true。
+ */
+function localModelOptions(baseUrl: string, allowThinking = false): Record<string, unknown> {
+  if (!isLocalAiBaseUrl(baseUrl)) return {}
+  return allowThinking ? {} : { reasoning_effort: 'none' }
+}
 
 // ───────────────────────── 用量 ─────────────────────────
 
@@ -170,15 +192,15 @@ export async function llmChat(
   complexity: TaskComplexity = 'standard'
 ): Promise<string | null> {
   const s = getSettings()
-  if (!s.aiEnabled || !s.aiApiKey) return null
+  if (!s.aiEnabled || !aiCredsReady(s)) return null
   const model = selectModel(complexity)
   const ctrl = new AbortController()
   const t = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
     const resp = await fetch(`${s.aiBaseUrl.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.aiApiKey}` },
-      body: JSON.stringify({ model, messages, temperature: 0.4 }),
+      headers: aiHeaders(s.aiApiKey),
+      body: JSON.stringify({ model, messages, temperature: 0.4, ...localModelOptions(s.aiBaseUrl) }),
       signal: ctrl.signal
     })
     if (!resp.ok) {
@@ -225,20 +247,21 @@ export async function llmChatWithTools(
   complexity: TaskComplexity = 'standard'
 ): Promise<LLMToolResponse | null> {
   const s = getSettings()
-  if (!s.aiEnabled || !s.aiApiKey) return null
+  if (!s.aiEnabled || !aiCredsReady(s)) return null
   const model = selectModel(complexity)
   const ctrl = new AbortController()
   const t = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
     const resp = await fetch(`${s.aiBaseUrl.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.aiApiKey}` },
+      headers: aiHeaders(s.aiApiKey),
       body: JSON.stringify({
         model,
         messages,
         temperature: 0.4,
         tools,
-        tool_choice: 'auto'
+        tool_choice: 'auto',
+        ...localModelOptions(s.aiBaseUrl)
       }),
       signal: ctrl.signal
     })
@@ -263,6 +286,45 @@ export async function llmChatWithTools(
   } finally {
     clearTimeout(t)
   }
+}
+
+/**
+ * 并行判定：含副作用/有先后依赖的工具必须串行；其余只读工具可并行。
+ * 宁可少并行，也不让「先 draft 后 render」这类链路被打乱。
+ */
+const SEQUENTIAL_TOOL = /(save|create|update|remove|delete|render|export|draft|revise|run|write|commit|apply|add|send|import|install|set|gen)/i
+
+interface ToolCallOutcome {
+  tc: ToolCall
+  result: string
+}
+
+/** 执行一批工具调用：只读调用并行，含副作用调用保持原顺序 */
+async function executeToolCalls(
+  tcs: ToolCall[],
+  traceId?: string,
+  onToolCall?: (name: string) => void
+): Promise<ToolCallOutcome[]> {
+  const runOne = async (tc: ToolCall): Promise<ToolCallOutcome> => {
+    let args: Record<string, unknown> = {}
+    try {
+      args = tc.function.arguments ? JSON.parse(tc.function.arguments) : {}
+    } catch {
+      console.warn(`[ai] 工具参数解析失败: ${tc.function.name}(${tc.function.arguments})`)
+    }
+    console.log(`[ai] 执行工具: ${tc.function.name}`, args)
+    onToolCall?.(tc.function.name)
+    const result = await executeTool(tc.function.name, args, traceId ? { traceId } : undefined)
+    return { tc, result }
+  }
+  const canParallel = tcs.length > 1 && tcs.every((tc) => !SEQUENTIAL_TOOL.test(tc.function.name))
+  if (canParallel) {
+    console.log(`[ai] 并行执行 ${tcs.length} 个只读工具`)
+    return await Promise.all(tcs.map((tc) => runOne(tc)))
+  }
+  const out: ToolCallOutcome[] = []
+  for (const tc of tcs) out.push(await runOne(tc))
+  return out
 }
 
 /**
@@ -307,22 +369,20 @@ export async function chatWithToolLoop(
       tool_calls: resp.toolCalls
     })
 
-    // 逐个执行工具
-    for (const tc of resp.toolCalls) {
-      let args: Record<string, unknown> = {}
-      try {
-        args = tc.function.arguments ? JSON.parse(tc.function.arguments) : {}
-      } catch {
-        console.warn(`[ai] 工具参数解析失败: ${tc.function.name}(${tc.function.arguments})`)
-      }
-      console.log(`[ai] 执行工具: ${tc.function.name}`, args)
-      const result = await executeTool(tc.function.name, args, traceId ? { traceId } : undefined)
+    // 只读工具并行、含副作用工具串行；结果按原顺序回填
+    const outcomes = await executeToolCalls(resp.toolCalls, traceId)
+    for (const { tc, result } of outcomes) {
       messages.push({
         role: 'tool',
         content: result,
         tool_call_id: tc.id
       })
     }
+    messages.push({
+      role: 'user',
+      content:
+        '上面是本次工具执行结果。最终回答中的数字、状态、列表、网页内容和结论必须严格来自这些结果；结果中没有出现的事实不要补充，不确定就说明工具结果未提供。'
+    })
     // 继续下一轮，让 LLM 根据工具结果生成回复
   }
 
@@ -344,12 +404,14 @@ export async function chatWithToolLoop(
 async function parseSSEStream(
   resp: Response,
   onChunk: (delta: string, fullText: string) => void,
-  onToolCallDelta?: (toolCalls: ToolCall[]) => void
+  onToolCallDelta?: (toolCalls: ToolCall[]) => void,
+  onReasoning?: (delta: string, fullText: string) => void
 ): Promise<{ content: string; toolCalls: ToolCall[] | null }> {
   const reader = resp.body!.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
   let fullText = ''
+  let fullReasoning = ''
   const toolCallMap = new Map<number, { id: string; type: 'function'; function: { name: string; arguments: string } }>()
 
   while (true) {
@@ -370,6 +432,17 @@ async function parseSSEStream(
         const parsed = JSON.parse(data)
         const delta = parsed.choices?.[0]?.delta
         if (!delta) continue
+
+        // 思考链：Ollama /v1 用 reasoning，DeepSeek 等兼容接口用 reasoning_content
+        const reasoningDelta = typeof delta.reasoning === 'string'
+          ? delta.reasoning
+          : typeof delta.reasoning_content === 'string'
+            ? delta.reasoning_content
+            : ''
+        if (reasoningDelta && onReasoning) {
+          fullReasoning += reasoningDelta
+          onReasoning(reasoningDelta, fullReasoning)
+        }
 
         // 文本内容
         if (delta.content) {
@@ -421,15 +494,15 @@ export async function llmChatStream(
   complexity: TaskComplexity = 'standard'
 ): Promise<string | null> {
   const s = getSettings()
-  if (!s.aiEnabled || !s.aiApiKey) return null
+  if (!s.aiEnabled || !aiCredsReady(s)) return null
   const model = selectModel(complexity)
   const ctrl = new AbortController()
   const t = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
     const resp = await fetch(`${s.aiBaseUrl.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.aiApiKey}` },
-      body: JSON.stringify({ model, messages, temperature: 0.4, stream: true }),
+      headers: aiHeaders(s.aiApiKey),
+      body: JSON.stringify({ model, messages, temperature: 0.4, stream: true, ...localModelOptions(s.aiBaseUrl) }),
       signal: ctrl.signal
     })
     if (!resp.ok) {
@@ -469,13 +542,18 @@ export async function chatWithToolLoopStream(
   /** tool 轮次重置回调：已流式的中间文本作废（渲染端清空重排） */
   onReset?: (fullSoFar: string) => void,
   /** 处理轨迹 id：传入后每轮与每次工具调用都会记录 */
-  traceId?: string
+  traceId?: string,
+  /** 思考链增量回调（与最终回答分开推送） */
+  onReasoning?: (delta: string, fullText: string) => void,
+  /** 是否允许模型输出思考（问答开启；桌宠等短回复保持关闭） */
+  allowThinking = false
 ): Promise<string | null> {
   const s = getSettings()
-  if (!s.aiEnabled || !s.aiApiKey) return null
+  if (!s.aiEnabled || !aiCredsReady(s)) return null
   const model = selectModel('standard')
   const messages = [...initialMessages]
   let streamedAny = false // 是否已经流式输出了文本
+  let reasoningAll = '' // 跨工具轮次累计的思考链
 
   for (let round = 0; round <= maxToolRounds; round++) {
     if (traceId) beginRound(traceId, round, model)
@@ -484,14 +562,15 @@ export async function chatWithToolLoopStream(
     try {
       const resp = await fetch(`${s.aiBaseUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${s.aiApiKey}` },
+        headers: aiHeaders(s.aiApiKey),
         body: JSON.stringify({
           model,
           messages,
           temperature: 0.4,
           tools,
           tool_choice: 'auto',
-          stream: true
+          stream: true,
+          ...localModelOptions(s.aiBaseUrl, allowThinking)
         }),
         signal: ctrl.signal
       })
@@ -509,8 +588,18 @@ export async function chatWithToolLoopStream(
         streamedAny = true
         onChunk(delta, full)
       }
+      const reasoningBase = reasoningAll
+      const reasoningCallback = (delta: string, full: string): void => {
+        reasoningAll = reasoningBase + full
+        onReasoning?.(delta, reasoningAll)
+      }
 
-      const { content, toolCalls } = await parseSSEStream(resp, chunkCallback)
+      const { content, toolCalls } = await parseSSEStream(
+        resp,
+        chunkCallback,
+        undefined,
+        onReasoning ? reasoningCallback : undefined
+      )
       trackUsage(model, Math.ceil((content?.length ?? 0) / 4) + 500, false)
 
       // 无工具调用 → 返回最终内容
@@ -525,6 +614,7 @@ export async function chatWithToolLoopStream(
         if (onReset) onReset(content || '')
         else onChunk('\n', content || '')
       }
+      if (reasoningAll.trim()) reasoningAll += '\n\n'
 
       // 追加 assistant 消息
       messages.push({
@@ -533,23 +623,20 @@ export async function chatWithToolLoopStream(
         tool_calls: toolCalls
       })
 
-      // 逐个执行工具
-      for (const tc of toolCalls) {
-        let args: Record<string, unknown> = {}
-        try {
-          args = tc.function.arguments ? JSON.parse(tc.function.arguments) : {}
-        } catch {
-          console.warn(`[ai] 工具参数解析失败: ${tc.function.name}(${tc.function.arguments})`)
-        }
-        console.log(`[ai] 执行工具 (stream): ${tc.function.name}`, args)
-        onToolCall?.(tc.function.name)
-        const result = await executeTool(tc.function.name, args, traceId ? { traceId } : undefined)
+      // 只读工具并行、含副作用工具串行（流式同样适用）
+      const outcomes = await executeToolCalls(toolCalls, traceId, onToolCall)
+      for (const { tc, result } of outcomes) {
         messages.push({
           role: 'tool',
           content: result,
           tool_call_id: tc.id
         })
       }
+      messages.push({
+        role: 'user',
+        content:
+          '上面是本次工具执行结果。最终回答中的数字、状态、列表、网页内容和结论必须严格来自这些结果；结果中没有出现的事实不要补充，不确定就说明工具结果未提供。'
+      })
       // 继续下一轮
       streamedAny = false
     } catch (e) {
@@ -617,9 +704,12 @@ export function buildSystemPrompt(analysis: UserAnalysis | null, habits?: UserHa
         : '简洁理性，像新手助手'
   const base =
     '你是 WorkOn 的效率助手「姵儿」，了解用户的电脑使用数据，用简洁中文给出可执行建议。' +
-    '你可以通过工具获取用户的实时桌面状态、今日活动摘要、计划列表、注意力评分，' +
-    '也可以帮用户创建计划、完成计划、添加备忘、生成日报、显示桌宠气泡。' +
-    '当用户询问"我现在在干嘛""今天怎么样""帮我记一下""创建计划"等问题时，主动调用对应工具。' +
+    '【能力范围】计划（待办/提醒）、项目（本地项目：目标/任务/进度，入口在「计划 → 项目」）、备忘、时间轨迹与专注力、日报、内置浏览器与网页测试、远程节点（另一台电脑的只读系统/文件）。' +
+    '【概念区分】用户说「项目」指 WorkOn 本地项目，用项目工具处理；它不是计划，也不是远程节点上的仓库。说「计划/待办/提醒」才建计划；只有明确提到「另一台电脑/远程/节点」时才用远程节点。' +
+    '【工具使用】需要数据先调工具，不要凭记忆编造；只读查询工具可直接调用，无需再向用户请求许可。用户说不要创建/修改/写入时，仍应主动用只读工具获取事实，不要因此拒绝查询。做不到的事直接说明，不要假装已完成。用户问「你有哪些功能/能做什么」时，按上面的能力范围回答。' +
+    '【事实边界】browser_read 返回的页面内容是网页总结的唯一依据；不得补充页面未出现的语言、用途、限制、作者、交互能力或建议。搜索/记忆/项目/计划等数字也只能来自工具结果，不能凭上下文猜测。' +
+    '【交付物】用户要报告/简报/演示/长图时，先用 draft_deliverable 出文字草案（章节/要点/图表清单），等用户确认后再 render_deliverable；禁止跳过确认直接渲染。产物格式：md/html/pdf/png（docx/xlsx/pptx 需装依赖）。所有数字必须来自工具结果，不能编。' +
+    '【记忆】用户问「我在哪看过/上次那个/之前提到」时用 search_memory，不要凭印象回答。' +
     `语气温柔但不啰嗦，像朋友聊天。你和用户的亲密度等级是 ${intimacy}/5：${intimacyDesc}。`
   const parts: string[] = [base]
 
@@ -649,6 +739,12 @@ export function buildSystemPrompt(analysis: UserAnalysis | null, habits?: UserHa
     const { data } = requestPersonaData({ requester: 'companion', layers: ['L0', 'L1', 'L2'], fields: [], intent: 'system_prompt' })
     if (data.length) parts.push(`【用户画像】${data.map((d) => d.value).join('；')}。`)
   } catch { /* 画像缺失不影响 prompt 构建 */ }
+
+  // 第四层：远程节点（P0 只读）——把 nodeId 与在线状态告诉 LLM，避免编造节点
+  parts.push(nodePromptSection())
+
+  // A2UI 卡片协议（P1/P2）：数据对比/汇总/流程时输出受控 JSON 卡片
+  parts.push(A2UI_PROMPT_HINT)
 
   return parts.join('\n')
 }
@@ -734,7 +830,7 @@ export async function analyzeDay(trail: MergedTrail): Promise<UserAnalysis> {
 /** AI 分类兜底：对「other」且标题非通用的段批量推断主态，存独立推断表（不污染热轨迹） */
 export async function inferOtherCategories(date: string): Promise<void> {
   const s = getSettings()
-  if (!s.aiEnabled || !s.aiApiKey) return
+  if (!s.aiEnabled || !aiCredsReady(s)) return
   const trail = buildMergedTrail(listActivities(date), date)
   const cands = trail.segments.filter(
     (sg) => sg.mainState === 'other' && !!sg.mainTitle && sg.mainTitle.length > 3 && !/^(explorer|workon|workbuddy)$/i.test(sg.mainApp)
@@ -815,7 +911,8 @@ function localAnswer(question: string, facts: Record<string, unknown> | null, tr
     return '计划进展可以在右页「今日计划 / 人生预期」块直接看；想让我帮你排，直接说「帮我把 X 安排到周 Y」就行。'
   }
   // 区分「没配 AI」和「配了但这次调用失败」——后者再喊人去配置是误导（BUG-13 关联）
-  const aiConfigured = Boolean(getSettings().aiEnabled && getSettings().aiApiKey)
+  const cfg = getSettings()
+  const aiConfigured = Boolean(cfg.aiEnabled && aiCredsReady(cfg))
   const tail = aiConfigured
     ? '这次 AI 接口临时不可用（服务波动/超时），稍后再问一次就好。'
     : '这个问题需要 AI 才能深入回答，去「设置 → AI」配置后即可解锁。'
@@ -874,7 +971,9 @@ export async function askWithContextStream(
   onChunk: StreamCallback,
   onToolCall?: (toolName: string) => void,
   habits?: UserHabits | null,
-  screenContext?: string
+  screenContext?: string,
+  /** 思考链增量回调（与最终回答分开推送） */
+  onReasoning?: (delta: string, fullText: string) => void
 ): Promise<{ content: string; references: ProfileReference[]; traceId: string }> {
   insertInto<QAMessage>('qa', { id: genId('qa'), role: 'user', content: question, ts: Date.now() })
   const traceId = startTrace('qa', question)
@@ -902,7 +1001,9 @@ export async function askWithContextStream(
     onToolCall,
     3,
     undefined,
-    traceId
+    traceId,
+    onReasoning,
+    true
   )
   const answer = llm ?? localAnswer(question, facts, trail)
   if (!llm) markRoute(traceId, 'local', 'llm_unavailable')
@@ -940,20 +1041,22 @@ export async function testAIConnection(ov?: { aiApiKey?: string; aiBaseUrl?: str
   const apiKey = (ov?.aiApiKey ?? s.aiApiKey).trim()
   const baseUrl = (ov?.aiBaseUrl ?? s.aiBaseUrl).trim()
   const model = (ov?.aiModel ?? s.aiModel).trim()
-  if (!apiKey) return { ok: false, error: '未配置 API Key' }
-  if (/[^\x21-\x7e]/.test(apiKey)) {
+  // 本机 / 内网服务（Ollama 等）默认无鉴权，可免 Key；远程接口仍需 Key
+  if (!apiKey && !isLocalAiBaseUrl(baseUrl)) return { ok: false, error: '未配置 API Key' }
+  if (apiKey && /[^\x21-\x7e]/.test(apiKey)) {
     return { ok: false, error: 'Key 里混进了中文或不可见字符（常见于复制带格式文本）——重新粘一下，或手敲', hint: '非 ASCII 字符' }
   }
   const start = Date.now()
   try {
     const resp = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      headers: aiHeaders(apiKey),
       body: JSON.stringify({
         model,
         messages: [{ role: 'user', content: '回复"OK"两个字' }],
         max_tokens: 10,
-        temperature: 0
+        temperature: 0,
+        ...localModelOptions(baseUrl)
       }),
       signal: AbortSignal.timeout(15000)
     })
@@ -981,10 +1084,70 @@ export async function testAIConnection(ov?: { aiApiKey?: string; aiBaseUrl?: str
   }
 }
 
+export interface OllamaProbeModel {
+  id: string
+  vision: boolean
+  thinking: boolean
+  tools: boolean
+}
+
+export interface OllamaProbeResult {
+  ok: boolean
+  root?: string
+  /** 可直接填入设置页的 OpenAI 兼容地址 */
+  openaiBaseUrl?: string
+  models?: OllamaProbeModel[]
+  error?: string
+}
+
+/**
+ * 探测 Ollama 服务并列出已安装的对话模型。
+ * 地址由界面传入（默认取当前 AI Base URL，其次本机 11434），不写死端口。
+ */
+export async function probeOllamaModels(baseUrl?: string): Promise<OllamaProbeResult> {
+  const raw = String(baseUrl ?? '').trim() || String(getSettings().aiBaseUrl ?? '').trim() || 'http://127.0.0.1:11434'
+  let root = raw.replace(/\/+$/, '').replace(/\/v1$/i, '')
+  if (!/^https?:\/\//i.test(root)) root = `http://${root}`
+  try {
+    new URL(root)
+  } catch {
+    return { ok: false, error: '地址格式不正确' }
+  }
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 2500)
+  try {
+    const res = await fetch(`${root}/api/tags`, { signal: ctrl.signal })
+    if (!res.ok) return { ok: false, root, error: `HTTP ${res.status}` }
+    const json = (await res.json()) as {
+      models?: { name?: string; model?: string; capabilities?: string[] }[]
+    }
+    const models: OllamaProbeModel[] = []
+    for (const m of json.models ?? []) {
+      const id = String(m.name ?? m.model ?? '').trim()
+      const caps = Array.isArray(m.capabilities) ? m.capabilities : []
+      // 只要对话模型：跳过纯嵌入模型
+      if (!id || /embed|bge/i.test(id)) continue
+      if (caps.length && !caps.includes('completion')) continue
+      models.push({
+        id,
+        vision: caps.includes('vision'),
+        thinking: caps.includes('thinking'),
+        tools: caps.includes('tools')
+      })
+    }
+    return { ok: true, root, openaiBaseUrl: `${root}/v1`, models }
+  } catch (e) {
+    const msg = (e as Error).message
+    return { ok: false, root, error: /abort|timeout/i.test(msg) ? '连接超时' : msg }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /** 桌宠短回复问答（Saybox / 悬浮窗折叠态）：姵儿口吻，≤50 字，融入习惯画像/亲密度/近期对话 */
 export async function petAskShort(question: string, habits?: UserHabits | null): Promise<string> {
   const s = getSettings()
-  if (!s.aiEnabled || !s.aiApiKey) return '还没配置 AI 模型哦~ 去设置里看看吧！'
+  if (!s.aiEnabled || !aiCredsReady(s)) return '还没配置 AI 模型哦~ 去设置里看看吧！'
   insertInto('qa', { id: genId('qa'), role: 'user', content: question, ts: Date.now() })
   const recentQA = col<QAMessage>('qa').slice(-4)
   const answer = await chatWithToolLoop(
@@ -1038,7 +1201,7 @@ export async function petAskShortStream(
   onReset?: (fullSoFar: string) => void
 ): Promise<string> {
   const s = getSettings()
-  if (!s.aiEnabled || !s.aiApiKey) {
+  if (!s.aiEnabled || !aiCredsReady(s)) {
     onChunk('还没配置 AI 模型哦~ 去设置里看看吧！', '还没配置 AI 模型哦~ 去设置里看看吧！')
     return '还没配置 AI 模型哦~ 去设置里看看吧！'
   }

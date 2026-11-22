@@ -9,6 +9,8 @@ import TopAppsCard from '../components/TopAppsCard'
 import DailyOverviewCard from '../components/DailyOverviewCard'
 import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
+import { DeliverableDraftCard } from '../components/DeliverableDraftCard'
+import type { DeliverableJob } from '@shared/deliverable/audit'
 import { EmptyState } from '../components/EmptyState'
 import { Seg } from '../components/ui/Seg'
 import AnalysisView from './AnalysisView'
@@ -81,7 +83,7 @@ function PinButton({ id }: { id: string }) {
       localStorage.setItem('pinnedWidgets', arr.join(','))
     } catch {}
   }
-  return <button onClick={toggle} className={`text-xs ${pinned ? 'text-neon-cyan' : 'text-slate-600 hover:text-slate-400'}`} title={pinned ? '已投送' : '投送到主页'}>{pinned ? '📌' : '📍'}</button>
+  return <button onClick={toggle} className={`text-xs ${pinned ? 'text-neon-cyan' : 'text-slate-600 hover:text-slate-400'}`} title={pinned ? '已投送' : '投送到主页'}><Icon name="pin" size={12} /></button>
 }
 
 /* ── 注意力评分组件（Radar / AttentionDailyCard / SectionTitle / DIM_META / Delta）已抽至 ../components/AttentionCard ── */
@@ -329,7 +331,7 @@ function DailyReport() {
         ) : null}
         <div className="flex-1" />
         <button className={`glass-btn !px-2.5 !py-1 !text-xs ${copied ? 'primary' : ''}`} onClick={copyReport}>
-          {copied ? '已复制 ✓' : '📋 复制日报'}
+          {copied ? '已复制' : '复制日报'}
         </button>
       </div>
       {/* 总览 */}
@@ -409,7 +411,7 @@ function DailyReport() {
         {/* 状态分布 */}
         <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '120ms' }}>
           <SectionTitle icon="chart" title="状态分布" />
-          <PinButton id="state" /> <span className="text-2xs text-slate-500 ml-1">📌 投送主页</span>
+          <PinButton id="state" /> <span className="ml-1 text-2xs text-slate-500">投送主页</span>
           <div className="flex items-start gap-4">
             <div className="shrink-0">
               <Donut data={dist.map(([state, value]) => ({ state, value }))} />
@@ -483,6 +485,11 @@ export default function ReportHub() {
   const patch = useSettingsStore((s) => s.patch)
   const [tab, setTab] = useState<Tab>('smart')
   const [showSettings, setShowSettings] = useState(false)
+  const [exportFormat, setExportFormat] = useState<'html' | 'md' | 'pdf' | 'png'>('html')
+  const [exportTemplate, setExportTemplate] = useState<'brief' | 'report' | 'deck' | 'poster'>('report')
+  const [exporting, setExporting] = useState(false)
+  const [exportPath, setExportPath] = useState<string | null>(null)
+  const [deliverableJob, setDeliverableJob] = useState<DeliverableJob | null>(null)
   const [lastSyncAt, setLastSyncAt] = useState<number>(Date.now())
   const [syncing, setSyncing] = useState(false)
   const [tabKey, setTabKey] = useState(0)
@@ -506,6 +513,22 @@ export default function ReportHub() {
     }
     window.addEventListener('workon:goto-report', onGoto)
     return () => window.removeEventListener('workon:goto-report', onGoto)
+  }, [])
+  // 交付物任务：加载最近一条 + 跟随进度事件刷新
+  useEffect(() => {
+    let alive = true
+    void window.api.listDeliverableJobs(1).then((list) => {
+      if (alive) setDeliverableJob(((list as DeliverableJob[]) ?? [])[0] ?? null)
+    })
+    const off = window.api.onDeliverableProgress((p) => {
+      void window.api.getDeliverableJob(p.jobId).then((j) => {
+        if (alive && j) setDeliverableJob(j as DeliverableJob)
+      })
+    })
+    return () => {
+      alive = false
+      if (typeof off === 'function') off()
+    }
   }, [])
   const pollRef = useRef<number | null>(null)
   const TABS: { key: Tab; label: string; icon: 'chart' | 'calendar' | 'sparkles' | 'brain' | 'book' }[] = [
@@ -553,6 +576,8 @@ export default function ReportHub() {
       {/* 页面标题区 */}
       <PageHeader icon="chart" title="回顾" desc="今天、本周做了什么，以及沉淀下来的东西" />
 
+      {deliverableJob ? <DeliverableDraftCard job={deliverableJob} onChanged={setDeliverableJob} /> : null}
+
       {/* 报表入口：分段选择器（v6 Seg，图标化） */}
       <div className="anim-fade-up flex flex-wrap items-center gap-2" style={{ animationDelay: '60ms' }}>
         <Seg
@@ -583,7 +608,65 @@ export default function ReportHub() {
         <button className={`glass-btn ${showSettings ? 'primary' : ''}`} title="报表设置" onClick={() => setShowSettings((v) => !v)}>
           <Icon name="settings" size={13} /> 报表设置
         </button>
+        {/* 起草交付物：文字先行，确认后才渲染 */}
+        <button
+          className="glass-btn"
+          title="先出文字草案，确认后再生成文件"
+          onClick={() => {
+            void window.api
+              .startDeliverableDraft({ template: exportTemplate, goal: '今日回顾' })
+              .then((j) => setDeliverableJob(j as DeliverableJob))
+              .catch((e) => setExportPath(`起草失败：${(e as Error).message}`))
+          }}
+        >
+          <Icon name="sparkles" size={13} /> 起草交付物
+        </button>
+        {/* 导出交付物：格式 × 模板 */}
+        <select
+          className="glass-input !py-1 !text-xs"
+          value={exportTemplate}
+          onChange={(e) => setExportTemplate(e.target.value as typeof exportTemplate)}
+          title="版式模板"
+        >
+          <option value="brief">简报</option>
+          <option value="report">日报</option>
+          <option value="deck">演示</option>
+          <option value="poster">长图</option>
+        </select>
+        <select
+          className="glass-input !py-1 !text-xs"
+          value={exportFormat}
+          onChange={(e) => setExportFormat(e.target.value as typeof exportFormat)}
+          title="文件格式"
+        >
+          <option value="html">HTML</option>
+          <option value="pdf">PDF</option>
+          <option value="png">PNG</option>
+          <option value="md">MD</option>
+        </select>
+        <button
+          className="glass-btn"
+          title="按当前模板导出今日报告"
+          disabled={exporting}
+          onClick={() => {
+            setExporting(true)
+            setExportPath(null)
+            void window.api
+              .exportReport(todayKey(), exportFormat, exportTemplate)
+              .then((r) => setExportPath((r as { path?: string })?.path ?? '已导出'))
+              .catch((e) => setExportPath(`导出失败：${(e as Error).message}`))
+              .finally(() => setExporting(false))
+          }}
+        >
+          <Icon name="sparkles" size={13} /> {exporting ? '导出中…' : '导出'}
+        </button>
       </div>
+      {exportPath ? (
+        <div className="anim-fade-in flex items-center gap-2 text-2xs text-slate-500">
+          <Icon name="book" size={12} />
+          <span className="truncate">{exportPath}</span>
+        </div>
+      ) : null}
       {showSettings ? (
         <div className="glass-card anim-fade-in flex flex-col gap-3 !p-4">
           <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-300">

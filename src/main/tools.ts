@@ -12,6 +12,8 @@
 
 import { clipText, summarizeArgs } from '@shared/trace'
 import { recordToolCall } from './trace'
+import { getNodeLabel } from './nodes'
+import type { DraftSpec } from '@shared/deliverable/spec'
 
 /** OpenAI Function Calling 工具定义 */
 export interface ToolDef {
@@ -80,7 +82,7 @@ export const WORKON_TOOLS: ToolDef[] = [
     type: 'function',
     function: {
       name: 'create_plan',
-      description: '创建一条新计划',
+      description: '准备一条新计划：先向用户展示预览卡，用户确认后才真正创建',
       parameters: {
         type: 'object',
         properties: {
@@ -195,6 +197,234 @@ export const WORKON_TOOLS: ToolDef[] = [
         required: []
       }
     }
+  },
+  // ── 节点模式（P0 只读）：外部电脑包装成普通能力插件，LLM 无感 ──
+  {
+    type: 'function',
+    function: {
+      name: 'remote_sys_info',
+      description: '查看已配对的远程电脑节点的系统信息（主机名、OS、架构、白名单根目录）',
+      parameters: {
+        type: 'object',
+        properties: {
+          nodeId: { type: 'string', description: '节点 ID（见上下文「远程节点」中的 nodeId）' }
+        },
+        required: ['nodeId']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'remote_fs_list',
+      description: '列出远程电脑节点上指定目录的内容（只读，受节点白名单根目录限制）',
+      parameters: {
+        type: 'object',
+        properties: {
+          nodeId: { type: 'string', description: '节点 ID' },
+          path: { type: 'string', description: '目录绝对路径，缺省为节点白名单第一个根目录' }
+        },
+        required: ['nodeId']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_navigate',
+      description: '在 WorkOn 内置浏览器中打开网址（应用内网页，登录态持久）。支持域名自动补 https，普通文字会走搜索',
+      parameters: {
+        type: 'object',
+        properties: { url: { type: 'string', description: '网址或搜索词' } },
+        required: ['url']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_read',
+      description: '读取内置浏览器当前页面的标题、正文和可交互元素（按钮/链接/输入框，带选择器）',
+      parameters: { type: 'object', properties: {}, required: [] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_click',
+      description: '在内置浏览器里点击元素：可传 CSS 选择器，或按钮/链接文字',
+      parameters: {
+        type: 'object',
+        properties: { target: { type: 'string', description: 'CSS 选择器或元素文字' } },
+        required: ['target']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_fill',
+      description: '在内置浏览器里填写输入框（选择器 + 文本），会触发 input/change 事件',
+      parameters: {
+        type: 'object',
+        properties: {
+          selector: { type: 'string', description: '输入框 CSS 选择器' },
+          text: { type: 'string', description: '要填入的文本' }
+        },
+        required: ['selector', 'text']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_screenshot',
+      description: '截取内置浏览器当前页面并保存到本地，返回文件路径',
+      parameters: { type: 'object', properties: {}, required: [] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'web_test',
+      description:
+        '对网页做自动化测试：页面巡检（空白页/坏图/错误文案/控制台报错/横向溢出）、核心流程回归、表单边界；返回步骤结果、问题清单、结论与报告路径',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: '要测试的网址（http/https）' },
+          goal: { type: 'string', description: '测试目标或要走的流程，例如：登录后进入个人中心并检查昵称；留空只做页面巡检' },
+          kinds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '测试类型：inspect=页面巡检 / flow=流程回归 / form=表单边界，默认全部'
+          },
+          maxSteps: { type: 'number', description: '流程步骤上限（3-15，默认 8）' }
+        },
+        required: ['url']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_projects',
+      description: '列出 WorkOn 本地项目（「计划 → 项目」里的项目，不是计划、不是远程节点仓库）：名称、状态、优先级、目标、任务数',
+      parameters: { type: 'object', properties: {}, required: [] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_project',
+      description: '新建 WorkOn 本地项目。用户说「增加/新建/创建 XXX 项目」时用这个，不要把项目建成计划',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: '项目名称，例如「Trae 大赛」' },
+          goal: { type: 'string', description: '项目目标（可选）' },
+          priority: { type: 'string', enum: ['high', 'medium', 'low'], description: '优先级，默认 medium' }
+        },
+        required: ['name']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'add_project_task',
+      description: '给本地项目加一条任务（按项目名或项目 ID 定位；项目不存在时提示先 create_project）',
+      parameters: {
+        type: 'object',
+        properties: {
+          project: { type: 'string', description: '项目名称或 projectId' },
+          title: { type: 'string', description: '任务标题' },
+          priority: { type: 'string', enum: ['high', 'medium', 'low'], description: '优先级，默认 medium' }
+        },
+        required: ['project', 'title']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_memory',
+      description: '检索本地记忆：屏幕 OCR、截图索引、知识库、应用活动。用户问「我在哪看过/上次那个/之前提到」时用',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: '关键词' },
+          startTs: { type: 'number', description: '起始时间戳（可选，默认 7 天前）' },
+          endTs: { type: 'number', description: '结束时间戳（可选，默认现在）' },
+          limit: { type: 'number', description: '返回条数（默认 10）' }
+        },
+        required: ['query']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'draft_deliverable',
+      description: '起草交付物（报告/简报/演示/长图）：只生成文字草案，不渲染任何文件。必须等用户确认草案后才能继续',
+      parameters: {
+        type: 'object',
+        properties: {
+          template: { type: 'string', enum: ['brief', 'report', 'deck', 'poster'], description: '模板，默认 report' },
+          title: { type: 'string', description: '标题（可选）' },
+          date: { type: 'string', description: '日期 YYYY-MM-DD（可选，默认今天）' },
+          goal: { type: 'string', description: '受众与目的（可选）' }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'revise_deliverable',
+      description: '按用户反馈修订交付物草案（仍不渲染）。仅用于草案阶段',
+      parameters: {
+        type: 'object',
+        properties: {
+          jobId: { type: 'string', description: '任务 id' },
+          title: { type: 'string', description: '新标题（可选）' },
+          feedback: { type: 'string', description: '用户修改意见（可选）' }
+        },
+        required: ['jobId']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'render_deliverable',
+      description: '把已确认的任务渲染成文件。未确认会被闸门拒绝（GATE_NOT_CONFIRMED）；禁止跳过确认',
+      parameters: {
+        type: 'object',
+        properties: {
+          jobId: { type: 'string', description: '任务 id' },
+          format: { type: 'string', enum: ['md', 'html', 'pdf', 'png', 'docx', 'xlsx', 'pptx'], description: '输出格式' }
+        },
+        required: ['jobId', 'format']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'export_report',
+      description: '直接导出某日报告为文件（md/html/pdf/png）。适合用户明确说「导出今天的报告」',
+      parameters: {
+        type: 'object',
+        properties: {
+          date: { type: 'string', description: '日期 YYYY-MM-DD，默认今天' },
+          format: { type: 'string', enum: ['md', 'html', 'pdf', 'png'], description: '格式，默认 html' },
+          template: { type: 'string', enum: ['brief', 'report', 'deck', 'poster'], description: '模板，默认 report' }
+        },
+        required: []
+      }
+    }
   }
 ]
 
@@ -297,28 +527,184 @@ async function executeToolInner(name: string, args: Record<string, unknown>): Pr
       }
 
       case 'create_plan': {
-        const { insertInto } = await import('./db')
         const { genId } = await import('@shared/types')
         const { dateKey } = await import('@shared/trail')
-        const date = dateKey(Date.now())
-        const title = args.title as string
-        const now = new Date()
-        const plan = {
-          id: genId('plan'),
-          date,
+        const title = String(args.title ?? '').trim()
+        if (!title) return JSON.stringify({ success: false, error: '计划标题为空' })
+        const hasTime = typeof args.startMin === 'number'
+        // 不直接落库：先广播预览卡，用户在卡片上确认后才写入
+        const proposal = {
+          token: genId('planproposal'),
+          date: dateKey(Date.now()),
           title,
           category: (args.category as string) || 'other',
-          startMin: (args.startMin as number) ?? (now.getHours() * 60 + now.getMinutes()),
-          status: 'planned' as const,
-          source: 'ai-tool',
-          completionRatio: 0,
-          ts: Date.now()
+          planType: hasTime ? ('reminder' as const) : ('task' as const),
+          startMin: hasTime ? (args.startMin as number) : undefined
         }
-        insertInto('plans', plan)
-        // 通知前端刷新
         const { broadcast } = await import('./windows')
-        broadcast('plan-updated')
-        return JSON.stringify({ success: true, planId: plan.id, message: `已创建计划：${title}` })
+        broadcast('plan:proposal', proposal)
+        return JSON.stringify({
+          success: true,
+          status: 'pending_user_confirmation',
+          proposal,
+          message: '已向用户展示计划预览卡，尚未创建；请提示用户点卡片确认，不要声称已创建。'
+        })
+      }
+
+      case 'list_projects': {
+        const { listProjects, listTasks } = await import('./projects')
+        return JSON.stringify({
+          projects: listProjects().map((p) => ({
+            id: p.id,
+            name: p.name,
+            status: p.status,
+            priority: p.priority,
+            goal: p.goal ?? '',
+            tasks: listTasks(p.id).length
+          }))
+        })
+      }
+
+      case 'create_project': {
+        const name = String(args.name ?? '').trim().slice(0, 40)
+        if (!name) return JSON.stringify({ success: false, error: '项目名称为空' })
+        const { listProjects, saveProject } = await import('./projects')
+        const dup = listProjects().find((p) => p.name === name)
+        if (dup) {
+          return JSON.stringify({
+            success: true,
+            existing: true,
+            project: { id: dup.id, name: dup.name },
+            message: `项目「${dup.name}」已存在，未重复创建。`
+          })
+        }
+        const priorityRaw = String(args.priority ?? 'medium')
+        const priority = priorityRaw === 'high' || priorityRaw === 'low' ? priorityRaw : 'medium'
+        const project = saveProject({
+          name,
+          goal: typeof args.goal === 'string' ? args.goal.slice(0, 200) : undefined,
+          priority
+        })
+        return JSON.stringify({
+          success: true,
+          project: { id: project.id, name: project.name, priority: project.priority },
+          message: `已在「计划 → 项目」中创建项目「${project.name}」，还没创建任何计划。`
+        })
+      }
+
+      case 'add_project_task': {
+        const key = String(args.project ?? '').trim()
+        const title = String(args.title ?? '').trim().slice(0, 80)
+        if (!key || !title) return JSON.stringify({ success: false, error: '缺少项目或任务标题' })
+        const { listProjects, saveTask } = await import('./projects')
+        const project = listProjects().find((p) => p.id === key || p.name === key) ??
+          listProjects().find((p) => p.name.includes(key))
+        if (!project) {
+          return JSON.stringify({ success: false, error: `没有找到项目「${key}」，请先用 create_project 新建` })
+        }
+        const priorityRaw = String(args.priority ?? 'medium')
+        const priority = priorityRaw === 'high' || priorityRaw === 'low' ? priorityRaw : 'medium'
+        const task = saveTask({ projectId: project.id, title, priority })
+        return JSON.stringify({
+          success: true,
+          project: project.name,
+          task: { id: task.id, title: task.title },
+          message: `已给项目「${project.name}」加任务「${task.title}」。`
+        })
+      }
+
+      case 'search_memory': {
+        const { search } = await import('./memory')
+        const query = String(args.query ?? '').trim()
+        if (!query) return JSON.stringify({ success: false, error: '缺少关键词' })
+        const hits = search(query, {
+          start: typeof args.startTs === 'number' ? args.startTs : undefined,
+          end: typeof args.endTs === 'number' ? args.endTs : undefined,
+          limit: typeof args.limit === 'number' ? args.limit : 10
+        })
+        return JSON.stringify({ success: true, count: hits.length, hits: hits.slice(0, 10) })
+      }
+
+      case 'draft_deliverable': {
+        const { startDraft } = await import('./deliverable/orchestrator')
+        const templateRaw = String(args.template ?? 'report')
+        const template = ['brief', 'report', 'deck', 'poster'].includes(templateRaw) ? templateRaw : 'report'
+        const job = await startDraft({
+          template: template as 'brief' | 'report' | 'deck' | 'poster',
+          title: args.title ? String(args.title).slice(0, 60) : undefined,
+          date: args.date ? String(args.date).slice(0, 10) : undefined,
+          goal: args.goal ? String(args.goal).slice(0, 120) : undefined
+        })
+        return JSON.stringify({
+          success: true,
+          jobId: job.id,
+          stage: job.stage,
+          draft: job.draft,
+          issues: job.draftIssues,
+          message: '文字草案已生成。请让用户确认或修改后再渲染，不要直接渲染。'
+        })
+      }
+
+      case 'revise_deliverable': {
+        const { getJob, reviseDraft } = await import('./deliverable/orchestrator')
+        const jobId = String(args.jobId ?? '')
+        const job = getJob(jobId)
+        if (!job) return JSON.stringify({ success: false, error: '任务不存在' })
+        if (job.stage !== 'draft' && job.stage !== 'draft_audited') {
+          return JSON.stringify({ success: false, error: `当前阶段不能修改草案：${job.stage}` })
+        }
+        const patch: Partial<DraftSpec> = {}
+        if (args.title) patch.title = String(args.title).slice(0, 60)
+        const feedback = String(args.feedback ?? '').trim()
+        if (feedback) patch.riskHints = [...(job.draft.riskHints ?? []), feedback.slice(0, 160)]
+        const next = reviseDraft(jobId, patch)
+        return JSON.stringify({ success: true, jobId: next.id, draft: next.draft, issues: next.draftIssues })
+      }
+
+      case 'render_deliverable': {
+        const { renderJob } = await import('./deliverable/orchestrator')
+        const jobId = String(args.jobId ?? '')
+        const formatRaw = String(args.format ?? 'html')
+        const allowed = ['md', 'html', 'pdf', 'png', 'docx', 'xlsx', 'pptx']
+        const format = (allowed.includes(formatRaw) ? formatRaw : 'html') as
+          | 'md'
+          | 'html'
+          | 'pdf'
+          | 'png'
+          | 'docx'
+          | 'xlsx'
+          | 'pptx'
+        try {
+          const r = await renderJob(jobId, format)
+          return JSON.stringify({ success: true, path: r.path, bytes: r.bytes })
+        } catch (e) {
+          const err = e as Error & { code?: string }
+          return JSON.stringify({
+            success: false,
+            error: err.code === 'GATE_NOT_CONFIRMED' ? 'GATE_NOT_CONFIRMED' : err.message,
+            message: '必须先让用户确认草案与 AST，才能渲染'
+          })
+        }
+      }
+
+      case 'export_report': {
+        const { exportReport } = await import('./report/engine')
+        const { dateKey } = await import('@shared/trail')
+        const date = String(args.date ?? dateKey(Date.now())).slice(0, 10)
+        const formatRaw = String(args.format ?? 'html')
+        const format = (['md', 'html', 'pdf', 'png'].includes(formatRaw) ? formatRaw : 'html') as
+          | 'md'
+          | 'html'
+          | 'pdf'
+          | 'png'
+        const templateRaw = String(args.template ?? 'report')
+        const template = (['brief', 'report', 'deck', 'poster'].includes(templateRaw) ? templateRaw : 'report') as
+          | 'brief'
+          | 'report'
+          | 'deck'
+          | 'poster'
+        const r = await exportReport(date, format, template)
+        return JSON.stringify({ success: true, path: r.path, bytes: r.bytes })
       }
 
       case 'complete_plan': {
@@ -459,6 +845,96 @@ async function executeToolInner(name: string, args: Record<string, unknown>): Pr
         })
       }
 
+      // ── 节点模式（P0 只读）：统一走 nodeManager，返回值仍是 JSON 字符串 ──
+      case 'remote_sys_info': {
+        const { callNode } = await import('./nodes')
+        const nodeId = typeof args.nodeId === 'string' ? args.nodeId : ''
+        if (!nodeId) return JSON.stringify({ error: '缺少 nodeId（可用节点见上下文「远程节点」）' })
+        return await callNode(nodeId, 'sys.info', {})
+      }
+
+      case 'remote_fs_list': {
+        const { callNode } = await import('./nodes')
+        const nodeId = typeof args.nodeId === 'string' ? args.nodeId : ''
+        if (!nodeId) return JSON.stringify({ error: '缺少 nodeId（可用节点见上下文「远程节点」）' })
+        return await callNode(nodeId, 'fs.list', {
+          path: typeof args.path === 'string' ? args.path : undefined
+        })
+      }
+
+      // ── 应用内浏览器（Qoder 式：Agent 直接看网页 / 操作网页） ──
+      case 'browser_navigate': {
+        const { browserNavigate, browserRead } = await import('./browser')
+        const res = await browserNavigate(String(args.url ?? ''))
+        if (!res.ok) return JSON.stringify({ error: res.error })
+        const read = await browserRead().catch(() => ({ ok: false as const, error: '页面读取失败' }))
+        return JSON.stringify({
+          ok: true,
+          url: res.detail,
+          title: read.ok ? read.title : '',
+          text: read.ok ? read.text : '',
+          items: read.ok ? read.items?.slice(0, 40) : [],
+          factGrounding:
+            '本工具已返回当前页面 title/url/text/items。只能依据这些字段总结；页面未出现的语言、用途、限制、作者、交互能力或建议不要补充，不确定就明确说页面未提供。',
+          nextStep: read.ok ? '页面正文已在本结果中，可直接总结；如需刷新页面内容可再调用 browser_read。' : '页面已打开但正文读取失败，可重试 browser_read。'
+        })
+      }
+
+      case 'browser_read': {
+        const { browserRead } = await import('./browser')
+        const res = await browserRead()
+        if (!res.ok) return JSON.stringify({ error: res.error })
+        return JSON.stringify({
+          title: res.title,
+          url: res.url,
+          text: res.text,
+          items: res.items?.slice(0, 40),
+          factGrounding: '只能依据本工具返回的 title/url/text/items 总结；页面未出现的语言、用途、限制、作者、交互能力或建议不要补充，不确定就明确说页面未提供。'
+        })
+      }
+
+      case 'browser_click': {
+        const { browserClick } = await import('./browser')
+        const res = await browserClick(String(args.target ?? ''))
+        return JSON.stringify(res.ok ? { ok: true, detail: res.detail } : { error: res.error })
+      }
+
+      case 'browser_fill': {
+        const { browserFill } = await import('./browser')
+        const res = await browserFill(String(args.selector ?? ''), String(args.text ?? ''))
+        return JSON.stringify(res.ok ? { ok: true, detail: res.detail } : { error: res.error })
+      }
+
+      case 'browser_screenshot': {
+        const { browserScreenshot } = await import('./browser')
+        const res = await browserScreenshot()
+        return JSON.stringify(res.ok ? { ok: true, path: res.path } : { error: res.error })
+      }
+
+      case 'web_test': {
+        const { runWebTest } = await import('./webTest')
+        const report = await runWebTest({
+          url: String(args.url ?? ''),
+          goal: args.goal ? String(args.goal) : '',
+          kinds: Array.isArray(args.kinds) ? (args.kinds as import('@shared/webtest').WebTestKind[]) : undefined,
+          maxSteps: args.maxSteps ? Number(args.maxSteps) : undefined
+        })
+        return JSON.stringify({
+          pageTitle: report.pageTitle,
+          summary: report.summary,
+          issues: report.issues.slice(0, 10),
+          steps: report.steps.map((s) => ({
+            index: s.index,
+            action: s.action,
+            target: s.target,
+            status: s.status,
+            detail: s.detail
+          })),
+          conclusion: report.conclusion,
+          reportPath: report.reportPath
+        })
+      }
+
       default:
         return JSON.stringify({ error: `未知工具：${name}` })
     }
@@ -498,7 +974,12 @@ export async function executeTool(
     ok: !failed,
     ms: Date.now() - started,
     resultPreview: clipText(result),
-    error
+    error,
+    // 远端调用在隧道里标明目标机器；本机调用保持缺省
+    target:
+      name.startsWith('remote_') && typeof args.nodeId === 'string'
+        ? { kind: 'node', nodeId: args.nodeId, label: getNodeLabel(args.nodeId) }
+        : undefined
   })
   return result
 }

@@ -142,6 +142,10 @@ function lowerPriority(pid: number | undefined): void {
 
 function runPs(encoded: string, timeoutMs: number, maxBuf: number): Promise<string | null> {
   return new Promise((resolve) => {
+    if (process.platform !== 'win32') {
+      resolve(null)
+      return
+    }
     const child = execFile(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],

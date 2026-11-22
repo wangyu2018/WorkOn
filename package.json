@@ -6,15 +6,23 @@
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
+    "dev:debug": "REMOTE_DEBUGGING_PORT=9333 electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "typecheck:e2e": "tsc --noEmit -p tsconfig.e2e.json",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.0.1",
     "@pixiv/three-vrm-animation": "^3.5.5",
     "chokidar": "^5.0.0",
+    "docx": "^9.15.4",
+    "exceljs": "^4.4.0",
     "koffi": "^3.2.1",
+    "mammoth": "^1.13.0",
+    "pdf-parse": "^2.4.5",
+    "pptxgenjs": "^4.0.1",
     "rapidocrjson": "^0.1.1",
     "sharp": "^0.35.3",
     "tesseract.js": "^5.1.1",
@@ -23,6 +31,7 @@
   },
   "devDependencies": {
     "@pixiv/three-vrm": "^3.5.5",
+    "@playwright/test": "^1.65.1",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@types/three": "^0.170.0",
@@ -59,8 +68,16 @@
       "node_modules/detect-libc/**/*",
       "node_modules/semver/**/*",
       "node_modules/@img/colour/**/*",
-      "node_modules/@img/sharp-win32-x64/**/*"
+      "node_modules/@img/sharp-win32-x64/**/*",
+      "node_modules/node-gyp-build/**/*"
     ],
+    "asarUnpack": [
+      "out/main/inputProbeWorker.js",
+      "node_modules/node-gyp-build/**"
+    ],
+    "mac": {
+      "icon": "assets/icon-1024.png"
+    },
     "win": {
       "target": "nsis",
       "icon": "assets/icon-512.png"

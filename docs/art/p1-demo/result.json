@@ -1,0 +1,68 @@
+{
+  "kn": {
+    "id": "kn_mwoed5q2_4261uc",
+    "title": "调研结论：AI 情报产品的三类留存钩子",
+    "source": "manual",
+    "links": [
+      {
+        "type": "plan",
+        "id": "plan_mwoed9gg_458b5b",
+        "title": "调研结论：AI 情报产品的三类留存钩子"
+      }
+    ]
+  },
+  "today": [
+    {
+      "id": "plan_mwoed5q4_438jsy",
+      "title": "写竞品分析初稿",
+      "source": "manual",
+      "status": "delayed",
+      "planType": "phase",
+      "startMin": 180,
+      "endMin": 210
+    },
+    {
+      "id": "plan_mwoed5q4_4485io",
+      "title": "整理用户访谈纪要",
+      "source": "manual",
+      "status": "delayed",
+      "planType": "phase",
+      "startMin": 210,
+      "endMin": 240
+    },
+    {
+      "id": "plan_mwoed9gg_458b5b",
+      "title": "调研结论：AI 情报产品的三类留存钩子",
+      "source": "knowledge",
+      "status": "delayed",
+      "planType": "task",
+      "note": "1. 每日固定时段的自动摘要，让用户形成回访习惯；2. 情报到计划的最后一公里，避免「看完就忘」；3. 复盘时能看到情报如何变成行动，形成正反馈。"
+    }
+  ],
+  "tomorrow": [
+    {
+      "id": "plan_mwoedhzj_464cxj",
+      "title": "写竞品分析初稿",
+      "source": "manual",
+      "status": "planned",
+      "planType": "phase",
+      "note": "延期自 2026-11-20，原因：回顾页顺延"
+    },
+    {
+      "id": "plan_mwoedhzm_47q934",
+      "title": "整理用户访谈纪要",
+      "source": "manual",
+      "status": "planned",
+      "planType": "phase",
+      "note": "延期自 2026-11-20，原因：回顾页顺延"
+    },
+    {
+      "id": "plan_mwoedhzn_48oemd",
+      "title": "调研结论：AI 情报产品的三类留存钩子",
+      "source": "manual",
+      "status": "planned",
+      "planType": "task",
+      "note": "延期自 2026-11-20，原因：回顾页顺延"
+    }
+  ]
+}

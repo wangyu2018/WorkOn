@@ -4,6 +4,8 @@
 
 /* ── CSS 变量体系（深邃黑默认 · 强调色仍走 theme） ── */
 :root {
+  /* 原生控件（日期/时间选择器、滚动条）跟随暗色 */
+  color-scheme: dark;
   /* Today 风格：近黑底 + 中性灰阶，文字对比靠字重与留白，不靠彩色 */
   --bg-deep: #0b0b0d;
   --bg-surface: #161618;
@@ -11,6 +13,12 @@
   --border-subtle: #262629;
   --surface-2: #1a1a1d;
   --surface-3: #232327;
+  /* 控件底色：输入框/弹层次级按钮靠填充区分，不靠描边 */
+  --control-bg: #1c1c1f;
+  --control-bg-hover: #232327;
+  --control-bg-focus: #101012;
+  /* 分段选择器选中底色：亮色用纯白抬起，暗色用深底下沉 */
+  --seg-active: #0b0b0d;
   --line: #2a2a2e;
   --line-strong: #3a3a40;
   --text-1: #f4f4f5;
@@ -20,15 +28,16 @@
   --teal: #0fb5a4;
   --teal-deep: #0a8f82;
   --teal-soft: rgba(15, 181, 164, 0.12);
-  --glow-t: 0 6px 22px rgba(15, 181, 164, 0.35);
+  --glow-t: none;
   --indigo: #6366f1;
   --violet: #8b5cf6;
   --cyan: #06b6d4;
-  --aura: linear-gradient(135deg, #6366f1, #8b5cf6 55%, #06b6d4);
-  --aura-soft: linear-gradient(135deg, rgba(99,102,241,.1), rgba(139,92,246,.06) 55%, rgba(6,182,212,.08));
-  --glow-i: 0 8px 26px rgba(124, 58, 237, 0.3);
-  --glow-v: 0 6px 24px rgba(139, 92, 246, 0.35);
-  --glow-c: 0 6px 24px rgba(6, 182, 212, 0.35);
+  /* AI 强调不再用紫蓝渐变：统一为品牌深青，靠字重/留白区分 */
+  --aura: var(--teal-deep);
+  --aura-soft: rgba(15, 181, 164, 0.1);
+  --glow-i: none;
+  --glow-v: none;
+  --glow-c: none;
   --shadow-sm: none;
   --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.24);
   --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.5);
@@ -108,6 +117,10 @@ html[data-tone='navy'] {
   --border-subtle: #26323d;
   --surface-2: #1a232c;
   --surface-3: #202c37;
+  --control-bg: #1f2a35;
+  --control-bg-hover: #26333f;
+  --control-bg-focus: #0f1620;
+  --seg-active: #0d1117;
   --line: #26323d;
   --line-strong: #324250;
   --text-1: #e8f0f3;
@@ -166,7 +179,7 @@ body {
 html[data-tone='navy']:not([data-mode='light']) body {
   background:
     radial-gradient(1100px 480px at 78% -12%, rgba(15, 181, 164, 0.1), transparent 62%),
-    radial-gradient(880px 420px at 8% 112%, rgba(139, 92, 246, 0.06), transparent 60%),
+    radial-gradient(880px 420px at 8% 112%, rgba(148, 163, 184, 0.05), transparent 60%),
     linear-gradient(165deg, #10161d 0%, #0d1117 52%, #0b0f14 100%);
 }
 
@@ -210,6 +223,18 @@ input,
 textarea {
   user-select: text;
   font-family: inherit;
+}
+
+/* 原生 checkbox/radio/range 统一跟随强调色 */
+input[type='checkbox'],
+input[type='radio'],
+input[type='range'] {
+  accent-color: var(--accent);
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text-1);
 }
 
 /* ── 滚动条 ── */
@@ -308,15 +333,64 @@ textarea {
     background: rgba(220, 38, 38, 0.08);
     color: #dc2626;
   }
+  /* 弹层内：次级按钮给一层浅填充，可点区域一眼可见；工具栏仍保持纯文字按钮 */
+  [role='dialog'] .glass-btn:not(.primary):not(.ai):not(.danger) {
+    background: var(--control-bg);
+  }
+  [role='dialog'] .glass-btn:not(.primary):not(.ai):not(.danger):hover {
+    background: var(--control-bg-hover);
+    color: var(--text-1);
+  }
+  /* 弹层内的危险确认用实心红，明确不可逆 */
+  [role='dialog'] .glass-btn.danger {
+    background: #dc2626;
+    border-color: transparent;
+    color: #ffffff;
+  }
+  [role='dialog'] .glass-btn.danger:hover {
+    background: #b91c1c;
+    border-color: transparent;
+    color: #ffffff;
+  }
 
   .glass-input {
     @apply w-full rounded-lg px-3 py-2 text-sm text-slate-200 outline-none;
-    background: var(--bg-deep);
+    background: var(--control-bg);
     border: 0;
-    transition: box-shadow var(--t-hover);
+    min-height: 36px;
+    caret-color: var(--accent);
+    transition:
+      background-color var(--t-hover),
+      box-shadow var(--t-hover);
   }
-  .glass-input:focus {
-    box-shadow: 0 0 0 2px var(--accent-softer);
+  .glass-input:hover:not(:disabled) {
+    background: var(--control-bg-hover);
+  }
+  .glass-input:focus:not(:disabled) {
+    /* 单圈焦点：只描输入框自身一圈，不再叠加外扩光晕 */
+    outline: none;
+    background: var(--control-bg-focus);
+    box-shadow: inset 0 0 0 1.5px var(--accent);
+  }
+  .glass-input:focus-visible {
+    outline: none;
+  }
+  .glass-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .glass-input[aria-invalid='true']:not(:disabled) {
+    box-shadow: inset 0 0 0 1.5px #ef4444;
+  }
+  /* 原生日期/时间控件比文本输入框高 2px，拉齐到同一行基线 */
+  input.glass-input[type='date'],
+  input.glass-input[type='time'],
+  input.glass-input[type='datetime-local'],
+  input.glass-input[type='month'],
+  input.glass-input[type='week'] {
+    height: 36px;
+    padding-top: 0;
+    padding-bottom: 0;
   }
   .glass-input::placeholder {
     color: var(--text-muted);
@@ -324,6 +398,20 @@ textarea {
   select.glass-input option {
     background: var(--bg-surface);
     color: var(--text-1);
+  }
+
+  /* 复合输入容器（输入框 + 前后按钮/图标）：聚焦时整体高亮，避免只有内部输入框有反馈 */
+  .ui-field-shell {
+    transition:
+      border-color var(--t-hover),
+      background-color var(--t-hover);
+  }
+  .ui-field-shell:focus-within {
+    border-color: var(--accent) !important;
+  }
+  /* 容器已经有整体焦点环，内部输入不再单独描一圈 */
+  .ui-field-shell :where(input, textarea, select):focus-visible {
+    outline: none;
   }
 
   .chip {
@@ -339,25 +427,34 @@ textarea {
     background: var(--surface-3);
   }
 
-  /* 选项胶囊（设置/隐私等单选按钮组的统一写法） */
+  /* 选项胶囊（设置/隐私等单选按钮组的统一写法）：填充式，选中用主题色淡底 */
   .pill-btn {
-    @apply rounded-lg border px-2.5 py-1.5 text-xs text-slate-400;
-    border-color: var(--line);
-    background: transparent;
+    @apply rounded-lg px-2.5 py-1.5 text-xs text-slate-400;
+    background: var(--control-bg);
+    border: 0;
+    min-height: 30px;
+    white-space: nowrap;
+    cursor: pointer;
     transition:
       background-color var(--t-hover),
-      border-color var(--t-hover),
-      color var(--t-hover);
+      color var(--t-hover),
+      transform 120ms var(--ease-soft);
   }
-  .pill-btn:hover {
-    border-color: var(--line-strong);
+  .pill-btn:hover:not(:disabled) {
+    background: var(--control-bg-hover);
     color: var(--text-1);
   }
+  .pill-btn:active {
+    transform: scale(0.97);
+  }
+  .pill-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
   .pill-btn.active {
-    border-color: var(--border-active);
-    background: var(--accent-softer);
+    background: var(--accent-soft);
     color: var(--accent);
-    box-shadow: 0 0 0 1px var(--accent-softer);
+    box-shadow: none;
   }
 
   /* 图标按钮：最小 28×28 点击区（此前 h-4/h-5 小图标 20 处不可点） */
@@ -365,13 +462,22 @@ textarea {
     @apply inline-flex shrink-0 items-center justify-center rounded-lg text-slate-400;
     width: 28px;
     height: 28px;
+    cursor: pointer;
     transition:
       background-color var(--t-hover),
-      color var(--t-hover);
+      color var(--t-hover),
+      transform 120ms var(--ease-soft);
   }
-  .ui-icon-btn:hover {
+  .ui-icon-btn:hover:not(:disabled) {
     background: var(--surface-3);
     color: var(--text-1);
+  }
+  .ui-icon-btn:active {
+    transform: scale(0.94);
+  }
+  .ui-icon-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
   .ui-icon-btn[aria-pressed='true'] {
     background: var(--accent-softer);
@@ -393,7 +499,7 @@ textarea {
     color: var(--text-1);
   }
   .ui-tab[aria-selected='true'] {
-    background: var(--bg-deep);
+    background: var(--seg-active);
     color: var(--text-1);
     box-shadow: var(--shadow-md);
   }
@@ -815,9 +921,9 @@ html[data-theme='ink']:not([data-overlay='1']) .app-sidebar {
 [data-theme='green']  { --star-work: 16 185 129; --star-life: 251 191 36; --star-work-fg: 6 95 70; --star-life-fg: 180 83 9; }
 [data-theme='amber']  { --star-work: 251 191 36; --star-life: 239 68 68; --star-work-fg: 180 83 9; --star-life-fg: 185 28 28; }
 
-/* shadow-glow 收敛：默认主题下也减弱（发光只做点缀） */
+/* 发光退场：只保留边框/底色表达状态 */
 .shadow-glow {
-  box-shadow: 0 0 14px rgba(34, 211, 238, 0.22) !important;
+  box-shadow: none !important;
 }
 
 /* ── 亮色模式（data-mode=light，覆盖少量硬编码工具类） ── */
@@ -827,11 +933,16 @@ html[data-theme='ink']:not([data-overlay='1']) .app-sidebar {
 }
 /* 亮色模式重映射 Token（中性冷灰，与 Graphite 主题一致） */
 [data-mode='light'] {
+  color-scheme: light;
   --bg-deep: #f6f7f9;
   --bg-surface: #ffffff;
   --bg-elevated: #ffffff;
   --surface-2: #f4f5f7;
   --surface-3: #eceef1;
+  --control-bg: #f2f4f7;
+  --control-bg-hover: #e8ecf2;
+  --control-bg-focus: #ffffff;
+  --seg-active: #ffffff;
   --line: #e5e7eb;
   --line-strong: #d3d7dd;
   --border-subtle: #e5e7eb;
@@ -841,10 +952,10 @@ html[data-theme='ink']:not([data-overlay='1']) .app-sidebar {
   --shadow-sm: 0 1px 3px rgba(16, 36, 43, 0.06), 0 4px 14px rgba(16, 36, 43, 0.05);
   --shadow-md: 0 4px 12px rgba(16, 36, 43, 0.07), 0 12px 36px rgba(16, 36, 43, 0.08);
   --shadow-lg: 0 14px 44px rgba(16, 36, 43, 0.12), 0 28px 72px rgba(16, 36, 43, 0.1);
-  --glow-t: 0 6px 22px rgba(15, 181, 164, 0.28);
-  --glow-i: 0 8px 26px rgba(124, 58, 237, 0.25);
-  --glow-v: 0 6px 24px rgba(139, 92, 246, 0.3);
-  --glow-c: 0 6px 24px rgba(6, 182, 212, 0.3);
+  --glow-t: none;
+  --glow-i: none;
+  --glow-v: none;
+  --glow-c: none;
 }
 [data-mode='light'] {
   --tl-work-fill: #b5d4f4;
@@ -932,10 +1043,23 @@ html[data-theme='ink'][data-mode='light']:not([data-overlay='1']) .glass-card {
   background: var(--surface-2);
   color: var(--text-1);
 }
+[data-mode='light'] .glass-btn.danger:hover {
+  background: rgba(220, 38, 38, 0.12);
+  border-color: rgba(220, 38, 38, 0.5);
+  color: #991b1b;
+}
 [data-mode='light'] .glass-input {
-  background: #ffffff;
-  border: 0;
   color: var(--text-1);
+}
+[data-mode='light'] [role='dialog'] .glass-btn.danger {
+  background: #dc2626;
+  border-color: transparent;
+  color: #ffffff;
+}
+[data-mode='light'] [role='dialog'] .glass-btn.danger:hover {
+  background: #b91c1c;
+  border-color: transparent;
+  color: #ffffff;
 }
 [data-mode='light'] .glass-input::placeholder { color: var(--text-3); }
 [data-mode='light'] select.glass-input option { background: #ffffff; color: #171c2e; }
@@ -946,16 +1070,13 @@ html[data-theme='ink'][data-mode='light']:not([data-overlay='1']) .glass-card {
 }
 [data-mode='light'] .chip:hover { background: var(--surface-3); }
 [data-mode='light'] .pill-btn {
-  border-color: rgba(0, 0, 0, 0.1);
-  color: #64748b;
+  color: #475569;
 }
-[data-mode='light'] .pill-btn:hover {
-  border-color: rgba(0, 0, 0, 0.2);
+[data-mode='light'] .pill-btn:hover:not(:disabled) {
   color: #1e293b;
 }
 [data-mode='light'] .pill-btn.active {
-  border-color: var(--border-active);
-  background: var(--accent-softer);
+  background: var(--accent-soft);
   color: var(--accent);
 }
 [data-mode='light'] .text-slate-100 { color: #0f172a !important; }
@@ -964,6 +1085,87 @@ html[data-theme='ink'][data-mode='light']:not([data-overlay='1']) .glass-card {
 [data-mode='light'] .text-slate-400 { color: #475569 !important; }
 [data-mode='light'] .text-slate-500 { color: #64748b !important; }
 [data-mode='light'] .text-slate-600 { color: #78869a !important; }
+
+/* 亮色模式对比度：品牌色/状态色整体加深一档（原浅色在白底仅 2.4–2.6:1） */
+[data-mode='light']:not([data-theme='violet']):not([data-theme='green']):not([data-theme='amber']):not([data-theme='ink']) {
+  --accent: #0b7a70;
+  --accent-soft: rgba(11, 122, 112, 0.12);
+  --accent-softer: rgba(11, 122, 112, 0.08);
+  --accent-glow: rgba(11, 122, 112, 0.24);
+  --border-active: rgba(11, 122, 112, 0.32);
+  --teal: #0b7a70;
+  --teal-deep: #075e56;
+  --teal-soft: rgba(11, 122, 112, 0.1);
+  --teal-border: rgba(11, 122, 112, 0.28);
+  --teal-wash: rgba(11, 122, 112, 0.06);
+  --teal-chip: rgba(11, 122, 112, 0.08);
+  --teal-wash-strong: rgba(11, 122, 112, 0.14);
+  --teal-rgb: 11 122 112;
+}
+[data-theme='violet'][data-mode='light'] {
+  --accent: #6d28d9;
+  --accent-soft: rgba(109, 40, 217, 0.12);
+  --accent-softer: rgba(109, 40, 217, 0.08);
+  --accent-glow: rgba(109, 40, 217, 0.24);
+  --border-active: rgba(109, 40, 217, 0.3);
+  --teal: #6d28d9;
+  --teal-deep: #5b21b6;
+  --teal-rgb: 109 40 217;
+}
+[data-theme='green'][data-mode='light'] {
+  --accent: #047857;
+  --accent-soft: rgba(4, 120, 87, 0.12);
+  --accent-softer: rgba(4, 120, 87, 0.08);
+  --accent-glow: rgba(4, 120, 87, 0.24);
+  --border-active: rgba(4, 120, 87, 0.3);
+  --teal: #047857;
+  --teal-deep: #065f46;
+  --teal-rgb: 4 120 87;
+}
+[data-theme='amber'][data-mode='light'] {
+  --accent: #b45309;
+  --accent-soft: rgba(180, 83, 9, 0.12);
+  --accent-softer: rgba(180, 83, 9, 0.08);
+  --accent-glow: rgba(180, 83, 9, 0.24);
+  --border-active: rgba(180, 83, 9, 0.3);
+  --teal: #b45309;
+  --teal-deep: #92400e;
+  --teal-rgb: 180 83 9;
+}
+[data-mode='light'] .text-neon-cyan { color: #0b7a70 !important; }
+[data-mode='light'] .text-neon-blue { color: #4338ca !important; }
+[data-mode='light'] .text-neon-violet { color: #6d28d9 !important; }
+[data-mode='light'] .text-neon-pink { color: #be185d !important; }
+[data-mode='light'] .text-neon-amber { color: #b45309 !important; }
+[data-mode='light'] .text-neon-green { color: #047857 !important; }
+[data-mode='light'] .text-neon-red { color: #b91c1c !important; }
+[data-theme='violet'][data-mode='light'] .text-neon-cyan { color: #6d28d9 !important; }
+[data-theme='green'][data-mode='light'] .text-neon-cyan { color: #047857 !important; }
+[data-theme='amber'][data-mode='light'] .text-neon-cyan { color: #b45309 !important; }
+html[data-theme='ink'][data-mode='light'] .text-neon-cyan { color: #111114 !important; }
+[data-mode='light'] .text-amber-200,
+[data-mode='light'] .text-amber-300,
+[data-mode='light'] .text-amber-400,
+[data-mode='light'] .text-amber-500 { color: #b45309 !important; }
+[data-mode='light'] .text-emerald-300,
+[data-mode='light'] .text-emerald-400,
+[data-mode='light'] .text-emerald-500,
+[data-mode='light'] .text-green-300,
+[data-mode='light'] .text-green-400 { color: #047857 !important; }
+[data-mode='light'] .text-rose-300,
+[data-mode='light'] .text-rose-400,
+[data-mode='light'] .text-red-300,
+[data-mode='light'] .text-red-400,
+[data-mode='light'] .text-red-500 { color: #b91c1c !important; }
+[data-mode='light'] .text-sky-300,
+[data-mode='light'] .text-sky-400,
+[data-mode='light'] .text-cyan-400,
+[data-mode='light'] .text-blue-400 { color: #0e7490 !important; }
+[data-mode='light'] .text-violet-400,
+[data-mode='light'] .text-purple-400 { color: #6d28d9 !important; }
+/* 项目卡/日历里写死的暖色数值（浅色下提深，深色保持原样） */
+[data-mode='light'] .text-\[\#fbbf24\] { color: #b45309 !important; }
+[data-mode='light'] .text-\[\#f87171\] { color: #b91c1c !important; }
 
 /* 计划月历格内待办 pill：默认浅字（深色底），浅色外观改深字 */
 .month-plan-pill { color: #e2e8f0; }

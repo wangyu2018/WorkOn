@@ -1,6 +1,7 @@
 import { useEffect, useState, Fragment, type DragEvent } from 'react'
-import type { AppSettings } from '@shared/types'
+import type { AppSettings, RemoteNodeInfo } from '@shared/types'
 import { AI_ASSIST_POOL, normalizeAssistKey } from '@shared/aiAssistWatch'
+import { isLocalAiBaseUrl } from '@shared/aiConfig'
 import { useSettingsStore } from '../stores/settingsStore'
 import { Icon } from '../components/Icon'
 import { Toggle } from '../components/Toggle'
@@ -328,12 +329,32 @@ export default function SettingsView() {
   const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'ok' | 'fail'>('idle')
   const [aiTest, setAiTest] = useState<{ state: 'idle' | 'testing' | 'ok' | 'fail'; text?: string }>({ state: 'idle' })
   const [aiKeyHint, setAiKeyHint] = useState<string | null>(null)
+  /** 本机 Ollama 地址：跟随已配置的本地 Base URL，否则用可编辑的探测默认值 */
+  const [ollamaAddr, setOllamaAddr] = useState(() => {
+    const raw = String(settings.aiBaseUrl ?? '').trim()
+    return isLocalAiBaseUrl(raw) ? raw.replace(/\/v1\/?$/, '') : 'http://127.0.0.1:11434'
+  })
+  const [ollamaProbe, setOllamaProbe] = useState<{
+    state: 'idle' | 'probing' | 'ok' | 'fail'
+    text?: string
+    models?: { id: string; vision: boolean; thinking: boolean; tools: boolean }[]
+    openaiBaseUrl?: string
+  }>({ state: 'idle' })
   /** 配置区展开状态：未配置时默认展开（新用户先填参数再谈开启） */
   const [aiExpanded, setAiExpanded] = useState(!settings.aiEnabled)
   const [aiEnabling, setAiEnabling] = useState(false)
   const [introOpen, setIntroOpen] = useState(false)
   const p = (patchObj: Partial<AppSettings>) => void patch(patchObj)
   const [devOcrNote, setDevOcrNote] = useState<string | null>(null)
+  /** 节点模式（P0）：已配对的外部电脑 + 当前配对码 */
+  const [nodes, setNodes] = useState<RemoteNodeInfo[]>([])
+  const [pairing, setPairing] = useState<{ code: string; expiresAt: number; port: number; addresses: string[] } | null>(null)
+
+  useEffect(() => {
+    void window.api?.listNodes?.().then((x) => setNodes((x as RemoteNodeInfo[]) ?? []))
+    const off = window.api?.onNodesChanged?.((x) => setNodes((x as RemoteNodeInfo[]) ?? []))
+    return () => off?.()
+  }, [])
 
   /** 导出 OCR 数据集（本地） */
   const exportOcr = async () => {
@@ -361,8 +382,8 @@ export default function SettingsView() {
       p({ aiEnabled: false })
       return
     }
-    if (!settings.aiApiKey) {
-      setAiKeyHint('请先展开配置参数填入 API Key，再启用 AI')
+    if (!settings.aiApiKey && !isLocalAiBaseUrl(settings.aiBaseUrl)) {
+      setAiKeyHint('请先展开配置参数填入 API Key；本机 Ollama 可在「本机 Ollama」里检测并选择模型（免 Key）')
       setAiExpanded(true)
       window.setTimeout(() => setAiKeyHint(null), 5000)
       return
@@ -408,6 +429,54 @@ export default function SettingsView() {
     }
   }
 
+  /** 探测 Ollama：模型列表由服务返回，不写死；选中后回填 Base URL + 模型 */
+  const detectOllama = async (): Promise<void> => {
+    setOllamaProbe({ state: 'probing' })
+    try {
+      const r = (await window.api.probeOllama?.(ollamaAddr)) as
+        | {
+            ok: boolean
+            openaiBaseUrl?: string
+            models?: { id: string; vision: boolean; thinking: boolean; tools: boolean }[]
+            error?: string
+          }
+        | undefined
+      if (!r?.ok) {
+        setOllamaProbe({ state: 'fail', text: r?.error ?? '连接失败，确认 Ollama 已启动' })
+        return
+      }
+      const models = r.models ?? []
+      setOllamaProbe({
+        state: 'ok',
+        models,
+        openaiBaseUrl: r.openaiBaseUrl,
+        text: models.length ? `发现 ${models.length} 个对话模型` : '没有对话模型，先 ollama pull 一个'
+      })
+    } catch (e) {
+      setOllamaProbe({ state: 'fail', text: (e as Error).message })
+    }
+  }
+
+  const useOllamaModel = (id: string): void => {
+    const base = ollamaProbe.openaiBaseUrl || `${ollamaAddr.replace(/\/+$/, '').replace(/\/v1$/, '')}/v1`
+    p({ aiBaseUrl: base, aiModel: id })
+    setAiKeyHint(null)
+    setAiTest({ state: 'idle' })
+  }
+
+  /** 展开配置时自动探测一次；之后改地址可手动重测 */
+  useEffect(() => {
+    if (!aiExpanded || ollamaProbe.state !== 'idle') return
+    void detectOllama()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiExpanded])
+
+  /** 已配置本地 Base URL 时同步地址框，避免显示与实际不一致 */
+  useEffect(() => {
+    const raw = String(settings.aiBaseUrl ?? '').trim()
+    if (isLocalAiBaseUrl(raw)) setOllamaAddr(raw.replace(/\/v1\/?$/, ''))
+  }, [settings.aiBaseUrl])
+
   const sync = async () => {
     setSyncState('syncing')
     try {
@@ -435,7 +504,7 @@ export default function SettingsView() {
       )}
       {/* 0. 性能（忙时轻档） */}
       <Section title="性能" icon="zap">
-        <Row label="忙时轻档（推荐开启）" desc="电脑忙到卡的时候，自动放慢 WorkOn 的后台节奏（读屏暂停、看窗口变慢、桌宠省电）；不忙了自动恢复。">
+        <Row label="忙时轻档（推荐开启）" desc="电脑忙到卡的时候，自动放慢 WorkOn 的后台节奏（读屏暂停、看窗口变慢）；不忙了自动恢复。">
           <Toggle checked={settings.loadGuardEnabled} onChange={(v) => p({ loadGuardEnabled: v })} />
         </Row>
         <Row label="读屏识别引擎" desc="系统快扫：Windows 自带识别，几乎不占 CPU（缺中文语言包时自动回落）；精细识别：本地 RapidOCR，更准但吃 CPU。">
@@ -508,8 +577,8 @@ export default function SettingsView() {
         {settings.aiAssistWatchEnabled ? <AiAssistWatchDrag settings={settings} patch={p} /> : null}
       </Section>
       {aiKeyHint ? (
-        <div className="anim-fade-in rounded-xl border border-neon-amber/30 bg-neon-amber/10 px-4 py-2.5 text-xs text-neon-amber">
-          ⚠️ {aiKeyHint}
+        <div className="anim-fade-in flex items-center gap-1.5 rounded-xl border border-neon-amber/30 bg-neon-amber/10 px-4 py-2.5 text-xs text-neon-amber">
+          <Icon name="alert" size={13} className="shrink-0" /> {aiKeyHint}
         </div>
       ) : null}
       <Section title="AI" icon="brain">
@@ -534,7 +603,59 @@ export default function SettingsView() {
           </div>
           {aiExpanded ? (
             <div className="anim-fade-in mt-1 flex flex-col divide-y divide-white/[0.05] border-l-2 border-neon-cyan/20 pl-3">
-              <Row label="API Key" desc="OpenAI 兼容接口密钥，仅存本地">
+              <Row
+                label="本机 Ollama"
+                desc="填服务地址后检测已安装模型；点模型即回填下方 Base URL 与模型（免 API Key）"
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    className="glass-input w-52"
+                    value={ollamaAddr}
+                    onChange={(e) => setOllamaAddr(e.target.value)}
+                    placeholder="http://127.0.0.1:11434"
+                  />
+                  <button
+                    type="button"
+                    className="glass-btn"
+                    disabled={ollamaProbe.state === 'probing'}
+                    onClick={() => void detectOllama()}
+                  >
+                    {ollamaProbe.state === 'probing' ? '检测中…' : '检测'}
+                  </button>
+                </div>
+              </Row>
+              {ollamaProbe.state !== 'idle' ? (
+                <div className="anim-fade-in flex flex-col gap-1.5 py-2.5">
+                  <div className={`text-xs ${ollamaProbe.state === 'fail' ? 'text-neon-amber' : 'text-slate-500'}`}>
+                    {ollamaProbe.text}
+                  </div>
+                  {ollamaProbe.models?.length ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {ollamaProbe.models.map((m) => {
+                        const active = settings.aiModel === m.id && isLocalAiBaseUrl(settings.aiBaseUrl)
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => useOllamaModel(m.id)}
+                            className={`rounded-full border px-2.5 py-1 text-2xs transition-colors ${
+                              active
+                                ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-1)]'
+                                : 'border-[var(--line)] text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            {m.id}
+                            {m.vision ? ' · 视觉' : ''}
+                            {m.tools ? ' · 工具' : ''}
+                            {m.thinking ? ' · 思考' : ''}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              <Row label="API Key" desc="OpenAI 兼容接口密钥，仅存本地；本机 Ollama / 内网地址可留空">
                 <TextSetting password value={settings.aiApiKey} placeholder="sk-…" onCommit={(v) => p({ aiApiKey: v })} />
               </Row>
               <Row label="Base URL">
@@ -589,7 +710,7 @@ export default function SettingsView() {
             </div>
           ) : null}
           <details className="mt-3 text-xs">
-            <summary className="cursor-pointer text-slate-400 hover:text-slate-200">📊 查看能力边界</summary>
+            <summary className="cursor-pointer text-slate-400 hover:text-slate-200">查看能力边界</summary>
             <div className="mt-2 rounded-xl border border-white/10 p-3">
               <div className="grid grid-cols-3 gap-2 text-xs">
                 <div className="font-medium text-slate-300">功能</div><div className="font-medium text-slate-400 text-center">无需 AI</div><div className="font-medium text-[var(--teal)] text-center">开启 AI 后增强</div>
@@ -603,7 +724,7 @@ export default function SettingsView() {
       {/* 4. 外观 */}
       <Section title="桌面组件" icon="monitor">
         <div className="mb-2 rounded-lg border border-white/[0.05] bg-white/[0.02] px-2.5 py-1.5 text-xs text-slate-500">
-          完整管控（显隐 / 钉桌面 / 顶层 / 穿透）在「搭子」页；此处为快捷入口。
+          显隐 / 钉桌面 / 顶层 / 穿透都在这里调。
           「钉桌面」= 和桌面图标同层（显示桌面后仍在）；「沉底/关顶层」只是普通窗口往后排，不是钉桌面。
         </div>
         <div className="flex flex-col gap-3 py-1 text-xs">
@@ -639,36 +760,6 @@ export default function SettingsView() {
               <span className="text-2xs text-slate-600">空区挖洞默认开；整窗穿透后需在此关闭</span>
             </div>
           </div>
-          {/* 待办树小组件 */}
-          <div className="flex flex-col gap-1.5 border-t border-white/[0.05] pt-2.5">
-            <div className="flex items-center justify-between">
-              <span className="font-medium text-slate-300">待办树小组件</span>
-              <div className="flex items-center gap-3">
-                <button className="glass-btn !px-2 !py-0.5 text-2xs" onClick={() => void window.api?.toggleTodoWidget?.()}>
-                  {settings.todoWidgetVisible ? '隐藏' : '显示'}
-                </button>
-                <label className="flex items-center gap-1.5 text-slate-500">
-                  <input type="checkbox" checked={settings.todoWidgetPenetration ?? false} onChange={(e) => void patch({ todoWidgetPenetration: e.target.checked })} /> 穿透
-                </label>
-                <label className="flex items-center gap-1.5 text-slate-500" title="钉到桌面图标同层；「显示桌面」后仍可见。与「沉底」不同。">
-                  <input
-                    type="checkbox"
-                    checked={!!settings.todoWidgetDesktopPin}
-                    onChange={(e) => void patch({ todoWidgetDesktopPin: e.target.checked })}
-                  /> 钉桌面
-                </label>
-                <label className={`flex items-center gap-1.5 ${settings.todoWidgetDesktopPin ? 'text-slate-600' : 'text-slate-500'}`} title={settings.todoWidgetDesktopPin ? '已钉桌面时顶层/沉底不生效' : '关闭=沉到底层（仍是普通窗，不是桌面层）'}>
-                  <input
-                    type="checkbox"
-                    checked={settings.todoWidgetOnTop !== false}
-                    disabled={!!settings.todoWidgetDesktopPin}
-                    onChange={(e) => void patch({ todoWidgetOnTop: e.target.checked })}
-                  /> 顶层
-                </label>
-                <input type="range" min={0.3} max={1} step={0.05} value={settings.todoWidgetOpacity ?? 0.95} className="w-20" onChange={(e) => void patch({ todoWidgetOpacity: Number(e.target.value) })} title="透明度" />
-              </div>
-            </div>
-          </div>
           {/* 报表限频 */}
           <div className="flex flex-col gap-1.5 border-t border-white/[0.05] pt-2.5">
             <div className="flex items-center justify-between">
@@ -685,11 +776,39 @@ export default function SettingsView() {
               </div>
             </div>
           </div>
-          {/* 桌宠 */}
+          {/* 每日首启简报 */}
           <div className="flex flex-col gap-1.5 border-t border-white/[0.05] pt-2.5">
             <div className="flex items-center justify-between">
-              <span className="font-medium text-slate-300">虚拟角色（桌宠）</span>
-              <input type="range" min={0.3} max={1} step={0.05} value={settings.petOpacity ?? 1} className="w-20" onChange={(e) => void patch({ petOpacity: Number(e.target.value) })} title="透明度" />
+              <div>
+                <div className="font-medium text-slate-300">每日首启简报</div>
+                <div className="text-2xs text-slate-600">每天第一次进主窗出现一次，内容块可自选</div>
+              </div>
+              <Toggle
+                checked={settings.briefingEnabled !== false}
+                onChange={(v) => void patch({ briefingEnabled: v })}
+              />
+            </div>
+            <div className="flex flex-wrap gap-3 text-xs text-slate-500">
+              {(
+                [
+                  ['yesterday', '昨天活动'],
+                  ['today', '今天计划'],
+                  ['reminders', '到点提醒']
+                ] as const
+              ).map(([k, label]) => {
+                const blocks = settings.briefingBlocks ?? { yesterday: true, today: true, reminders: true }
+                return (
+                  <label key={k} className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={blocks[k]}
+                      disabled={settings.briefingEnabled === false}
+                      onChange={(e) => void patch({ briefingBlocks: { ...blocks, [k]: e.target.checked } })}
+                    />
+                    {label}
+                  </label>
+                )
+              })}
             </div>
           </div>
         </div>
@@ -728,11 +847,11 @@ export default function SettingsView() {
         <div className="grid grid-cols-3 gap-3 pb-3 pt-1">
           {(
             [
-              ['light', '☀️', '浅色', '明亮界面，日间使用'],
-              ['dark', '🌙', '深色', '低蓝光，夜间更护眼'],
-              ['auto', '🪄', '跟随系统', '随操作系统亮暗自动切换']
+              ['light', '#ffffff', '浅色', '明亮界面，日间使用'],
+              ['dark', '#111114', '深色', '低蓝光，夜间更护眼'],
+              ['auto', 'linear-gradient(135deg, #ffffff 50%, #111114 50%)', '跟随系统', '随操作系统亮暗自动切换']
             ] as const
-          ).map(([id, emoji, label, desc]) => {
+          ).map(([id, swatch, label, desc]) => {
             const active = settings.appearanceMode === id
             return (
               <button
@@ -746,7 +865,7 @@ export default function SettingsView() {
                 }}
               >
                 <span className="flex items-center gap-2">
-                  <span className="text-lg leading-none">{emoji}</span>
+                  <span className="h-4 w-4 shrink-0 rounded-full border" style={{ background: swatch, borderColor: 'var(--line-strong)' }} />
                   <span className={`text-sm font-medium ${active ? 'text-slate-100' : 'text-slate-300'}`}>{label}</span>
                   <span
                     className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full transition-all"
@@ -836,6 +955,46 @@ export default function SettingsView() {
       </IntegrationSection>
 
       {/* 10. 系统 */}
+      {/* 节点模式（P0）：外部电脑接入 */}
+      <Section title="外部节点" icon="monitor">
+        <Row label="接入另一台电脑" desc="在另一台电脑运行 WorkOn 节点，用配对码出站连回本机。P0 只读：系统信息 / 列目录。">
+          <button
+            className="glass-btn primary !px-3 !py-1 !text-xs"
+            onClick={() => void window.api?.createNodePairing?.().then((x) => setPairing(x as typeof pairing))}
+          >
+            {pairing ? `配对码 ${pairing.code}` : '生成配对码'}
+          </button>
+        </Row>
+        {pairing ? (
+          <div className="py-2 text-xs leading-relaxed text-slate-400">
+            <div className="text-neon-cyan">配对码 {pairing.code} · 5 分钟内有效</div>
+            <div className="mt-1.5 text-slate-500">在节点电脑执行（Node ≥ 22；更早版本先 npm i ws）：</div>
+            <code className="mt-1 block break-all rounded-lg bg-black/30 px-2 py-1.5 text-2xs text-slate-300">
+              node tools/workon-node/index.js --server ws://
+              {pairing.addresses.find((a) => a !== '127.0.0.1') ?? '127.0.0.1'}:{pairing.port} --code {pairing.code}
+            </code>
+            {pairing.addresses.length > 2 ? (
+              <div className="mt-1 text-slate-600">本机地址：{pairing.addresses.join(' / ')}（选与节点同网段的）</div>
+            ) : null}
+          </div>
+        ) : null}
+        {nodes.length === 0 ? (
+          <div className="py-2 text-xs text-slate-500">还没有已配对的节点。</div>
+        ) : (
+          nodes.map((n) => (
+            <Row
+              key={n.id}
+              label={`${n.label}${n.online ? ' · 在线' : ' · 离线'}`}
+              desc={`${n.os}/${n.arch} · 授权只读 · 最近心跳 ${new Date(n.lastSeen).toLocaleString()}`}
+            >
+              <button className="glass-btn danger !px-2.5 !py-1 !text-xs" onClick={() => void window.api?.revokeNode?.(n.id)}>
+                移除
+              </button>
+            </Row>
+          ))
+        )}
+      </Section>
+
       <Section title="系统" icon="settings">
         <Row label="开机自启">
           <Toggle checked={settings.launchAtLogin} onChange={(v) => p({ launchAtLogin: v })} />
@@ -931,7 +1090,7 @@ export default function SettingsView() {
                   ['计划', '从想法到执行', '手动新建 + 会议纪要一键导入'],
                   ['回顾', '日报 / 周报 / 知识沉淀', '五维评分 + 实际活动记录'],
                   ['日历', '注意力热度', '热力图 + 日/周视图'],
-                  ['更多', '主线 / 问答 / 画像 / 搭子 / 隐私', '低频能力收在二级入口']
+                  ['更多', '主线 / 问答 / 画像 / 隐私', '低频能力收在二级入口']
                 ].map(([tag, title, desc]) => (
                   <div key={title} className="flex gap-2">
                     <span className="shrink-0 rounded px-1.5 py-0.5 text-2xs text-slate-500" style={{ background: 'var(--surface-2)' }}>{tag}</span>

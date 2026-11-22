@@ -82,9 +82,10 @@ export function isLoadGuardEngaged(): boolean {
 function apply(): void {
   const engaged = isLoadGuardEngaged()
   const manual = getSettings().performanceMode
-  // 读屏采集：降档或手动性能模式 → 停；恢复时仅在用户没开手动性能模式且开了 deepMode 时重启
+  // 读屏采集：手动性能模式或 CPU 持续高压 → 停；仅内存高压不停止（macOS 常驻 85%+，
+  // 停掉会让「屏幕记忆」永远为空），由 OCR 自身的 45s 低频节流降载。
   try {
-    if (engaged) stopOcr()
+    if (manual || (engaged && cpuPercent >= CPU_HIGH)) stopOcr()
     else if (!manual && getSettings().deepMode) startOcr()
   } catch { /* ignore */ }
   try {

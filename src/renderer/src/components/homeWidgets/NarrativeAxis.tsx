@@ -127,7 +127,7 @@ export function NarrativeAxis({
               const done = p.status === 'done'
               return (
                 <div key={`p-${p.id}`} className="relative flex items-start gap-2 py-1.5">
-                  <span className="w-[44px] shrink-0 text-right text-[11px] leading-5 tabular-nums text-slate-500">
+                  <span className="w-[44px] shrink-0 text-right text-2xs leading-5 tabular-nums text-slate-500">
                     {p.startMin != null ? hm(e.startTs) : ''}
                   </span>
                   <span
@@ -135,10 +135,10 @@ export function NarrativeAxis({
                     style={{ borderColor: done ? 'var(--teal)' : 'var(--line-strong)', background: 'var(--bg-deep)' }}
                   />
                   <div className="min-w-0 flex-1 pl-1">
-                    <div className={`truncate text-[13px] ${done ? 'text-slate-500 line-through' : 'text-slate-300'}`}>
+                    <div className={`truncate text-sm ${done ? 'text-slate-500 line-through' : 'text-slate-300'}`}>
                       计划 · {p.title}
                     </div>
-                    <div className="text-[11px] text-slate-500">
+                    <div className="text-2xs text-slate-500">
                       {p.endMin != null ? `${hm(e.startTs)}–${hm(e.endTs)} · ` : ''}
                       {PLAN_STATUS_LABEL[p.status]}
                     </div>
@@ -151,7 +151,7 @@ export function NarrativeAxis({
             const topApps = [...(e.apps ?? [])].sort((a, b) => b.min - a.min).slice(0, 2)
             return (
               <div key={`s-${i}`} className="relative flex items-start gap-2 py-1.5">
-                <span className="w-[44px] shrink-0 text-right text-[11px] leading-5 tabular-nums text-slate-500">
+                <span className="w-[44px] shrink-0 text-right text-2xs leading-5 tabular-nums text-slate-500">
                   {hm(e.startTs)}
                 </span>
                 <span
@@ -159,13 +159,13 @@ export function NarrativeAxis({
                   style={{ background: meta.color, boxShadow: '0 0 0 3px var(--bg-deep)' }}
                 />
                 <div className="min-w-0 flex-1 pl-1">
-                  <div className="truncate text-[13px] text-slate-200">
+                  <div className="truncate text-sm text-slate-200">
                     <span style={{ color: meta.color }}>{meta.label}</span>
                     <span className="text-slate-500"> · {fmtMin(e.min)}</span>
                     <span className="text-slate-500"> · {hm(e.endTs)}</span>
                   </div>
                   {topApps.length > 0 ? (
-                    <div className="truncate text-[11px] text-slate-500">
+                    <div className="truncate text-2xs text-slate-500">
                       {topApps.map((a) => displayApp(a.name)).join(' · ')}
                     </div>
                   ) : null}

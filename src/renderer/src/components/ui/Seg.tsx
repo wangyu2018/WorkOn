@@ -23,7 +23,7 @@ export function Seg({ options, value, onChange, full, className = '' }: SegProps
           onClick={() => onChange(o.value)}
           className={`rounded-full px-3 py-1.5 text-sm transition-colors ${full ? 'flex-1' : ''} ${
             value === o.value
-              ? 'bg-[var(--bg-deep)] font-medium text-[var(--text-1)] shadow-[var(--shadow-md)]'
+              ? 'bg-[var(--seg-active)] font-medium text-[var(--text-1)] shadow-[var(--shadow-md)]'
               : 'text-slate-500 hover:text-slate-200'
           }`}
         >

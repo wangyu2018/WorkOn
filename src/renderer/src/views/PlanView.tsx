@@ -7,13 +7,15 @@ import { ModalShell } from '../components/ui/Modal'
 import { ProgressRing } from '../components/ProgressRing'
 import { InsightCard } from '../components/ui/InsightCard'
 import { AiThinking } from '../components/ui/AiThinking'
-import { addDays, clockOf, fmtDateLabel, fmtMin, timeToMin, todayKey } from '../components/utils'
+import { ProjectBoard } from '../components/ProjectBoard'
+import { WEEK_LABELS, addDays, clockOf, fmtDateLabel, fmtMin, timeToMin, todayKey } from '../components/utils'
 import { guessPlanCategory } from '@shared/planAnalysis'
 import { PRIO_META, prioW } from '@shared/priority'
 import { parsePlanText } from '../components/parsePlanText'
 import { useAppStore } from '../stores/appStore'
 import { useTerm } from '../i18n/useTerm'
 import { parseBreakdownSteps } from '@shared/parseBreakdown'
+import { useBookmarks, type BookmarkItem } from '../lib/bookmarks'
 
 const STATUS_LABEL: Record<PlanStatus, string> = {
   planned: '待办',
@@ -48,15 +50,28 @@ function planStatusColor(p: PlanItem, risky: boolean): string {
   return STATUS_COLOR[p.status]
 }
 
-/** 进度条渐变填色（与状态色条同源） */
-function planBarGradient(p: PlanItem, risky: boolean): string {
-  if (p.status === 'done') return 'linear-gradient(90deg, var(--teal), #34D399)'
-  if (risky) return 'linear-gradient(90deg, #EF4444, #F97316)'
-  if (p.status === 'in_progress') return 'linear-gradient(90deg, var(--teal), #22D3EE)'
-  if (p.status === 'partial') return 'linear-gradient(90deg, #F59E0B, #FBBF24)'
-  if (p.status === 'delayed') return 'linear-gradient(90deg, #EF4444, #F59E0B)'
-  if (p.status === 'cancelled') return 'linear-gradient(90deg, #64748B, #94A3B8)'
-  return 'linear-gradient(90deg, var(--line-strong), var(--teal))'
+/** 进度条填色（与状态色条同源，纯色不渐变） */
+function planBarColor(p: PlanItem, risky: boolean): string {
+  return planStatusColor(p, risky)
+}
+
+/** 月历切换：YYYY-MM ± n */
+function shiftMonth(ym: string, delta: number): string {
+  const [y, m] = ym.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+/** 单日完成情况（不含取消项） */
+function dayBrief(list: PlanItem[]): { done: number; total: number } {
+  const active = list.filter((p) => p.status !== 'cancelled')
+  return { done: active.filter((p) => p.status === 'done').length, total: active.length }
+}
+
+/** 时间块文案：起止都有显示区间，只有开始显示单点，否则全天 */
+function timeRangeOf(p: PlanItem): string {
+  if (p.startMin === undefined) return '全天'
+  return p.endMin !== undefined ? `${clockOf(p.startMin)}–${clockOf(p.endMin)}` : clockOf(p.startMin)
 }
 
 /** 计划来源标记（轻量文案，不抢标题） */
@@ -64,6 +79,9 @@ function SourceMark({ plan }: { plan: PlanItem }) {
   if (plan.browserDerived) return <span title="浏览器行为确认">浏览器确认</span>
   if (plan.confirmedFromQA) return <span title="问答确认">问答确认</span>
   if (plan.source === 'manual') return <span title="手动创建">手动</span>
+  if (plan.source === 'intel') return <span title="来自情报流">情报</span>
+  if (plan.source === 'knowledge') return <span title="来自知识库">知识</span>
+  if (plan.source === 'watch') return <span title="来自盯守">盯守</span>
   return <span>{plan.source}</span>
 }
 
@@ -218,7 +236,7 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
                 key={t.v}
                 type="button"
                 onClick={() => setPlanType(t.v)}
-                className={`glass-btn !px-2 !py-2 flex flex-col items-center gap-0.5 ${planType === t.v ? '!border-neon-cyan/60 !text-neon-cyan' : ''}`}
+                className={`glass-btn !px-2 !py-2 flex flex-col items-center gap-0.5 ${planType === t.v ? '!text-neon-cyan !bg-neon-cyan/15' : ''}`}
               >
                 <span className="text-sm font-medium">{t.label}</span>
                 <span className="text-2xs text-[var(--text-3)]">{t.desc}</span>
@@ -331,7 +349,16 @@ function PlanEditor({ plan, isNew, onClose, onSaved }: PlanEditorProps) {
 /* ── 计划视图 ── */
 export default function PlanView() {
   const t = useTerm()
+  /** 顶部数据书签：把某条计划固定到顶栏下方 */
+  const { has: hasBookmark, toggle: toggleBookmark } = useBookmarks()
+  const [flashId, setFlashId] = useState<string | null>(null)
   const [date, setDate] = useState(todayKey())
+  /** 视图：列表 / 日历（持久化） */
+  const [view, setView] = useState<'list' | 'calendar'>(() =>
+    localStorage.getItem('workon:plan-view') === 'calendar' ? 'calendar' : 'list'
+  )
+  const [calMonth, setCalMonth] = useState(() => todayKey().slice(0, 7))
+  const [allPlans, setAllPlans] = useState<PlanItem[]>([])
   const [tab, setTab] = useState<'plan' | 'project'>('plan')
   /** 今日安排内：全部 / 仅项目相关 / 仅日常 */
   const [scopeFilter, setScopeFilter] = useState<'all' | 'project' | 'daily'>('all')
@@ -350,6 +377,30 @@ export default function PlanView() {
   const [quickText, setQuickText] = useState('')
   const [quickProj, setQuickProj] = useState('')
   const quickRef = useRef<HTMLInputElement>(null)
+  /** 重排建议（只读预览）：今日时间块需要顺延/拆分/放弃时提示，不自动改计划 */
+  const [replan, setReplan] = useState<
+    { taskId: string; title: string; action: 'defer' | 'split' | 'drop'; reason: string }[]
+  >([])
+  const [replanHidden, setReplanHidden] = useState(false)
+
+  useEffect(() => {
+    if (date !== todayKey()) {
+      setReplan([])
+      return
+    }
+    let alive = true
+    void window.api
+      .replanSuggest()
+      .then((list) => {
+        if (alive) setReplan((list as typeof replan) ?? [])
+      })
+      .catch(() => {
+        if (alive) setReplan([])
+      })
+    return () => {
+      alive = false
+    }
+  }, [date, plans])
 
   const quickAdd = async (): Promise<void> => {
     const text = quickText.trim()
@@ -440,6 +491,75 @@ export default function PlanView() {
     void load()
   }, [load])
 
+  /** 计划 → 顶部书签（只存展示信息，点击时按日期/分组定位） */
+  const bookmarkOf = (p: PlanItem): BookmarkItem => ({
+    id: `plan:${p.id}`,
+    page: 'plan',
+    refId: p.id,
+    title: p.title,
+    meta: [p.date.slice(5), p.startMin !== undefined ? clockOf(p.startMin) : ''].filter(Boolean).join(' '),
+    icon: 'target',
+    locator: p.date,
+    group: p.projectId ? `proj:${p.projectId}` : p.category,
+    createdAt: Date.now()
+  })
+
+  // 点击顶部书签：切到对应日期 / 展开分组 / 高亮定位
+  useEffect(() => {
+    const onOpen = (e: Event): void => {
+      const b = (e as CustomEvent<BookmarkItem>).detail
+      if (!b || b.page !== 'plan') return
+      if (b.locator) setDate(b.locator)
+      if (b.group) setCatCollapsed((m) => ({ ...m, [b.group as string]: false }))
+      setStatusFilter('all')
+      if (view === 'calendar') {
+        setView('list')
+        localStorage.setItem('workon:plan-view', 'list')
+      }
+      setFlashId(b.refId)
+    }
+    window.addEventListener('workon:bookmark-open', onOpen)
+    return () => window.removeEventListener('workon:bookmark-open', onOpen)
+  }, [view])
+
+  // 等高亮目标进入列表后滚动到它，闪一下强调
+  useEffect(() => {
+    if (!flashId) return
+    const el = document.querySelector<HTMLElement>(`[data-plan-id="${flashId}"]`)
+    if (!el) return
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    const timer = window.setTimeout(() => setFlashId(null), 1800)
+    return () => window.clearTimeout(timer)
+  }, [flashId, plans, statusFilter, view])
+
+  /** 日历视图：一次取全部计划做月格聚合（plans:list 不传日期返回全部） */
+  const loadMonthPlans = useCallback(async () => {
+    try {
+      const all = ((await window.api.listPlans()) as PlanItem[]) ?? []
+      setAllPlans(all.filter((p) => !p.archived))
+    } catch {
+      setAllPlans([])
+    }
+  }, [])
+
+  useEffect(() => {
+    if (view === 'calendar') void loadMonthPlans()
+  }, [view, loadMonthPlans])
+
+  // 日历模式下日期变化（前后翻日 / 弹窗改日期）同步月份
+  useEffect(() => {
+    if (view === 'calendar') setCalMonth(date.slice(0, 7))
+  }, [date, view])
+
+  const switchView = (v: 'list' | 'calendar'): void => {
+    setView(v)
+    localStorage.setItem('workon:plan-view', v)
+    if (v === 'calendar') {
+      setCalMonth(date.slice(0, 7))
+      void loadMonthPlans()
+    }
+  }
+
   // 连续达成：截至所选日期前一天，日达成率 ≥50% 记为达成，逐日回看最多 7 天（复用现有 IPC，不新增）
   useEffect(() => {
     let alive = true
@@ -494,8 +614,15 @@ export default function PlanView() {
     return () => window.removeEventListener('workon:edit-plan', onEdit)
   }, [plans, date, load])
 
-  // 问答确认创建计划后实时刷新
-  useEffect(() => window.api.onPlanUpdated(() => void load()), [load])
+  // 问答确认创建计划后实时刷新（列表 + 日历聚合）
+  useEffect(
+    () =>
+      window.api.onPlanUpdated(() => {
+        void load()
+        if (view === 'calendar') void loadMonthPlans()
+      }),
+    [load, view, loadMonthPlans]
+  )
 
   useEffect(() => {
     if (folderModal) {
@@ -797,6 +924,16 @@ export default function PlanView() {
   const partialCount = activePlans.filter((p) => p.status === 'partial').length
   const delayedCount = activePlans.filter((p) => p.status === 'delayed').length
 
+  // 日历视图派生：月份首日星期（周一开头）、天数、按日聚合
+  const [calYear, calMon] = calMonth.split('-').map(Number)
+  const calFirstDow = (new Date(calYear, calMon - 1, 1).getDay() + 6) % 7
+  const calDayCount = new Date(calYear, calMon, 0).getDate()
+  const plansByDate = new Map<string, PlanItem[]>()
+  for (const p of allPlans) {
+    if (!plansByDate.has(p.date)) plansByDate.set(p.date, [])
+    plansByDate.get(p.date)!.push(p)
+  }
+
   return (
     <div className="view-enter flex flex-col gap-4">
       <PageHeader
@@ -818,11 +955,36 @@ export default function PlanView() {
         }
       />
 
+      {/* 页面级入口：今日安排 / 项目（项目含新建与跨天任务管理） */}
+      <div className="ui-tabs self-start" role="tablist" aria-label="计划与项目">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'plan'}
+          className="ui-tab"
+          onClick={() => setTab('plan')}
+        >
+          今日安排
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'project'}
+          className="ui-tab"
+          onClick={() => setTab('project')}
+        >
+          项目{projects.length ? ` ${projects.length}` : ''}
+        </button>
+      </div>
+
       {importMsg ? (
         <div className="rounded-lg border border-neon-cyan/25 bg-neon-cyan/10 px-3 py-2 text-xs text-neon-cyan">{importMsg}</div>
       ) : null}
 
-      <>
+      {tab === 'project' ? (
+        <ProjectBoard trail={trail} />
+      ) : (
+        <>
 
       {scanProgress > 0 && (
         <div className="anim-fade-in">
@@ -851,6 +1013,21 @@ export default function PlanView() {
           <div className="flex min-w-0 items-center gap-2">
             <Icon name="calendar" size={14} className="shrink-0 text-slate-500" />
             <span className="truncate text-base font-semibold tracking-wide text-slate-100">{fmtDateLabel(date)}</span>
+          </div>
+          <span className="flex-1" />
+          <div className="ui-tabs" role="tablist" aria-label="视图切换">
+            {(['list', 'calendar'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                role="tab"
+                aria-selected={view === v}
+                className="ui-tab"
+                onClick={() => switchView(v)}
+              >
+                {v === 'list' ? '列表' : '日历'}
+              </button>
+            ))}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 border-t pt-2.5" style={{ borderColor: 'var(--line)' }}>
@@ -889,11 +1066,44 @@ export default function PlanView() {
         </div>
       </div>
 
+      {replan.length && !replanHidden ? (
+        <section
+          className="anim-fade-up rounded-2xl border border-neon-amber/25 bg-neon-amber/[0.06] px-3 py-2.5"
+          style={{ animationDelay: '80ms' }}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-neon-amber">重排建议 {replan.length}</span>
+            <span className="text-2xs text-[var(--text-3)]">只做预览，不会自动改计划</span>
+            <span className="flex-1" />
+            <button
+              type="button"
+              className="ui-icon-btn !h-6 !w-6"
+              title="忽略本次建议"
+              aria-label="忽略重排建议"
+              onClick={() => setReplanHidden(true)}
+            >
+              ✕
+            </button>
+          </div>
+          <ul className="mt-1.5 space-y-1">
+            {replan.slice(0, 4).map((r) => (
+              <li key={r.taskId} className="flex items-center gap-2 text-2xs text-[var(--text-2)]">
+                <span className="chip !py-0 !text-2xs">
+                  {r.action === 'defer' ? '顺延' : r.action === 'split' ? '拆分' : '放弃'}
+                </span>
+                <span className="min-w-0 flex-1 truncate">{r.title}</span>
+                <span className="shrink-0 text-[var(--text-3)]">{r.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <section className="anim-fade-up grid grid-cols-2 gap-2.5 lg:grid-cols-4" style={{ animationDelay: '100ms' }}>
         <InsightCard
           icon={<Icon name="target" size={14} />}
           tone="teal"
-          label="今日达成率"
+          label="今日达成率（按耗时）"
           big={
             <span className="flex items-center gap-2">
               <ProgressRing value={achievement} size={30} stroke={3.5} color={ringColor} />
@@ -905,7 +1115,7 @@ export default function PlanView() {
         <InsightCard
           icon={<Icon name="calendar" size={14} />}
           tone="ai"
-          label="今日计划"
+          label="今日计划（按数量）"
           big={
             <>
               {doneCount}
@@ -935,7 +1145,7 @@ export default function PlanView() {
       </section>
 
       {/* 快速添加：回车即入库 */}
-      <div className="anim-fade-up flex items-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2" style={{ animationDelay: '120ms' }}>
+      <div className="ui-field-shell anim-fade-up flex items-center gap-2 rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2" style={{ animationDelay: '120ms' }}>
         <span className="text-sm" style={{ color: 'var(--teal)' }}>＋</span>
         <input
           ref={quickRef}
@@ -961,8 +1171,133 @@ export default function PlanView() {
         </button>
       </div>
 
+      {/* 日历视图：月格聚合 + 选中日紧凑列表 */}
+      {view === 'calendar' ? (
+        <section className="glass-card anim-fade-up" style={{ animationDelay: '200ms' }}>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <h2 className="flex items-center gap-2 text-base font-semibold text-slate-200">
+              <Icon name="calendar" size={15} />
+              {calYear} 年 {calMon} 月
+            </h2>
+            <span className="text-2xs text-slate-500">点击日期查看当天安排</span>
+            <span className="flex-1" />
+            <button type="button" className="glass-btn !px-2 !py-1" aria-label="上个月" onClick={() => setCalMonth(shiftMonth(calMonth, -1))}>
+              <Icon name="chevronLeft" size={13} />
+            </button>
+            <button
+              type="button"
+              className="glass-btn !px-2.5 !py-1 !text-2xs"
+              onClick={() => { setCalMonth(todayKey().slice(0, 7)); setDate(todayKey()) }}
+            >
+              今天
+            </button>
+            <button type="button" className="glass-btn !px-2 !py-1" aria-label="下个月" onClick={() => setCalMonth(shiftMonth(calMonth, 1))}>
+              <Icon name="chevronRight" size={13} />
+            </button>
+          </div>
+          <div className="mb-1.5 grid grid-cols-7 gap-1.5 text-center text-2xs text-slate-500">
+            {WEEK_LABELS.map((l) => <span key={l}>{l}</span>)}
+          </div>
+          <div className="grid grid-cols-7 gap-1.5">
+            {Array.from({ length: calFirstDow }, (_, i) => <div key={`blank-${i}`} />)}
+            {Array.from({ length: calDayCount }, (_, i) => {
+              const d = `${calMonth}-${String(i + 1).padStart(2, '0')}`
+              const list = plansByDate.get(d) ?? []
+              const brief = dayBrief(list)
+              const isToday = d === todayKey()
+              const selected = d === date
+              const visible = list.slice(0, 3)
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setDate(d)}
+                  className="flex min-h-[92px] flex-col overflow-hidden rounded-lg border p-1.5 text-left transition-colors hover:border-[var(--teal)]"
+                  style={{
+                    background: selected ? 'var(--surface-3)' : 'var(--surface-2)',
+                    borderColor: selected || isToday ? 'var(--teal)' : 'var(--line)'
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span
+                      className={`flex h-5 w-5 items-center justify-center rounded-md text-xs font-semibold tabular-nums ${
+                        isToday ? 'bg-[var(--teal)] text-white' : selected ? 'text-[var(--teal)]' : 'text-slate-300'
+                      }`}
+                    >
+                      {i + 1}
+                    </span>
+                    {brief.total > 0 ? (
+                      <span className={`text-2xs tabular-nums ${brief.done === brief.total ? 'text-neon-green' : 'text-slate-500'}`}>
+                        {brief.done}/{brief.total}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
+                    {visible.length ? visible.map((p) => (
+                      <span
+                        key={p.id}
+                        title={p.title}
+                        className="block w-full truncate rounded px-1 py-px text-2xs leading-snug"
+                        style={{
+                          background: 'var(--surface-3)',
+                          borderLeft: `2px solid ${STATUS_COLOR[p.status]}`,
+                          color: 'var(--text-2)',
+                          textDecoration: p.status === 'done' ? 'line-through' : undefined,
+                          opacity: p.status === 'cancelled' ? 0.45 : 1
+                        }}
+                      >
+                        {p.title}
+                      </span>
+                    )) : <span className="text-2xs text-slate-600">—</span>}
+                    {list.length > visible.length ? <span className="text-2xs text-slate-500">+{list.length - visible.length}</span> : null}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="mt-4 border-t pt-3" style={{ borderColor: 'var(--line)' }}>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-[var(--text-2)]">{fmtDateLabel(date)}</span>
+              <span className="text-2xs text-slate-500">{plans.length} 项</span>
+              <span className="flex-1" />
+              <button
+                type="button"
+                className="glass-btn !px-2.5 !py-1 !text-2xs"
+                onClick={() => setEditor({ plan: { date }, isNew: true })}
+              >
+                <Icon name="plus" size={12} /> 新建这天的安排
+              </button>
+            </div>
+            {plans.length === 0 ? (
+              <div className="text-2xs text-slate-600">这一天还没有计划。</div>
+            ) : (
+              <div className="flex flex-col divide-y divide-white/[0.04]">
+                {plans.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="flex items-center gap-2 py-1.5 text-left hover:bg-white/[0.03]"
+                    onClick={() => setEditor({ plan: p, isNew: false })}
+                  >
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: STATUS_COLOR[p.status] }} />
+                    <span className="w-20 shrink-0 text-2xs tabular-nums text-slate-500">
+                      {timeRangeOf(p)}
+                    </span>
+                    <span className={`min-w-0 flex-1 truncate text-xs ${p.status === 'done' ? 'text-slate-500 line-through' : 'text-slate-200'}`}>
+                      {p.title}
+                    </span>
+                    <span className="shrink-0 text-2xs text-slate-500">{STATUS_LABEL[p.status]}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      ) : null}
+
       {/* 计划列表 */}
-      {filtered.length === 0 ? (
+      {view === 'list' ? (filtered.length === 0 ? (
         <div className="glass-card hoverable anim-fade-up" style={{ animationDelay: '240ms' }}>
           <EmptyState
             emoji="🎯"
@@ -1144,12 +1479,14 @@ export default function PlanView() {
             return (
               <div
                 key={p.id}
+                data-plan-id={p.id}
                 className={`anim-fade-up rounded-xl px-3 py-2.5 transition-colors ${
                   isExpanded ? 'bg-[var(--surface-3)]' : 'hover:bg-[var(--surface-3)]'
                 }`}
                 style={{
                   animationDelay: `${240 + Math.min(idx * 40, 240)}ms`,
-                  borderLeft: `3px solid ${planStatusColor(p, risky)}`
+                  borderLeft: `3px solid ${planStatusColor(p, risky)}`,
+                  ...(flashId === p.id ? { boxShadow: '0 0 0 2px var(--accent)' } : null)
                 }}
               >
                 <div className="flex items-start gap-2.5">
@@ -1198,12 +1535,24 @@ export default function PlanView() {
                       <div className="mt-2 h-1 overflow-hidden rounded-full bg-[var(--surface-3)]">
                         <div
                           className="h-full rounded-full transition-all duration-500"
-                          style={{ width: `${ratio}%`, background: planBarGradient(p, risky) }}
+                          style={{ width: `${ratio}%`, background: planBarColor(p, risky) }}
                         />
                       </div>
                     ) : null}
                   </button>
                   <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      className={`glass-btn !px-2 !py-1 ${hasBookmark(`plan:${p.id}`) ? 'text-[var(--accent)]' : ''}`}
+                      title={hasBookmark(`plan:${p.id}`) ? '取消固定到顶部书签' : '固定到顶部书签（也可把图钉拖到顶部栏下方）'}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('application/x-workon-bookmark', JSON.stringify(bookmarkOf(p)))
+                        e.dataTransfer.effectAllowed = 'copy'
+                      }}
+                      onClick={() => toggleBookmark(bookmarkOf(p))}
+                    >
+                      <Icon name="pin" size={13} />
+                    </button>
                     {!done && !cancelled ? (
                       <button
                         className="glass-btn ai !px-2 !py-1 !text-xs"
@@ -1494,7 +1843,7 @@ export default function PlanView() {
             )
           })}
         </div>
-      )}
+      )) : null}
 
       {editor ? (
         <PlanEditor
@@ -1528,8 +1877,6 @@ export default function PlanView() {
           </div>
         </ModalShell>
       )}
-      </>
-
       {/* ── 确认归档：已确认项分类展示 / 编辑 / 归档 ── */}
       {(() => {
         const confirmed = plans.filter(
@@ -1569,6 +1916,8 @@ export default function PlanView() {
           </div>
         )
       })()}
+        </>
+      )}
     </div>
   )
 }

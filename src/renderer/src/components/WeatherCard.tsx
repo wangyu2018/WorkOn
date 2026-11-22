@@ -3,6 +3,7 @@
  * 头部只放一枚精简 chip，点击弹出卡片
  */
 import { useEffect, useRef, useState } from 'react'
+import { Icon } from './Icon'
 
 interface HourItem { hour: number; ts: number; text: string; tempC: number; chanceOfRain: number }
 
@@ -57,11 +58,11 @@ export function WeatherCard() {
   return (
     <div className="relative" ref={ref}>
       <button
-        className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-slate-300 transition-colors hover:bg-white/[0.06] hover:text-slate-100"
+        className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[var(--text-2)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text-1)]"
         title="天气"
         onClick={() => setOpen((o) => !o)}
       >
-        <span>☁️</span>
+        <Icon name="cloud" size={13} />
         {now ? <span className="text-xs font-semibold tabular-nums">{Math.round(now.tempC)}°</span> : <span className="text-xs">天气</span>}
       </button>
       {open ? (
@@ -71,48 +72,48 @@ export function WeatherCard() {
         >
           {/* 现在 */}
           <div className="flex items-baseline justify-between">
-            <span className="text-2xs uppercase tracking-wider text-slate-500">现在</span>
-            <span className="text-2xs text-slate-500">{now?.text}</span>
+            <span className="text-2xs uppercase tracking-wider text-[var(--text-3)]">现在</span>
+            <span className="text-2xs text-[var(--text-3)]">{now?.text}</span>
           </div>
-          <div className="text-xl font-extrabold leading-tight text-slate-100">{now ? `${Math.round(now.tempC)}°` : '—'}</div>
+          <div className="text-xl font-extrabold leading-tight text-[var(--text-1)]">{now ? `${Math.round(now.tempC)}°` : '—'}</div>
           {/* 未来几小时 */}
           <div className="mt-2.5 border-t border-[var(--line)] pt-2">
-            <div className="mb-1 text-2xs uppercase tracking-wider text-slate-500">未来几小时</div>
+            <div className="mb-1 text-2xs uppercase tracking-wider text-[var(--text-3)]">未来几小时</div>
             <div className="flex justify-between gap-1">
               {nextHours.map((h) => (
-                <div key={h.ts} className="flex flex-col items-center gap-0.5 text-2xs text-slate-400">
+                <div key={h.ts} className="flex flex-col items-center gap-0.5 text-2xs text-[var(--text-2)]">
                   <span>{h.hour}时</span>
-                  <span className="font-semibold text-slate-200">{Math.round(h.tempC)}°</span>
-                  {h.chanceOfRain >= 30 ? <span className="text-2xs text-sky-400">雨{h.chanceOfRain}%</span> : <span className="text-2xs text-slate-600">{h.text.slice(0, 2)}</span>}
+                  <span className="font-semibold text-[var(--text-1)]">{Math.round(h.tempC)}°</span>
+                  {h.chanceOfRain >= 30 ? <span className="text-2xs text-sky-500">雨{h.chanceOfRain}%</span> : <span className="text-2xs text-[var(--text-3)]">{h.text.slice(0, 2)}</span>}
                 </div>
               ))}
-              {!nextHours.length ? <span className="text-slate-600">—</span> : null}
+              {!nextHours.length ? <span className="text-[var(--text-3)]">—</span> : null}
             </div>
           </div>
           {/* 未来几天 */}
           <div className="mt-2.5 border-t border-[var(--line)] pt-2">
-            <div className="mb-1 text-2xs uppercase tracking-wider text-slate-500">未来几天</div>
+            <div className="mb-1 text-2xs uppercase tracking-wider text-[var(--text-3)]">未来几天</div>
             <div className="flex flex-col gap-1">
               {dayKeys.map((k) => {
                 const list = byDay.get(k)!
                 const maxT = Math.round(Math.max(...list.map((h) => h.tempC)))
                 const text = list[0]?.text ?? ''
                 return (
-                  <div key={k} className="flex items-center justify-between text-slate-300">
+                  <div key={k} className="flex items-center justify-between text-[var(--text-2)]">
                     <span>{k}</span>
-                    <span className="text-slate-500">{text}</span>
-                    <span className="tabular-nums font-semibold">{maxT}°</span>
+                    <span className="text-[var(--text-3)]">{text}</span>
+                    <span className="tabular-nums font-semibold text-[var(--text-1)]">{maxT}°</span>
                   </div>
                 )
               })}
-              {!dayKeys.length ? <span className="text-slate-600">—</span> : null}
+              {!dayKeys.length ? <span className="text-[var(--text-3)]">—</span> : null}
             </div>
           </div>
           {/* 城市切换 */}
           <div className="mt-2.5 flex items-center gap-1.5 border-t border-[var(--line)] pt-2">
-            <span className="shrink-0 text-2xs uppercase tracking-wider text-slate-500">城市</span>
+            <span className="shrink-0 text-2xs uppercase tracking-wider text-[var(--text-3)]">城市</span>
             <input
-              className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-transparent px-2 py-1 text-xs text-slate-300 outline-none focus:border-[var(--border-active)]"
+              className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-transparent px-2 py-1 text-xs text-[var(--text-2)] outline-none focus:border-[var(--border-active)]"
               placeholder="留空跟随全局设置"
               defaultValue={city}
               onKeyDown={(e) => {

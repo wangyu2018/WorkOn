@@ -107,6 +107,31 @@ export function getOcrShotsForWindow(startTs: number, endTs: number): { shots: O
   return { shots, snaps }
 }
 
+/** 时间旅行：按时间窗 + 关键词检索截图索引与结构化快照（新→旧，含类别过滤） */
+export function searchOcrShots(
+  startTs: number,
+  endTs: number,
+  keyword?: string,
+  limit = 60
+): { shots: OcrShot[]; snaps: OcrSnapshot[] } {
+  const kw = (keyword ?? '').trim().toLowerCase()
+  const { shots, snaps } = getOcrShotsForWindow(startTs, endTs)
+  const textHit = (parts: Array<string | null | undefined>): boolean =>
+    !kw || parts.some((p) => (p ?? '').toLowerCase().includes(kw))
+  return {
+    shots: shots
+      .filter((s) => textHit([s.app, s.classify, ...s.keywords]))
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, limit),
+    snaps: snaps
+      .filter((s) =>
+        textHit([s.app, ...s.keywords, ...s.documentNames, ...s.personNames, ...s.urls, ...s.codeSnippets])
+      )
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, limit)
+  }
+}
+
 /**
  * P0：时段屏幕上下文（脱敏摘要，不含 OCR 原文）——注入 AI 问答
  */

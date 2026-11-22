@@ -6,7 +6,10 @@ import { col, insertInto, updateIn, removeFrom } from './db'
 import { genId } from '@shared/types'
 import { llmChat, extractJson } from './ai'
 import { getSettings } from './settings'
+import { aiCredsReady } from '@shared/aiConfig'
 import { dateKey } from '@shared/trail'
+import { planBlocks, type PlanBlock } from './planner/timeBlocks'
+import { busyRangesForDate } from './connectors/calendar'
 import { normText, similarity, fuzzyMatch } from '@shared/fuzzy'
 import type { Project, ProjectTask, ProjectTimeLink, PlanItem } from '@shared/types'
 
@@ -221,7 +224,7 @@ export async function aiBreakdown(projectId: string, requirement: string): Promi
   const proj = col<Project>('projects').find((p) => p.id === projectId)
   if (!proj) return []
   const s = getSettings()
-  if (!s.aiEnabled || !s.aiApiKey) {
+  if (!s.aiEnabled || !aiCredsReady(s)) {
     // 未开 AI：按简单切分兜底
     const lines = requirement.split(/[\n\r]+/).map((l) => l.trim()).filter((l) => l && !/^(需求|目标|步骤|说明)[:：]/i.test(l))
     return lines.length ? createTasksBulk(projectId, lines) : []
@@ -319,10 +322,20 @@ export function dayProjectLinks(date?: string): { app: string; projectId: string
 }
 
 /**
- * AI 任务排期：汇总各项目未完成任务 + 预估工时 + 优先级，AI 推荐今日优先安排。
- * 返回任务列表（含标题/所属项目/建议序号/理由）。未开 AI 则按时长与优先级本地排序。
+ * AI 任务排期：先排序，再排成可执行时间块。
+ * 模型只负责顺序；时间块由确定性算法生成（避免模型编时间）。
+ * 解析失败不再静默返回空，而是返回 error 供 UI 提示。
  */
-export async function aiSchedule(): Promise<{ taskId: string; title: string; projectName: string; priority: ProjectTask['priority']; estMin: number; reason: string }[]> {
+export interface ScheduleItem {
+  taskId: string
+  title: string
+  projectName: string
+  priority: ProjectTask['priority']
+  estMin: number
+  reason: string
+}
+
+export async function aiSchedule(): Promise<{ order: ScheduleItem[]; blocks: PlanBlock[]; error?: string }> {
   const projects = listProjects()
   const tasks = col<ProjectTask>('projectTasks').filter((t) => t.status !== 'done')
   const items = tasks.map((t) => {
@@ -335,14 +348,16 @@ export async function aiSchedule(): Promise<{ taskId: string; title: string; pro
       estMin: t.estMin ?? 0
     }
   })
-  if (items.length === 0) return []
+  if (items.length === 0) return { order: [], blocks: [], error: '没有未完成的开发任务' }
+  const day = dateKey(Date.now())
+  const busy = await busyRangesForDate(day).catch(() => [])
   const s = getSettings()
-  if (!s.aiEnabled || !s.aiApiKey) {
-    // 未开 AI：按优先级（high>medium>low）+ 预估时长升序
+  if (!s.aiEnabled || !aiCredsReady(s)) {
     const rank = { high: 0, medium: 1, low: 2 }
-    return items
+    const order = items
       .sort((a, b) => (rank[a.priority] ?? 1) - (rank[b.priority] ?? 1) || (a.estMin || 0) - (b.estMin || 0))
-      .map((it, i) => ({ ...it, reason: `优先级 ${it.priority}${it.estMin ? ` · 预估 ${Math.round(it.estMin / 60)}h` : ''}` }))
+      .map((it) => ({ ...it, reason: `优先级 ${it.priority}${it.estMin ? ` · 预估 ${Math.round(it.estMin / 60)}h` : ''}` }))
+    return { order, blocks: planBlocks({ date: day, tasks: order, busy }) }
   }
   const prompt = [
     `你是开发任务排期助手。下面是今日各项目的待办开发任务，请为它们排出合理的执行顺序（考虑优先级、预估工时、项目集中度，尽量同项目连做）。`,
@@ -352,18 +367,20 @@ export async function aiSchedule(): Promise<{ taskId: string; title: string; pro
   ].join('\n')
   try {
     const raw = await llmChat([{ role: 'user', content: prompt }])
-    if (!raw) return []
-    const order = extractJson<{ taskId: string; reason: string }[]>(raw)
-    if (!Array.isArray(order)) return []
+    if (!raw) return { order: [], blocks: [], error: 'AI 返回为空' }
+    const parsed = extractJson<{ taskId: string; reason: string }[]>(raw)
+    if (!Array.isArray(parsed)) return { order: [], blocks: [], error: '模型输出非 JSON' }
     const byId = new Map(items.map((it) => [it.taskId, it]))
-    return order
+    const order = parsed
       .map((o) => {
         const it = byId.get(o.taskId)
         return it ? { ...it, reason: o.reason || 'AI 建议优先' } : null
       })
-      .filter((x): x is { taskId: string; title: string; projectName: string; priority: ProjectTask['priority']; estMin: number; reason: string } => !!x)
-  } catch {
-    return []
+      .filter((x): x is ScheduleItem => !!x)
+    if (!order.length) return { order: [], blocks: [], error: '模型未返回有效任务 id' }
+    return { order, blocks: planBlocks({ date: day, tasks: order, busy }) }
+  } catch (e) {
+    return { order: [], blocks: [], error: `排期失败：${(e as Error).message}` }
   }
 }
 
@@ -377,7 +394,7 @@ export async function aiReview(projectId: string, trailMinutes: number): Promise
   const done = ts.filter((t) => t.status === 'done')
   const pending = ts.filter((t) => t.status !== 'done')
   const s = getSettings()
-  if (!s.aiEnabled || !s.aiApiKey) {
+  if (!s.aiEnabled || !aiCredsReady(s)) {
     // 未开 AI：本地汇总
     return {
       text: `项目「${proj.name}」：共 ${ts.length} 个任务，已完成 ${done.length}（${ts.length ? Math.round((done.length / ts.length) * 100) : 0}%）。本项目累计投入约 ${Math.round(trailMinutes / 60)}h。`,
@@ -423,7 +440,7 @@ export async function aiDevAdvice(ctx: { currentApp: string; devMin: number; sta
     if (topTask) return { text: `手头在做「${active?.name}」，接下来可以考虑继续 ${topTask.title}。` }
     return null
   }
-  if (!s.aiEnabled || !s.aiApiKey) return local()
+  if (!s.aiEnabled || !aiCredsReady(s)) return local()
   const prompt = [
     `你是 WorkOn 的开发陪伴助手，根据用户当前状态给一条简短、温暖的实时建议（一句话）。`,
     `当前应用：${ctx.currentApp}（状态 ${ctx.state}）`,

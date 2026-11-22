@@ -7,7 +7,7 @@ import type { AccessLog, MergedTrail, PrivacyLevel, ProfileField, UserPersona, U
 import { PERSONA_LAYERS, PRIVACY_LEVEL_META, completenessLabel, completenessOf, type PersonaLayerMeta } from '@shared/personaMeta'
 import { USER_TYPE_META } from '@shared/attention'
 import { WORK_LIKE_STATES } from '@shared/stateMeta'
-import { Icon } from '../components/Icon'
+import { Icon, type IconName } from '../components/Icon'
 import { Toggle } from '../components/Toggle'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { fmtMin } from '../components/utils'
@@ -43,6 +43,26 @@ const RULE_LABEL: Record<string, string> = {
 }
 /** 日志按等级显示的层名（同一等级可能覆盖多个画像层） */
 const LEVEL_LAYER_LABEL: Record<string, string> = { L0: '基础信息', L1: '身份/偏好', L2: '行为/兴趣', L3: '心理/关系', L4: '核心隐私' }
+/** 画像层 / 用户类型的线性图标（去 emoji，保持单色 UI） */
+const LAYER_ICON: Record<string, IconName> = {
+  basicInfo: 'book',
+  identity: 'target',
+  preferences: 'sliders',
+  behavioral: 'activity',
+  interests: 'flame',
+  capabilities: 'zap',
+  psychological: 'brain',
+  relationship: 'sparkles'
+}
+const USER_TYPE_ICON: Record<string, IconName> = {
+  developer: 'command',
+  office_worker: 'folder',
+  exam_candidate: 'book',
+  freelancer: 'zap',
+  student: 'book',
+  creator: 'sparkles',
+  entrepreneur: 'target'
+}
 
 // ───────────────────────── 时间格式化 ─────────────────────────
 
@@ -631,7 +651,10 @@ export default function ProfileView() {
         </div>
         <InfoRow label="用户类型">
           <span className="flex flex-wrap items-center gap-2">
-            <span className="chip">{ut?.emoji} {ut?.label ?? persona.basicInfo.userType}</span>
+            <span className="chip inline-flex items-center gap-1">
+              <Icon name={USER_TYPE_ICON[persona.basicInfo.userType] ?? 'user'} size={11} />
+              {ut?.label ?? persona.basicInfo.userType}
+            </span>
             <button className="text-xs text-neon-cyan/70 transition-colors hover:text-neon-cyan" onClick={() => setSel('score')}>
               去「注意力与评分」修改 →
             </button>
@@ -763,7 +786,7 @@ export default function ProfileView() {
                     <span className="w-20 shrink-0 truncate text-slate-400">{a.category}</span>
                     <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
                       <span
-                        className="block h-full rounded-full bg-gradient-to-r from-neon-cyan/60 to-neon-cyan/30"
+                        className="block h-full rounded-full bg-neon-cyan/40"
                         style={{ width: `${Math.round((a.avgDailyMin / maxMin) * 100)}%` }}
                       />
                     </span>
@@ -874,7 +897,7 @@ export default function ProfileView() {
                 <span className="w-28 shrink-0 truncate text-xs text-slate-300">{s.name}</span>
                 <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
                   <span
-                    className="block h-full rounded-full bg-gradient-to-r from-neon-cyan/70 to-neon-violet/50"
+                    className="block h-full rounded-full bg-neon-cyan/60"
                     style={{ width: `${Math.max(0, Math.min(100, Math.round(s.proficiency)))}%` }}
                   />
                 </span>
@@ -955,14 +978,14 @@ export default function ProfileView() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {(
             [
-              ['💞', '亲密度', `Lv.${r.intimacyLevel}`],
-              ['📅', '相伴天数', `${r.daysTogether} 天`],
-              ['💬', '累计交互', `${r.totalInteractions}`],
-              ['📈', '日均交互', `${r.interactionPattern.avgDailyInteractions}`]
+              ['flame', '亲密度', `Lv.${r.intimacyLevel}`],
+              ['calendar', '相伴天数', `${r.daysTogether} 天`],
+              ['message', '累计交互', `${r.totalInteractions}`],
+              ['chart', '日均交互', `${r.interactionPattern.avgDailyInteractions}`]
             ] as const
-          ).map(([emoji, label, value]) => (
+          ).map(([icon, label, value]) => (
             <div key={label} className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 transition-all hover:border-neon-cyan/25 hover:bg-white/[0.05]">
-              <div className="text-lg leading-none">{emoji}</div>
+              <Icon name={icon} size={16} className="text-neon-cyan/80" />
               <div className="mt-1.5 text-xs text-slate-500">{label}</div>
               <div className="mt-0.5 text-base font-semibold text-neon-cyan">{value}</div>
             </div>
@@ -999,7 +1022,7 @@ export default function ProfileView() {
                   }`}
                   onClick={() => void chooseType(t)}
                 >
-                  {m.emoji} {m.label}
+                  <Icon name={USER_TYPE_ICON[t]} size={12} /> {m.label}
                 </button>
               )
             })}
@@ -1044,9 +1067,6 @@ export default function ProfileView() {
             onCommit={(v) => void patchSettings({ targetPomodoros: v })}
           />
         </SettingRow>
-        <SettingRow label="桌宠评分策略" desc="根据评分调整桌宠情感与提醒频率">
-          <Toggle checked={settings.scorePetAdapt} onChange={(v) => void patchSettings({ scorePetAdapt: v })} />
-        </SettingRow>
       </div>
     </>
   )
@@ -1078,7 +1098,7 @@ export default function ProfileView() {
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-neon-cyan/70 to-neon-green/60 transition-all duration-500"
+              className="h-full rounded-full bg-neon-cyan/60 transition-all duration-500"
               style={{ width: `${completeness}%` }}
             />
           </div>
@@ -1159,7 +1179,7 @@ export default function ProfileView() {
                               className="rounded-md border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 text-2xs text-slate-400 transition-colors hover:border-neon-cyan/40 hover:text-neon-cyan"
                               onClick={() => setSel(l.key)}
                             >
-                              {l.emoji} {l.label}
+                              <Icon name={LAYER_ICON[l.key]} size={10} /> {l.label}
                             </button>
                           ))}
                         </div>
@@ -1255,12 +1275,15 @@ export default function ProfileView() {
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-neon-cyan/25 bg-neon-cyan/10 text-xl shadow-glow">
-              {ut?.emoji ?? '🪪'}
+              {ut ? <Icon name={USER_TYPE_ICON[persona.basicInfo.userType] ?? 'user'} size={20} className="text-neon-cyan" /> : <Icon name="user" size={20} className="text-neon-cyan" />}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h1 className="truncate text-lg font-semibold text-slate-100">{persona.basicInfo.nickname || '未设置昵称'}</h1>
-                <span className="chip shrink-0 !text-2xs">{ut?.emoji} {ut?.label ?? ''}</span>
+                <span className="chip inline-flex shrink-0 items-center gap-1 !text-2xs">
+                  <Icon name={USER_TYPE_ICON[persona.basicInfo.userType] ?? 'user'} size={10} />
+                  {ut?.label ?? ''}
+                </span>
               </div>
               <p className="mt-0.5 text-xs text-slate-500">
                 已使用 {persona.relationship.daysTogether} 天 · 亲密度 Lv.{persona.relationship.intimacyLevel}
@@ -1276,8 +1299,8 @@ export default function ProfileView() {
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-neon-cyan/70 to-neon-green/60 transition-all duration-500"
-                style={{ width: `${completeness}%`, boxShadow: '0 0 8px rgba(34,211,238,0.4)' }}
+                className="h-full rounded-full bg-neon-cyan/60 transition-all duration-500"
+                style={{ width: `${completeness}%` }}
               />
             </div>
           </div>
@@ -1332,7 +1355,7 @@ export default function ProfileView() {
                             }`}
                             onClick={() => setSel(l.key)}
                           >
-                            <span className="text-sm leading-none">{l.emoji}</span>
+                            <Icon name={LAYER_ICON[l.key]} size={13} />
                             <span className="min-w-0 flex-1 truncate">{l.label}</span>
                           </button>
                         )
@@ -1377,7 +1400,7 @@ export default function ProfileView() {
           <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-slate-200">
             {selMeta ? (
               <>
-                <span>{selMeta.emoji}</span> {selMeta.label}
+                <Icon name={LAYER_ICON[selMeta.key]} size={14} className="text-neon-cyan" /> {selMeta.label}
               </>
             ) : sel === 'score' ? (
               <>
@@ -1450,7 +1473,7 @@ export default function ProfileView() {
                               className="rounded border border-white/[0.08] px-1.5 py-0.5 text-2xs text-slate-400 transition-colors hover:border-neon-cyan/40 hover:text-neon-cyan"
                               onClick={() => setSel(l.key)}
                             >
-                              {l.emoji} {l.label}
+                              <Icon name={LAYER_ICON[l.key]} size={10} /> {l.label}
                             </button>
                           ))}
                         </div>
@@ -1610,7 +1633,7 @@ export default function ProfileView() {
                             className="rounded-md border border-white/[0.08] bg-black/20 px-2 py-1 text-xs text-slate-300 transition-colors hover:border-neon-cyan/40 hover:text-neon-cyan"
                             onClick={() => setSel(l.key)}
                           >
-                            {l.emoji} {l.label}
+                            <Icon name={LAYER_ICON[l.key]} size={10} /> {l.label}
                           </button>
                         ))}
                       </div>

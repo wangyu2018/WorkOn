@@ -21,9 +21,17 @@ export interface FocusChainState {
 // ───────────────────────── MotionLab 自动化（v7） ─────────────────────────
 
 export interface AutomationAction {
-  kind: 'genReport' | 'petCelebrate' | 'notify' | 'addTodo'
+  kind: 'genReport' | 'petCelebrate' | 'notify' | 'addTodo' | 'exportReport' | 'runWorkflow' | 'renderDeliverable'
   /** notify 文案 / addTodo 待办标题 / petCelebrate 台词 */
   text?: string
+  /** exportReport / renderDeliverable 的输出格式 */
+  format?: 'md' | 'html' | 'pdf' | 'png'
+  /** exportReport 模板 */
+  template?: 'brief' | 'report' | 'deck' | 'poster'
+  /** runWorkflow：工作流 id */
+  workflowId?: string
+  /** renderDeliverable：已审批任务 id（不允许运行时新建草案） */
+  approvedSpecId?: string
 }
 
 export interface AutomationTrigger {
@@ -182,7 +190,7 @@ export interface TimeEntry {
 
 export type PlanStatus = 'planned' | 'in_progress' | 'partial' | 'done' | 'delayed' | 'cancelled'
 export type PlanType = 'reminder' | 'phase' | 'task' | 'burst'
-export type PlanSource = 'manual' | 'oner' | 'import' | 'qa-confirm' | 'session'
+export type PlanSource = 'manual' | 'oner' | 'import' | 'qa-confirm' | 'session' | 'goal' | 'intel' | 'knowledge' | 'watch'
 export type PlanCategory = string // 内置分类 id（ai-dev/work-customer/leader/personal/other）或自定义分类 id
 
 export interface PlanItem {
@@ -469,7 +477,7 @@ export interface MemoRecord {
 }
 
 /** 知识库条目与结构化实体的关联（项目 / 计划 / 备忘等） */
-export type KnowledgeLinkType = 'project' | 'plan' | 'memo' | 'task'
+export type KnowledgeLinkType = 'project' | 'plan' | 'memo' | 'task' | 'workflow'
 
 export interface KnowledgeLink {
   type: KnowledgeLinkType
@@ -487,7 +495,7 @@ export interface KnowledgeItem {
   body: string
   /** @deprecated 界面不再展示；入库默认 unstructured */
   kind: 'unstructured' | 'structured'
-  source: 'manual' | 'memo' | 'import' | 'ai-tool' | 'pet' | 'upload' | 'paste' | 'process'
+  source: 'manual' | 'memo' | 'import' | 'ai-tool' | 'pet' | 'upload' | 'paste' | 'process' | 'workflow' | 'qa' | 'watch'
   links: KnowledgeLink[]
   tags: string[]
   /** 来源文件名（上传/截图时可选） */
@@ -938,6 +946,9 @@ export interface AppSettings {
   petOpacity: number // 桌宠不透明度 0.3-1
   smartDailyMaxPerDay: number // 智能日报每日 AI 生成次数上限（省 token）
   curveRefreshMin: number // 报表头部曲线数据最短刷新间隔（分钟）
+  /** 每日首启简报：每天第一次进主窗时出现一次，内容块可自选 */
+  briefingEnabled?: boolean
+  briefingBlocks?: { yesterday: boolean; today: boolean; reminders: boolean }
   petCareEnabled: boolean // 桌宠关怀调度（休息提醒/里程碑庆祝/整点问候），默认开
   petDndUntilTs: number // 桌宠免打扰截止时间戳（右键菜单「免打扰 1 小时」）
   petPosX: number // 上次拖拽放置位置 X（petRememberPos 用）
@@ -1025,6 +1036,8 @@ export interface AppSettings {
   privacyConsent: 'pending' | 'granted' | 'declined'
   /** v10 工作台拆出窗：右页独立窗口的位置尺寸记忆 */
   v10WorkbenchBounds?: { x: number; y: number; width: number; height: number }
+  /** 主窗口位置尺寸记忆（含最大化状态） */
+  mainWindowBounds?: { x: number; y: number; width: number; height: number; maximized?: boolean }
   /** 消息监控（v10 signals·隐私红线）：默认关；开启后 IM 未读上升→截屏 OCR→来件进对话流 */
   messageWatchEnabled?: boolean
   /** EdgeDock 边缘分组（用户 2026-11-02）：三边 Dock 应用分组+排序+批量启动 */
@@ -1113,6 +1126,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   petOpacity: 1,
   smartDailyMaxPerDay: 2,
   curveRefreshMin: 5,
+  briefingEnabled: true,
+  briefingBlocks: { yesterday: true, today: true, reminders: true },
   petCareEnabled: true,
   petDndUntilTs: 0,
   petPosX: -1,
@@ -1378,6 +1393,23 @@ export interface OcrSnapshot {
   codeSnippets: string[] // 代码片段标识
 }
 
+/** 统一记忆事件：屏幕/音频/文件/应用/笔记都落这里，供 searchMemory 检索 */
+export interface MemoryEvent {
+  id: string
+  ts: number
+  source: 'screen' | 'audio' | 'file' | 'app' | 'note'
+  text: string
+  ref: string
+}
+
+/** 日历订阅源（ICS / CalDAV） */
+export interface CalendarFeed {
+  id: string
+  name: string
+  url: string
+  ts: number
+}
+
 /** 时间统计（v2.9 模块 A，纯本地计算） */
 export interface ReportStats {
   totalWorkMin: number
@@ -1531,6 +1563,52 @@ export interface GoalDraft {
   source: 'ai' | 'local'
 }
 
+/** 目标树草案：一句话 → 目标 → 路径 → 里程碑 → 本周执行块 */
+export interface GoalTreeDraft {
+  event: string
+  deadline: string
+  dailyTargetMin: number
+  keywords: string[]
+  paths: PathDraft[]
+  source: 'ai' | 'local'
+  confidence: number
+  weekBlocks: WeekBlockDraft[]
+}
+
+export interface PathDraft {
+  id: string
+  title: string
+  /** 投入占比 0-1，各路径合计为 1 */
+  weight: number
+  rationale: string
+  skills: string[]
+  milestones: MilestoneDraft[]
+}
+
+export interface MilestoneDraft {
+  id: string
+  title: string
+  targetDate: string
+  deliverables: string[]
+  projectName?: string
+  bindProjectId?: string
+}
+
+export interface WeekBlockDraft {
+  date: string
+  startMin: number
+  durationMin: number
+  title: string
+  milestoneId: string
+}
+
+export interface GoalTreeApplyResult {
+  goalId: string
+  projectIds: string[]
+  planIds: string[]
+  todayCount: number
+}
+
 /** v10 块渲染用聚合视图（goals:list 返回） */
 /** v10 会话：气泡/消息归档成可继续追问的 session（右键加入会话） */
 export interface ChatSessionItem {
@@ -1538,14 +1616,53 @@ export interface ChatSessionItem {
   text: string
   time: number
 }
+/** 会话目标：本机，或已配对的远程节点（P0 节点模式） */
+export type SessionTarget = { kind: 'local' } | { kind: 'node'; nodeId: string }
+
 export interface ChatSession {
   id: string
   title: string
   topic: 'project' | 'life' | 'general'
   projectId?: string
   items: ChatSessionItem[]
+  /** 目标机器：缺省视为本机（历史会话兼容） */
+  target?: SessionTarget
+  /** 会话级群组：参与本会话的 Agent id（@Agent 派发 / 分支继承） */
+  participants?: string[]
+  /** 子会话：接续自哪个上游会话（创建时快照上游最近消息） */
+  parentSessionId?: string
+  /** 归档：从会话列表隐藏，可在归档视图恢复 */
+  archived?: boolean
+  archivedAt?: number
   createdAt: number
   updatedAt: number
+}
+
+/** 远程节点持久化记录（主进程使用，token 只存 hash） */
+export interface NodeRecord {
+  id: string
+  label: string
+  hostname: string
+  os: string
+  arch: string
+  /** P0 只开放只读 */
+  authLevel: 'read' | 'write' | 'exec'
+  tokenHash: string
+  pairedAt: number
+  lastSeen: number
+}
+
+/** 远程节点视图（渲染端使用，不含 token） */
+export interface RemoteNodeInfo {
+  id: string
+  label: string
+  hostname: string
+  os: string
+  arch: string
+  authLevel: 'read' | 'write' | 'exec'
+  pairedAt: number
+  lastSeen: number
+  online: boolean
 }
 
 export interface GoalView {
@@ -1558,4 +1675,74 @@ export interface GoalView {
   remainingDays: number
   forecast: GoalForecast | null
   alerts: string[] // 当前活动中的偏离描述
+}
+
+// ───────────────────────── 关联图谱（P1 索引 / P2 关联面板 / P3 分析） ─────────────────────────
+
+export type GraphNodeKind = 'project' | 'task' | 'session' | 'plan' | 'knowledge' | 'workflow' | 'goal'
+
+export interface GraphNode {
+  /** 稳定 id：`${kind}:${refId}` */
+  id: string
+  kind: GraphNodeKind
+  refId: string
+  label: string
+  status?: string
+  meta?: Record<string, string | number | boolean>
+  ts: number
+}
+
+export type GraphEdgeKind = 'belongs' | 'references' | 'derived'
+
+export interface GraphEdge {
+  id: string
+  from: string
+  to: string
+  kind: GraphEdgeKind
+  weight?: number
+  ts: number
+}
+
+export interface GraphStats {
+  nodes: number
+  edges: number
+  byKind: Record<string, number>
+  orphans: number
+  components: number
+  builtAt: number
+}
+
+export interface GraphViewData {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+  stats: GraphStats
+}
+
+export interface GraphNeighbor {
+  node: GraphNode
+  edge: GraphEdge
+  direction: 'in' | 'out'
+}
+
+export type GraphInsightKind = 'stalled' | 'isolated' | 'cluster' | 'critical'
+
+export interface GraphInsight {
+  kind: GraphInsightKind
+  title: string
+  detail: string
+  nodeIds: string[]
+}
+
+export interface GraphCriticalPath {
+  /** 项目 → 未完成任务（按优先级/排序） */
+  nodes: GraphNode[]
+  /** 预估剩余天数（按每日投入 120 分钟估算） */
+  estimatedDays: number
+  remainingMin: number
+}
+
+export interface GraphAnalysis {
+  stats: GraphStats
+  insights: GraphInsight[]
+  criticalPath: GraphCriticalPath | null
 }

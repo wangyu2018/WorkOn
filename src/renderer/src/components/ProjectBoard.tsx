@@ -10,7 +10,7 @@ import { Modal } from './ui/Modal'
 import { ModalShell } from './ui/Modal'
 import { Icon } from '../components/Icon'
 import { displayApp } from '@shared/appDisplayName'
-import { fmtMin, todayKey } from '../components/utils'
+import { clockOf, fmtMin, todayKey } from '../components/utils'
 
 const STATUS_LABEL: Record<ProjectTask['status'], string> = {
   todo: '待做', in_progress: '进行中', done: '完成', blocked: '阻塞'
@@ -49,6 +49,7 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
   const [dossiers, setDossiers] = useState<Record<string, KnowledgeItem[]>>({})
   /** AI 排期结果 + 加载态 */
   const [schedule, setSchedule] = useState<{ taskId: string; title: string; projectName: string; priority: string; estMin: number; reason: string }[] | null>(null)
+  const [scheduleBlocks, setScheduleBlocks] = useState<Array<{ taskId: string; startMin: number; endMin: number }>>([])
   const [scheduleLoading, setScheduleLoading] = useState(false)
   const [scheduleOpen, setScheduleOpen] = useState(false)
   /** AI 复盘：projectId → { loading, text } */
@@ -319,8 +320,14 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
     setScheduleLoading(true)
     setErr(null)
     try {
-      const r = (await window.api.aiSchedule()) as { taskId: string; title: string; projectName: string; priority: string; estMin: number; reason: string }[]
-      setSchedule(r)
+      const r = (await window.api.aiSchedule()) as {
+        order: { taskId: string; title: string; projectName: string; priority: string; estMin: number; reason: string }[]
+        blocks?: Array<{ taskId: string; startMin: number; endMin: number }>
+        error?: string
+      }
+      if (r.error) setErr(`AI 排期：${r.error}`)
+      setSchedule(r.order ?? [])
+      setScheduleBlocks(r.blocks ?? [])
       setScheduleOpen(true)
     } catch (e) {
       setErr(`AI 排期失败：${(e as Error).message || '未知错误'}`)
@@ -852,12 +859,18 @@ export function ProjectBoard({ trail }: { trail: { segments: { mainApp: string; 
                 {schedule.map((s, i) => {
                   const pc = { high: '#EF4444', medium: '#F59E0B', low: '#94a3b8' }[s.priority as 'high' | 'medium' | 'low'] ?? '#F59E0B'
                   const proj = projects.find((x) => x.name === s.projectName)
+                  const block = scheduleBlocks.find((b) => b.taskId === s.taskId)
                   return (
                     <div key={s.taskId} className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2">
                       <div className="flex items-center gap-2">
                         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--surface-3)] text-xs font-semibold text-[var(--text-2)]">{i + 1}</span>
                         <span className="min-w-0 flex-1 truncate text-xs text-[var(--text-1)]">{s.title}</span>
                         <span className="chip !py-0 !text-2xs" style={{ color: pc, borderColor: `${pc}44` }}>{s.priority}</span>
+                        {block ? (
+                          <span className="shrink-0 text-2xs tabular-nums text-[var(--text-2)]" title="建议时间块">
+                            {clockOf(block.startMin)}–{clockOf(block.endMin)}
+                          </span>
+                        ) : null}
                         <span className="text-2xs text-[var(--text-3)]">{s.projectName}</span>
                         {proj ? (
                           <button

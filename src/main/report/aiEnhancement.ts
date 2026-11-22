@@ -9,6 +9,7 @@ import type { PlanItem, ReportEntry, ReportStats } from '@shared/types'
 import type { IndustryVocabulary } from '@shared/industryVocab'
 import { getSettings } from '../settings'
 import { llmChat, extractJson } from '../ai'
+import { aiCredsReady } from '@shared/aiConfig'
 import { requestPersonaData } from '../desensitize'
 
 export interface AIEnhanceContext {
@@ -155,7 +156,7 @@ function mergeAIItem(entry: ReportEntry, item: AIInferredItem): void {
 /** AI 增强报表条目；返回 null 触发 engine 的 fallback_to_base */
 export async function enhanceWithAI(entries: ReportEntry[], ctx: AIEnhanceContext): Promise<ReportEntry[] | null> {
   const s = getSettings()
-  if (!s.aiEnabled || !s.aiApiKey) return null // AI 不可用
+  if (!s.aiEnabled || !aiCredsReady(s)) return null // AI 不可用
 
   const pending = collectPending(entries)
   if (pending.length === 0) return entries // 无待富化条目，不调 LLM

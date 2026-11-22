@@ -8,6 +8,7 @@
 import { col, insertInto, updateIn, removeFrom, listActivities } from './db'
 import { getSettings } from './settings'
 import { pushNotify } from './notify'
+import { replanSuggestions, type ReplanSuggestion } from './planner/timeBlocks'
 import { dateKey, buildMergedTrail } from '@shared/trail'
 import { genId } from '@shared/types'
 import type { PlanItem, AutomationRule, AutomationAction, AutomationTrigger } from '@shared/types'
@@ -102,6 +103,33 @@ async function runActions(rule: AutomationRule): Promise<void> {
           } as unknown as PlanItem)
           break
         }
+        case 'exportReport': {
+          const { exportReport } = await import('./report/engine')
+          const today = dateKey(Date.now())
+          const out = await exportReport(today, act.format ?? 'html', act.template ?? 'report')
+          pushNotify('report', `自动化 · ${rule.name}`, `报告已导出：${out.path}`, [
+            { label: '知道了', action: 'dismiss', primary: true }
+          ], 45)
+          break
+        }
+        case 'runWorkflow': {
+          if (!act.workflowId) break
+          const { runWorkflowById } = await import('./workflowRunner')
+          const rec = await runWorkflowById(act.workflowId)
+          pushNotify('ai', `自动化 · ${rule.name}`, rec?.ok ? '工作流运行完成' : `工作流失败：${rec?.error ?? '未知原因'}`, [
+            { label: '知道了', action: 'dismiss', primary: true }
+          ], 30)
+          break
+        }
+        case 'renderDeliverable': {
+          if (!act.approvedSpecId) break
+          const { renderApproved } = await import('./deliverable/orchestrator')
+          const out = await renderApproved(act.approvedSpecId, act.format ?? 'html')
+          pushNotify('report', `自动化 · ${rule.name}`, `交付物已生成：${out.path}`, [
+            { label: '知道了', action: 'dismiss', primary: true }
+          ], 45)
+          break
+        }
       }
     } catch {
       // 单个动作失败不阻断后续动作
@@ -135,6 +163,7 @@ export function automationMinuteTick(): void {
   lastMinuteTick = now
   const s = getSettings()
   if (s.recordingPaused) return
+  replanTick()
   const hhmm = `${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`
   const fireKey = `${dateKey(now)} ${hhmm}`
   for (const rule of listAutomations()) {
@@ -154,6 +183,60 @@ export function automationMinuteTick(): void {
       void fire(rule, weekKey)
     }
   }
+}
+
+/** 今日未完成时间块的重排建议（只读，不写库） */
+export function replanPreview(nowMin?: number): ReplanSuggestion[] {
+  const now = Date.now()
+  const day = dateKey(now)
+  const plans = col<PlanItem>('plans').filter(
+    (p) => p.date === day && !p.archived && typeof p.startMin === 'number' && typeof p.endMin === 'number'
+  )
+  const blocks = plans.map((p) => ({
+    taskId: p.id,
+    title: p.title,
+    date: p.date,
+    startMin: p.startMin as number,
+    endMin: p.endMin as number
+  }))
+  const doneTaskIds = plans.filter((p) => p.status === 'done' || p.status === 'cancelled').map((p) => p.id)
+  const d = new Date(now)
+  return replanSuggestions({
+    nowMin: nowMin ?? d.getHours() * 60 + d.getMinutes(),
+    blocks,
+    doneTaskIds
+  })
+}
+
+/** 每 15 分钟产出一次重排建议：只推送预览卡，任何计划都不改 */
+let lastReplanTick = 0
+const REPLAN_INTERVAL_MS = 15 * 60 * 1000
+export function replanTick(): void {
+  const now = Date.now()
+  if (now - lastReplanTick < REPLAN_INTERVAL_MS) return
+  lastReplanTick = now
+  let suggestions: ReplanSuggestion[] = []
+  try {
+    suggestions = replanPreview()
+  } catch {
+    return
+  }
+  if (!suggestions.length) return
+  const actionLabel = (a: ReplanSuggestion['action']): string => (a === 'defer' ? '顺延' : a === 'split' ? '拆分' : '放弃')
+  const head = suggestions
+    .slice(0, 3)
+    .map((x) => `${actionLabel(x.action)}「${x.title}」`)
+    .join('；')
+  pushNotify(
+    'generic',
+    '计划需要重排',
+    `${suggestions.length} 项建议：${head}${suggestions.length > 3 ? ' 等' : ''}（未改动任何计划，去计划页确认）`,
+    [
+      { label: '去计划页', action: 'open-plan', primary: true },
+      { label: '忽略', action: 'dismiss' }
+    ],
+    40
+  )
 }
 
 /** monitor 钩子：应用切换 */

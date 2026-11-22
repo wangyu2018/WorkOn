@@ -366,6 +366,11 @@ export function parseDeadline(text: string): string | null {
   const y = now.getFullYear()
   const lastDayOf = (yy: number, mm: number): string => fmtDate(new Date(yy, mm, 0).getTime())
   let m: RegExpExecArray | null
+  if ((m = /(\d{4})-(\d{1,2})-(\d{1,2})/.exec(text))) {
+    const candidate = parseDate(`${m[1]}-${String(+m[2]).padStart(2, '0')}-${String(+m[3]).padStart(2, '0')}`)
+    if (!isNaN(candidate)) return fmtDate(candidate)
+  }
+  if (/后\s*年/.test(text)) return `${y + 2}-12-31`
   if ((m = /(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]/.exec(text))) {
     const candidate = parseDate(`${m[1]}-${String(+m[2]).padStart(2, '0')}-${String(+m[3]).padStart(2, '0')}`)
     if (!isNaN(candidate)) return fmtDate(candidate)
@@ -375,6 +380,7 @@ export function parseDeadline(text: string): string | null {
     return fmtDate(parseDate(`${y + 1}-${String(+m[1]).padStart(2, '0')}-${String(+m[2]).padStart(2, '0')}`))
   if ((m = /明年\s*(\d{1,2})\s*月\s*(底|末|前|之前)?/.exec(text))) return lastDayOf(y + 1, +m[1])
   if (/明年\s*(底|年底)/.test(text)) return `${y + 1}-12-31`
+  if (/明\s*年/.test(text)) return `${y + 1}-12-31`
   if ((m = /(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]/.exec(text))) {
     const mm = +m[1]
     const dd = +m[2]

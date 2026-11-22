@@ -5,6 +5,7 @@ import type {
   GeneratedReport,
   GeneratedSection,
   MergedTrail,
+  PlanItem,
   ReportEntry,
   ReportTemplate,
   SectionType,
@@ -595,6 +596,25 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
   const [generatedAt, setGeneratedAt] = useState<number | null>(null)
   /** KPI sparkline/环比：以选中日期收尾的近 7 天轨迹（date-6 .. date） */
   const [weekTrails, setWeekTrails] = useState<(MergedTrail | null)[]>([])
+  /** 屏幕记忆是否在采集（为空时解释数据来源，避免误判「导出没数据」） */
+  const [ocrRunning, setOcrRunning] = useState<boolean | null>(null)
+  /** 当日计划：用于「未完成项顺延」定位真实计划与状态 */
+  const [dayPlans, setDayPlans] = useState<PlanItem[]>([])
+  const [delayBusy, setDelayBusy] = useState(false)
+  const [delayMsg, setDelayMsg] = useState('')
+  const [confirmDelay, setConfirmDelay] = useState(false)
+  useEffect(() => {
+    let alive = true
+    void window.api
+      .ocrStats()
+      .then((s) => {
+        if (alive) setOcrRunning(!!(s as { running?: boolean }).running)
+      })
+      .catch(() => { /* ignore */ })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   /* 模板列表 */
   const loadTemplates = useCallback(async () => {
@@ -645,6 +665,22 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
     gen(key, useAI)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, selectedTemplateId, aiOn, manualKey])
+
+  /* 当日计划（顺延用）：日期切换或日报重新生成后刷新 */
+  useEffect(() => {
+    let alive = true
+    window.api
+      .listPlans(date)
+      .then((list) => {
+        if (alive) setDayPlans(Array.isArray(list) ? (list as PlanItem[]) : [])
+      })
+      .catch(() => {
+        if (alive) setDayPlans([])
+      })
+    return () => {
+      alive = false
+    }
+  }, [date, generatedAt])
 
   /* KPI 近 7 天轨迹（仅复用现有 trail:get IPC） */
   useEffect(() => {
@@ -733,6 +769,35 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
       : null
   const aiStatusText =
     report?.aiStatus === 'enhanced' ? '已增强' : report?.aiStatus === 'fallback_to_base' ? 'AI 不可用，已用基础数据' : ''
+
+  /** 当日未完成计划：报告判定 missed/partial，且真实计划仍可顺延 */
+  const unfinishedPlans = (report?.achievements ?? []).flatMap((a) => {
+    if (a.status !== 'missed' && a.status !== 'partial') return []
+    const plan = dayPlans.find((p) => p.id === a.planId)
+    if (!plan || plan.archived) return []
+    if (plan.status === 'done' || plan.status === 'cancelled' || plan.status === 'delayed') return []
+    return [{ plan, title: a.title }]
+  })
+
+  /** 顺延到次日：为每项生成新计划，原计划标记延期 */
+  const delayUnfinished = async (plans: PlanItem[]): Promise<void> => {
+    if (delayBusy || plans.length === 0) return
+    setDelayBusy(true)
+    const target = addDays(date, 1)
+    let ok = 0
+    for (const p of plans) {
+      try {
+        const r = (await window.api.delayPlan(p.id, target, '回顾页顺延')) as { newPlan?: PlanItem } | null
+        if (r?.newPlan) ok += 1
+      } catch {
+        /* 单项失败不阻塞其他 */
+      }
+    }
+    setDayPlans((prev) => prev.filter((p) => !plans.some((x) => x.id === p.id)))
+    setDelayMsg(ok > 0 ? `已顺延 ${ok} 项到 ${target}` : '顺延失败，请重试')
+    setDelayBusy(false)
+    setConfirmDelay(false)
+  }
 
   /* AI 日报 hero 摘要（由现有日报内容拼装） */
   const heroSummary =
@@ -947,7 +1012,7 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
             </div>
             <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-neon-cyan to-neon-blue transition-all"
+                className="h-full rounded-full bg-neon-cyan transition-all"
                 style={{ width: `${report ? Math.round(report.coverage * 100) : 0}%` }}
               />
             </div>
@@ -959,6 +1024,11 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
                 需确认 <span className={needReviewCount > 0 ? 'text-amber-400' : 'text-slate-300'}>{needReviewCount}</span>
               </span>
             </div>
+            {ocrRunning === false && report && report.entries.length < 10 && (
+              <p className="mt-2 text-2xs leading-relaxed text-amber-400/80">
+                屏幕记忆未采集，当前数据来自应用切换记录；到「更多 → 隐私」开启屏幕记忆可获得更完整的时段与内容。
+              </p>
+            )}
           </section>
         </aside>
 
@@ -970,7 +1040,7 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
             </div>
           ) : !report || report.entries.length === 0 ? (
             <div className="glass-card flex flex-col items-center gap-2 py-10 text-center">
-              <span className="text-2xl opacity-70">🗓️</span>
+              <Icon name="calendar" size={24} className="opacity-70" />
               <p className="text-xs text-slate-500">这一天还没有足够数据，换个日期看看吧。</p>
             </div>
           ) : (
@@ -1071,14 +1141,51 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '60ms' }}>
           <SectionTitle icon="target" title="计划达成" hint={report ? `${report.achievements.length} 项` : undefined} />
+          {unfinishedPlans.length > 0 || delayMsg ? (
+            <div className="mb-1.5 flex flex-wrap items-center gap-2 text-2xs">
+              {unfinishedPlans.length > 0 ? (
+                <>
+                  <span className="text-slate-500">未完成 {unfinishedPlans.length} 项</span>
+                  <button
+                    type="button"
+                    className="glass-btn !px-2 !py-0.5 !text-2xs"
+                    disabled={delayBusy}
+                    onClick={() => setConfirmDelay(true)}
+                  >
+                    {delayBusy ? '顺延中…' : `全部顺延到 ${addDays(date, 1)}`}
+                  </button>
+                </>
+              ) : null}
+              {delayMsg ? <span className="text-[var(--teal-deep)]">{delayMsg}</span> : null}
+            </div>
+          ) : null}
           {report && report.achievements.length > 0 ? (
             <div className="flex flex-col gap-1.5">
               {report.achievements.map((a) => {
                 const m = ACH_META[a.status]
+                const pl = dayPlans.find((p) => p.id === a.planId)
+                const canDelay =
+                  (a.status === 'missed' || a.status === 'partial') &&
+                  !!pl &&
+                  !pl.archived &&
+                  pl.status !== 'done' &&
+                  pl.status !== 'cancelled' &&
+                  pl.status !== 'delayed'
                 return (
                   <div key={a.planId} className="flex items-center gap-2 rounded-lg px-1.5 py-1 text-xs transition-colors hover:bg-white/[0.03]">
                     <span className={`w-4 shrink-0 text-center ${m.cls}`}>{m.mark}</span>
                     <span className="min-w-0 truncate text-slate-300">{a.title}</span>
+                    {canDelay ? (
+                      <button
+                        type="button"
+                        className="shrink-0 border-0 bg-transparent p-0 text-2xs text-slate-500 transition-colors hover:text-[var(--accent)]"
+                        disabled={delayBusy}
+                        title={`顺延到 ${addDays(date, 1)}`}
+                        onClick={() => void delayUnfinished([pl])}
+                      >
+                        顺延
+                      </button>
+                    ) : null}
                     <span className="ml-auto shrink-0 text-xs text-slate-500">
                       {fmtMin(a.actualMin)}/{fmtMin(a.plannedMin)} <span className={m.cls}>({Math.round(a.achievementRate * 100)}%)</span>
                     </span>
@@ -1177,6 +1284,16 @@ function SmartDayReportView({ onSynced, onGoWeekly, focusKpi: focusKpiProp }: { 
         }}
         onCancel={() => setConfirmTemplate(null)}
       />
+
+      {/* 未完成项顺延确认 */}
+      <ConfirmDialog
+        open={confirmDelay}
+        title={`顺延 ${unfinishedPlans.length} 项未完成计划？`}
+        message={`会为每项生成一份 ${addDays(date, 1)} 的新计划，原计划标记为已延期。`}
+        confirmLabel="顺延"
+        onConfirm={() => void delayUnfinished(unfinishedPlans.map((x) => x.plan))}
+        onCancel={() => setConfirmDelay(false)}
+      />
     </div>
   )
 }
@@ -1243,6 +1360,11 @@ function SmartWeeklyReportView({ onSynced }: { onSynced?: () => void }) {
   /** KPI：本周 + 上周各 7 天轨迹（0-6 本周，7-13 上周），近 21 天注意力评分（专注度环比用） */
   const [weekTrails, setWeekTrails] = useState<(MergedTrail | null)[]>([])
   const [attn, setAttn] = useState<AttentionScore[]>([])
+  /** 本周计划：用于「未完成项顺延到下周一」 */
+  const [weekPlans, setWeekPlans] = useState<PlanItem[]>([])
+  const [rollBusy, setRollBusy] = useState(false)
+  const [rollMsg, setRollMsg] = useState('')
+  const [confirmRoll, setConfirmRoll] = useState(false)
 
   const monday = mondayOf(anchor)
   const isCurrentWeek = monday >= mondayOf(todayKey())
@@ -1291,6 +1413,54 @@ function SmartWeeklyReportView({ onSynced }: { onSynced?: () => void }) {
       .then((a) => setAttn(a as AttentionScore[]))
       .catch(() => undefined)
   }, [])
+
+  /* 本周计划（只看已过去的日子，避免把未来待办重复顺延） */
+  useEffect(() => {
+    let alive = true
+    window.api
+      .listPlans()
+      .then((list) => {
+        if (alive) setWeekPlans(Array.isArray(list) ? (list as PlanItem[]) : [])
+      })
+      .catch(() => {
+        if (alive) setWeekPlans([])
+      })
+    return () => {
+      alive = false
+    }
+  }, [monday, report])
+
+  const weekEnd = addDays(monday, 6)
+  const weekCutoff = isCurrentWeek ? todayKey() : weekEnd
+  const unfinishedWeek = weekPlans.filter(
+    (p) =>
+      !p.archived &&
+      p.date >= monday &&
+      p.date <= weekCutoff &&
+      p.status !== 'done' &&
+      p.status !== 'cancelled' &&
+      p.status !== 'delayed'
+  )
+
+  /** 本周未完成 → 下周一：复制成新计划，原计划标记延期 */
+  const rollToNextWeek = async (): Promise<void> => {
+    if (rollBusy || unfinishedWeek.length === 0) return
+    setRollBusy(true)
+    const target = addDays(monday, 7)
+    let ok = 0
+    for (const p of unfinishedWeek) {
+      try {
+        const r = (await window.api.delayPlan(p.id, target, '周回顾顺延')) as { newPlan?: PlanItem } | null
+        if (r?.newPlan) ok += 1
+      } catch {
+        /* 单项失败不阻塞其他 */
+      }
+    }
+    setWeekPlans((prev) => prev.filter((p) => !unfinishedWeek.some((x) => x.id === p.id)))
+    setRollMsg(ok > 0 ? `已顺延 ${ok} 项到 ${target}` : '顺延失败，请重试')
+    setRollBusy(false)
+    setConfirmRoll(false)
+  }
 
   const toggleAI = () => {
     const v = !aiOn
@@ -1360,6 +1530,28 @@ function SmartWeeklyReportView({ onSynced }: { onSynced?: () => void }) {
         ) : null}
       </div>
 
+      {/* ── 本周未完成 → 下周一（只顺延已过去的日子） ── */}
+      {unfinishedWeek.length > 0 || rollMsg ? (
+        <div className="glass-card hoverable flex flex-wrap items-center gap-2 !p-3 text-xs">
+          {unfinishedWeek.length > 0 ? (
+            <>
+              <span className="text-slate-400">本周未完成 {unfinishedWeek.length} 项</span>
+              <span className="text-2xs text-slate-600">顺延会复制到下周一，原计划标记为延期</span>
+              <span className="flex-1" />
+              <button
+                type="button"
+                className="glass-btn !px-2 !py-1 !text-2xs"
+                disabled={rollBusy}
+                onClick={() => setConfirmRoll(true)}
+              >
+                {rollBusy ? '顺延中…' : `顺延到 ${addDays(monday, 7)}`}
+              </button>
+            </>
+          ) : null}
+          {rollMsg ? <span className="text-2xs text-[var(--teal-deep)]">{rollMsg}</span> : null}
+        </div>
+      ) : null}
+
       {/* ── 周 KPI 4 卡（v6 InsightCard：专注 / 切换次数 / 最长专注段 / 摸鱼占比） ── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <InsightCard
@@ -1407,7 +1599,7 @@ function SmartWeeklyReportView({ onSynced }: { onSynced?: () => void }) {
         </div>
       ) : !report || report.days.every((d) => d.entries.length === 0) ? (
         <div className="glass-card flex flex-col items-center gap-2 py-10 text-center">
-          <span className="text-2xl opacity-70">🗓️</span>
+          <Icon name="calendar" size={24} className="opacity-70" />
           <p className="text-xs text-slate-500">这一周还没有足够数据，换一周看看吧。</p>
         </div>
       ) : (
@@ -1432,6 +1624,16 @@ function SmartWeeklyReportView({ onSynced }: { onSynced?: () => void }) {
           </section>
         ))
       )}
+
+      {/* 本周未完成 → 下周一确认 */}
+      <ConfirmDialog
+        open={confirmRoll}
+        title={`顺延 ${unfinishedWeek.length} 项到 ${addDays(monday, 7)}？`}
+        message="会为每项生成一份下周一的新计划，原计划标记为已延期。"
+        confirmLabel="顺延"
+        onConfirm={() => void rollToNextWeek()}
+        onCancel={() => setConfirmRoll(false)}
+      />
     </div>
   )
 }

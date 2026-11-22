@@ -1,0 +1,21 @@
+# REQ-20261117-09 Checklist
+
+- [x] 文字草案阶段不落盘，任务停在 `draft_audited`
+- [x] 草案确认后才允许绑定数据与生成 AST
+- [x] 未通过/未确认的 AST 调用渲染返回 `GATE_NOT_CONFIRMED`
+- [x] 高风险（页数 > 5 / 外部数据 / 隐私字段）触发二次确认
+- [x] 审计覆盖内容、版式、合规三档，且审计结论写入 `deliverableAudits`
+- [x] 审计失败自动修一轮，二次仍有 high 转为 `escalated`
+- [x] 产物目录生成 `audit-<revision>.json`，图表带来源
+- [x] HTML/PDF/PNG/DOCX/XLSX/PPTX/MD 均可导出且文件非空
+- [x] 流程图可导出为单文件 HTML，含 SVG 节点与箭头
+- [x] A2UI 新卡片（chart/compare/flow/progress/image/kanban）可解析并渲染
+- [x] `search_memory` 可检索 OCR/知识库/活动记录
+- [x] 本地 MCP Server 可 `tools/list` 与 `tools/call`
+- [x] MCP Agent 仅白名单工具可派发；未配置白名单仍不可派发
+- [x] 计划时间块返回起止时间，计划页展示区间
+- [x] 重排建议只预览不写库，忽略后计划数量不变
+- [x] 节点写入先返回 diff，未确认不落盘
+- [x] 富文档（docx/pdf/xlsx）可导入为知识条目
+- [x] 只读工具可并行执行，含副作用工具保持串行
+- [x] `npm run typecheck` 通过

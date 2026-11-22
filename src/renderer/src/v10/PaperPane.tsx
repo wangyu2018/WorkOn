@@ -7,9 +7,12 @@ import type { PlanItem, TrailSegment, PresenceSnapshot, GoalView } from '@shared
 import type { BlockParams } from './V10Surface'
 import type { ObjectChipData } from './AskPane'
 import { FlowMap } from './FlowMap'
+import { TraceFlowBlock } from './TraceFlow'
+import { JobsBlock } from './JobsBlock'
 import { Shrinkable } from './Shrinkable'
 import { MindMap } from './mindmap'
 import { useEffect } from 'react'
+import { isLocalAiBaseUrl } from '@shared/aiConfig'
 
 /** 折下数据流：真实 notify 卡 + 提醒事件（v10 §5 消息总线的 v10 侧呈现） */
 export interface FeedItem {
@@ -158,8 +161,9 @@ function NowBlock(props: { presence: PresenceSnapshot | null; kick?: (p: { block
   )
 }
 
-function TimelineBlock(props: { trail: TrailSegment[]; days: number; kick?: (p: { blockKey: string; extra?: JSX.Element }) => JSX.Element; pinned?: boolean; hidden?: boolean; onContextAsk?: (key: 'timeline', q: string) => void }): JSX.Element | null {
+function TimelineBlock(props: { trail: TrailSegment[]; days: number; hours?: [number, number]; kick?: (p: { blockKey: string; extra?: JSX.Element }) => JSX.Element; pinned?: boolean; hidden?: boolean; onContextAsk?: (key: 'timeline', q: string) => void }): JSX.Element | null {
   const days = props.days
+  const hours = props.hours
   const [expanded, setExpanded] = useState(false)
   const [showSrc, setShowSrc] = useState(false)
   if (props.hidden) return null
@@ -167,6 +171,14 @@ function TimelineBlock(props: { trail: TrailSegment[]; days: number; kick?: (p: 
   const all = props.trail.filter((t) => !t.glance && t.startTs >= cutoff)
   if (props.hidden || all.length === 0) return null // 空自动隐藏
   const segs = (expanded ? all : all.slice(-8)).reverse()
+  /** FEAT-22：时段裁剪后，段外行灰显（图上直接裁窗口） */
+  const inWindow = (t: TrailSegment): boolean => {
+    if (!hours) return true
+    const d = new Date(t.startTs)
+    const startMin = d.getHours() * 60 + d.getMinutes()
+    const endMin = startMin + Math.max(1, Math.round(t.durationMin))
+    return endMin > hours[0] * 60 && startMin < hours[1] * 60
+  }
   return (
     <section
       className="v10-block"
@@ -182,6 +194,11 @@ function TimelineBlock(props: { trail: TrailSegment[]; days: number; kick?: (p: 
         <span>◆ {days === 1 ? '今日轨迹' : `近 ${days} 天轨迹`}</span>
         <span>· 最近 {segs.length} 段</span>
         {days !== 1 ? <span className="aura-mark">◇ 已调</span> : null}
+        {hours ? (
+          <span className="aura-mark">
+            ◇ 时段 {String(hours[0]).padStart(2, '0')}:00–{String(hours[1]).padStart(2, '0')}:00
+          </span>
+        ) : null}
         <span className="acts">
           <span className="acts">
             {props.kick ? props.kick({ blockKey: 'timeline', extra: <button onClick={() => setShowSrc(!showSrc)} title="数据源">源</button> }) : null}
@@ -195,10 +212,10 @@ function TimelineBlock(props: { trail: TrailSegment[]; days: number; kick?: (p: 
       {!expanded && all.length > 8 ? (
         <button className="v10-foldmore" onClick={() => setExpanded(true)}>展开更早的 {all.length - 8} 段 ▾</button>
       ) : null}
-      {days === 1 && all.length ? <TimelineBand segs={all} /> : null}
+      {days === 1 && all.length ? <TimelineBand segs={all} hours={hours} /> : null}
       {(
         segs.map((t, i) => (
-          <div className={`v10-tl-row${t.glance ? ' glance' : ''}`} key={`${t.startTs}-${i}`}>
+          <div className={`v10-tl-row${t.glance ? ' glance' : ''}${inWindow(t) ? '' : ' off'}`} key={`${t.startTs}-${i}`}>
             <span className="v10-tl-time">{hhmm(t.startTs)}</span>
             <span className="v10-tl-dot" style={{ background: WORK_STATES[t.mainState]?.color ?? '#64748B' }} />
             <span className="v10-tl-app">{WORK_STATES[t.mainState]?.label ?? '—'}</span>
@@ -210,16 +227,27 @@ function TimelineBlock(props: { trail: TrailSegment[]; days: number; kick?: (p: 
   )
 }
 
-/** 24h 时间带（v10 轨迹可视化升级）：横带按段时长画色块，hover 看详情 */
-function TimelineBand(props: { segs: TrailSegment[] }): JSX.Element {
+/** 24h 时间带（v10 轨迹可视化升级）：横带按段时长画色块，hover 看详情；FEAT-22 支持时段裁窗口 */
+function TimelineBand(props: { segs: TrailSegment[]; hours?: [number, number] }): JSX.Element {
   const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0)
-  const total = 24 * 3600_000
+  const startH = props.hours?.[0] ?? 0
+  const endH = props.hours?.[1] ?? 24
+  const winStart = dayStart.getTime() + startH * 3600_000
+  const total = (endH - startH) * 3600_000
+  const nowIn = Date.now() >= winStart && Date.now() <= winStart + total
+  const ticks = [0, 1 / 3, 2 / 3, 1].map((f) => {
+    const h = startH + (endH - startH) * f
+    return `${String(Math.round(h) % 24).padStart(2, '0')}时`
+  })
   return (
     <div className="v10-tband">
       <div className="tb-track">
         {props.segs.map((t, i) => {
-          const left = ((t.startTs - dayStart.getTime()) / total) * 100
-          const width = Math.max(0.6, ((t.endTs - t.startTs) / total) * 100)
+          const cs = Math.max(t.startTs, winStart)
+          const ce = Math.min(t.endTs, winStart + total)
+          if (ce <= cs) return null // 段外截断
+          const left = ((cs - winStart) / total) * 100
+          const width = Math.max(0.6, ((ce - cs) / total) * 100)
           return (
             <span
               key={i}
@@ -229,10 +257,10 @@ function TimelineBand(props: { segs: TrailSegment[] }): JSX.Element {
             />
           )
         })}
-        <span className="tb-now" style={{ left: `${((Date.now() - dayStart.getTime()) / total) * 100}%` }} />
+        {nowIn ? <span className="tb-now" style={{ left: `${((Date.now() - winStart) / total) * 100}%` }} /> : null}
       </div>
       <div className="tb-scale">
-        <span>0时</span><span>6时</span><span>12时</span><span>18时</span><span>24时</span>
+        {ticks.map((label, i) => <span key={i}>{label}</span>)}
       </div>
     </div>
   )
@@ -497,8 +525,8 @@ function AiConfigBlock(props: { onClose: () => void; onSaved: () => void }): JSX
           <button
             className="dc-btn"
             title="保存配置并启用"
-            disabled={!key.trim() && !hasKey}
-            style={{ opacity: key.trim() || hasKey ? 1 : 0.5, flex: 1 }}
+            disabled={!key.trim() && !hasKey && !isLocalAiBaseUrl(base)}
+            style={{ opacity: key.trim() || hasKey || isLocalAiBaseUrl(base) ? 1 : 0.5, flex: 1 }}
             onClick={() => {
               const patch: Record<string, unknown> = { aiEnabled: true, aiBaseUrl: base.trim(), aiModel: model.trim() }
               // 剥离非 ASCII/空白字符（复制带格式文本常混入中文标点/不可见符，fetch 会 ByteString 报错）
@@ -516,7 +544,7 @@ function AiConfigBlock(props: { onClose: () => void; onSaved: () => void }): JSX
           </button>
         </div>
         {testResult ? <div className="ob-hint" style={{ marginTop: 6 }}>{testResult}</div> : null}
-        <div className="ob-hint">Key 只存本机 settings.json；国内可用 DeepSeek / Kimi / GLM 的兼容端点。</div>
+        <div className="ob-hint">Key 只存本机 settings.json；国内可用 DeepSeek / Kimi / GLM 的兼容端点；本机 Ollama 可留空 Key。</div>
       </div>
     </section>
   )
@@ -756,6 +784,16 @@ export function PaperPane(props: {
   const days = props.blockParams?.timelineDays ?? 1
   const pane = props.pane ?? 'main'
   const [aiCfg, setAiCfg] = useState(false)
+  /** FEAT-24：报头收口——所有控件进单个 ⚙ 菜单 */
+  const [mhMenu, setMhMenu] = useState(false)
+  useEffect(() => {
+    if (!mhMenu) return
+    const onDown = (e: MouseEvent): void => {
+      if (!(e.target as HTMLElement | null)?.closest?.('.mh-menuwrap')) setMhMenu(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [mhMenu])
   // 块管理（v10 拍板：「留住/固定」真实化——置顶排序；「×」隐藏可恢复；localStorage 持久）
   const [blockState, setBlockState] = useState<{ pinned: string[]; hidden: string[] }>(() => {
     try {
@@ -822,52 +860,64 @@ export function PaperPane(props: {
               return st ? `${WORK_STATES[st].emoji} ${STATE_LABEL[st]} · ${main?.app ?? ''}` : '等待采集'
             })()}
           </span>
-          <span className="mh-focus">专注 {Math.round((props.presence?.continuousFocusSec ?? 0) / 60)} 分钟</span>
           <span style={{ marginLeft: 'auto' }} className="mh-clock">
             {props.now !== undefined ? new Date(props.now).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : ''}
           </span>
-          <button className="mh-act" onClick={() => props.onToggleTheme?.()} title="主题：浅/暗/跟随系统">{props.theme === 'dark' ? '☾' : props.theme === 'auto' ? 'A' : '◐'}</button>
-          <span
-            className={`mh-ai ${props.aiOn ? 'on' : ''}`}
-            title={props.aiOn ? 'AI 已接入——点击改配置/看状态' : 'AI 未接入——点击接入（填 Key 即可）'}
-            style={{ cursor: 'pointer' }}
-            onClick={() => setAiCfg(true)}
-          >
-            {props.aiOn ? 'AI ✓' : 'AI 未接入'}
-          </span>
-          {pane !== 'main' ? (
-            <>
-              <button className="mh-act" onClick={() => { void window.api?.snapPanes?.() }} title="两块玻璃片贴合固定（上下/左右按当前方位）">⎯ 吸附</button>
-              <button className="mh-act" onClick={() => props.onSwapContent?.()} title="这片窗格换装：对话 ⇄ 看板">⇄ 换页</button>
-            </>
-          ) : null}
-          <button className="mh-act" onClick={() => setAiCfg(true)} title="设置（AI Key/端点/模型）">⚙ 设置</button>
-          {pane === 'main' ? (
-            <>
-              <button className="mh-act" onClick={() => props.onDetach?.()} title="拆出：右页独立窗口（吸附+位置记忆）">⇱</button>
-              <button className="mh-act" onClick={() => { void window.api?.detachPanes?.() }} title="玻璃拆开：两块穿透玻璃片，磁性吸附">◫</button>
-            </>
-          ) : pane === 'paper' ? (
-            <>
-              <button className="mh-act" onClick={() => { void window.api?.winHideWorkbench?.() }} title="缩小到任务栏">—</button>
-              <button className="mh-act" onClick={() => props.onAttach?.()} title="合回主窗一面">⇲</button>
-            </>
-          ) : null}
-          <span className="mh-winsep" />
-          {pane === 'main' ? (
-            <>
-              <button className="mh-winbtn" onClick={() => props.onMinimize?.()} title="最小化">—</button>
-              <button className="mh-winbtn close" onClick={() => props.onHideToTray?.()} title="收进托盘（点托盘图标唤回）">✕</button>
-            </>
-          ) : pane === 'paper' ? (
-            <button className="mh-winbtn close" onClick={() => { void window.api?.winHideWorkbench?.() }} title="收起右页（任务栏/托盘唤回）">✕</button>
-          ) : (
-            <button className="mh-winbtn close" onClick={() => { void window.api?.collapsePane?.('paper') }} title="收起这块玻璃片（托盘玻璃模式唤回）">✕</button>
-          )}
+          {/* FEAT-24：控件收口——主题 / AI / 设置 / 拆出 / 换页 / 收起都在这个菜单里 */}
+          <div className="mh-menuwrap">
+            <button
+              className="mh-winbtn"
+              onClick={() => setMhMenu((v) => !v)}
+              title="菜单：主题 / AI / 设置 / 拆出 / 换页 / 收起"
+              aria-expanded={mhMenu}
+            >
+              ⚙
+            </button>
+            {mhMenu ? (
+              <div className="mh-menu">
+                <button onClick={() => { props.onToggleTheme?.(); setMhMenu(false) }}>
+                  主题：{props.theme === 'dark' ? '暗' : props.theme === 'auto' ? '跟随系统' : '浅'}
+                </button>
+                <button onClick={() => { setAiCfg(true); setMhMenu(false) }}>
+                  AI 接入 · {props.aiOn ? '已接入' : '未配置'}
+                </button>
+                <button onClick={() => { window.api?.openMain?.('settings'); setMhMenu(false) }}>完整设置…</button>
+                {pane === 'main' ? (
+                  <>
+                    <button onClick={() => { props.onDetach?.(); setMhMenu(false) }}>拆出右页 ⇱</button>
+                    <button onClick={() => { void window.api?.detachPanes?.(); setMhMenu(false) }}>玻璃拆开 ◫</button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => { void window.api?.snapPanes?.(); setMhMenu(false) }}>吸附贴合 ⎯</button>
+                    <button onClick={() => { props.onSwapContent?.(); setMhMenu(false) }}>换页 ⇄</button>
+                  </>
+                )}
+                {pane === 'main' ? (
+                  <button onClick={() => { props.onMinimize?.(); setMhMenu(false) }}>最小化 —</button>
+                ) : pane === 'paper' ? (
+                  <button onClick={() => { props.onAttach?.(); setMhMenu(false) }}>合回主窗 ⇲</button>
+                ) : null}
+                <button
+                  className="danger"
+                  onClick={() => {
+                    setMhMenu(false)
+                    if (pane === 'main') props.onHideToTray?.()
+                    else if (pane === 'paper') window.api?.winHideWorkbench?.()
+                    else window.api?.collapsePane?.('paper')
+                  }}
+                >
+                  {pane === 'main' ? '收进托盘 ✕' : pane === 'paper' ? '收起右页 ✕' : '收起玻璃片 ✕'}
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
         <div className="mh-sub">
           <span className="mh-dot" />
           <span>{props.dateLabel}</span>
+          <span>·</span>
+          <span>专注 {Math.round((props.presence?.continuousFocusSec ?? 0) / 60)} 分钟</span>
           <span>·</span>
           <span>{props.plans.filter((p) => p.status === 'done').length} 件已完成</span>
           <span>·</span>
@@ -880,6 +930,14 @@ export function PaperPane(props: {
           <OnboardCard step={props.onboardStep} onFinish={props.onOnboardFinish} />
         </div>
       ) : null}
+
+      {/* 处理流程：全局问答的实时链路，常驻右页 */}
+      <div className="v10-trace-wrap">
+        <TraceFlowBlock />
+      </div>
+
+      {/* 事务 / 长任务：本地控制面 + 云作业服务器 */}
+      <JobsBlock />
 
       <div className="v10-fold-above">
         <div className="v10-fold-label">折 上 · 你 的 版 面{blockState.pinned.length ? ` · ◆ 已固定 ${blockState.pinned.length}` : ''}</div>
@@ -933,7 +991,7 @@ export function PaperPane(props: {
         {([
           { key: 'now', pinned: isPinned('now'), node: (<NowBlock presence={props.presence} kick={Kick} pinned={isPinned('now')} hidden={isHidden('now')} />) },
           { key: 'plans', pinned: isPinned('plans'), node: (<TodayPlansBlock plans={props.plans} onToggle={props.onTogglePlan} kick={Kick} pinned={isPinned('plans')} hidden={isHidden('plans')} onContextAsk={props.onContextAsk} />) },
-          { key: 'timeline', pinned: isPinned('timeline'), node: (<TimelineBlock trail={props.trail} days={days} kick={Kick} pinned={isPinned('timeline')} hidden={isHidden('timeline')} onContextAsk={props.onContextAsk} />) },
+          { key: 'timeline', pinned: isPinned('timeline'), node: (<TimelineBlock trail={props.trail} days={days} hours={props.blockParams?.timelineHours} kick={Kick} pinned={isPinned('timeline')} hidden={isHidden('timeline')} onContextAsk={props.onContextAsk} />) },
           { key: 'goals', pinned: isPinned('goals'), node: (props.onMarkAnchor ? (
           <GoalsBlock goals={props.goals ?? []} onMarkAnchor={props.onMarkAnchor} onGoalPatch={props.onGoalPatch ?? (() => {})} onContextAsk={props.onContextAsk} />
         ) : null) },

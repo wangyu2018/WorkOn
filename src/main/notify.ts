@@ -68,6 +68,9 @@ export function registerNotifyIpc(openMainView: (view?: string) => void): void {
       case 'open-qa':
         openMainView('qa')
         break
+      case 'open-plan':
+        openMainView('plan')
+        break
       case 'snooze':
         // 稍后提醒：30 分钟后再推一次休息提醒
         setTimeout(() => pushNotify('rest', '休息提醒', '之前约定的休息时间到啦，起来活动一下吧～', [

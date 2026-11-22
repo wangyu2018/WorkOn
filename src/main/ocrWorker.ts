@@ -3,7 +3,7 @@
  * 支持 Tesseract.js（默认回退）和 RapidOCR-json（5x 提速）
  * 仅在 deepMode 开启时运行，变化驱动采样 + 每应用自适应频率
  */
-import { desktopCapturer, app, powerMonitor } from 'electron'
+import { desktopCapturer, app, powerMonitor, systemPreferences } from 'electron'
 import sharp from 'sharp'
 import fs from 'fs'
 import path from 'path'
@@ -51,6 +51,22 @@ async function ensureRecognize(): Promise<typeof import('tesseract.js').recogniz
 /** 截图落盘目录 */
 function shotsDir(): string {
   return path.join(app.getPath('userData'), 'screenshots')
+}
+
+/** 截图文件 → dataUrl（时间旅行缩略图/预览用；只允许 userData/screenshots 下的图片） */
+export function readShotDataUrl(file: string): string | null {
+  try {
+    const abs = path.resolve(String(file ?? ''))
+    if (!abs.startsWith(path.resolve(shotsDir()) + path.sep)) return null
+    if (!/\.(png|jpe?g)$/i.test(abs)) return null
+    if (!fs.existsSync(abs)) return null
+    const buf = fs.readFileSync(abs)
+    if (buf.length > 8 * 1024 * 1024) return null
+    const mime = /\.png$/i.test(abs) ? 'image/png' : 'image/jpeg'
+    return `data:${mime};base64,${buf.toString('base64')}`
+  } catch {
+    return null
+  }
 }
 
 /** 最近一次截图落盘路径（runOcr 广播给 ocrShots 索引用） */
@@ -337,6 +353,44 @@ export function startOcr(): void {
 export function stopOcr(): void {
   if (ocrTimer) { clearTimeout(ocrTimer); ocrTimer = null }
   console.log('[ocr] 深度模式已停止')
+}
+
+/** 屏幕录制权限（仅 macOS 有系统级授权；其他平台视为已授权） */
+export function getScreenPermission(): 'granted' | 'denied' | 'unknown' {
+  if (process.platform !== 'darwin') return 'granted'
+  try {
+    const st = systemPreferences.getMediaAccessStatus('screen')
+    return st === 'granted' ? 'granted' : st === 'denied' ? 'denied' : 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
+/** 屏幕记忆自检：是否在跑、最近一次识别时间、最近窗口签名 */
+export function getOcrQueueStats(): { running: boolean; lastTs: number | null; lastSig: string; lastText: string; permission: 'granted' | 'denied' | 'unknown' } {
+  return {
+    running: !!ocrTimer,
+    lastTs: lastOcrAt || null,
+    lastSig: lastOcrSig,
+    lastText: lastOcrText.slice(0, 120),
+    permission: getScreenPermission()
+  }
+}
+
+/** 立即采集一次（不依赖 deepMode 周期任务；供隐私页自检/首次开启使用） */
+export async function captureOnce(): Promise<{ ok: boolean; lines: number; text: string; permission: 'granted' | 'denied' | 'unknown' }> {
+  const permission = getScreenPermission()
+  try {
+    await runOcr()
+    return {
+      ok: lastOcrText.length > 0,
+      lines: lastOcrText ? lastOcrText.split(' | ').filter(Boolean).length : 0,
+      text: lastOcrText.slice(0, 200),
+      permission
+    }
+  } catch (e) {
+    return { ok: false, lines: 0, text: (e as Error).message, permission }
+  }
 }
 
 /** 执行一次 OCR 并返回分类结果 */

@@ -15,21 +15,17 @@ import { attentionGrade, focusAdvice, focusScoreLine } from '@shared/focusMeta'
 import { displayApp } from '@shared/appDisplayName'
 import { CATEGORY_META, categoryOf } from '@shared/appCategory'
 
-/** 状态分组（状态分布堆叠彩条口径）：工作 teal 渐变 / AI 协作 indigo→violet / 学习 cyan / 摸鱼 amber / 离开 surface */
+/** 状态分组（状态分布堆叠彩条口径）：工作 teal / AI 协作 blue / 学习 cyan / 摸鱼 amber / 离开 surface */
 const STATE_GROUPS: { key: string; label: string; fill: string; dot: string; states: WorkState[] }[] = [
-  { key: 'work', label: '工作', fill: 'linear-gradient(90deg, var(--teal), var(--teal-border))', dot: 'var(--teal)', states: ['focus', 'coding', 'meeting', 'remote'] },
-  { key: 'ai', label: 'AI 协作', fill: 'linear-gradient(90deg, #6366f1, #8b5cf6)', dot: '#8b5cf6', states: ['aidev', 'aiqa'] },
-  { key: 'study', label: '学习', fill: 'linear-gradient(90deg, #06b6d4, #67e8f9)', dot: '#06b6d4', states: ['writing'] },
-  { key: 'slack', label: '摸鱼', fill: 'linear-gradient(90deg, #f59e0b, #fbbf24)', dot: '#f59e0b', states: ['slack', 'relax', 'break', 'lunch'] },
+  { key: 'work', label: '工作', fill: 'var(--teal)', dot: 'var(--teal)', states: ['focus', 'coding', 'meeting', 'remote'] },
+  { key: 'ai', label: 'AI 协作', fill: '#3b82f6', dot: '#3b82f6', states: ['aidev', 'aiqa'] },
+  { key: 'study', label: '学习', fill: '#06b6d4', dot: '#06b6d4', states: ['writing'] },
+  { key: 'slack', label: '摸鱼', fill: '#f59e0b', dot: '#f59e0b', states: ['slack', 'relax', 'break', 'lunch'] },
   { key: 'away', label: '离开', fill: 'var(--surface-3)', dot: '#64748b', states: ['idle', 'away', 'other'] }
 ]
 
-/** 应用 TOP 榜权重色：前三名 teal / violet / cyan 渐变 */
-const RANK_BARS = [
-  'linear-gradient(90deg, var(--teal), var(--teal-border))',
-  'linear-gradient(90deg, #8b5cf6, #c4b5fd)',
-  'linear-gradient(90deg, #06b6d4, #67e8f9)'
-]
+/** 应用 TOP 榜权重色：前三名 teal / blue / cyan */
+const RANK_BARS = ['var(--teal)', '#3b82f6', '#06b6d4']
 
 /** v6 当前状态大圆环：SVG linearGradient 渐变描边（teal→cyan / 按评级色），中心大数字 */
 function GradientRing({
@@ -729,7 +725,7 @@ export default function MonitorView({
                           className="h-full rounded-full transition-all"
                           style={{
                             width: `${Math.min(100, (min / Math.max(1, trail!.totalMin)) * 100)}%`,
-                            background: isFocus ? 'linear-gradient(90deg, var(--teal), var(--teal-border))' : 'rgba(255,255,255,0.28)',
+                            background: isFocus ? 'var(--teal)' : 'rgba(255,255,255,0.28)',
                             transitionDuration: '300ms'
                           }}
                         />
@@ -754,7 +750,7 @@ export default function MonitorView({
           </section>
         ) : null}
 
-        {/* 应用 TOP 榜（v6）：应用名 + 时长 + 占比横条（渐变填色，前三名权重色 teal/violet/cyan） */}
+        {/* 应用 TOP 榜（v6）：应用名 + 时长 + 占比横条（纯色填色，前三名权重色 teal/blue/cyan） */}
         {showTop ? (
         <section className="glass-card hoverable anim-fade-up" style={{ animationDelay: '150ms', order: rankOf('topApps') }}>
           <SectionTitle icon="folder">应用 TOP 榜</SectionTitle>
@@ -763,12 +759,12 @@ export default function MonitorView({
             <div className="flex flex-col gap-0.5">
               {topApps.map(({ app, min, pct }, i) => {
                 const meta = CATEGORY_META[categoryOf(app)]
-                const bar = i < 3 ? RANK_BARS[i] : 'linear-gradient(90deg, rgba(255,255,255,0.35), rgba(255,255,255,0.12))'
+                const bar = i < 3 ? RANK_BARS[i] : 'rgba(255,255,255,0.22)'
                 return (
                   <div key={app} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors hover:bg-white/[0.04]">
                     <span
                       className={`w-5 shrink-0 text-center text-xs font-extrabold tabular-nums ${
-                        i === 0 ? 'text-[var(--teal)]' : i === 1 ? 'text-[var(--violet)]' : i === 2 ? 'text-[var(--cyan)]' : 'text-slate-600'
+                        i === 0 ? 'text-[var(--teal)]' : i === 1 ? 'text-[#3b82f6]' : i === 2 ? 'text-[var(--cyan)]' : 'text-slate-600'
                       }`}
                     >
                       {i + 1}

@@ -1,7 +1,7 @@
 /**
  * IPC 注册：window.api 的全部通道
  */
-import { ipcMain, dialog, app, clipboard } from 'electron'
+import { ipcMain, dialog, app, clipboard, shell } from 'electron'
 import { getLoadStatus, startLoadGuard, stopLoadGuard, isLoadGuardEngaged } from './loadGuard'
 import { getAiAssistPace } from './aiAssistWatch'
 import { getActiveEngine } from './ocrEngine'
@@ -20,12 +20,15 @@ import type {
   ReportEntryPatch,
   KnowledgeItem,
   KnowledgeLink,
-  MemoRecord, ProjectTask } from '@shared/types'
+  MemoRecord, ProjectTask, GoalTreeDraft } from '@shared/types'
 import { genId } from '@shared/types'
+import type { PlanProposal } from '@shared/assistant'
 import { dateKey, buildMergedTrail } from '@shared/trail'
 import { planVsActual, forecastPlan, BUILTIN_CATEGORIES } from '@shared/planAnalysis'
 import { getSettings, setSettings } from './settings'
+import { aiCredsReady } from '@shared/aiConfig'
 import { getWeather, getWeatherNextHours, getWeatherBrief } from './weather'
+import { runAssistantIntent } from './assistantIntents'
 import { getAllAppVisuals } from './appVisuals'
 import { buildDevDataset, buildDevOcrBatch, buildDevPrompts } from './devOcr'
 import {
@@ -38,10 +41,42 @@ import {
   listRecentRecognitionLogs,
   updateActivityTitleByStartTs
 } from './db'
+import { listAgents, addAgent, updateAgent, removeAgent, probeAgent, dispatchAgent, cancelAgentDispatches, listAgentRuns, setAgentRunReference } from './agents'
+import {
+  listWorkflows, saveWorkflow, removeWorkflow, listWorkflowModels,
+  runWorkflowNode, cancelWorkflowRun, ocrWorkflowImage, collectWorkflowContext, automationCapabilities,
+  fetchVideoSubtitle, readRssFeed,
+  generateWorkflow, listWorkflowReferenceSamples
+} from './workflow'
+import type { WorkflowDef, WorkflowRunRequest } from '@shared/workflow'
+import type { TraceEvalCaseInput } from '@shared/trace'
+import { listWorkflowRuns, runWorkflowById } from './workflowRunner'
+import { createWatchTask, listWatchSnapshot, patchWatchTask, removeWatchTask, runWatchNow } from './watch'
+import { approveJob, cancelJob as cancelAgentJob, getJobSnapshot, runCommitmentNow } from './jobScheduler'
+import { listJobEvents, patchCommitment, removeCommitment, saveCommitment } from './jobStore'
+import type { CommitmentRecord, JobPolicy, JobPlan, JobTarget, JobTrigger } from '@shared/job'
+import { getGraph, analyzeGraph, graphNeighbors, rebuildGraph } from './graph'
+import {
+  attachBrowserGuest, detachBrowserGuest, browserNavigate, browserBack, browserForward,
+  browserReload, browserState, browserRead, browserClick, browserFill, browserAsk, browserScreenshot,
+  browserOpenExternal, setBrowserMode, getBrowserMode
+} from './browser'
+import {
+  chromeStatus, chromeTabs, chromeActivate, chromeOpen, chromeExtensionDir, chromeOpenExtensionFolder
+} from './chromeConnector'
+import { runWebTest, getLastWebTest } from './webTest'
+import type { WebTestInput } from '@shared/webtest'
+import {
+  getIntelState, setIntelConfig, setAgentQuota, listBookmarkSources, listBookmarkSites,
+  importBookmarkSource, addIntelWatch, removeIntelWatch, runIntelScan, ingestIntel, checkIntelProviders,
+  getVaultStatus, listVaultSites, removeVaultSite, hideWatchToVault
+} from './intel'
+import type { AgentInput } from '@shared/agents'
+import type { IntelConfig, IntelProvider } from '@shared/intel'
 import { presence } from './presence'
 import { getFocusChainState } from './focusChain'
 import { registerNotifyIpc, pushNotify } from './notify'
-import { listAutomations, saveAutomation, removeAutomation, toggleAutomation, automationMinuteTick } from './automation'
+import { listAutomations, saveAutomation, removeAutomation, toggleAutomation, automationMinuteTick, replanPreview, replanTick } from './automation'
 import { starGraphForDays } from './starGraph'
 import { pendingReview, reviewSummary, confirmReviewApp, ignoreReviewApp, reviewProjects } from './review'
 import { attributionTick, getAttribution, listBindings, bindProject, unbindProject, setBinding, answerAttribution } from './attributions'
@@ -60,22 +95,23 @@ import {
   confirmProcessSediment
 } from './processDraft'
 import { listGoalViews, createGoal, updateGoal, removeGoal, decomposeGoal } from './lifeGoal'
+import { applyGoalTree, decomposeGoalTree } from './goalTree'
 import { bus } from './state'
 import { emitPetIntent } from './petIntent'
 import {
   analyzeDay, askWithContext, askWithContextStream, recordFeedback, genQuestion,
   generateTodos, generateTips, testAIConnection, petAskShort, petAskShortStream, confirmToPlan, matchBrowserToPlan, deriveHabits,
-  aggregateFacts, buildSystemPrompt, selectModel
+  aggregateFacts, buildSystemPrompt, selectModel, probeOllamaModels
 } from './ai'
 import { onerPull, onerPushStatus, startOnerAutoSync } from './oner'
 import { restartMonitor, PRIVACY_ALIASES, getMonitorPerf } from './monitor'
 import { startInputProbe, stopInputProbe } from './recognition/inputProbe'
 import { startIntegration } from './integration'
 import { getOcrStorageStats, clearOcrCache } from './ocr'
-import { startOcr, stopOcr } from './ocrWorker'
+import { startOcr, stopOcr, readShotDataUrl, getOcrQueueStats, captureOnce } from './ocrWorker'
 import { startFolderWatch, updateFolders, scanFolders, getWatchDirs } from './folderWatcher'
 import { saveWorkChain } from './qa/questionGenerator'
-import { refreshTray, syncTrayFromSettings } from './tray'
+import { syncTrayFromSettings } from './tray'
 import { todayScore, recentScores, getScoreStrategy } from './attention'
 import { todayChains, analyzeDayChains } from './chain/engine'
 import {
@@ -85,26 +121,45 @@ import {
 import { listAccessLogs, clearAccessLogs } from './desensitize'
 import { ACHIEVEMENT_DEFS } from '@shared/achievements'
 import {
-  mainWindow, widgetWindow, petWindow, toggleWidget, togglePet, setWidgetPenetration,
+  mainWindow, widgetWindow, petWindow, toggleWidget, setWidgetPenetration,
   setWidgetMode, resizeWidget, resizeWidgetTransient, moveWidgetBy, beginWidgetDrag, endWidgetDrag,
   setWidgetHit, broadcastWidgetSettings, broadcast,
-  setPetIgnoreMouse, setPetModal, createMainWindow, createPetWindow, closePetWindow, sendTo,
-  toggleTodoWidget, createTodoWidgetWindow, setTodoWidgetLayer, setTodoWidgetPenetration,
-  setWidgetOnTop, setPetOpacity, todoWidgetWindow,
-  setTodoWidgetCollapsed, applyTodoWidgetGlass, applyTodoWidgetChrome,
-  applyTodoDesktopPin, applyWidgetDesktopPin, applyAppearanceToOverlays, applyWidgetOpacity
+  setPetIgnoreMouse, setPetModal, createMainWindow, sendTo,
+  setWidgetOnTop,
+  applyWidgetDesktopPin, applyAppearanceToOverlays, applyWidgetOpacity
 } from './windows'
 import type { UserAnalysis, MergedTrail, CustomCategory, UserHabits, Achievement, UserType, ReportTemplate, CategoryInference, SegmentPlanLink, Project } from '@shared/types'
-import { generateReport, generateWeeklyReport } from './report/engine'
-import { screenContextForWindow } from './report/ocrCollector'
+import { generateReport, generateWeeklyReport, exportReport } from './report/engine'
+import { screenContextForWindow, searchOcrShots } from './report/ocrCollector'
 import {
   listMotions, getMotionData, saveMotion, removeMotion, setMotionCost, redeemMotion,
   getPoints, addPoints
 } from './motions'
 import { createMotionWindow } from './windows'
-import { getTrace, setTraceSink } from './trace'
+import { getTrace, listTraces, setTraceSink } from './trace'
+import {
+  discardPendingTraceExport,
+  getPendingTraceExport,
+  getTraceRunMetrics,
+  listTraceEvalCases,
+  previewTraceExport,
+  removeTraceEvalCase,
+  runTraceEvalCase,
+  saveTraceEvalCase
+} from './traceEval'
+import { runSuperAgent } from './superAgent'
+import { shouldUseSuperAgent } from '@shared/superAgent'
+import { createPairing, listNodes, revokeNode, setNodeSink, proposeNodeWrite, commitNodeWrite } from './nodes'
 import { listTemplates } from './report/templates'
 import { parseUserTemplate } from './report/templateParser'
+import { search as searchMemory, stats as memoryStats } from './memory'
+import { listFeeds, addFeed, removeFeed, listEvents, upsertEvent, busyRangesForDate } from './connectors/calendar'
+import { startMcpServer, stopMcpServer, mcpStatus } from './mcp/server'
+import type { DeliverableFormat, DeliverableTemplate, DraftSpec } from '@shared/deliverable/spec'
+import {
+  startDraft, confirmDraft, buildAndAudit, confirmSpec, renderJob,
+  listJobs, getJob, cancelJob, revertJob
+} from './deliverable/orchestrator'
 
 function todayTrail(): MergedTrail {
   const date = dateKey(Date.now())
@@ -129,13 +184,119 @@ export function registerIpc(): void {
   // AI 处理轨迹：实时推送到主窗口（隧道边缘边看）
   setTraceSink((e) => sendTo('main', 'ai:trace', e))
   ipcMain.handle('ai:getTrace', (_e, id: string) => getTrace(String(id)))
+  ipcMain.handle('ai:listTraces', (_e, limit?: number) => listTraces(Math.max(1, Math.min(50, Number(limit) || 8))))
+  ipcMain.handle('ai:traceMetrics', () => getTraceRunMetrics())
+  ipcMain.handle('ai:traceEvalList', () => listTraceEvalCases())
+  ipcMain.handle('ai:traceEvalSave', (_e, input: TraceEvalCaseInput) => saveTraceEvalCase(input))
+  ipcMain.handle('ai:traceEvalRemove', (_e, id: string) => removeTraceEvalCase(String(id)))
+  ipcMain.handle('ai:traceEvalRun', (_e, id: string) => runTraceEvalCase(String(id)))
+  ipcMain.handle('ai:traceExportPreview', () => previewTraceExport())
+  ipcMain.handle('ai:traceExportSave', async (_e, previewId: string, confirmed: boolean) => {
+    if (confirmed !== true) throw new Error('导出需要用户明确确认')
+    const pending = getPendingTraceExport(String(previewId))
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: '确认导出脱敏 Trace 评测数据',
+      defaultPath: `workon-trace-eval-${dateKey(Date.now()).replace(/-/g, '')}.jsonl`,
+      filters: [{ name: '脱敏 JSONL', extensions: ['jsonl'] }]
+    })
+    if (canceled || !filePath) return { ok: false, canceled: true }
+    fs.writeFileSync(filePath, pending.content, 'utf8')
+    discardPendingTraceExport(String(previewId))
+    return { ok: true, filePath, records: pending.records, bytes: pending.bytes }
+  })
+  ipcMain.handle('superAgent:run', async (_e, question: string) => runSuperAgent(String(question ?? '')))
+
+  // ── 节点模式（P0）：配对 / 列表 / 撤销；在线状态变化实时推送 ──
+  setNodeSink((nodes) => sendTo('main', 'nodes:changed', nodes))
+  ipcMain.handle('nodes:list', () => listNodes())
+  ipcMain.handle('nodes:pairing', () => createPairing())
+  ipcMain.handle('nodes:revoke', (_e, id: string) => revokeNode(String(id)))
+  ipcMain.handle('nodes:writePreview', (_e, nodeId: string, filePath: string, content: string) =>
+    proposeNodeWrite(String(nodeId), String(filePath), String(content ?? '')))
+  ipcMain.handle('nodes:write', (_e, nodeId: string, filePath: string, content: string, confirmed: boolean) =>
+    commitNodeWrite(String(nodeId), String(filePath), String(content ?? ''), !!confirmed))
+
+  // ── 事务 / 长任务（个人 Agent） ──
+  ipcMain.handle('jobs:snapshot', () => getJobSnapshot())
+  ipcMain.handle(
+    'jobs:saveCommitment',
+    (
+      _e,
+      input: {
+        id?: string
+        title: string
+        intent: string
+        plan: JobPlan
+        trigger: JobTrigger
+        policy?: JobPolicy
+        target?: JobTarget
+        status?: CommitmentRecord['status']
+      }
+    ) => {
+      const saved = saveCommitment(input)
+      sendTo('main', 'job:changed', {})
+      return saved
+    }
+  )
+  ipcMain.handle(
+    'jobs:patchCommitment',
+    (_e, id: string, patch: Partial<CommitmentRecord>) => {
+      const out = patchCommitment(String(id), patch)
+      sendTo('main', 'job:changed', {})
+      return out
+    }
+  )
+  ipcMain.handle('jobs:removeCommitment', (_e, id: string) => {
+    const ok = removeCommitment(String(id))
+    sendTo('main', 'job:changed', {})
+    return ok
+  })
+  ipcMain.handle('jobs:run', (_e, id: string, confirmed?: boolean) =>
+    runCommitmentNow(String(id), !!confirmed)
+  )
+  ipcMain.handle('jobs:cancel', (_e, jobId: string) => cancelAgentJob(String(jobId)))
+  ipcMain.handle('jobs:approve', (_e, jobId: string) => approveJob(String(jobId)))
+  ipcMain.handle('jobs:events', (_e, jobId: string, limit?: number) =>
+    listJobEvents(String(jobId), Number(limit) || 50)
+  )
+
+  // ── 盯守：多盯点独立增量（不是定时批量） ──
+  ipcMain.handle('watch:list', () => listWatchSnapshot())
+  ipcMain.handle(
+    'watch:create',
+    (
+      _e,
+      input: {
+        title?: string
+        intent?: string
+        intervalMin?: number
+        points: Array<{ url: string; label?: string }>
+        sourceKind?: 'web-links' | 'browser-page'
+        sourceLabel?: string
+        sinks?: {
+          knowledge?: boolean
+          persona?: boolean
+          plan?: boolean
+          projectId?: string
+          workflowId?: string
+        }
+      }
+    ) => createWatchTask(input)
+  )
+  ipcMain.handle(
+    'watch:patch',
+    (_e, id: string, patch: { status?: 'active' | 'paused'; intervalMin?: number }) =>
+      patchWatchTask(String(id), patch)
+  )
+  ipcMain.handle('watch:remove', (_e, id: string) => removeWatchTask(String(id)))
+  ipcMain.handle('watch:run', (_e, taskId?: string) => runWatchNow(taskId ? String(taskId) : undefined))
 
   // ── 设置 ──
   ipcMain.handle('settings:get', () => getSettings())
   ipcMain.handle('settings:set', (_e, patch: Partial<AppSettings>) => {
     let next = setSettings(patch)
-    // 后端校验：无 API Key 不允许启用 AI（前端提示可能被绕过，这里兜底）
-    if (patch.aiEnabled && !next.aiApiKey) {
+    // 后端校验：远程接口无 API Key 不允许启用 AI；本机/内网地址（Ollama）可免 Key
+    if (patch.aiEnabled && !aiCredsReady(next)) {
       next = setSettings({ aiEnabled: false })
     }
     // 用户手动改帧率档位 → 硬件分级停止自动接管档位
@@ -171,7 +332,6 @@ export function registerIpc(): void {
     if (patch.widgetOpacity !== undefined) applyWidgetOpacity()
     if (patch.widgetPenetration !== undefined) {
       setWidgetPenetration(patch.widgetPenetration)
-      refreshTray()
     }
     if (patch.widgetAccent !== undefined) {
       sendTo('widget', 'widget:accent', patch.widgetAccent)
@@ -206,12 +366,7 @@ export function registerIpc(): void {
     if (patch.launchAtLogin !== undefined) {
       import('electron').then(({ app }) => app.setLoginItemSettings({ openAtLogin: patch.launchAtLogin! }))
     }
-    // 模块开关影响托盘菜单显示（桌搭/悬浮窗未开启则对应菜单项隐藏）
-    if (patch.petEnabled !== undefined) {
-      if (patch.petEnabled) createPetWindow()
-      else closePetWindow()
-    }
-    if (patch.petEnabled !== undefined || patch.widgetVisible !== undefined) refreshTray()
+    // 悬浮窗开关：需要时确保托盘存在
     if (patch.widgetVisible !== undefined) {
       syncTrayFromSettings()
       if (widgetWindow && !widgetWindow.isDestroyed()) {
@@ -241,30 +396,6 @@ export function registerIpc(): void {
     // ── 悬浮面运行时属性（透明度/穿透/顶层）：设置驱动统一应用 ──
     if (patch.widgetOpacity !== undefined) applyWidgetOpacity()
     // widgetOnTop / widgetDockOnTop 已在上方按是否吸附分支处理
-    if (patch.todoWidgetOpacity !== undefined && todoWidgetWindow && !todoWidgetWindow.isDestroyed()) {
-      todoWidgetWindow.setOpacity(1)
-      sendTo('todoWidget', 'todoWidget:content-opacity', next.todoWidgetOpacity)
-    }
-    if (patch.todoWidgetPenetration !== undefined) setTodoWidgetPenetration(next.todoWidgetPenetration)
-    if (patch.todoWidgetOnTop !== undefined && !next.todoWidgetDesktopPin) setTodoWidgetLayer(next.todoWidgetOnTop)
-    if (patch.todoWidgetVisible !== undefined) {
-      if (next.todoWidgetVisible) {
-        const tw = createTodoWidgetWindow()
-        if (tw && !tw.isDestroyed()) tw.show()
-      } else if (todoWidgetWindow && !todoWidgetWindow.isDestroyed()) {
-        todoWidgetWindow.hide()
-      }
-      refreshTray()
-    }
-    if (patch.todoWidgetCollapsed !== undefined) setTodoWidgetCollapsed(!!next.todoWidgetCollapsed)
-    if (
-      patch.overlayGlass !== undefined ||
-      patch.todoWidgetOpacity !== undefined
-    ) {
-      applyTodoWidgetGlass(!!next.overlayGlass)
-      applyTodoWidgetChrome()
-    }
-    if (patch.todoWidgetDesktopPin !== undefined) applyTodoDesktopPin()
     if (patch.widgetDesktopPin !== undefined) applyWidgetDesktopPin()
     if (patch.appearanceMode !== undefined || patch.darkTone !== undefined) {
       applyAppearanceToOverlays()
@@ -346,14 +477,7 @@ export function registerIpc(): void {
   )
   ipcMain.handle('plans:dedupeBurst', () => dedupeSessionBurstPlans())
 
-  // ── 待办树小组件 ──
-  ipcMain.handle('todoWidget:toggle', () => toggleTodoWidget())
-  ipcMain.handle('todoWidget:layer', (_e, onTop: boolean) => setTodoWidgetLayer(!!onTop))
-  ipcMain.handle('todoWidget:setCollapsed', (_e, v: boolean) => {
-    setTodoWidgetCollapsed(!!v)
-    return { ok: true, collapsed: !!v }
-  })
-  ipcMain.handle('todoWidget:applyPin', () => applyTodoDesktopPin())
+  // ── 窗口贴桌面 ──
   ipcMain.handle('widget:applyPin', () => applyWidgetDesktopPin())
   // ── MotionLab 自动化（v7） ──
   ipcMain.handle('automations:list', () => listAutomations())
@@ -478,10 +602,37 @@ export function registerIpc(): void {
     broadcast('plan-updated')
     return r
   })
+  // 本地兜底：模型没真正调用 create_plan 时，渲染端解析出草稿走同一张预览卡
+  ipcMain.handle('plans:propose', (_e, draft: { title?: string; date?: string; startMin?: number; category?: string }) => {
+    const title = String(draft?.title ?? '').trim().slice(0, 60)
+    if (!title) return { ok: false, error: '标题为空' }
+    const hasTime = typeof draft?.startMin === 'number' && Number.isFinite(draft.startMin)
+    const proposal: PlanProposal = {
+      token: genId('planproposal'),
+      date: /^\d{4}-\d{2}-\d{2}$/.test(String(draft?.date ?? '')) ? String(draft.date) : dateKey(Date.now()),
+      title,
+      category: String(draft?.category ?? 'other'),
+      planType: hasTime ? 'reminder' : 'task',
+      startMin: hasTime ? Math.max(0, Math.min(1439, Math.round(draft.startMin as number))) : undefined
+    }
+    broadcast('plan:proposal', proposal)
+    return { ok: true, proposal }
+  })
+  ipcMain.handle('plans:replanSuggest', (_e, nowMin?: number) =>
+    replanPreview(typeof nowMin === 'number' ? nowMin : undefined))
+  ipcMain.handle('plans:replanNow', () => {
+    replanTick()
+    return replanPreview()
+  })
   ipcMain.handle('plans:remove', (_e, id: string) => {
     // 级联清理段→计划关联：孤儿关联会让时间轴上的活动段凭空消失
     const links = col<SegmentPlanLink>('segmentPlans').filter((x) => x.planId === id)
     for (const l of links) removeFrom('segmentPlans', l.id)
+    // 级联清理知识→计划关联：否则知识会一直显示「已关联计划」且再也转不出去
+    for (const k of col<KnowledgeItem>('knowledge')) {
+      const kept = (k.links ?? []).filter((l) => !(l.type === 'plan' && l.id === id))
+      if (kept.length !== (k.links ?? []).length) updateIn<KnowledgeItem>('knowledge', k.id, { links: kept })
+    }
     const r = removeFrom('plans', id)
     broadcast('plan-updated')
     return r
@@ -500,6 +651,12 @@ export function registerIpc(): void {
   ipcMain.handle('goals:list', () => listGoalViews())
   ipcMain.handle('goals:decompose', async (_e, sourceText: string, hint?: string) =>
     decomposeGoal(String(sourceText), hint ? String(hint) : undefined)
+  )
+  ipcMain.handle('goals:decomposeTree', async (_e, sourceText: string, hint?: string, deadlineOverride?: string) =>
+    decomposeGoalTree(String(sourceText), hint ? String(hint) : undefined, deadlineOverride ? String(deadlineOverride) : undefined)
+  )
+  ipcMain.handle('goals:applyTree', (_e, sourceText: string, draft: GoalTreeDraft, deadlineOverride?: string) =>
+    applyGoalTree(String(sourceText), draft, deadlineOverride ? String(deadlineOverride) : undefined)
   )
   ipcMain.handle('goals:create', (_e, input: Parameters<typeof createGoal>[0]) => createGoal(input))
   ipcMain.handle('goals:update', (_e, id: string, patch: Parameters<typeof updateGoal>[1]) =>
@@ -613,7 +770,11 @@ export function registerIpc(): void {
   })
 
   // ── 问答 ──
-  ipcMain.handle('qa:ask', async (_e, question: string) => {
+  ipcMain.handle('qa:ask', async (_e, question: string, useSuperAgent?: boolean) => {
+    if (useSuperAgent === true || (useSuperAgent === undefined && shouldUseSuperAgent(String(question)))) {
+      const result = await runSuperAgent(String(question))
+      return { ...result, references: [] }
+    }
     const ana = latestAnalysis(dateKey(Date.now()))
     return askWithContext(question, ana, todayTrail(), habitsOfUser())
   })
@@ -636,19 +797,38 @@ export function registerIpc(): void {
   ipcMain.handle('points:get', () => getPoints())
   ipcMain.handle('points:add', (_e, delta: number, reason: string) => addPoints(delta, reason))
 
+  // 本地助手意图：待办梳理 / 列表全览 / 天气 / 应用接管（数据在本机，不走 LLM）
+  ipcMain.handle('assistant:intent', async (_e, q: string) => runAssistantIntent(q))
+
   // P0 截图问答：按时间窗召回 ocrShots/ocrSnapshots 脱敏摘要注入上下文（默认最近 30 分钟）
-  ipcMain.handle('qa:askWithShots', async (_e, question: string, windowMin?: number) => {
-    const end = Date.now()
+  ipcMain.handle('qa:askWithShots', async (_e, question: string, windowMin?: number) => {    const end = Date.now()
     const start = end - Math.max(1, windowMin ?? 30) * 60000
     const screenContext = screenContextForWindow(start, end)
     const ana = latestAnalysis(dateKey(Date.now()))
     return askWithContext(question, ana, todayTrail(), habitsOfUser(), screenContext ?? undefined)
   })
 
+  // 时间旅行：按时间窗 + 关键词检索 OCR 截图/结构化快照；缩略图按需取 dataUrl
+  ipcMain.handle('ocr:shots', (_e, startTs: number, endTs: number, keyword?: string) =>
+    searchOcrShots(Number(startTs), Number(endTs), keyword ? String(keyword) : undefined)
+  )
+  ipcMain.handle('ocr:shotImage', (_e, file: string) => readShotDataUrl(String(file)))
+
   // ── 流式问答 ──
   // 渲染端调用后，主进程通过事件流式推送 chunk
-  ipcMain.handle('qa:askStream', async (_e, question: string) => {
+  ipcMain.handle('qa:askStream', async (_e, question: string, useSuperAgent?: boolean) => {
     const s = getSettings()
+    if (useSuperAgent === true || (useSuperAgent === undefined && shouldUseSuperAgent(String(question)))) {
+      try {
+        const result = await runSuperAgent(String(question))
+        if (s.aiStreaming) sendTo('main', 'ai:streamChunk', { delta: result.content, full: result.content })
+        sendTo('main', 'ai:streamDone', { content: result.content, traceId: result.traceId, recommendations: result.recommendations })
+        return { ...result, references: [] }
+      } catch (e) {
+        sendTo('main', 'ai:streamError', { error: (e as Error).message })
+        return { content: null, references: [], traceId: '' }
+      }
+    }
     const ana = latestAnalysis(dateKey(Date.now()))
     const screenContext = screenContextForWindow(Date.now() - 30 * 60000, Date.now())
     if (!s.aiStreaming) {
@@ -664,7 +844,9 @@ export function registerIpc(): void {
         todayTrail(),
         (delta, full) => sendTo('main', 'ai:streamChunk', { delta, full }),
         (toolName) => sendTo('main', 'ai:streamTool', { tool: toolName }),
-        habitsOfUser()
+        habitsOfUser(),
+        screenContext ?? undefined,
+        (delta, full) => sendTo('main', 'ai:streamReasoning', { delta, full })
       )
       sendTo('main', 'ai:streamDone', { content: result.content, traceId: result.traceId })
       return result
@@ -773,18 +955,26 @@ export function registerIpc(): void {
     const picked = await dialog.showOpenDialog({
       properties: ['openFile', 'multiSelections'],
       filters: [
-        { name: '文本/文档', extensions: ['txt', 'md', 'markdown', 'json', 'csv', 'log'] },
+        { name: '文本/文档', extensions: ['txt', 'md', 'markdown', 'json', 'csv', 'log', 'docx', 'pdf', 'xlsx'] },
         { name: '全部', extensions: ['*'] }
       ]
     })
     if (picked.canceled || !picked.filePaths.length) return { ok: false, items: [] }
     const links = Array.isArray(payload?.links) ? payload!.links! : []
     const items: KnowledgeItem[] = []
+    const failed: Array<{ file: string; error: string }> = []
     const now = Date.now()
+    const { parseFile } = await import('./knowledge/parser')
     for (const fp of picked.filePaths) {
       const fileName = path.basename(fp)
       let body = ''
-      try { body = fs.readFileSync(fp, 'utf8') } catch { body = '' }
+      try {
+        const parsed = await parseFile(fp)
+        body = parsed.text
+      } catch (e) {
+        failed.push({ file: fileName, error: (e as Error).message })
+        continue
+      }
       items.push(insertInto('knowledge', {
         id: genId('kn'),
         title: fileName.replace(/\.[^.]+$/, '') || fileName,
@@ -798,7 +988,7 @@ export function registerIpc(): void {
         ts: now
       }))
     }
-    return { ok: true, items }
+    return { ok: true, items, failed }
   })
 
   ipcMain.handle('process:getOpenDraft', () => getOpenProcessDraft())
@@ -889,10 +1079,11 @@ export function registerIpc(): void {
     if (petWindow && !petWindow.isDestroyed()) petWindow.hide()
   })
   ipcMain.on('pet:modal', (_e, active: boolean) => setPetModal(active))
-  ipcMain.on('pet:show', () => { if (petWindow) { createPetWindow(); petWindow.show() } })
   ipcMain.on('pet:restore', () => sendTo('pet', 'pet:restore'))
   ipcMain.on('pet:introReplay', () => sendTo('pet', 'pet:introReplay'))
   ipcMain.handle('ai:test', (_e, ov?: { aiApiKey?: string; aiBaseUrl?: string; aiModel?: string }) => testAIConnection(ov))
+  // Ollama 探测：地址由界面传入，返回已安装的对话模型（不写死端口/模型）
+  ipcMain.handle('ai:ollama', (_e, baseUrl?: string) => probeOllamaModels(baseUrl))
   ipcMain.handle('pet:ask', (_e, q: string) => petAskShort(String(q).slice(0, 200), habitsOfUser()))
 
   // ── 桌宠流式问答 ──
@@ -1129,8 +1320,10 @@ export function registerIpc(): void {
       confirmedFromQA: undefined,
       browserDerived: undefined,
       confirmContext: undefined,
-      source: 'manual',
-      note: `延期自 ${plan.date}${reason ? `，原因：${reason}` : ''}`,
+      // 保留情报/知识来源，便于次日副本仍能追溯出处
+      source: plan.source === 'intel' || plan.source === 'knowledge' ? plan.source : 'manual',
+      // 延期标记在前；原始备注（可能含情报 URL / 知识摘要）追加在后，不因顺延丢失
+      note: `延期自 ${plan.date}${reason ? `，原因：${reason}` : ''}${plan.note ? `\n${plan.note}` : ''}`,
       ts: Date.now()
     }
     insertInto('plans', newPlan)
@@ -1199,9 +1392,9 @@ export function registerIpc(): void {
     if (mainWindow.isMaximized()) mainWindow.unmaximize()
     else mainWindow.maximize()
   })
+  ipcMain.handle('win:isMaximized', () => !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isMaximized())
   ipcMain.on('win:close', () => mainWindow?.hide())
   ipcMain.on('win:toggleWidget', () => toggleWidget())
-  ipcMain.on('win:togglePet', () => togglePet())
   ipcMain.on('win:openMain', (_e, view?: string) => {
     createMainWindow()
     if (view) setTimeout(() => sendTo('main', 'nav:view', view), 600)
@@ -1233,8 +1426,15 @@ export function registerIpc(): void {
   ipcMain.on('widget:hit', (_e, over: boolean) => setWidgetHit(!!over))
 
   // ── OCR 资源管理 ──
-  ipcMain.handle('ocr:stats', () => getOcrStorageStats())
+  // 同一通道兼顾两处消费：隐私页要存储占用，自检条要队列/最近识别
+  ipcMain.handle('ocr:stats', () => ({ ...getOcrStorageStats(), ...getOcrQueueStats(), load: getLoadStatus() }))
   ipcMain.handle('ocr:clear', (_e, keepRecentDays?: number) => clearOcrCache(keepRecentDays ?? 7))
+  ipcMain.handle('ocr:captureOnce', () => captureOnce())
+  ipcMain.handle('ocr:openPermission', async () => {
+    if (process.platform !== 'darwin') return { ok: false }
+    await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture')
+    return { ok: true }
+  })
 
   // ── UIAutomation 深度模式 ──
   ipcMain.handle('uia:getFocused', async () => {
@@ -1431,6 +1631,73 @@ export function registerIpc(): void {
     generateReport(date, templateId, enableAI))
   ipcMain.handle('report:generateWeek', (_e, startDate: string, templateId?: string, enableAI?: boolean) =>
     generateWeeklyReport(startDate, templateId, enableAI))
+  ipcMain.handle('report:export', (_e, date: string, format?: DeliverableFormat, template?: DeliverableTemplate, templateId?: string) =>
+    exportReport(String(date), format ?? 'html', template ?? 'report', templateId))
+
+  // ── 交付物：起草 → 确认 → 审计 → 渲染（闸门由 orchestrator 统一把守） ──
+  ipcMain.handle('deliverable:draft', (_e, input?: { template?: DeliverableTemplate; title?: string; date?: string; goal?: string }) =>
+    startDraft(input ?? {}))
+  ipcMain.handle('deliverable:confirmDraft', (_e, jobId: string, patch?: Partial<DraftSpec>) =>
+    confirmDraft(String(jobId), patch))
+  ipcMain.handle('deliverable:build', (_e, jobId: string) => buildAndAudit(String(jobId)))
+  ipcMain.handle('deliverable:confirmSpec', (_e, jobId: string) => confirmSpec(String(jobId)))
+  ipcMain.handle('deliverable:render', (_e, jobId: string, format: DeliverableFormat) =>
+    renderJob(String(jobId), format))
+  ipcMain.handle('deliverable:job', (_e, jobId: string) => getJob(String(jobId)))
+  ipcMain.handle('deliverable:list', (_e, limit?: number) => listJobs(Number(limit) || 20))
+  ipcMain.handle('deliverable:cancel', (_e, jobId: string) => cancelJob(String(jobId)))
+  ipcMain.handle('deliverable:revert', (_e, jobId: string, revision: number) =>
+    revertJob(String(jobId), Number(revision)))
+  ipcMain.handle(
+    'deliverable:exportFlow',
+    async (
+      _e,
+      input: {
+        title?: string
+        nodes: Array<{ id: string; label: string; kind?: string }>
+        edges: Array<{ from: string; to: string; label?: string }>
+      }
+    ) => {
+      const { renderDeliverable } = await import('./deliverable/render')
+      const date = dateKey(Date.now())
+      const spec = {
+        template: 'brief' as const,
+        title: input.title || '工作流',
+        date,
+        author: 'WorkOn',
+        theme: 'dark' as const,
+        blocks: [
+          { id: 'f-cover', type: 'cover' as const, title: input.title || '工作流', subtitle: '流程图导出', date },
+          { id: 'f-flow', type: 'flow' as const, title: '流程', nodes: input.nodes, edges: input.edges },
+          { id: 'f-footer', type: 'footer' as const, text: 'WorkOn · 流程图由画布导出' }
+        ]
+      }
+      return renderDeliverable('html', spec, { revision: 1 })
+    }
+  )
+
+  // ── 记忆检索 / 屏幕记忆自检 ──
+  ipcMain.handle('memory:search', (_e, q: string, opts?: { start?: number; end?: number; limit?: number }) =>
+    searchMemory(String(q ?? ''), opts))
+  ipcMain.handle('memory:stats', () => memoryStats())
+
+  // ── 日历：ICS 订阅 / 本地日程 / 忙碌区间 ──
+  ipcMain.handle('calendar:feeds', () => listFeeds())
+  ipcMain.handle('calendar:addFeed', (_e, input: { name?: string; url: string }) => addFeed(input))
+  ipcMain.handle('calendar:removeFeed', (_e, id: string) => removeFeed(String(id)))
+  ipcMain.handle('calendar:events', (_e, startTs: number, endTs: number) =>
+    listEvents(Number(startTs), Number(endTs)))
+  ipcMain.handle('calendar:upsert', (_e, input: { title: string; startTs: number; endTs: number; location?: string }) =>
+    upsertEvent(input))
+  ipcMain.handle('calendar:busy', (_e, date: string) => busyRangesForDate(String(date)))
+
+  // ── 本地 MCP Server（显式开启） ──
+  ipcMain.handle('mcp:status', () => mcpStatus())
+  ipcMain.handle('mcp:start', () => startMcpServer())
+  ipcMain.handle('mcp:stop', () => {
+    stopMcpServer()
+    return mcpStatus()
+  })
   ipcMain.handle('report:templates', () => listTemplates())
   ipcMain.handle('report:saveTemplate', (_e, t: ReportTemplate) => {
     // 预置模板不落库（内置定义即真相）
@@ -1496,4 +1763,105 @@ export function registerIpc(): void {
     })
     return result.canceled ? [] : result.filePaths
   })
+
+  // ── 收藏网址 / 情报流 ──
+  ipcMain.handle('intel:state', () => getIntelState())
+  ipcMain.handle('intel:sources', () => listBookmarkSources())
+  ipcMain.handle('intel:sites', (_e, sourceId: string, limit?: number) =>
+    listBookmarkSites(String(sourceId), Number(limit) || 500)
+  )
+  ipcMain.handle('intel:importSource', (_e, sourceId: string, limit?: number) =>
+    importBookmarkSource(String(sourceId), Number(limit) || 20)
+  )
+  ipcMain.handle('intel:addWatch', (_e, url: string, title?: string) => addIntelWatch(String(url), title))
+  ipcMain.handle('intel:removeWatch', (_e, id: string) => removeIntelWatch(String(id)))
+  ipcMain.handle('intel:vaultStatus', () => getVaultStatus())
+  ipcMain.handle('intel:vaultList', () => listVaultSites())
+  ipcMain.handle('intel:vaultRemove', (_e, id: string) => removeVaultSite(String(id)))
+  ipcMain.handle('intel:watchToVault', (_e, id: string) => hideWatchToVault(String(id)))
+  ipcMain.handle('intel:scan', () => runIntelScan())
+  ipcMain.handle('intel:ingest', (_e, id: string, target: string) =>
+    ingestIntel(String(id), target as IntelProvider)
+  )
+  ipcMain.handle('intel:setConfig', (_e, patch: Partial<IntelConfig>) => setIntelConfig(patch ?? {}))
+  ipcMain.handle('intel:setQuota', (_e, agentId: string, value: number, note?: string) =>
+    setAgentQuota(String(agentId), Number(value), note)
+  )
+  ipcMain.handle('intel:providers', () => checkIntelProviders())
+
+  // ── 动态 Agent 连接器 ──
+  ipcMain.handle('agents:list', () => listAgents())
+  ipcMain.handle('agents:add', (_e, input: AgentInput) => addAgent(input))
+  ipcMain.handle('agents:update', (_e, id: string, input: AgentInput) => updateAgent(String(id), input))
+  ipcMain.handle('agents:remove', (_e, id: string) => removeAgent(String(id)))
+  ipcMain.handle('agents:probe', (_e, id: string) => probeAgent(String(id)))
+  ipcMain.handle('agents:dispatch', (_e, id: string, prompt: string, cwd?: string, confirm?: boolean) =>
+    dispatchAgent(String(id), String(prompt), cwd, !!confirm)
+  )
+  ipcMain.handle('agents:runs', (_e, agentId?: string) => listAgentRuns(agentId ? String(agentId) : undefined))
+  ipcMain.handle('agents:setRunReference', (_e, runId: string, reference: boolean) =>
+    setAgentRunReference(String(runId), !!reference)
+  )
+
+  // ── 可视化工作流 ──
+  ipcMain.handle('workflow:list', () => listWorkflows())
+  ipcMain.handle('workflow:references', () => listWorkflowReferenceSamples())
+  ipcMain.handle('workflow:generate', (_e, description: string, model?: string) =>
+    generateWorkflow(String(description ?? ''), { model: model ? String(model) : undefined })
+  )
+  ipcMain.handle('workflow:save', (_e, def: WorkflowDef) => saveWorkflow(def))
+  ipcMain.handle('workflow:remove', (_e, id: string) => removeWorkflow(String(id)))
+  ipcMain.handle('workflow:models', (_e, force?: boolean) => listWorkflowModels(!!force))
+  ipcMain.handle('workflow:run', (_e, req: WorkflowRunRequest) => runWorkflowNode(req))
+  ipcMain.handle('workflow:runs', (_e, id?: string) => listWorkflowRuns(id ? String(id) : undefined))
+  ipcMain.handle('workflow:runById', (_e, id: string, input?: string) =>
+    runWorkflowById(String(id), 'manual', input == null ? undefined : String(input))
+  )
+  ipcMain.handle('workflow:cancel', async () => {
+    const model = cancelWorkflowRun()
+    const agents = await cancelAgentDispatches()
+    return { ok: model.ok || agents > 0 }
+  })
+  ipcMain.handle('workflow:ocr', (_e, dataUrl: string) => ocrWorkflowImage(String(dataUrl ?? '')))
+  ipcMain.handle('workflow:collect', () => collectWorkflowContext())
+  ipcMain.handle('workflow:automation', () => automationCapabilities())
+  ipcMain.handle('workflow:video', (_e, input: { url?: string; langs?: string; maxChars?: number }) =>
+    fetchVideoSubtitle(input ?? {})
+  )
+  ipcMain.handle('workflow:feed', (_e, input: { url?: string; limit?: number }) => readRssFeed(input ?? {}))
+
+  // ── 关联图谱（P1 索引 / P2 邻居 / P3 分析） ──
+  ipcMain.handle('graph:get', () => getGraph())
+  ipcMain.handle('graph:rebuild', () => rebuildGraph())
+  ipcMain.handle('graph:neighbors', (_e, id: string, depth?: number) => graphNeighbors(String(id), Number(depth) || 1))
+  ipcMain.handle('graph:analyze', () => analyzeGraph())
+
+  // ── 应用内浏览器（webview guest 由渲染层挂载后回传 id） ──
+  ipcMain.handle('browser:attach', (_e, id: number) => attachBrowserGuest(Number(id)))
+  ipcMain.handle('browser:detach', () => { detachBrowserGuest() })
+  ipcMain.handle('browser:navigate', (_e, url: string) => browserNavigate(String(url ?? '')))
+  ipcMain.handle('browser:back', () => browserBack())
+  ipcMain.handle('browser:forward', () => browserForward())
+  ipcMain.handle('browser:reload', () => browserReload())
+  ipcMain.handle('browser:state', () => browserState())
+  ipcMain.handle('browser:read', () => browserRead())
+  ipcMain.handle('browser:click', (_e, target: string) => browserClick(String(target ?? '')))
+  ipcMain.handle('browser:fill', (_e, selector: string, text: string) => browserFill(String(selector ?? ''), String(text ?? '')))
+  ipcMain.handle('browser:ask', (_e, input: unknown) => browserAsk((input ?? {}) as Parameters<typeof browserAsk>[0]))
+  ipcMain.handle('browser:screenshot', () => browserScreenshot())
+  ipcMain.handle('browser:openExternal', (_e, url: string) => browserOpenExternal(String(url ?? '')))
+  ipcMain.handle('browser:setMode', (_e, mode: string) => setBrowserMode(String(mode ?? '')))
+  ipcMain.handle('browser:getMode', () => getBrowserMode())
+
+  // ── 本机 Chrome 连接器（Qoder CN 同款架构） ──
+  ipcMain.handle('chrome:status', () => chromeStatus())
+  ipcMain.handle('chrome:tabs', () => chromeTabs())
+  ipcMain.handle('chrome:activate', (_e, tabId: number) => chromeActivate(Number(tabId)))
+  ipcMain.handle('chrome:open', (_e, url: string) => chromeOpen(String(url ?? '')))
+  ipcMain.handle('chrome:extensionPath', () => chromeExtensionDir())
+  ipcMain.handle('chrome:openExtension', () => chromeOpenExtensionFolder())
+
+  // ── Web 测试（页面巡检 / 流程回归 / 表单边界） ──
+  ipcMain.handle('webtest:run', (_e, input: WebTestInput) => runWebTest(input))
+  ipcMain.handle('webtest:last', () => getLastWebTest())
 }

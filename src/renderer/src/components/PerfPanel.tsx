@@ -57,7 +57,6 @@ export function PerfPanel() {
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-white/[0.05] pt-1.5 text-2xs text-slate-500">
             <span>监控：<b className="text-slate-300">{(data.modules.monitor as { running?: boolean; intervalMs?: number })?.running ? `开 · ${Math.round(((data.modules.monitor as { intervalMs?: number })?.intervalMs ?? 0) / 1000)}s` : '关'}</b></span>
             <span>深度OCR：<b className="text-slate-300">{data.modules.deepMode ? '开' : '关'}</b></span>
-            <span>桌宠：<b className="text-slate-300">{data.modules.petEnabled ? '开' : '关'}</b></span>
             <span>悬浮窗：<b className="text-slate-300">{data.modules.widgetVisible ? '开' : '关'}</b></span>
             <span>AI：<b className="text-slate-300">{data.modules.aiEnabled ? '开' : '关'}</b></span>
           </div>

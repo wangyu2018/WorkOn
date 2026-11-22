@@ -23,7 +23,13 @@ const TOOL_UI: Record<string, ToolUiMeta> = {
   set_pet_message: { label: '桌宠发言', group: 'write' },
   get_weekly_summary: { label: '本周小结', group: 'read' },
   quick_recommend: { label: '快捷推荐', group: 'read' },
-  get_weather: { label: '天气', group: 'net' }
+  get_weather: { label: '天气', group: 'net' },
+  // 节点模式（P0 只读）：远端能力在隧道里与本地插件同构展示
+  remote_sys_info: { label: '远端系统信息', group: 'read' },
+  remote_fs_list: { label: '远端列目录', group: 'read' },
+  'agent:data': { label: '数据 Agent', group: 'read' },
+  'agent:knowledge': { label: '知识库 Agent', group: 'read' },
+  'agent:web': { label: '抓取 Agent', group: 'net' }
 }
 
 const GROUP_LABEL: Record<ToolUiMeta['group'], string> = {

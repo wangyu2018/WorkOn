@@ -5,7 +5,17 @@ import { resolve } from 'path'
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
-    build: { outDir: 'out/main' },
+    build: {
+      outDir: 'out/main',
+      rollupOptions: {
+        // 行为探针单独打进 worker 产物，主进程不直接加载原生输入钩子
+        input: {
+          index: resolve(__dirname, 'src/main/index.ts'),
+          inputProbeWorker: resolve(__dirname, 'src/main/recognition/inputProbeWorker.ts')
+        },
+        output: { entryFileNames: '[name].js' }
+      }
+    },
     resolve: { alias: { '@shared': resolve('src/shared') } }
   },
   preload: {

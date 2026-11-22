@@ -27,6 +27,29 @@ import { getBehaviorWindow } from './inputProbe'
 
 /** model_first 下模型置信度门槛（低于此值不覆盖规则） */
 export const MODEL_PROB_THRESHOLD = 0.75
+/**
+ * 边际判定的概率下限：校准后 top1 低于此值说明整体分布很平，宁可用规则。
+ * （校准：sidecar 对 work_state 逐题温度校准，probs 已归一）
+ */
+export const MODEL_MIN_PROB = 0.45
+/** 边际门槛：top1 − top2 ≥ 0.25 时，即使绝对概率不足 0.75 也采用模型态 */
+export const MODEL_MARGIN_THRESHOLD = 0.25
+
+/** top1 − top2 边际（没有分布时返回 null，退回绝对阈值） */
+function modelMargin(pred: ModelPrediction): number | null {
+  const probs = pred.probs
+  if (!probs) return null
+  const vals = Object.values(probs).sort((a, b) => b - a)
+  return vals.length >= 2 ? vals[0] - vals[1] : null
+}
+
+/** 是否采用模型结果：绝对置信度达标，或校准分布足够陡（边际 fallback） */
+function shouldAdoptModel(pred: ModelPrediction): boolean {
+  if (pred.prob >= MODEL_PROB_THRESHOLD) return true
+  if (pred.prob < MODEL_MIN_PROB) return false
+  const margin = modelMargin(pred)
+  return margin != null && margin >= MODEL_MARGIN_THRESHOLD
+}
 
 // ───────────────────── WorkOn-Jev：场景识别旁路缓存 ─────────────────────
 // work_state 走每个采样点的快通道；场景三级（scene_l1/l2/l3）只在窗口上下文
@@ -140,7 +163,7 @@ export async function recognize(input: RecognitionInput): Promise<RecognitionRes
     })
   } else {
     const pred = await client.predict(features)
-    if (pred && pred.prob >= MODEL_PROB_THRESHOLD) {
+    if (pred && shouldAdoptModel(pred)) {
       const mapped = MODEL_LABEL_TO_STATE[pred.label]
       if (mapped) {
         state = mapped

@@ -276,7 +276,7 @@ function EntryEditor({ entry, isNew, onClose, onSaved }: EditorProps) {
             <button className="glass-btn" onClick={onClose}>
               取消
             </button>
-            {timeHint ? <div className="mb-1.5 text-xs text-amber-300">⚠ {timeHint}</div> : null}
+            {timeHint ? <div className="mb-1.5 flex items-center gap-1 text-xs text-amber-300"><Icon name="alert" size={12} /> {timeHint}</div> : null}
             <button className="glass-btn primary" disabled={!draft.title.trim()} onClick={() => void save()}>
               <Icon name="check" size={13} /> 保存
             </button>
@@ -578,7 +578,7 @@ function DayDetailCard({ date, reloadKey, onEditEntry, onAdd, dayPlans, categori
                   className="h-full rounded-full transition-all duration-500"
                   style={{
                     width: `${planProg.pct}%`,
-                    background: planProg.pct >= 100 ? 'var(--teal)' : 'linear-gradient(90deg, var(--teal), #22D3EE)'
+                    background: 'var(--teal)'
                   }}
                 />
               </div>

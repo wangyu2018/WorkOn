@@ -24,6 +24,10 @@ export interface Reminder {
    *  如「入会/开会」→ 检测近 5 分钟 activity 是否出现会议应用，命中则自动确认不再打扰 */
   confirmKeywords?: string[]
   confirmedAt?: number // 自动确认时间（命中后不再 fire）
+  /** 延后到此刻之前不再触发（到点卡点「延后 10 分钟」） */
+  snoozeUntil?: number
+  /** 到点后的可执行动作：打开页面 / 打开应用 / 跑工作流 */
+  action?: { kind: 'open_view' | 'open_app' | 'run_workflow'; target?: string; label?: string }
 }
 
 let file = ''
@@ -79,6 +83,7 @@ function tick(): void {
   let dirty = false
   for (const r of reminders) {
     if (!r.enabled) continue
+    if (r.snoozeUntil && Date.now() < r.snoozeUntil) continue
     if (r.recurring === 'daily' && r.atHHMM === hhmm && r.lastFiredDate !== today) {
       r.lastFiredDate = today
       dirty = true
@@ -120,6 +125,7 @@ export function addReminder(input: {
   atTs?: number
   origin?: 'user' | 'system'
   confirmKeywords?: string[]
+  action?: Reminder['action']
 }): Reminder {
   const r: Reminder = {
     id: `rm${Date.now()}${Math.floor(Math.random() * 1000)}`,
@@ -130,9 +136,44 @@ export function addReminder(input: {
     enabled: true,
     createdAt: Date.now(),
     origin: input.origin ?? 'user',
-    confirmKeywords: input.confirmKeywords
+    confirmKeywords: input.confirmKeywords,
+    action: input.action
   }
   reminders.push(r)
+  save()
+  return r
+}
+
+/** 延后 N 分钟：daily 用 snoozeUntil 抑制，once 直接把触发时刻往后推 */
+export function snoozeReminder(id: string, minutes = 10): Reminder | null {
+  const r = reminders.find((x) => x.id === id)
+  if (!r) return null
+  const ms = Math.max(1, minutes) * 60_000
+  if (r.recurring === 'once') {
+    r.atTs = Date.now() + ms
+    r.enabled = true
+    r.snoozeUntil = undefined
+  } else {
+    r.snoozeUntil = Date.now() + ms
+  }
+  save()
+  return r
+}
+
+/** 完成 / 关闭这条提醒（保留记录，可召回） */
+export function doneReminder(id: string): Reminder | null {
+  const r = reminders.find((x) => x.id === id)
+  if (!r) return null
+  r.enabled = false
+  r.confirmedAt = Date.now()
+  save()
+  return r
+}
+
+export function updateReminder(id: string, patch: Partial<Reminder>): Reminder | null {
+  const r = reminders.find((x) => x.id === id)
+  if (!r) return null
+  Object.assign(r, patch)
   save()
   return r
 }

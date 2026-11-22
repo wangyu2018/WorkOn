@@ -3,9 +3,11 @@
  * 启动顺序：设置 → 存储 → 窗口 → 监控 → 集成服务 → 托盘 → 快捷键 → 周期任务
  */
 import { app, BrowserWindow, Notification, ipcMain, Menu } from 'electron'
+import fs from 'fs'
+import path from 'path'
 import { initSettings, getSettings, setSettings } from './settings'
 import { initDb, flushNow, loadActivitiesDeferred } from './db'
-import { createMainWindow, createWidgetWindow, createPetWindow, createSplashWindow, closeSplash, sendTo, broadcast, widgetWindow, mainWindow, createTodoWidgetWindow, createWorkbenchWindow, attachWorkbench, isWorkbenchDetached, detachPanes, attachPanes, setPaneIgnore, panesState, snapPanes, collapsePane, expandPane, paneCollapsed, minimizeMain, hideMainToTray, hideWorkbench, setPaneTop } from './windows'
+import { createMainWindow, createWidgetWindow, closeSplash, sendTo, broadcast, widgetWindow, mainWindow, createWorkbenchWindow, attachWorkbench, isWorkbenchDetached, detachPanes, attachPanes, setPaneIgnore, panesState, snapPanes, collapsePane, expandPane, paneCollapsed, minimizeMain, hideMainToTray, hideWorkbench, setPaneTop } from './windows'
 import { createTray } from './tray'
 import { registerShortcuts, unregisterShortcuts } from './globalShortcut'
 import { registerIpc } from './ipc'
@@ -18,8 +20,13 @@ import { startInputProbe } from './recognition/inputProbe'
 import { addPoints } from './motions'
 import { pushNotify } from './notify'
 import { startIntegration } from './integration'
+import { startChromeConnector } from './chromeConnector'
+import { getOpenProcessDraft, buildProcessMergePreview } from './processDraft'
 import { startOnerAutoSync } from './oner'
 import { startAgentHookServer } from './agentHook'
+import { startNodeServer } from './nodes'
+import { initJobStore } from './jobStore'
+import { startJobScheduler } from './jobScheduler'
 import { autoCleanOcrCache } from './ocr'
 import { bus } from './state'
 import { emitPetIntent } from './petIntent'
@@ -28,13 +35,18 @@ import { refreshPersona, getPersona } from './persona'
 import { getWeatherBrief } from './weather'
 import { startOcrCollector } from './report/ocrCollector'
 import { startFolderWatch } from './folderWatcher'
+import { initIntelScheduler, stopIntelModelServer } from './intel'
+import { startWatchScheduler } from './watch'
 import { detectHardware } from './hardwareDetect'
 import { stopWinInfoServer } from './winInfo'
 import { presence } from './presence'
 import { genQuestion, analyzeDay, deriveHabits } from './ai'
 import { genPersonaGapQuestion } from './qa/questionGenerator'
 import { canInterrupt } from './confirmQueue'
-import { initReminders, addReminder, listReminders, removeReminder } from './reminders'
+import { initReminders, addReminder, listReminders, removeReminder, snoozeReminder, doneReminder, updateReminder } from './reminders'
+import { startWorkflowScheduler } from './workflowRunner'
+import { startGraphIndex } from './graph'
+import { startCoach } from './coach'
 import { listApps, openAppSafe } from './appLauncher'
 import { generateSandbox } from './sandbox'
 import { getDock, addDockItem, removeDockItem, reorderDock, renameDock, launchDockItem, launchDockGroup, createDockWindow, closeDock, dockVisible } from './edgeDock'
@@ -43,10 +55,10 @@ import { musicControl } from './musicWatch'
 import { startMusicWatch } from './musicWatch'
 import { initLifeGoalJobs } from './lifeGoal'
 import { macCheckPermissions } from './winInfoMac'
-import { listChatSessions, createChatSession, addChatSessionItem, removeChatSession, renameChatSession, removeChatSessionItem } from './chatSessions'
+import { listChatSessions, createChatSession, addChatSessionItem, removeChatSession, renameChatSession, removeChatSessionItem, addChatSessionParticipant, removeChatSessionParticipant, forkChatSession, archiveChatSession } from './chatSessions'
 import { aiDevAdvice } from './projects'
 import { listActivities, listActivitiesRange, insertInto, col, updateIn } from './db'
-import type { UserHabits, PlanItem } from '@shared/types'
+import type { UserHabits, PlanItem, SessionTarget } from '@shared/types'
 import { WORK_LIKE_STATES } from '@shared/stateMeta'
 import { dateKey, buildMergedTrail } from '@shared/trail'
 import { genId } from '@shared/types'
@@ -258,7 +270,6 @@ function startPeriodicJobs(): void {
       if (day === 0 || day === 6) return
       const nowMin = now.getHours() * 60 + now.getMinutes()
       if (nowMin < 17 * 60 || nowMin > 21 * 60) return
-      const { getOpenProcessDraft, buildProcessMergePreview } = require('./processDraft') as typeof import('./processDraft')
       const draft = getOpenProcessDraft()
       if (!draft) return
       const notes = draft.notes?.length ?? 0
@@ -307,44 +318,29 @@ if (!gotSingleInstanceLock) {
 app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return
 
+  // macOS 开发态 Dock 图标（打包后由 icns 接管）
+  if (process.platform === 'darwin') {
+    try {
+      const iconFile = path.join(app.getAppPath(), 'assets', 'icon-512.png')
+      if (fs.existsSync(iconFile)) app.dock.setIcon(iconFile)
+    } catch { /* ignore */ }
+  }
+
   try {
   initSettings()
   console.log('[startup] settings ok')
   initDb()
+  initJobStore()
   console.log('[startup] db ok')
 
-  // 尽早建窗：后续清理/IPC/探针再慢也不挡首屏
-  const showSplash = getSettings().showSplash !== false
+  // 尽早建窗：后续清理/IPC/探针再慢也不挡首屏（启动画面已下线，直接亮主窗）
   // Windows frameless 窗粘贴修复：无应用菜单时 Ctrl+C/V/X 加速器失效——注册编辑/窗口角色
   if (process.platform !== 'darwin') {
     Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'editMenu' }, { role: 'windowMenu' }]))
   }
-  const splashAt = Date.now()
   try {
-    if (showSplash) createSplashWindow()
-    const mw = createMainWindow({ deferShow: showSplash })
-    // 亮窗定时器必须在 IPC/重活之前挂上；用本地引用避免打包后 mainWindow 绑定失效
-    setTimeout(
-      () => {
-        closeSplash()
-        if (mw && !mw.isDestroyed()) {
-          if (mw.isMinimized()) mw.restore()
-          mw.show()
-          mw.focus()
-          try { mw.moveTop() } catch { /* ignore */ }
-          console.log('[startup] main window shown')
-        }
-        // 桌宠延迟创建：让主窗口先加载首页（首页卡顿投诉）。
-        // 20s→6s：产品的"脸"不能在第一印象窗口缺席（审计 F4），资源让位保留但缩短
-        if (getSettings().petEnabled) {
-          setTimeout(() => {
-            if (getSettings().petEnabled) createPetWindow()
-          }, 6_000)
-        }
-      },
-      showSplash ? Math.max(800, 2000 - (Date.now() - splashAt)) : 0
-    )
-    // 兜底：再过几秒强制亮一次（防 splash/焦点被抢走）
+    const mw = createMainWindow()
+    // 兜底：过几秒若仍未显示（被 splash/焦点抢走的历史情况），强制亮一次
     setTimeout(() => {
       if (mw && !mw.isDestroyed() && !mw.isVisible()) {
         if (mw.isMinimized()) mw.restore()
@@ -372,19 +368,27 @@ app.whenReady().then(() => {
 
   try {
     registerIpc()
+    initIntelScheduler()
+    startWatchScheduler()
     console.log('[startup] ipc ok')
   } catch (e) {
     console.error('[startup] ipc 注册失败', e)
   }
   setupBusForwarding()
   autoCleanOcrCache()
+  // 工作闭环助手：监控 → 提示 → 行动 → 验证（内部 75s 评估，隐私未同意时不触发）
+  try {
+    startCoach()
+  } catch (e) {
+    console.warn('[startup] 闭环助手启动失败', e)
+  }
 
   // 硬件分级：异步，不阻塞亮窗
   void detectHardware().catch((e) => console.warn('[hardware] 检测失败:', e))
 
   const ww = createWidgetWindow()
   if (ww && !ww.isDestroyed() && getSettings().widgetVisible) ww.show()
-  if (getSettings().todoWidgetVisible) createTodoWidgetWindow()
+  // 桌面待办悬浮框已下线（后续重做）：不再按设置创建
   createTray()
   registerShortcuts()
   console.log('[startup] 窗口/托盘已就绪')
@@ -414,10 +418,13 @@ app.whenReady().then(() => {
   })
   // 提醒中心（v10 §5）：应用内呈现，不走 OS 通知；用户自设提醒不受注意力预算扣减
   ipcMain.handle('reminders:list', () => listReminders())
-  ipcMain.handle('reminders:add', (_e, input: { title: string; recurring: 'daily' | 'once'; atHHMM?: string; atTs?: number; origin?: 'user' | 'system'; confirmKeywords?: string[] }) =>
+  ipcMain.handle('reminders:add', (_e, input: { title: string; recurring: 'daily' | 'once'; atHHMM?: string; atTs?: number; origin?: 'user' | 'system'; confirmKeywords?: string[]; action?: { kind: 'open_view' | 'open_app' | 'run_workflow'; target?: string; label?: string } }) =>
     addReminder(input)
   )
   ipcMain.handle('reminders:remove', (_e, id: string) => removeReminder(id))
+  ipcMain.handle('reminders:snooze', (_e, id: string, minutes?: number) => snoozeReminder(id, minutes))
+  ipcMain.handle('reminders:done', (_e, id: string) => doneReminder(id))
+  ipcMain.handle('reminders:update', (_e, id: string, patch: Record<string, unknown>) => updateReminder(id, patch))
   // 会话（v10）：消息右键加入会话，可继续追问
   ipcMain.handle('sessions:list', () => listChatSessions())
   // 工作台拆出（v10）：右页独立窗口（吸附+位置记忆）
@@ -482,7 +489,7 @@ app.whenReady().then(() => {
     setPaneTop(which, on)
     return true
   })
-  ipcMain.handle('sessions:create', (_e, input: { title?: string; topic?: 'project' | 'life' | 'general'; first?: { role: 'user' | 'ai'; text: string; time: number } }) =>
+  ipcMain.handle('sessions:create', (_e, input: { title?: string; topic?: 'project' | 'life' | 'general'; target?: SessionTarget; first?: { role: 'user' | 'ai'; text: string; time: number } }) =>
     createChatSession(input)
   )
   ipcMain.handle('sessions:addItem', (_e, id: string, item: { role: 'user' | 'ai'; text: string; time: number }) =>
@@ -491,6 +498,19 @@ app.whenReady().then(() => {
   ipcMain.handle('sessions:removeItem', (_e, id: string, index: number) => removeChatSessionItem(id, index))
   ipcMain.handle('sessions:remove', (_e, id: string) => removeChatSession(id))
   ipcMain.handle('sessions:rename', (_e, id: string, title: string) => renameChatSession(id, title))
+  ipcMain.handle('sessions:archive', (_e, id: string, archived: boolean) =>
+    archiveChatSession(String(id), !!archived)
+  )
+  // 会话级多 Agent 群组：参与 Agent + 派生子会话（继承上游上下文）
+  ipcMain.handle('sessions:addParticipant', (_e, id: string, agentId: string) =>
+    addChatSessionParticipant(String(id), String(agentId))
+  )
+  ipcMain.handle('sessions:removeParticipant', (_e, id: string, agentId: string) =>
+    removeChatSessionParticipant(String(id), String(agentId))
+  )
+  ipcMain.handle('sessions:fork', (_e, id: string, agentId?: string) =>
+    forkChatSession(String(id), agentId ? String(agentId) : undefined)
+  )
   // 消息/音乐信号（v10 signals）：默认关，用户在设置里开
   initMessageWatch(
     (p) => {
@@ -512,12 +532,13 @@ app.whenReady().then(() => {
     pushNotify('generic', `♪ 正在播放：${info.name}`, info.artist, [], 20)
   })
   initReminders((r) => {
-    const payload = { id: r.id, title: r.title, recurring: r.recurring, atHHMM: r.atHHMM, origin: r.origin, confirmed: !!r.confirmedAt }
+    const payload = { id: r.id, title: r.title, recurring: r.recurring, atHHMM: r.atHHMM, origin: r.origin, confirmed: !!r.confirmedAt, action: r.action }
     sendTo('main', 'reminder:fired', payload)
     sendTo('pet', 'reminder:fired', payload)
     // 桌宠气泡：走近级打扰只留给用户自设的提醒（正是这类）
     emitPetIntent('chat_open', { message: `时间到了：${r.title}`, workState: bus.pet.workState })
   })
+  startWorkflowScheduler()
   setImmediate(() => {
     void loadActivitiesDeferred()
       .then(() => {
@@ -538,13 +559,17 @@ app.whenReady().then(() => {
             }
           }
           startAgentHookServer()
+          startNodeServer()
+          startJobScheduler()
           if (getSettings().loadGuardEnabled !== false) {
             void import('./loadGuard').then((m) => m.startLoadGuard())
           }
   startIntegration()
+          startChromeConnector()
           startOnerAutoSync()
           startPeriodicJobs()
           initLifeGoalJobs()
+          startGraphIndex()
           setPetNotifier((msg) => bus.setPet({ message: msg }))
           startAttentionEngine()
           // 画像重算会扫全量 activities，放到空闲后再跑，避免堵死主进程 IPC（最小化/点击假死）
@@ -607,7 +632,14 @@ app.whenReady().then(() => {
   }, 30 * 60 * 1000)
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
+    // 主窗口 close = 隐藏（托盘常驻），但桌宠/悬浮窗始终存在，
+    // 不能用「零窗口」判断，否则点 Dock 永远唤不回主页面
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (!mainWindow.isVisible()) mainWindow.show()
+      mainWindow.focus()
+      return
+    }
+    createMainWindow()
   })
 
   } catch (e) {
@@ -624,6 +656,7 @@ app.on('before-quit', () => {
   quitting = true
   unregisterShortcuts()
   disposeModelClient()
+  stopIntelModelServer()
   stopWinInfoServer()
   flushNow()
   void quitting

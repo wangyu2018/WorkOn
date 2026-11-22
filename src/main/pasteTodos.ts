@@ -4,6 +4,7 @@
 import { getSettings } from './settings'
 import { llmChat, extractJson } from './ai'
 import { extractTodoTitlesHeuristic } from '@shared/pasteDetect'
+import { aiCredsReady } from '@shared/aiConfig'
 
 function cleanTitle(t: string): string {
   return String(t ?? '')
@@ -21,7 +22,7 @@ export async function extractAndPolishPasteTodos(text: string): Promise<string[]
   const heuristic = extractTodoTitlesHeuristic(raw, 40).map(cleanTitle).filter((t) => t.length >= 2)
 
   const s = getSettings()
-  if (!s.aiEnabled || !s.aiApiKey) return heuristic
+  if (!s.aiEnabled || !aiCredsReady(s)) return heuristic
 
   const prompt = [
     `你是 WorkOn 的待办整理助手。下面是用户粘贴/截图 OCR 的文本（可能是聊天记录、会议纪要、清单）。`,

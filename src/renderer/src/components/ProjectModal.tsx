@@ -273,7 +273,7 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
                 onClick={() => setTab('manage')}
                 title="去管理页编辑对接线索"
               >
-                <span className="text-2xs uppercase tracking-wider text-slate-500">🔌 对接</span>
+                <span className="text-2xs uppercase tracking-wider text-slate-500">对接</span>
                 {liveHere ? <span className="text-2xs font-bold text-[var(--teal-deep)]">● 正在归因{attr?.app ? `：${displayApp(attr.app)}` : ''}</span> : null}
                 <span className="min-w-0 flex-1 truncate text-xs text-slate-400">
                   {bind && (bind.apps.length + bind.keywords.length + bind.dirs.length) > 0
@@ -455,7 +455,7 @@ export function ProjectModal({ project, onClose, onSaved, initialTab }: {
 
               {/* 对接编辑：归属引擎线索（应用/关键词/目录）+ 计时归类 */}
               <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2.5">
-                <div className="mb-1.5 text-2xs uppercase tracking-wider text-slate-500">🔌 对接（归属引擎按这些线索把干活归到本项目）</div>
+                <div className="mb-1.5 text-2xs uppercase tracking-wider text-slate-500">对接（归属引擎按这些线索把干活归到本项目）</div>
                 <BindGroup label="应用" kind="apps" items={bind?.apps ?? []} fmt={displayApp} onRemove={removeBindItem} addBind={addBind} setAddBind={setAddBind} onAdd={addBindItem} />
                 <BindGroup label="关键词" kind="keywords" items={bind?.keywords ?? []} onRemove={removeBindItem} addBind={addBind} setAddBind={setAddBind} onAdd={addBindItem} />
                 <BindGroup label="目录" kind="dirs" items={bind?.dirs ?? []} onRemove={removeBindItem} addBind={addBind} setAddBind={setAddBind} onAdd={addBindItem} mono />

@@ -196,3 +196,22 @@ interface ChatSession {
 | 3 | 命令白名单默认值 | 按 OS 给一组保守默认（如 `git`、`npm`、`ls`/`dir`） |
 | 4 | 会话 target 是否允许中途切换 | 允许，但必须显式确认并新开会话 |
 | 5 | 是否复用 agentHook 端口 | 不复用；新端口 + 鉴权，agentHook 保持只收状态 |
+
+---
+
+## 10. P0 落地记录（2026-11-12）
+
+按 §9 建议拍板并实现：独立 CLI 节点、P0 仅局域网直连、不复用 agentHook 端口、会话 target 创建时确定。
+
+| 模块 | 文件 |
+|---|---|
+| 节点服务（配对/鉴权/心跳/调用/撤销） | `src/main/nodes.ts` |
+| 能力插件 | `src/main/tools.ts`（`remote_sys_info` / `remote_fs_list`） |
+| 系统提示词注入 | `src/main/ai.ts`（`nodePromptSection()`） |
+| 会话 target | `src/shared/types.ts`、`src/main/chatSessions.ts`、`AskPane.tsx` |
+| 隧道 target | `src/shared/trace.ts`、`src/components/TraceTunnel.tsx` |
+| 配对 UI | `SettingsView.tsx`「外部节点」 |
+| 节点 CLI | `tools/workon-node/index.js` |
+
+P0 范围：只读（`sys.info` / `fs.list` / `fs.read`）+ 会话 target + 隧道显示 target。
+P1 待做：终端执行白名单、二次确认、节点离线提示强化。

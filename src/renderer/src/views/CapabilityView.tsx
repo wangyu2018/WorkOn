@@ -4,7 +4,7 @@
 export default function CapabilityView() {
   return (
     <div className="flex h-full flex-col gap-5 overflow-auto">
-      <h2 className="text-xl font-bold text-slate-100">⚡ 能力边界</h2>
+      <h2 className="text-xl font-bold text-slate-100">能力边界</h2>
       <p className="text-sm text-slate-500 -mt-2">
         每个功能的运行模式：无需 AI 即可运行 vs 开启 AI 后增强。关掉 AI 也能保留核心体验。
       </p>

@@ -8,6 +8,9 @@ export type TraceSource = 'qa' | 'today' | 'plan' | 'pet'
 /** 增量事件阶段：input → route → round → tool → output → end */
 export type TracePhase = 'input' | 'route' | 'round' | 'tool' | 'output' | 'end'
 
+/** 工具调用目标机器（缺省=本机；远端节点调用时填写，隧道据此展示） */
+export type TraceTarget = { kind: 'local' } | { kind: 'node'; nodeId: string; label: string }
+
 export interface TraceToolCall {
   /** 能力插件 id（即 Function Calling 工具名） */
   name: string
@@ -16,6 +19,15 @@ export interface TraceToolCall {
   ms: number
   resultPreview: string
   error?: string
+  /** 本次调用的目标机器（仅远端调用时填写） */
+  target?: TraceTarget
+  /** 节点执行者归因：普通工具可缺省，Super Agent / Skill 调用必须标明 */
+  executor?: {
+    kind: 'subagent' | 'skill' | 'tool'
+    id: string
+    label: string
+    parentId?: string
+  }
 }
 
 export interface TraceRound {
@@ -28,11 +40,72 @@ export interface PipelineTrace {
   id: string
   parentId?: string
   ts: number
+  /** 完成时间；进行中的轨迹缺省 */
+  endedAt?: number
   source: TraceSource
   input: { text: string; keywords: string[] }
   route: { decided: 'llm' | 'local'; reason?: string; domain?: string }
   rounds: TraceRound[]
   output: { text: string; tokens?: number; fallback?: boolean }
+}
+
+export interface TraceSubagentMetric {
+  id: string
+  label: string
+  calls: number
+  succeeded: number
+  successRate: number
+  avgMs: number
+}
+
+export interface TraceRunMetrics {
+  sampleSize: number
+  completedRuns: number
+  successfulRuns: number
+  successRate: number
+  avgDurationMs: number
+  fallbackRuns: number
+  toolCalls: number
+  toolSuccessRate: number
+  subagents: TraceSubagentMetric[]
+}
+
+export interface TraceEvalResult {
+  ts: number
+  traceId: string
+  passed: boolean
+  missingKeywords: string[]
+  routeOk: boolean
+  fallback: boolean
+  outputChars: number
+}
+
+export interface TraceEvalCase {
+  id: string
+  name: string
+  input: string
+  expectedKeywords: string[]
+  expectedRoute?: 'llm' | 'local'
+  createdAt: number
+  updatedAt: number
+  lastResult?: TraceEvalResult
+}
+
+export interface TraceEvalCaseInput {
+  id?: string
+  name?: string
+  input: string
+  expectedKeywords?: string[]
+  expectedRoute?: 'llm' | 'local'
+}
+
+export interface TraceExportPreview {
+  id: string
+  generatedAt: number
+  records: number
+  bytes: number
+  redactions: number
+  content: string
 }
 
 /** main → renderer 的增量推送载荷（每次携带完整快照，渲染端直接替换） */

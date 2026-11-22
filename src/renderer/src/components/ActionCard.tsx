@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Icon, type IconName } from './Icon'
 
 export interface ActionCardData {
   id: string
@@ -17,7 +18,7 @@ interface ActionCardProps {
 
 function fmtTime(ts: number): string { const d = new Date(ts); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }
 
-const typeIcons: Record<string, string> = { focus: '🔵', plan: '📋', switch: '🔄', meeting: '📝' }
+const typeIcons: Record<ActionCardData['type'], IconName> = { focus: 'target', plan: 'calendar', switch: 'refresh', meeting: 'message' }
 
 export default function ActionCard({ data, onUpdate, onDelete }: ActionCardProps) {
   const [expanded, setExpanded] = useState(false)
@@ -39,7 +40,7 @@ export default function ActionCard({ data, onUpdate, onDelete }: ActionCardProps
     return (
       <div onClick={() => setExpanded(true)} className="shrink-0 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 min-w-[140px] cursor-pointer hover:bg-white/[0.06] transition-colors">
         <div className="flex items-center gap-1.5 text-xs text-slate-300 mb-0.5">
-          <span>{typeIcons[data.type]}</span><span>{data.app}</span><span className="ml-auto">{fmtTime(data.startTs)}</span>
+          <Icon name={typeIcons[data.type]} size={12} className="text-neon-cyan" /><span>{data.app}</span><span className="ml-auto">{fmtTime(data.startTs)}</span>
         </div>
         <p className="text-xs text-slate-200 truncate">{data.title || '无标题'}</p>
         <span className="text-2xs text-slate-300">{durMin}m</span>

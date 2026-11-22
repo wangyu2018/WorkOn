@@ -22,6 +22,9 @@ import { attachOcrToEntries } from './ocrCollector'
 import { detectPatterns } from './patterns'
 import { findTemplate, getDefaultTemplate } from './templates'
 import { enhanceWithAI } from './aiEnhancement'
+import type { DeliverableFormat, DeliverableTemplate } from '@shared/deliverable/spec'
+import { buildSpec } from '../deliverable/templates'
+import { renderDeliverable } from '../deliverable/render'
 
 const pad2 = (n: number): string => `${n}`.padStart(2, '0')
 const hhmm = (ts: number): string => {
@@ -178,6 +181,22 @@ function mergeAchievements(list: PlanAchievement[]): PlanAchievement[] {
  * 生成智能周报：startDate 起 7 天（含）逐日走单日管线，再聚合
  * AI 增强复用单日管线（enableAI 透传；单日 AI 结果有 1 小时缓存，成本可控），不另起周级 LLM 调用
  */
+/**
+ * 导出报告为文件：md / html / pdf / png（docx/xlsx/pptx 由 P2 office 渲染器承接）
+ * 复用 generateReport 结果，不改变原有返回结构。
+ */
+export async function exportReport(
+  date: string,
+  format: DeliverableFormat = 'html',
+  template: DeliverableTemplate = 'report',
+  templateId?: string
+): Promise<{ path: string; bytes: number }> {
+  const report = await generateReport(date, templateId, false)
+  const spec = buildSpec(template, report, { revision: 1 })
+  spec.meta = { ...spec.meta, dataSnapshotTs: Date.now() }
+  return renderDeliverable(format, spec, { revision: 1 })
+}
+
 export async function generateWeeklyReport(
   startDate: string,
   templateId?: string,

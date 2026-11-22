@@ -1,15 +1,15 @@
 /**
- * 系统托盘（v8 重构）：状态 → 日常动作 → 三个悬浮面 → 细化 → 系统控制。
- * - 去重：穿透/桌宠开关只出现一处；主界面入口不再混在「记录」组
- * - 人话：鼠标穿透 → 点击穿过；透明度缩进不再用空格伪装
- * - 托盘常驻：藏悬浮窗不再销毁托盘（否则用户彻底失联，只能重启）
- * 注：托盘是 Windows 原生菜单，颜色字体跟系统走，无法套应用主题皮肤；
- *     这里的「风格」= 命名与产品词典一致 + 结构与勾选逻辑干净。
+ * 系统托盘（精简版）：状态 → 打开主界面 → 记录控制 → 设置 / 退出。
+ * - 已下线功能不再出现在菜单：玻璃模式、悬浮窗 / 右页窗格、日报与问答快捷入口
+ * - 托盘常驻：主窗口关闭只隐藏，托盘是最后的控制权
+ * - 菜单是系统原生外观；macOS 用模板图，Windows 按明暗主题切换图标
  */
-import { app, Menu, Tray, nativeImage } from 'electron'
+import { app, Menu, Tray, nativeImage, nativeTheme } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import { createMainWindow, toggleWidget, togglePet, sendTo, setWidgetPenetration, petWindow, widgetWindow, toggleTodoWidget, setTodoWidgetPenetration, setTodoWidgetLayer, setWidgetOnTop, setPetOpacity, applyWidgetOpacity, detachPanes, attachPanes, expandPane, paneCollapsed, panesState, snapPanes, collapsePane } from './windows'
+import type { ChatSession } from '@shared/types'
+import { createMainWindow, openAskSession, sendTo } from './windows'
+import { createChatSession, listChatSessions } from './chatSessions'
 import { getSettings, setSettings } from './settings'
 
 let tray: Tray | null = null
@@ -22,182 +22,101 @@ function loadIcon(filename: string): Electron.NativeImage {
   return nativeImage.createEmpty()
 }
 
+/**
+ * 托盘图标：
+ * - macOS 菜单栏是单色模板图，深色图标在深色菜单栏会「看不见」，交给系统按明暗着色
+ * - Windows 任务栏深浅随系统主题，暗色用浅图标、亮色用深图标（主题切换时重设）
+ */
+function trayIcon(): Electron.NativeImage {
+  if (process.platform === 'darwin') {
+    const icon = loadIcon('tray-dark-16.png')
+    icon.setTemplateImage(true)
+    return icon
+  }
+  return loadIcon(nativeTheme.shouldUseDarkColors ? 'tray-light-16.png' : 'tray-dark-16.png')
+}
+
 /** 打开主窗口并跳到指定视图 */
 function openMain(view?: string): void {
   createMainWindow()
   if (view) setTimeout(() => sendTo('main', 'nav:view', view), 600)
 }
 
-/** 生成今日日报：后台生成完成后打开报表页 */
-async function generateTodayReport(): Promise<void> {
-  const { dateKey } = await import('@shared/trail')
-  const { generateReport } = await import('./report/engine')
-  try {
-    await generateReport(dateKey(Date.now()), undefined, true)
-  } catch { /* 生成失败也打开报表页，页面内可见错误态 */ }
-  openMain('report')
+/** 会话菜单文案：标题 + 条数（过长截断） */
+function sessionLabel(s: ChatSession): string {
+  const title = s.title.length > 22 ? `${s.title.slice(0, 22)}…` : s.title
+  return `${title}（${s.items.length} 条）`
 }
 
-/** 透明度三档 radio（共用模板）：档位判定与写回 */
-function opacityRadios(
-  value: number,
-  pick: (v: number) => void
-): Electron.MenuItemConstructorOptions[] {
-  const tiers: { label: string; v: number }[] = [
-    { label: '不透明', v: 1 },
-    { label: '半透明', v: 0.7 },
-    { label: '更透', v: 0.4 },
-    { label: '无极调节…', v: -1 } // 跳设置页滑杆（原生菜单做不了滑块）
-  ]
-  return tiers.map((t, i) => ({
-    label: t.label,
-    type: 'radio',
-    checked: t.v > 0 && (i === 0 ? value > 0.85 : i === 1 ? value > 0.55 && value <= 0.85 : value <= 0.55),
-    click: () => {
-      if (t.v < 0) {
-        // 无极调节：跳设置页滑杆（原生菜单做不了滑块）
-        openMain('settings')
-        return
-      }
-      pick(t.v)
-    }
-  }))
-}
-
-function buildMenu(): void {
-  if (!tray) return
-  const s = getSettings()
-  const paused = !!s.recordingPaused
+function buildMenu(): Electron.Menu {
+  const paused = !!getSettings().recordingPaused
+  const recent = listChatSessions().slice(0, 5)
 
   const sep = (): Electron.MenuItemConstructorOptions => ({ type: 'separator' })
+  const sessionItems: Electron.MenuItemConstructorOptions[] = recent.length
+    ? recent.map((s) => ({ label: sessionLabel(s), click: () => openAskSession(s.id) }))
+    : [{ label: '暂无会话', enabled: false }]
 
   const items: Electron.MenuItemConstructorOptions[] = [
     // ── 状态 ──
     { label: paused ? '⏸ 记录已暂停' : '● 记录中', enabled: false },
     sep(),
-    // ── 日常动作 ──
-    { label: '打开 WorkOn', accelerator: 'CmdOrCtrl+Alt+O', registerAccelerator: false, click: () => openMain() },
-    { label: '✦ 生成今日日报', accelerator: 'CmdOrCtrl+Alt+D', registerAccelerator: false, click: () => { void generateTodayReport() } },
-    { label: '✦ 问 AI 搭子', accelerator: 'CmdOrCtrl+Alt+K', registerAccelerator: false, click: () => openMain('qa') },
+    // ── 主界面 / 会话 ──
+    { label: '打开 WorkOn', click: () => openMain() },
     sep(),
-    // ── 玻璃模式（v10）：两块穿透玻璃片统一管理 ──
     {
-      label: '玻璃模式 ▸',
-      submenu: [
-        { label: '拆开（问/右页 两块玻璃片）', click: () => detachPanes() },
-        { label: '合回一面', click: () => attachPanes() },
-        { label: '吸附固定排布', click: () => { snapPanes() } },
-        { type: 'separator' },
-        { label: '问玻璃（显示/唤回）', click: () => expandPane('ask') },
-        { label: '右页玻璃（显示/唤回）', click: () => expandPane('paper') },
-        {
-          label: '收起全部玻璃',
-          click: () => {
-            collapsePane('ask')
-            collapsePane('paper')
-          }
-        }
-      ]
-    },
-    sep(),
-    // ── 三个悬浮面（一级开关，一处一个） ──
-    {
-      label: '悬浮窗',
-      type: 'checkbox',
-      checked: !!s.widgetVisible,
-      registerAccelerator: false,
+      label: '发起新会话',
       click: () => {
-        // toggleWidget 统一负责显隐+设置写入+托盘刷新（修复托盘勾选无效，审计 D1）
-        toggleWidget()
+        // 已有空会话就复用，避免反复点出现一串「新会话」
+        const empty = listChatSessions().find((s) => s.items.length === 0 && !(s.participants?.length))
+        const created = empty ?? createChatSession({ target: { kind: 'local' } })
+        openAskSession(created.id)
       }
     },
     {
-      label: '待办小组件',
-      type: 'checkbox',
-      checked: !!s.todoWidgetVisible,
-      registerAccelerator: false,
-      click: () => toggleTodoWidget()
-    },
-    {
-      label: '桌宠',
-      type: 'checkbox',
-      checked: !!s.petEnabled,
-      registerAccelerator: false,
-      click: () => {
-        const next = !getSettings().petEnabled
-        setSettings({ petEnabled: next })
-        if (next) togglePet()
-        else if (petWindow && !petWindow.isDestroyed() && petWindow.isVisible()) togglePet()
-        refreshTray()
-      }
-    },
-    sep(),
-    // ── 细化（每个悬浮面只在这里调穿透/层级/透明度） ──
-    {
-      label: '右页窗格调节 ▸',
-      visible: !!s.widgetVisible,
-      submenu: [
-        { label: '点击穿透（点到下层应用）', type: 'checkbox', checked: !!s.widgetPenetration, click: (it) => { const v = !!(it as Electron.MenuItem & { checked?: boolean }).checked; setSettings({ widgetPenetration: v }); setWidgetPenetration(v) } },
-        { label: '置顶显示', type: 'checkbox', checked: s.widgetOnTop !== false, click: (it) => { const v = !!(it as Electron.MenuItem & { checked?: boolean }).checked; setWidgetOnTop(v) } },
-        { type: 'separator' },
-        ...opacityRadios(s.widgetOpacity ?? 1, (v) => { setSettings({ widgetOpacity: v }); applyWidgetOpacity() })
-      ]
-    },
-    {
-      label: '待办窗格调节 ▸',
-      visible: !!s.todoWidgetVisible,
-      submenu: [
-        { label: '点击穿透（点到下层应用）', type: 'checkbox', checked: !!s.todoWidgetPenetration, click: (it) => { const v = !!(it as Electron.MenuItem & { checked?: boolean }).checked; setTodoWidgetPenetration(v) } },
-        { label: '置顶显示', type: 'checkbox', checked: s.todoWidgetOnTop !== false, click: (it) => { const v = !!(it as Electron.MenuItem & { checked?: boolean }).checked; setTodoWidgetLayer(v) } },
-        { type: 'separator' },
-        ...opacityRadios(s.todoWidgetOpacity ?? 0.95, (v) => { setSettings({ todoWidgetOpacity: v }); refreshTray() })
-      ]
-    },
-    {
-      label: '桌宠调节 ▸',
-      visible: !!s.petEnabled,
-      submenu: opacityRadios(s.petOpacity ?? 1, (v) => setPetOpacity(v))
+      label: '切换会话 ▸',
+      submenu: sessionItems
     },
     sep(),
     // ── 系统控制 ──
     {
       label: paused ? '恢复记录' : '暂停记录',
-      accelerator: 'CmdOrCtrl+Alt+P',
-      registerAccelerator: false,
       click: () => {
         setSettings({ recordingPaused: !getSettings().recordingPaused })
-        refreshTray()
       }
     },
-    { label: '设置…', accelerator: 'CmdOrCtrl+,', registerAccelerator: false, click: () => openMain('settings') },
-    {
-      label: '退出 WorkOn',
-      accelerator: 'CmdOrCtrl+Q',
-      registerAccelerator: false,
-      click: () => app.exit(0)
-    }
+    { label: '设置…', click: () => openMain('settings') },
+    { label: '退出 WorkOn', click: () => app.exit(0) }
   ]
-  tray.setContextMenu(Menu.buildFromTemplate(items))
+  return Menu.buildFromTemplate(items)
+}
+
+/** 每次弹出前重建菜单：最近会话 / 记录状态始终是最新的 */
+function showMenu(): void {
+  if (!tray || tray.isDestroyed()) return
+  tray.popUpContextMenu(buildMenu())
 }
 
 export function createTray(): void {
   if (tray) return
-  const icon = loadIcon('tray-dark-16.png')
-  tray = new Tray(icon)
+  tray = new Tray(trayIcon())
   tray.setToolTip('WorkOn — 桌面工作记录')
-  buildMenu()
-  tray.on('click', () => openMain())
+  // macOS：左右键都出菜单（系统标准行为）
+  // Windows：左键打开主窗口、右键出菜单；系统明暗切换时同步换图标
+  if (process.platform === 'darwin') {
+    tray.on('click', () => showMenu())
+    tray.on('right-click', () => showMenu())
+  } else {
+    tray.on('click', () => openMain())
+    tray.on('right-click', () => showMenu())
+    nativeTheme.on('updated', () => {
+      if (!tray || tray.isDestroyed()) return
+      tray.setImage(trayIcon())
+    })
+  }
 }
 
-/** 设置变更时刷新托盘菜单（模块开关影响菜单项显示） */
-export function refreshTray(): void {
-  buildMenu()
-}
-
-/**
- * 托盘常驻：不管悬浮窗藏不藏，托盘都是最后的控制权
- * （旧逻辑藏悬浮窗即销毁托盘 → 用户失联只能重启，已废弃；仅确保存在）。
- */
+/** 托盘常驻：确保托盘存在（主窗口关闭只隐藏，托盘是最后的控制权） */
 export function syncTrayFromSettings(): void {
   createTray()
 }

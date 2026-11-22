@@ -9,6 +9,7 @@ import type { PipelineTrace, TraceToolCall } from '@shared/trace'
 import { ModalShell } from './ui/Modal'
 import { Icon } from './Icon'
 import { toolGroupLabel, toolMeta } from '../lib/toolUi'
+import { buildTraceGraph, TraceFlow } from '../v10/TraceFlow'
 
 const SOURCE_LABEL: Record<PipelineTrace['source'], string> = {
   qa: '问答',
@@ -75,6 +76,11 @@ function ToolRow({ call, keywords }: { call: TraceToolCall; keywords: string[] }
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
           <span style={{ fontSize: 13, color: 'var(--text-1)' }}>{meta.label}</span>
           <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{toolGroupLabel(call.name)}</span>
+          {call.target?.kind === 'node' ? (
+            <span style={{ fontSize: 11, color: 'var(--violet)' }} title={`远端节点 ${call.target.nodeId}`}>
+              ⇄ {call.target.label}
+            </span>
+          ) : null}
           <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 'auto' }}>{call.ms}ms</span>
         </div>
         {detail ? (
@@ -182,6 +188,10 @@ export function TraceTunnel({ traceId, onClose }: { traceId: string | null; onCl
           <div style={{ color: 'var(--text-3)', padding: '24px 0' }}>读取中，或本次未记录处理过程。</div>
         ) : (
           <>
+            <div className="v10-trace-scope v10-trace-scope--app" style={{ marginTop: 12 }}>
+              <TraceFlow graph={buildTraceGraph(trace)} />
+            </div>
+
             <div style={{ marginTop: 16 }}>
               <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 6 }}>输入</div>
               <div style={{ color: 'var(--text-1)', lineHeight: 1.6 }}>{clip(trace.input.text, 180)}</div>

@@ -16,6 +16,7 @@
  * 隐私：只记录应用名/窗口标题摘要/时长
  */
 import { col, insertInto, updateIn, removeFrom } from './db'
+import { aiCredsReady } from '@shared/aiConfig'
 import { addPoints } from './motions'
 import { bus } from './state'
 import { getSettings } from './settings'
@@ -267,7 +268,7 @@ export function maybeAutoBreakdownFor(plan: PlanItem): void {
   if (!plan.linkedProjectId) return
   try {
     const s = getSettings()
-    if (!s.aiEnabled || !s.aiApiKey) return
+    if (!s.aiEnabled || !aiCredsReady(s)) return
     const projectId = plan.linkedProjectId
     void import('./projects').then(({ aiBreakdown, listTasks }) => {
       const existing = listTasks(projectId)

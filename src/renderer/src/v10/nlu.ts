@@ -38,12 +38,15 @@ export interface GoalIntent {
 const GOAL_PHRASE_RE = /(我?\s*(想|要|打算|希望|计划|争取|立志)|目标\s*(是|为)?|定个?目标|立个?\s*flag|我的?愿望)/i
 const DEADLINE_HINT_RE =
   /(年底|明年|今年|后年|\d{4}\s*年|\d{1,2}\s*月|(\d+|十|十一|十二|[一二两三四五六七八九])\s*个?\s*(月|周|天)|半年|一年|\d+\s*岁)/
+const STRONG_GOAL_RE = /(目标|flag|愿望|立志|争取)/i
+// 没期限的长期目标也先进入目标通道，再由主流程反问期限；排除「我要吃饭」这类即时需求。
+const GOAL_ACTION_RE = /(学会|学习|学(?!校|费|生)|掌握|赚|收入|变现|减肥|减重|健身|备考|考证|上线|发布|开发|创业|参赛|大赛|读完|写完|作品|产品|升职|晋升|存款|存钱|vibecoding)/i
 
 export function parseGoalIntent(text: string): GoalIntent | null {
   // 提醒词优先——「提醒我……」归提醒通道，不当预期
   if (REMIND_RE.test(text)) return null
   if (!GOAL_PHRASE_RE.test(text)) return null
-  if (!DEADLINE_HINT_RE.test(text)) return null
+  if (!DEADLINE_HINT_RE.test(text) && !STRONG_GOAL_RE.test(text) && !GOAL_ACTION_RE.test(text)) return null
   return { sourceText: text }
 }
 

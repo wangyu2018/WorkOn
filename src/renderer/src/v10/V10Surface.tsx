@@ -5,12 +5,16 @@
  * 详见 docs/UI-DESIGN-SPEC-v10.md
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { PlanItem, TrailSegment, PresenceSnapshot, GoalView, GoalDraft, ChatSession } from '@shared/types'
+import type { AgentListResult, AgentView } from '@shared/agents'
+import type { PlanItem, TrailSegment, PresenceSnapshot, GoalView, GoalTreeDraft, GoalTreeApplyResult, ChatSession, RemoteNodeInfo, SessionTarget } from '@shared/types'
 import { AskPane, type ChatMsg, type ObjectChipData, type QuoteChipData } from './AskPane'
 import { PaperPane, type FeedItem } from './PaperPane'
 import { parseReminderIntent, parseGoalIntent, parseScheduleProposal } from './nlu'
 import { withContext, type ContextKey } from './sessionContext'
+import { recordLocalTrace } from './traceStore'
 import { STATE_LABEL } from '@shared/stateMeta'
+import { shouldUseSuperAgent } from '@shared/superAgent'
+import { useAgentWizardStore } from '../stores/agentWizardStore'
 
 import { FlowMap } from './FlowMap'
 import './v10.css'
@@ -33,9 +37,29 @@ const APP_CN_ALIAS: Record<string, string> = {
   '会议': 'meeting', '文档': 'office', '笔记': 'notes', '截图': 'screenshot', '画图': 'paint'
 }
 
+/** FEAT-22：从「早8点到晚6点 / 9点-18点 / 18时到22时」解出同一天内的时段 */
+export function parseTimelineHours(text: string): [number, number] | null {
+  const m = /(凌晨|早上?|上午|中午|下午|傍晚|晚上?|夜里?)?\s*(\d{1,2})\s*(?:[点時时:：]\s*)?(?:到|至|~|～|-|—|–)\s*(凌晨|早上?|上午|中午|下午|傍晚|晚上?|夜里?)?\s*(\d{1,2})\s*[点時时:：]?/.exec(text)
+  if (!m) return null
+  if (!/[点時时:：]/.test(m[0])) return null // 纯数字区间不当时间（避免误吃「3-5个」）
+  const shift = (h: number, mark?: string): number => {
+    if (!mark) return h
+    if (/下午|傍晚|晚上?|夜里?/.test(mark)) return h < 12 ? h + 12 : h
+    if (mark === '中午') return 12
+    if (/凌晨/.test(mark) && h === 12) return 0
+    return h
+  }
+  const a = Math.max(0, Math.min(23, shift(Number(m[2]), m[1])))
+  const b = Math.max(1, Math.min(24, shift(Number(m[4]), m[3])))
+  if (a >= b) return null
+  return [a, b]
+}
+
 /** 块参数（块进化 diff 的作用对象；v10 §4.C：改参数不改画） */
 export interface BlockParams {
   timelineDays: 1 | 7 | 14
+  /** FEAT-22：时段裁切（小时，[起, 止]，同一天内；缺省=全天） */
+  timelineHours?: [number, number]
 }
 
 export default function V10Surface(props: { onExit?: () => void }): JSX.Element {
@@ -71,10 +95,18 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const scrollRef = useRef<HTMLDivElement>(null)
   /** 快捷回复协议：最近一条带选项的消息 index → 选项数组；回 1/2 即答 */
   const optionsRef = useRef<{ msgIndex: number; options: string[] } | null>(null)
+  /** 最近一次问题（超时后「重试」用） */
+  const lastAskRef = useRef<string>('')
+  /** 自身 send 引用（快捷回复「重试」复用同一条链路） */
+  const sendRef = useRef<((text: string) => void) | null>(null)
+  /** 本轮问题（本地直答写「处理流程」用） */
+  const traceQuestionRef = useRef('')
+  /** send 期间等待首条无 traceId 的 AI 回复 → 记为本地直答 */
+  const localTracePendingRef = useRef(false)
   /** 日程提议待确认（快捷回复 ① 建带确认器的提醒） */
   const pendingProposalRef = useRef<{ msgIndex: number; proposal: { whenLabel: string; event: string; atHHMM?: string; atTs?: number; isMeeting: boolean } } | null>(null)
-  /** 待确认的预期拆解草稿（确认创建/重新拆解/算了） */
-  const pendingGoalRef = useRef<{ msgIndex: number; sourceText: string; draft: GoalDraft } | null>(null)
+  /** 待确认的目标树：整树确认 / 重拆 / 改期限 / 放弃 */
+  const pendingGoalRef = useRef<{ msgIndex: number; sourceText: string; draft?: GoalTreeDraft; deadlineOverride?: string; awaitingDeadline?: boolean } | null>(null)
   /** 块进化：挂在输入场的对象芯片 */
   const [objectChip, setObjectChip] = useState<ObjectChipData | null>(null)
   const [prefillText, setPrefillText] = useState<string | null>(null)
@@ -152,10 +184,37 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   }, [paneMode])
   const [detached, setDetached] = useState(false)
   const [sessions, setSessions] = useState<ChatSession[]>([])
+  /** 会话级多 Agent 群组：可 @ 的 Agent 注册表 */
+  const [agents, setAgents] = useState<AgentView[]>([])
+  /** 节点模式（P0）：已配对的外部电脑与在线状态 */
+  const [nodes, setNodes] = useState<RemoteNodeInfo[]>([])
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  // 托盘快捷入口：URL ?session= 指定初始会话；已打开的问玻璃通过 qa:focus-session 切换
+  useEffect(() => {
+    const initial = new URLSearchParams(window.location.search).get('session')
+    if (initial) setActiveSessionId(initial)
+    const off = window.api?.onQAFocusSession?.((id) => {
+      if (!id) return
+      setActiveSessionId(id)
+      // 托盘可能刚新建了会话：重新拉一次列表，确保会话视图能查到
+      void window.api?.listSessions?.().then((x) => setSessions((x as ChatSession[]) ?? []))
+    })
+    return () => off?.()
+  }, [])
   /** 会话中所有回复统一走这里（纯数据入参；IPC 绝不放 setChat updater——StrictMode 双调用会双写）
    *  BUG-14/19 修：会话态 → 追加到该会话 items（视图即刷新）+ 落库，绝不写全局 chat（防倒灌） */
   const pushAI = useCallback((msgs: ChatMsg[]) => {
+    // 本地直答也进右页「处理流程」：send 期间首条无 traceId 的 AI 消息 = 规则/本地分支
+    if (localTracePendingRef.current) {
+      if (msgs.some((m) => !!m.traceId)) localTracePendingRef.current = false
+      else {
+        const ai = msgs.find((m) => m.role === 'ai')
+        if (ai) {
+          recordLocalTrace(traceQuestionRef.current, ai.text)
+          localTracePendingRef.current = false
+        }
+      }
+    }
     if (activeSessionId) {
       const items = msgs.map((m) => ({ role: (m.role === 'user' ? 'user' : 'ai') as 'user' | 'ai', text: m.text, time: Date.now() }))
       setSessions((ss) => ss.map((s) => (s.id === activeSessionId ? { ...s, items: [...s.items, ...items] } : s)))
@@ -171,6 +230,22 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
   const reloadGoals = useCallback(() => {
     void window.api?.listGoals?.().then((g) => setGoals((g as GoalView[]) ?? []))
   }, [])
+  const presentGoalTree = useCallback((sourceText: string, draft: GoalTreeDraft, deadlineOverride?: string) => {
+    const milestones = draft.paths.reduce((n, p) => n + p.milestones.length, 0)
+    const intro = `拆成了一棵执行树（${draft.source === 'ai' ? 'AI' : '本地粗略版'}）：${draft.paths.length} 条路径、${milestones} 个里程碑、本周 ${draft.weekBlocks.length} 块。点节点能看产出与归属，整树确认后一次落库。`
+    if (activeSessionId) {
+      pendingGoalRef.current = null
+      pushAI([{ role: 'ai', text: `${intro}\n（编排确认卡仅在主对话可点——回主对话重新发这句话即可）。` }])
+      return
+    }
+    const opts = ['整树确认', '重新拆一版', '改截止日重拆', '算了']
+    setChat((c) => {
+      const next = [...c, { role: 'ai' as const, text: intro, goalTree: draft, options: opts }]
+      optionsRef.current = { msgIndex: next.length - 1, options: opts }
+      pendingGoalRef.current = { msgIndex: next.length - 1, sourceText, draft, deadlineOverride }
+      return next
+    })
+  }, [activeSessionId, pushAI])
   const reloadTrail = useCallback(() => {
     void window.api?.getTrail?.().then((t) => {
       const merged = t as { segments?: TrailSegment[] } | null
@@ -213,6 +288,17 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       if (typeof p.aiEnabled === 'boolean') setAiOn(p.aiEnabled)
     })
     void window.api?.listSessions?.().then((x) => setSessions((x as ChatSession[]) ?? []))
+    // 会话级多 Agent 群组：@Agent 派发需要注册表（去掉内置模型代理）
+    void window.api
+      ?.listAgents?.()
+      .then((x) => {
+        const res = x as AgentListResult
+        setAgents((res?.agents ?? []).filter((a) => !a.builtin))
+      })
+      .catch(() => undefined)
+    // 节点模式（P0）：外部节点列表 + 上下线实时刷新
+    void window.api?.listNodes?.().then((x) => setNodes((x as RemoteNodeInfo[]) ?? []))
+    const offNodes = window.api?.onNodesChanged?.((x) => setNodes((x as RemoteNodeInfo[]) ?? []))
     // coding 信号（v10）：AI 编程工具 busy→done → 对话流通知（开始=可接管提示，结束=完成通知）
     const seenBusy = new Set<string>()
     const seenDone = new Set<string>()
@@ -319,6 +405,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       offM?.()
       offMu?.()
       offW?.()
+      offNodes?.()
     }
     // 工作台拆出态轮询兜底（事件链验证期；确认无误后可去掉）
     wbPoll = window.setInterval(() => {
@@ -412,13 +499,90 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       }
       const text = raw.trim()
       if (!text || asking) return
+      const superMode = shouldUseSuperAgent(text)
+      traceQuestionRef.current = text
+      localTracePendingRef.current = true
       // 引用芯片：把拖进来的内容作为上下文附给回答（会话框不是主要阅读区，补充要顺手）
       let quoted = quoteChip ? `（关于我拖进来的内容：「${quoteChip.text.slice(0, 200)}」）\n\n${text}` : text
       // 会话上下文（v10 简化模型）：绑定框后问答自动带数据源摘要
       if (activeContext !== 'general') {
         quoted = withContext(activeContext, quoted, { trail, plans, goals, reminders })
       }
+      // 节点模式（P0）：会话目标 = 远程节点 → 注入目标摘要；离线则提示并中止（文档 §6）
+      const activeSession = sessions.find((s) => s.id === activeSessionId)
+      const sessionTarget = activeSession?.target
+      if (sessionTarget?.kind === 'node') {
+        const node = nodes.find((n) => n.id === sessionTarget.nodeId)
+        if (!node?.online) {
+          pushAI([
+            { role: 'user', text },
+            { role: 'ai', text: `目标节点「${node?.label ?? sessionTarget.nodeId}」当前离线——先把那台电脑的 WorkOn 节点启动起来，或新建一个本机会话。` }
+          ])
+          setAsking(false)
+          return
+        }
+        quoted = `（会话目标：远程节点「${node.label}」nodeId=${node.id}，系统 ${node.os}/${node.arch}。\n涉及该电脑时只调用 remote_* 工具并传这个 nodeId；不要假设它是本机路径。）\n\n${quoted}`
+      }
+      // 会话上下文：把本会话最近消息带给模型（子会话创建时已快照上游，这里保证接续理解）
+      if (activeSession && activeSession.items.length) {
+        const history = activeSession.items
+          .slice(-10)
+          .map((m) => `${m.role === 'user' ? '我' : 'AI'}：${m.text.replace(/\s+/g, ' ').slice(0, 120)}`)
+          .join('\n')
+        quoted = `（本会话最近消息，供接续理解）\n${history}\n\n${quoted}`
+      }
       pushAI([{ role: 'user', text }])
+
+      // ── 会话级 @Agent：@名字 需求 → 直接派发该 Agent，并把参与者记进会话 ──
+      const mention = /^@([^\s@]{1,32})\s+([\s\S]+)$/.exec(text)
+      if (mention) {
+        const key = mention[1].toLowerCase()
+        const agent = agents.find((a) => a.name.toLowerCase() === key || a.id.toLowerCase() === key)
+        if (agent) {
+          if (!agent.enabled || !agent.dispatchable || agent.status !== 'online') {
+            pushAI([
+              {
+                role: 'ai',
+                text: `@${agent.name} 现在不可派发（${agent.status}${agent.dispatchable ? '' : ' · 不支持派发'}）——换一个 Agent，或到「Agent」页刷新探活。`
+              }
+            ])
+            return
+          }
+          if (activeSessionId) {
+            void window.api?.addSessionParticipant?.(activeSessionId, agent.id).then((x) => {
+              const s = x as ChatSession | null
+              if (s) setSessions((list) => list.map((it) => (it.id === s.id ? s : it)))
+            })
+          }
+          setAsking(true)
+          void window.api
+            ?.dispatchAgent?.(agent.id, mention[2], undefined, false)
+            .then((r) => {
+              const res = r as { ok: boolean; output: string; error?: string }
+              pushAI([
+                {
+                  role: 'ai',
+                  text: res?.ok
+                    ? `@${agent.name}：${(res.output ?? '').trim() || '（没有输出）'}`
+                    : `@${agent.name} 派发失败：${res?.error ?? '未知原因'}`
+                }
+              ])
+            })
+            .catch((e) => pushAI([{ role: 'ai', text: `@${agent.name} 派发失败：${(e as Error).message}` }]))
+            .finally(() => {
+              setAsking(false)
+              consumeQuote()
+            })
+          return
+        }
+      }
+
+      // ── 动态 Agent：在窗口里说“增加一个 Agent” → 逐项问答后写入注册表 ──
+      if (/(增加|新增|接入|添加|加个|加一个).{0,10}(agent|智能体|助手)/i.test(text)) {
+        useAgentWizardStore.getState().openWizard()
+        pushAI([{ role: 'ai', text: '好，我来问几个问题：名称、接入方式、地址/命令、认证与能力、额度口径。填完就写入 Agent 注册表，不用改代码。' }])
+        return
+      }
 
       // ── 全局撤销（v10 §4.C：块进化的可召回；无需重新拖芯片） ──
       if (/(换回来|撤销|还原)/.test(text)) {
@@ -439,7 +603,16 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           pushAI([{ role: 'ai', text: `好，轨迹改成最近 ${days} 天了（旧版本在账里，说「换回来」可召回）。` }])
           return
         }
-        pushAI([{ role: 'ai', text: `收到——想调整「${chip.label}」。现在能听懂的：「最近 N 天」（时间窗）、「换回来」（撤销）。更多调整（换图表/改粒度）在学。` }])
+        if (chip.blockKey === 'timeline') {
+          const hours = parseTimelineHours(text)
+          if (hours) {
+            setBlockParams({ ...blockParams, timelineDays: 1, timelineHours: hours })
+            const fmt = (h: number): string => `${String(h).padStart(2, '0')}:00`
+            pushAI([{ role: 'ai', text: `好，轨迹裁到 ${fmt(hours[0])}–${fmt(hours[1])} 了，段外灰显；说「换回来」恢复整天。` }])
+            return
+          }
+        }
+        pushAI([{ role: 'ai', text: `收到——想调整「${chip.label}」。现在能听懂的：「最近 N 天」（时间窗）、「早9点到晚6点」（时段裁切）、「换回来」（撤销）。更多调整（换图表/改粒度）在学。` }])
         return
       }
 
@@ -464,62 +637,38 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         if (!picked) return
         optionsRef.current = null
         setChat((c) => c.map((m, i) => (i === pending.msgIndex ? { ...m, options: undefined, picked } : m)))
-        // 预期拆解确认卡
+        // 目标树确认卡：只在主进程落库，渲染端不直接拼项目/计划
         if (pendingGoalRef.current && pendingGoalRef.current.msgIndex === pending.msgIndex) {
-          const { sourceText, draft } = pendingGoalRef.current
-          pendingGoalRef.current = null
-          if (picked.includes('确认创建')) {
-            void window.api
-              ?.createGoal?.({
-                sourceText,
-                event: draft.event,
-                deadline: draft.deadline,
-                keywords: draft.keywords,
-                projectIds: draft.projectIds,
-                dailyTargetMin: draft.dailyTargetMin,
-                anchors: draft.anchors
-              })
-              .then(() => {
-                reloadGoals()
-                pushAI([{ role: 'ai', text: `立了。右页「人生预期」开始盯轨——「${draft.event}」，${draft.deadline} 见分晓。` }])
-              })
-          } else if (picked.includes('重新拆')) {
+          const { sourceText, draft, deadlineOverride } = pendingGoalRef.current
+          if (!draft) return
+          if (picked.includes('整树确认')) {
+            pendingGoalRef.current = null
             setAsking(true)
-            void window.api
-              ?.decomposeGoal?.(sourceText, '重新拆一版')
-              .then((d) => {
-                const draft = d as GoalDraft | null
-                if (!draft) {
-                  pushAI([{ role: 'ai', text: '还是没拆出来——说得再具体点，或者直接说「算了」。' }])
-                  return
-                }
-                const anchorsText = draft.anchors.map((a) => `  · ${a.targetDate} ${a.title}`).join('\n')
-                const kw = draft.keywords.length ? `\n归因关键词：${draft.keywords.join('、')}` : ''
-                const opts = ['确认创建', '重新拆一版', '算了']
-                if (activeSessionId) {
-                  pushAI([{ role: 'ai', text: `重拆了一版（${draft.source === 'ai' ? 'AI' : '本地'}）：「${draft.event}」→ ${draft.deadline}\n每天应投入约 ${draft.dailyTargetMin} 分钟${kw}\n锚点轨迹：\n${anchorsText}\n（确认卡仅在主对话可点——回主对话说「确认创建」即可）。` }])
-                  return
-                }
-                setChat((c) => {
-                  const next = [
-                    ...c,
-                    {
-                      role: 'ai' as const,
-                      text: `重拆了一版（${draft.source === 'ai' ? 'AI' : '本地'}）：「${draft.event}」→ ${draft.deadline}\n每天应投入约 ${draft.dailyTargetMin} 分钟${kw}\n锚点轨迹：\n${anchorsText}`,
-                      options: opts
-                    }
-                  ]
-                  optionsRef.current = { msgIndex: next.length - 1, options: opts }
-                  pendingGoalRef.current = { msgIndex: next.length - 1, sourceText, draft }
-                  return next
-                })
+            void window.api?.applyGoalTree?.(sourceText, draft, deadlineOverride)
+              .then((raw) => {
+                const result = raw as GoalTreeApplyResult
+                reloadGoals()
+                reloadPlans()
+                pushAI([{ role: 'ai', text: `整棵树已落库：1 个目标、${result.projectIds.length} 个项目、${result.planIds.length} 个执行块。${result.todayCount ? `今天先做 ${result.todayCount} 块，` : ''}右页「人生预期」会持续盯轨。` }])
               })
-              .finally(() => {
-          setAsking(false)
-          consumeQuote()
-        })
+              .catch((e) => pushAI([{ role: 'ai', text: `落库失败，已回滚本次新增内容（${String(e?.message ?? e).slice(0, 80)}）。可以重新拆一版再确认。` }]))
+              .finally(() => { setAsking(false); consumeQuote() })
+          } else if (picked.includes('重新拆')) {
+            pendingGoalRef.current = null
+            setAsking(true)
+            void window.api?.decomposeGoalTree?.(sourceText, '换一版更具体、更可执行的目标树', deadlineOverride)
+              .then((d) => {
+                if (!d) { pushAI([{ role: 'ai', text: '还是没拆出来——把目标说得更具体一点，或直接说「算了」。' }]); return }
+                presentGoalTree(sourceText, d as GoalTreeDraft, deadlineOverride)
+              })
+              .catch(() => pushAI([{ role: 'ai', text: '重拆失败，稍后再试。' }]))
+              .finally(() => { setAsking(false); consumeQuote() })
+          } else if (picked.includes('改截止日')) {
+            pendingGoalRef.current = { msgIndex: pending.msgIndex, sourceText, draft, awaitingDeadline: true }
+            pushAI([{ role: 'ai', text: '直接发新期限，比如「2027 年 6 月底」「三个月后」「后年」。我会保留目标，按新期限重拆整棵树。' }])
           } else {
-            pushAI([{ role: 'ai', text: '好，不立了。' }])
+            pendingGoalRef.current = null
+            pushAI([{ role: 'ai', text: '好，这棵树不落库。' }])
           }
           return
         }
@@ -557,6 +706,10 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
             const res = r as { ok: boolean; error?: string }
             pushAI([{ role: 'ai', text: res?.ok ? '好了 ✦' : `没控成（${res?.error ?? '未知'}）——mac 上先打开 Music/Spotify。` }])
           })
+        } else if (picked === '重试') {
+          const q = lastAskRef.current
+          if (q) void sendRef.current?.(q)
+          else pushAI([{ role: 'ai', text: '没有可重试的问题，直接再发一次吧。' }])
         } else if (picked.includes('配置 AI')) {
           // 右页内联接入卡（旧版 openMain 会被 v10 表面遮挡——统一走新流程）
           setAiConfigOpen(true)
@@ -564,6 +717,34 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         } else {
           pushAI([{ role: 'ai', text: '好。' }])
         }
+        return
+      }
+
+      // 改截止日：新期限独立传递，避免原话里的「明年」等旧期限抢走优先级。
+      if (pendingGoalRef.current?.awaitingDeadline) {
+        const pendingGoal = pendingGoalRef.current
+        const base = pendingGoal.sourceText
+        if (/^(算了|取消|不改了)$/.test(normalized)) {
+          pendingGoalRef.current = null
+          pushAI([{ role: 'ai', text: '好，这次目标不落库。' }])
+          return
+        }
+        pendingGoalRef.current = null
+        setAsking(true)
+        void window.api?.decomposeGoalTree?.(base, `截止时间以「${text}」为准，重新排里程碑和本周块`, text)
+          .then((d) => {
+            if (!d) {
+              pendingGoalRef.current = { ...pendingGoal, awaitingDeadline: true }
+              pushAI([{ role: 'ai', text: '没听出新期限。请带明确时间再发一次，例如「2027 年 6 月底」。' }])
+              return
+            }
+            presentGoalTree(base, d as GoalTreeDraft, text)
+          })
+          .catch(() => {
+            pendingGoalRef.current = { ...pendingGoal, awaitingDeadline: true }
+            pushAI([{ role: 'ai', text: '按新期限重拆失败，请再发一次新期限。' }])
+          })
+          .finally(() => { setAsking(false); consumeQuote() })
         return
       }
 
@@ -593,13 +774,12 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       }
 
       // ── 对话控制台（v10：问答开启任何功能；规则先行，意图判定后续接 jev） ──
-      const cmd = /^(开启|打开|启用|关闭|停用|显示|隐藏)\s*(虚拟角色|桌宠|搭子|悬浮窗|待办树|待办小组件|深度模式|忙时轻档|天气|AI|键鼠|行为探针|消息监控|微信监控|音乐信号)\s*$/.exec(normalized)
+      const cmd = /^(开启|打开|启用|关闭|停用|显示|隐藏)\s*(悬浮窗|深度模式|忙时轻档|天气|AI|键鼠|行为探针|消息监控|微信监控|音乐信号)\s*$/.exec(normalized)
       if (cmd) {
         const on = /^(开启|打开|启用|显示)$/.test(cmd[1])
         const kw = cmd[2]
         const FIELD: Record<string, string> = {
-          '虚拟角色': 'petEnabled', '桌宠': 'petEnabled', '搭子': 'petEnabled',
-          '悬浮窗': 'widgetVisible', '待办树': 'todoWidgetVisible', '待办小组件': 'todoWidgetVisible',
+          '悬浮窗': 'widgetVisible',
           '深度模式': 'deepMode', '忙时轻档': 'loadGuardEnabled', '天气': 'weatherEnabled',
           'AI': 'aiEnabled', '键鼠': 'inputProbeEnabled', '行为探针': 'inputProbeEnabled',
           '消息监控': 'messageWatchEnabled', '微信监控': 'messageWatchEnabled', '音乐信号': 'musicWatchEnabled'
@@ -607,7 +787,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         const field = FIELD[kw]
         if (field) {
           void window.api?.setSettings?.({ [field]: on } as never)
-          pushAI([{ role: 'ai', text: `${on ? '开' : '关'}了${kw} ✦（生效即可见，桌宠/悬浮窗的开关会即时创建或收起窗口）` }])
+          pushAI([{ role: 'ai', text: `${on ? '开' : '关'}了${kw} ✦（生效即可见，悬浮窗开关会即时创建或收起）` }])
           return
         }
       }
@@ -723,47 +903,21 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         return
       }
 
-      // ── 人生预期意图（v10 人生规划模拟）：「我想在X前做到Y」→ AI拆锚点→确认卡 ──
-      const goalIntent = parseGoalIntent(text)
+      // ── 目标闭环：一句话 → 目标树编排预览 → 整树确认 → 目标/项目/本周块一次落库 ──
+      const goalIntent = superMode ? null : parseGoalIntent(text)
       if (goalIntent) {
         setAsking(true)
-        void window.api
-          ?.decomposeGoal?.(text)
+        void window.api?.decomposeGoalTree?.(text)
           .then((d) => {
-            const draft = d as GoalDraft | null
-            if (!draft) {
-              pushAI([{ role: 'ai', text: '听着像个目标，但我没听出截止时间——带上「年底前」「三个月后」「6 月前」这类时间锚点再跟我说一次。' }])
+            if (!d) {
+              pendingGoalRef.current = { msgIndex: -1, sourceText: text, awaitingDeadline: true }
+              pushAI([{ role: 'ai', text: '听着像个目标，但我没听出截止时间——想什么时候到？直接回复「明年」「三个月后」或「2027 年 6 月底」即可，我会保留目标。' }])
               return
             }
-            const anchorsText = draft.anchors.map((a) => `  · ${a.targetDate} ${a.title}`).join('\n')
-            const kw = draft.keywords.length ? `\n归因关键词：${draft.keywords.join('、')}` : ''
-            const pj = draft.projectIds.length ? `\n建议绑定项目：${draft.projectIds.length} 个（按名称命中，可在目标卡上改）` : ''
-            const opts = ['确认创建', '重新拆一版', '算了']
-            if (activeSessionId) {
-              pushAI([{ role: 'ai', text: `拆好了（${draft.source === 'ai' ? 'AI' : '本地'}拆解）：「${draft.event}」→ ${draft.deadline}\n每天应投入约 ${draft.dailyTargetMin} 分钟${kw}${pj}\n锚点轨迹：\n${anchorsText}\n（确认卡仅在主对话可点——回主对话说「确认创建」即可立轨）。` }])
-              return
-            }
-            setChat((c) => {
-              const next = [
-                ...c,
-                {
-                  role: 'ai' as const,
-                  text: `拆好了（${draft.source === 'ai' ? 'AI' : '本地'}拆解）：「${draft.event}」→ ${draft.deadline}\n每天应投入约 ${draft.dailyTargetMin} 分钟${kw}${pj}\n锚点轨迹：\n${anchorsText}\n确认就开始盯轨（回 1/2/3）。`,
-                  options: opts
-                }
-              ]
-              optionsRef.current = { msgIndex: next.length - 1, options: opts }
-              pendingGoalRef.current = { msgIndex: next.length - 1, sourceText: text, draft }
-              return next
-            })
+            presentGoalTree(text, d as GoalTreeDraft)
           })
-          .catch(() => {
-            pushAI([{ role: 'ai', text: '拆解失败——稍后再试，或说得再具体些。' }])
-          })
-          .finally(() => {
-          setAsking(false)
-          consumeQuote()
-        })
+          .catch(() => pushAI([{ role: 'ai', text: '目标树拆解失败——稍后再试，或把目标说得更具体些。' }]))
+          .finally(() => { setAsking(false); consumeQuote() })
         return
       }
 
@@ -799,6 +953,8 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         return
       }
 
+      // Super Agent 的多域只读问题交给 Supervisor，避免被单域快捷直答截获。
+      if (!superMode) {
       // ── 人生预期概念/进展问句（数据在本地 goals state，直答不依赖 LLM） ──
       if (/(人生预期|长期目标).*(是啥|是什么|怎么样|进度|有哪些|咋样)|(是啥|什么是).*(人生预期|长期目标)|目标进展|预期进度/.test(normalized)) {
         const lines = goals.map((g) => {
@@ -1057,33 +1213,32 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         return
       }
 
+      }
+
       // ── 常规问答：AI 配置后走流式（边生成边读）；未配置走稳定同步路径 ──
       // 本地模式+绑定会话上下文时：兜底=数据源摘要（BUG-13 答非所问修复）
       if (!aiOn && activeContext !== 'general') {
         const summary = withContext(activeContext, '', { trail, plans, goals, reminders }).trim()
-        pushAI([{ role: 'ai', text: `「${text}」需要 AI 才能深入回答。当前「${activeContext}」会话我能给的本底数据：\n\n${summary}\n\n接入 AI 后我可以基于这些做分析和建议（右上角 AI 未接入 → 点击接入）。`, options: ['⚙ 去配置 AI'] }])
+        pushAI([{ role: 'ai', text: `AI 还没接通（设置 → AI 可配置本地 Ollama 或兼容接口）。当前「${activeContext}」会话我能给的本底数据：\n\n${summary}\n\n接通后我可以基于这些做分析和建议。`, options: ['⚙ 去配置 AI'] }])
         optionsRef.current = { msgIndex: chat.length + 1, options: ['⚙ 去配置 AI'] }
         return
       }
-      // 超时兜底（v10 修）：流式事件丢失时 15s 自动解锁，asking 永不卡死
-      const askingGuard = window.setTimeout(() => {
-        setAsking(false)
-      }, 15_000)
+      lastAskRef.current = text
       // AI 未配置 → 稳定同步路径；会话态同样走同步（流式 chunk 按 id 写全局 chat，会穿透会话隔离——BUG-19）
       // 监听必须在 return 之后注册——同步路径若先注册又不清理，残留 offDone 闭包捕获旧 activeSessionId，后续流式响应会往会话重复写回复（双回复根因）
       if (!aiOn || activeSessionId) {
         void window.api
-          ?.askQA?.(quoted)
+          ?.askQA?.(quoted, superMode)
           .then((r) => {
             const content = typeof r === 'string' ? r : ((r as { content?: string })?.content ?? '（没有回答）')
             const tid = typeof r === 'object' ? (r as { traceId?: string })?.traceId : undefined
-            pushAI([{ role: 'ai', text: content, options: content.includes('这个问题需要 AI') ? ['⚙ 去配置 AI'] : undefined, traceId: tid }])
+            const recommendations = typeof r === 'object' ? (r as { recommendations?: ChatMsg['recommendations'] })?.recommendations : undefined
+            pushAI([{ role: 'ai', text: content, options: content.includes('这个问题需要 AI') ? ['⚙ 去配置 AI'] : undefined, traceId: tid, recommendations }])
           })
           .catch(() => {
             pushAI([{ role: 'ai', text: '这个问题暂时答不上来。' }])
           })
           .finally(() => {
-            window.clearTimeout(askingGuard)
             setAsking(false)
             consumeQuote()
           })
@@ -1091,8 +1246,22 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       }
       const streamId = `ai${Date.now()}`
       let acc = ''
+      let gotChunk = false
+      // 超时兜底：流式事件丢失时 30s 解锁，并给出可见原因 + 重试（不再静默；本地模型首 token 可能较慢）
+      const askingGuard = window.setTimeout(() => {
+        setAsking(false)
+        if (gotChunk) return
+        setChat((c) => {
+          const opts = ['重试']
+          const next = [...c, { role: 'ai' as const, text: '这次没有收到回复（可能模型超时或本机模型未启动）。回「1」重试，或到设置 → AI 检查连接。', options: opts }]
+          optionsRef.current = { msgIndex: next.length - 1, options: opts }
+          return next
+        })
+        localTracePendingRef.current = false
+      }, superMode ? 75_000 : 30_000)
       const offChunk = window.api?.onAIStreamChunk?.((p) => {
         const { full } = p as { delta: string; full: string }
+        gotChunk = true
         acc = full
         setChat((c) => {
           const idx = c.findIndex((m) => m.id === streamId)
@@ -1107,6 +1276,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         const content = (typeof raw === 'string' ? raw : (raw as { content?: string })?.content) || acc || ''
         // L2 隧道：本次处理的轨迹 id 挂到消息上，供「过程」下钻
         const tid = typeof raw === 'object' ? (raw as { traceId?: string })?.traceId : undefined
+        const recommendations = typeof raw === 'object' ? (raw as { recommendations?: ChatMsg['recommendations'] })?.recommendations : undefined
         // 兜底回答（本地模式）带「去配置 AI」快捷回复——AI 接入入口
         const needsAI = content.includes('这个问题需要 AI')
         const opts = needsAI ? ['⚙ 去配置 AI'] : undefined
@@ -1114,13 +1284,14 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
           const idx = c.findIndex((m) => m.id === streamId)
           if (idx >= 0) {
             const next = [...c]
-            next[idx] = { ...next[idx], text: content, options: opts, traceId: tid || next[idx].traceId }
+            next[idx] = { ...next[idx], text: content, options: opts, traceId: tid || next[idx].traceId, recommendations }
             if (opts) optionsRef.current = { msgIndex: idx, options: opts }
             return next
           }
           if (opts) optionsRef.current = { msgIndex: c.length, options: opts }
-          return [...c, { id: streamId, role: 'ai' as const, text: content, options: opts, traceId: tid }]
+          return [...c, { id: streamId, role: 'ai' as const, text: content, options: opts, traceId: tid, recommendations }]
         })
+        localTracePendingRef.current = false
         window.clearTimeout(askingGuard)
         offChunk?.()
         offDone?.()
@@ -1130,6 +1301,7 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
       })
       const offErr = window.api?.onAIStreamError?.((p) => {
         const msg = (p as { error?: string })?.error ?? ''
+        localTracePendingRef.current = false
         pushAI([{ role: 'ai', text: `回答失败了（${msg.slice(0, 60)}）——已按原样告诉你，不悄悄换答案。` }])
         window.clearTimeout(askingGuard)
         offChunk?.()
@@ -1138,10 +1310,13 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         setAsking(false)
         consumeQuote()
       })
-      void window.api?.askQAStream?.(quoted)
+      void window.api?.askQAStream?.(quoted, superMode)
     },
-    [asking, reminders, objectChip, blockParams, reloadGoals, pushAI, activeSessionId, quoteChip, activeContext, trail, plans, goals]
+    [asking, reminders, objectChip, blockParams, reloadGoals, reloadPlans, presentGoalTree, pushAI, activeSessionId, quoteChip, activeContext, trail, plans, goals, agents]
   )
+  useEffect(() => {
+    sendRef.current = send
+  }, [send])
 
   const markAnchor = useCallback(
     (goalId: string, anchorId: string, status: 'hit' | 'pending') => {
@@ -1314,6 +1489,17 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         onQuoteDrop={(q) => setQuoteChip(q)}
         onPrefill={(q) => setPrefillText(q)}
         activeContext={activeContext}
+        nodes={nodes}
+        onCreateSession={(target: SessionTarget) => {
+          void window.api
+            ?.createSession?.({ target })
+            .then((x) => {
+              const created = x as ChatSession
+              setSessions((list) => [created, ...list])
+              setActiveSessionId(created.id)
+            })
+            .catch(() => undefined)
+        }}
         onSetContext={(k) => {
           setActiveContext(k)
           if (k !== 'general') {
@@ -1327,6 +1513,27 @@ export default function V10Surface(props: { onExit?: () => void }): JSX.Element 
         activeSessionId={activeSessionId}
         onSessionRenamed={(id, title) => setSessions((list) => list.map((x) => (x.id === id ? { ...x, title } : x)))}
         onSessionRemoved={(id) => setSessions((list) => list.filter((x) => x.id !== id))}
+        agents={agents}
+        onAddParticipant={(sid, aid) => {
+          void window.api?.addSessionParticipant?.(sid, aid).then((x) => {
+            const s = x as ChatSession | null
+            if (s) setSessions((list) => list.map((it) => (it.id === s.id ? s : it)))
+          })
+        }}
+        onRemoveParticipant={(sid, aid) => {
+          void window.api?.removeSessionParticipant?.(sid, aid).then((x) => {
+            const s = x as ChatSession | null
+            if (s) setSessions((list) => list.map((it) => (it.id === s.id ? s : it)))
+          })
+        }}
+        onForkSession={(sid) => {
+          void window.api?.forkSession?.(sid).then((x) => {
+            const s = x as ChatSession | null
+            if (!s) return
+            setSessions((list) => [s, ...list])
+            setActiveSessionId(s.id)
+          })
+        }}
         onDeleteMessage={(i) => setChat((c) => c.filter((_, x) => x !== i))}
         onDeleteSessionItem={(i) => {
           if (!activeSessionId) return

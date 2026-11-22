@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react'
 import type { ChainDayReport, ChainRole, ChainType, WorkChain } from '@shared/chain'
 import { SectionTitle } from './AttentionCard'
+import { Icon } from './Icon'
 import { clockOf, fmtMin, minutesOfDay } from './utils'
 
 const TYPE_LABEL: Record<ChainType, string> = {
@@ -76,7 +77,7 @@ function ChainRow({ chain, index }: { chain: WorkChain; index: number }) {
       <div className="flex items-center gap-3 text-2xs text-slate-500">
         <span>切换效率 {pct(chain.switchEfficiency)}</span>
         <span>置信度 {pct(chain.confidence)}</span>
-        {!chain.hasOutput ? <span className="text-amber-400/80">⚠️ 未形成闭环</span> : null}
+        {!chain.hasOutput ? <span className="flex items-center gap-1 text-amber-400/80"><Icon name="alert" size={11} /> 未形成闭环</span> : null}
       </div>
     </div>
   )
@@ -152,7 +153,7 @@ export function ChainCard({ date }: { date: string }) {
           切换效率 <span className="font-medium text-slate-200">{pct(m.switchEfficiency)}</span>
         </span>
       </div>
-      {insight ? <p className="mt-2.5 rounded-lg bg-neon-cyan/[0.06] px-3 py-2 text-xs leading-relaxed text-slate-400">💡 {insight}</p> : null}
+      {insight ? <p className="mt-2.5 flex items-start gap-1.5 rounded-lg bg-neon-cyan/[0.06] px-3 py-2 text-xs leading-relaxed text-slate-400"><Icon name="sparkles" size={12} className="mt-0.5 shrink-0 text-neon-cyan" /> {insight}</p> : null}
     </section>
   )
 }

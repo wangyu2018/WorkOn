@@ -69,6 +69,21 @@ class PythonSidecarClient {
     return null
   }
 
+  /** 优先使用 ml/jev/.venv 里的解释器，避免受系统 Python 缺依赖影响。 */
+  private resolvePythonExe(): string {
+    if (process.env.WORKON_PYTHON) return process.env.WORKON_PYTHON
+    const rel = process.platform === 'win32'
+      ? path.join('ml', 'jev', '.venv', 'Scripts', 'python.exe')
+      : path.join('ml', 'jev', '.venv', 'bin', 'python')
+    const candidates = [path.join(app.getAppPath(), rel)]
+    if (process.resourcesPath) candidates.push(path.join(process.resourcesPath, rel))
+    for (const c of candidates) {
+      try { if (fs.existsSync(c)) return c } catch { /* ignore */ }
+    }
+    // mac 无 python 命令（只有 python3）
+    return process.platform === 'darwin' ? 'python3' : 'python'
+  }
+
   /** Jev 模型目录：含 model.int8.onnx 或 model.onnx（并带 tokenizer.json） */
   private resolveModelDir(): string | null {
     const candidates: string[] = []
@@ -133,7 +148,14 @@ class PythonSidecarClient {
       return
     }
     if (typeof msg.label === 'string' && typeof msg.prob === 'number') {
-      simple?.resolve({ label: msg.label, prob: msg.prob })
+      // work_state 的概率分布（sidecar 已做逐题温度校准）：用于决策层的边际判定
+      const answers = msg.answers as Record<string, { probs?: Record<string, number> }> | undefined
+      const probs = answers?.work_state?.probs
+      simple?.resolve({
+        label: msg.label,
+        prob: msg.prob,
+        probs: probs && typeof probs === 'object' ? probs : undefined
+      })
       full?.resolve({
         label: msg.label,
         prob: msg.prob,
@@ -155,8 +177,7 @@ class PythonSidecarClient {
       this.consecutiveFailures = MAX_CONSECUTIVE_FAILURES
       return
     }
-    // mac 无 python 命令（只有 python3）；WORKON_PYTHON 可强制指定
-    const exe = process.env.WORKON_PYTHON || (process.platform === 'darwin' ? 'python3' : 'python')
+    const exe = this.resolvePythonExe()
     try {
       this.starting = true
       this.ready = false

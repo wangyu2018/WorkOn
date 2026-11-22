@@ -9,6 +9,8 @@ import { dateKey } from '@shared/trail'
 import { ActivityHoverCard } from '../components/ActivityHoverCard'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { TodayBrief } from '../components/TodayBrief'
+import { DailyBriefing } from '../components/DailyBriefing'
+import { CoachToday } from '../components/CoachToday'
 import { ReviewSheet } from '../components/ReviewSheet'
 import { Icon } from '../components/Icon'
 import { displayApp } from '@shared/appDisplayName'
@@ -747,11 +749,11 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
     const sense = senseOf(seg.mainState)
     const ghost = dragTs === seg.startTs
     const glance = !!seg.glance
-    // v6 色块：按语义渐变 — 工作=青绿→青 / 摸鱼=琥珀 / 其他=中性面板色（token，亮暗模式自适应）
+    // v6 色块：按语义纯色 — 工作=青绿 / 摸鱼=琥珀 / 其他=中性面板色（token，亮暗模式自适应）
     const grad = sense === 'work'
-      ? 'linear-gradient(90deg, var(--teal), var(--teal-border))'
+      ? 'var(--teal)'
       : sense === 'slack'
-        ? 'linear-gradient(90deg, #f59e0b, #fbbf24)'
+        ? '#f59e0b'
         : 'var(--surface-3)'
     const glow = sense === 'work' ? 'var(--teal-glow)' : sense === 'slack' ? 'rgba(245,158,11,0.28)' : 'rgba(100,116,139,0.20)'
     const blockText = sense === 'work' ? '#ffffff' : sense === 'slack' ? '#451a03' : 'var(--text-2)'
@@ -1033,8 +1035,14 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
 
   return (
     <div className="flex h-full flex-col gap-8 overflow-auto">
+      {/* 每天第一次进主窗：昨 / 今 / 提醒三行简报，只出现一次 */}
+      <DailyBriefing />
+
       {/* 首屏结论：一句话说清今天干了什么 + 唯一行动点（一分钟校对） */}
       <TodayBrief onReview={() => setReviewOpen(true)} refreshKey={reviewRefresh} />
+
+      {/* 监控 → 提示 → 行动 → 验证：今日闭环助手 */}
+      <CoachToday />
 
       {/* 编辑布局：大卡片 + 拖拽排序 */}
       {editing ? (
@@ -1394,8 +1402,8 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
           style={{
             minHeight: 360, borderRadius: 12,
             background: isDarkMode
-              ? 'radial-gradient(ellipse 55% 75% at 25% 50%, var(--teal-chip), transparent 70%), radial-gradient(ellipse 55% 75% at 75% 50%, rgba(139,92,246,0.14), transparent 70%), radial-gradient(circle at 50% 35%, #141d33 0%, #0b101b 100%)'
-              : 'radial-gradient(ellipse 55% 75% at 25% 50%, rgb(var(--teal-rgb) / 0.07), transparent 70%), radial-gradient(ellipse 55% 75% at 75% 50%, rgba(139,92,246,0.08), transparent 70%), #f8fafc',
+              ? 'radial-gradient(ellipse 55% 75% at 25% 50%, var(--teal-chip), transparent 70%), radial-gradient(ellipse 55% 75% at 75% 50%, rgba(148,163,184,0.10), transparent 70%), radial-gradient(circle at 50% 35%, #141d33 0%, #0b101b 100%)'
+              : 'radial-gradient(ellipse 55% 75% at 25% 50%, rgb(var(--teal-rgb) / 0.07), transparent 70%), radial-gradient(ellipse 55% 75% at 75% 50%, rgba(148,163,184,0.08), transparent 70%), #f8fafc',
             border: isDarkMode ? '1px solid rgba(255,255,255,0.05)' : '1px solid rgba(15,23,42,0.06)',
           }}
         >
@@ -1406,7 +1414,7 @@ function gotoReport(tab: 'smart' | 'smartWeekly' | 'ai', kpi?: 'focus' | 'slack'
               className="pointer-events-none absolute rounded-full"
               style={{
                 left: `${d.x}%`, top: `${d.y}%`, width: d.s, height: d.s,
-                background: isDarkMode ? '#dbe4ff' : '#334155',
+                background: isDarkMode ? '#e2e8f0' : '#334155',
                 opacity: d.o * (isDarkMode ? 1 : 0.32),
               }}
             />

@@ -497,6 +497,28 @@ export function removePersonaTag(kind: 'interest' | 'skill', name: string): User
   return savePersona(p)
 }
 
+/** 盯守分析出的兴趣标签：合并进 detectedInterests（不覆盖用户已确认的标签） */
+export function addWatchInterests(tags: string[]): UserPersona {
+  const p = getPersona()
+  const now = Date.now()
+  const map = new Map(p.interests.detectedInterests.map((d) => [d.tag, d]))
+  for (const raw of tags) {
+    const tag = String(raw ?? '').trim().slice(0, 20)
+    if (!tag) continue
+    const old = map.get(tag)
+    map.set(
+      tag,
+      old
+        ? { ...old, confidence: Math.min(1, Math.max(old.confidence, 0.55) + 0.05), lastSeen: now }
+        : { tag, confidence: 0.55, source: 'auto_inference', lastSeen: now }
+    )
+  }
+  p.interests.detectedInterests = Array.from(map.values())
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, 50)
+  return savePersona(p)
+}
+
 /** 逐层 AI 访问开关（L4 永远关闭，不建模） */
 export function setPersonaPrivacy(patch: Partial<{ L0: boolean; L1: boolean; L2: boolean; L3: boolean }>): UserPersona {
   const p = getPersona()

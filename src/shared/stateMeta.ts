@@ -172,7 +172,81 @@ export const APP_RULES: AppRule[] = [
   { match: /^(anki|ankiui)\.exe$/i, name: 'Anki', state: 'focus', titleState: [{ match: /(复习|记忆|卡片|deck)/i, state: 'focus' }] },
   { match: /^(explorer)\.exe$/i, name: 'Explorer', state: 'idle' },
   { match: /^(workon)\.exe$/i, name: 'WorkOn', state: 'idle' },
-  { match: /^(workbuddy)\.exe$/i, name: 'WorkBuddy', state: 'aiqa', titleState: [{ match: /(代码|写|实现|函数|bug|修复|重构|开发|编程|调试|需求)/i, state: 'aidev' }] }
+  { match: /^(workbuddy)\.exe$/i, name: 'WorkBuddy', state: 'aiqa', titleState: [{ match: /(代码|写|实现|函数|bug|修复|重构|开发|编程|调试|需求)/i, state: 'aidev' }] },
+  // ── macOS 应用名（NSWorkspace localizedName，无 .exe）+ 常用进程补齐（30+） ──
+  {
+    match: /^(safari|google chrome|microsoft edge|firefox|arc|brave browser|opera)$/i,
+    name: 'Browser',
+    state: 'other',
+    titleState: [
+      { match: /(arxiv|cnki|pubmed|scholar|论文|paper|期刊)/i, state: 'aiqa' },
+      { match: /(mooc|coursera|学习通|网课|公开课)/i, state: 'focus' },
+      { match: /(bilibili|youtube|netflix|爱奇艺|腾讯视频|抖音)/i, state: 'relax' },
+      { match: /(weibo|知乎|zhihu|twitter|x\.com|reddit|贴吧)/i, state: 'slack' },
+      { match: /(chatgpt|claude|gemini|copilot|kimi|通义|豆包)/i, state: 'aiqa' },
+      { match: /(docs\.google|notion|飞书|语雀|confluence)/i, state: 'writing' },
+      { match: /(meet\.google|zoom\.us|teams\.microsoft)/i, state: 'meeting' },
+      { match: /(github|gitlab|gitee|stackoverflow|juejin|csdn|jira|postman)/i, state: 'coding' }
+    ]
+  },
+  {
+    match: /^(visual studio code|code)$/i,
+    name: 'VSCode',
+    state: 'coding',
+    titleState: [
+      { match: /copilot|chatgpt|claude|通义|文心|kim/i, state: 'aidev' },
+      { match: /\.md\b|readme/i, state: 'writing' }
+    ]
+  },
+  { match: /^(xcode)$/i, name: 'Xcode', state: 'coding' },
+  { match: /^(android studio)$/i, name: 'Android Studio', state: 'coding' },
+  { match: /^(intellij idea|pycharm|webstorm|goland|clion|rider|phpstorm|rubymine|datagrip)$/i, name: 'IntelliJ', state: 'coding' },
+  { match: /^(sublime text|sublime_text|nova|bbedit|textmate|zed)$/i, name: 'Editor', state: 'coding' },
+  {
+    match: /^(terminal|iterm2|iterm|warp|kitty|hyper|tabby|alacritty|wezterm)$/i,
+    name: 'Terminal',
+    state: 'coding',
+    titleState: [
+      { match: /opencode|claude[ -]?code|codex|aider|cursor-agent|kimi|copilot-cli/i, state: 'aidev' },
+      { match: /npm|pnpm|yarn|bun|deno|node|python|pip|poetry|docker|kubectl|helm|git|cargo|mvn|gradle|go\s|make|cmake|pytest|jest|vitest|webpack|vite/i, state: 'coding' },
+      { match: /ssh |mstsc|rdp |telnet /i, state: 'remote' }
+    ]
+  },
+  { match: /^(wechat|微信)$/i, name: 'WeChat', state: 'slack', titleState: [{ match: /会议|meeting/i, state: 'meeting' }] },
+  { match: /^(wecom|企业微信)$/i, name: 'WeCom', state: 'remote' },
+  { match: /^(feishu|lark|飞书)$/i, name: 'Feishu', state: 'remote', titleState: [{ match: /会议|meeting|视频/i, state: 'meeting' }] },
+  { match: /^(dingtalk|钉钉)$/i, name: 'DingTalk', state: 'remote' },
+  { match: /^(telegram)$/i, name: 'Telegram', state: 'slack' },
+  { match: /^(slack)$/i, name: 'Slack', state: 'remote' },
+  { match: /^(discord)$/i, name: 'Discord', state: 'slack' },
+  { match: /^(zoom\.us|zoom|腾讯会议|wemeet)$/i, name: 'Meeting', state: 'meeting' },
+  { match: /^(microsoft teams|teams)$/i, name: 'Meeting', state: 'meeting' },
+  { match: /^(notion|obsidian|bear|craft|logseq|typora|notes|备忘录|思源笔记)$/i, name: 'Notes', state: 'writing' },
+  { match: /^(microsoft word|word|pages)$/i, name: 'Office', state: 'writing' },
+  { match: /^(microsoft excel|excel|numbers)$/i, name: 'Office', state: 'writing' },
+  { match: /^(microsoft powerpoint|powerpoint|keynote)$/i, name: 'Office', state: 'writing' },
+  { match: /^(mail|microsoft outlook|outlook|foxmail|spark|网易邮箱大师)$/i, name: 'Mail', state: 'remote' },
+  { match: /^(calendar|fantastical|notion calendar|things|滴答清单|ticktick)$/i, name: 'Calendar', state: 'other' },
+  { match: /^(spotify|music|网易云音乐|qq音乐|netease cloud music)$/i, name: 'Music', state: 'relax' },
+  { match: /^(iina|vlc|quicktime player|mpv)$/i, name: 'Video', state: 'relax' },
+  { match: /^(steam|epic games launcher|league of legends|英雄联盟)$/i, name: 'Game', state: 'slack' },
+  { match: /^(figma|sketch|adobe photoshop.*|photoshop|adobe illustrator|illustrator|affinity designer|affinity photo|pixelmator|canva)$/i, name: 'Design', state: 'focus' },
+  { match: /^(final cut pro|davinci resolve|adobe premiere pro|premiere|after effects|剪映|capcut|blender)$/i, name: 'Editor', state: 'focus' },
+  { match: /^(finder|访达|文件资源管理器)$/i, name: 'Finder', state: 'idle' },
+  { match: /^(preview|预览|activity monitor|活动监视器|system settings|system preferences|系统设置|cleanmymac)$/i, name: 'System', state: 'other' },
+  { match: /^(raycast|alfred|spotlight)$/i, name: 'Launcher', state: 'other' },
+  { match: /^(docker|orbstack|docker desktop)$/i, name: 'Docker', state: 'coding' },
+  { match: /^(postman|apifox|insomnia)$/i, name: 'DevTool', state: 'coding' },
+  { match: /^(tableplus|sequel ace|sequel pro|navicat|dbeaver)$/i, name: 'DevTool', state: 'coding' },
+  {
+    match: /^(chatgpt|claude|doubao|豆包|kimi|通义|文心一言|copilot|perplexity|poe)$/i,
+    name: 'AI QA',
+    state: 'aiqa',
+    titleState: [{ match: /(代码|写|实现|函数|bug|修复|重构|开发|编程|调试|code|function|script|项目|需求)/i, state: 'aidev' }]
+  },
+  { match: /^(anki|marginnote|goodnotes|notability|zotero)$/i, name: 'Study', state: 'focus' },
+  { match: /^(obs|obs studio|screenflow|camtasia)$/i, name: 'Recorder', state: 'other' },
+  { match: /^(deepl|欧路词典|eudic)$/i, name: 'Translator', state: 'writing' }
 ]
 
 export interface AppIdentifyResult {

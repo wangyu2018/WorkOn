@@ -43,9 +43,53 @@ const ENCODED_GPU = Buffer.from(PS_GPU_SCRIPT, 'utf16le').toString('base64')
 
 let cachedInfo: HardwareInfo | null = null
 
-/** 运行 PowerShell 获取 GPU 信息 */
+/** macOS 显存字段常见为「8 GB」「4GB」「共享内存」，统一转成字节用于等级估算。 */
+function parseDarwinVRAM(value: unknown): number {
+  const text = String(value ?? '')
+  const m = text.match(/(\d+(?:\.\d+)?)\s*(gb|g|mb|m|tb|t)/i)
+  if (!m) return 0
+  const n = Number(m[1])
+  const unit = m[2].toLowerCase()
+  const bytes = unit.startsWith('t') ? n * 1024 ** 4 : unit.startsWith('g') ? n * 1024 ** 3 : n * 1024 ** 2
+  return Math.round(bytes)
+}
+
+/** 运行系统命令获取 GPU 信息：Windows 走 PowerShell，macOS 走 system_profiler，其他平台暂不探测。 */
 function queryGPU(): Promise<{ name: string; vramBytes: number }[]> {
   return new Promise((resolve) => {
+    if (process.platform === 'darwin') {
+      execFile(
+        'system_profiler',
+        ['SPDisplaysDataType', '-json'],
+        { timeout: 10000, maxBuffer: 1024 * 1024, encoding: 'utf8' },
+        (err, stdout) => {
+          if (err) {
+            console.warn('[hardwareDetect] macOS GPU 检测失败:', err.message)
+            resolve([])
+            return
+          }
+          try {
+            const data = JSON.parse(stdout) as { SPDisplaysDataType?: Array<Record<string, unknown>> }
+            const gpus = (data.SPDisplaysDataType ?? [])
+              .map((d) => ({
+                name: String(d.sppci_model ?? d._name ?? '').trim(),
+                vramBytes: parseDarwinVRAM(d.spdisplays_vram ?? d.sppci_vram)
+              }))
+              .filter((d) => d.name)
+            resolve(gpus)
+          } catch {
+            resolve([])
+          }
+        }
+      )
+      return
+    }
+
+    if (process.platform !== 'win32') {
+      resolve([])
+      return
+    }
+
     execFile(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-EncodedCommand', ENCODED_GPU],

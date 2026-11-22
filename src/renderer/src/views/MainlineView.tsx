@@ -3,6 +3,7 @@
  * 项目 → 计划 → 实时工作 循环的"项目"端；实时数据由归属引擎自动归因
  */
 import { useEffect, useState } from 'react'
+import { Icon } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { useSettingsStore } from '../stores/settingsStore'
 import { ProjectModal } from '../components/ProjectModal'
@@ -171,7 +172,7 @@ export default function MainlineView() {
                   })()}
                   {r.project.status !== 'active' ? (
                     <span className="shrink-0 rounded-full bg-white/5 px-1.5 py-0.5 text-2xs font-bold text-slate-500">
-                      {r.project.status === 'paused' ? '⏸ 暂停' : r.project.status === 'done' ? '✓ 已完成' : '已归档'}
+                      {r.project.status === 'paused' ? '已暂停' : r.project.status === 'done' ? '已完成' : '已归档'}
                     </span>
                   ) : null}
                   {r.project.deadline ? (
@@ -195,7 +196,7 @@ export default function MainlineView() {
                   const tight = days < r.tasksLeft
                   return (
                     <div className={`mt-1 flex items-center gap-1.5 text-2xs ${tight ? 'text-[#fbbf24]' : 'text-slate-500'}`}>
-                      {tight ? '⚠' : '·'} 剩 {r.tasksLeft} 项任务 / {days} 天{tight ? ' —— 节奏偏紧，考虑砍范围或加时段' : ''}
+                      {tight ? <Icon name="alert" size={10} className="shrink-0" /> : <span>·</span>} 剩 {r.tasksLeft} 项任务 / {days} 天{tight ? ' —— 节奏偏紧，考虑砍范围或加时段' : ''}
                     </div>
                   )
                 })() : null}
@@ -248,7 +249,7 @@ export default function MainlineView() {
                   {goal ? <span className="min-w-0 flex-1 truncate" title={r.project.goal}>◇ {goal}</span> : <span className="flex-1" />}
                   <span className="shrink-0">
                     {dirInfo
-                      ? `📁 今日改动 ${dirInfo.changedFiles} 个文件${dirInfo.hotspot ? ` · 热点 ${dirInfo.hotspot}/` : ''}`
+                      ? `今日改动 ${dirInfo.changedFiles} 个文件${dirInfo.hotspot ? ` · 热点 ${dirInfo.hotspot}/` : ''}`
                       : r.todayMin > 0
                         ? `今日 ${fmtDur(r.todayMin)}${lastTouchStr ? ` · 上次处理 ${lastTouchStr}` : ''}`
                         : r.lastTouch
@@ -266,7 +267,7 @@ export default function MainlineView() {
                     className="ml-auto rounded-full border border-dashed px-2 py-0.5 text-2xs text-slate-500 hover:text-slate-200"
                     onClick={() => setMsEdit({ pid: r.project.id, items: r.nodes.filter((x) => x.kind === 'ms').map((x) => x.title), msIds: r.nodes.filter((x) => x.kind === 'ms').map((x) => x.id) })}
                   >
-                    编辑 / ✦ AI
+                    编辑 / AI
                   </button>
                 </div>
                 {/* 查看/管理 */}
@@ -274,11 +275,11 @@ export default function MainlineView() {
                   <button
                     className="glass-btn !px-2 !py-0.5 !text-2xs"
                     onClick={() => setModalProj({ project: r.project, tab: 'view' })}
-                  >👁 查看 · 对接</button>
+                  >查看 · 对接</button>
                   <button
                     className="glass-btn !px-2 !py-0.5 !text-2xs"
                     onClick={() => setModalProj({ project: r.project, tab: 'manage' })}
-                  >⚙ 管理</button>
+                  >管理</button>
                 </div>
                 {msEdit?.pid === r.project.id ? (
                   <div className="mt-1.5 rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-2">

@@ -164,7 +164,7 @@ export function AttentionDailyCard({ score, yesterday, pin }: { score: Attention
               <div key={d.key} className="flex items-center gap-2 text-xs">
                 <span className="w-14 shrink-0 text-slate-400">{d.label}</span>
                 <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
-                  <div className="h-full rounded-full bg-gradient-to-r from-neon-cyan to-neon-blue" style={{ width: `${v}%` }} />
+                  <div className="h-full rounded-full bg-neon-cyan" style={{ width: `${v}%` }} />
                 </div>
                 <span className="w-7 shrink-0 text-right font-medium text-slate-300">{v}</span>
                 <span className="w-10 shrink-0 text-right">{yv !== undefined ? <Delta v={v - yv} /> : <span className="text-2xs text-slate-600">—</span>}</span>

@@ -15,16 +15,19 @@ import type {
   CustomCategory, AttentionScore, Achievement, AccessLog, UserPersona,
   ReportTemplate, OcrSnapshot, CategoryInference, SegmentPlanLink,
   Project, ProjectTask, ProjectTimeLink,
-  RecognitionLogRecord, OcrShot,
+  RecognitionLogRecord, OcrShot, MemoryEvent, CalendarFeed,
   MotionMeta, PointsEntry, ReportEntryPatch,
   AutomationRule, KnowledgeItem, ProcessDraft,
-  LifeGoal, GoalDayState, ChatSession
+  LifeGoal, GoalDayState, ChatSession, NodeRecord,
+  GraphNode, GraphEdge
 } from '@shared/types'
 import type { ProjectBinding } from './attributions'
 import type { DirActivity } from './dirWatcher'
 import type { ConfirmMemory } from './attributions'
 import type { ReviewIgnore } from './review'
 import type { ChainDayReport } from '@shared/chain'
+import type { TraceEvalCase } from '@shared/trace'
+import type { DeliverableJob, AuditResult } from '@shared/deliverable/audit'
 import { dateKey } from '@shared/trail'
 import { getSettings } from './settings'
 import { sendTo } from './windows'
@@ -69,6 +72,14 @@ interface JsonData {
   goalDayStates: GoalDayState[] // 目标每日归因结算（goalId:date 唯一）
   chatSessions: ChatSession[] // v10 会话：消息归档可续问
   reviewIgnores: ReviewIgnore[] // 一分钟校对：按 date+app 忽略「与工作无关」
+  nodes: NodeRecord[] // 节点模式：已配对的外部电脑（token 只存 hash）
+  graphNodes: GraphNode[] // 关联图谱节点（P1：由项目/任务/会话/知识/工作流/目标派生，定时重建）
+  graphEdges: GraphEdge[] // 关联图谱边
+  deliverableJobs: DeliverableJob[] // 交付物生成任务（草案 → 闸门 → 渲染）
+  deliverableAudits: AuditResult[] // 审计留痕
+  memoryEvents: MemoryEvent[] // 统一记忆事件（屏幕/音频/文件/应用/笔记）
+  calendarFeeds: CalendarFeed[] // 日历订阅源（ICS/CalDAV）
+  traceEvalCases: TraceEvalCase[] // Super Agent 本地评测集（不含 Trace 原文快照）
 }
 
 const EMPTY: JsonData = {
@@ -79,11 +90,19 @@ const EMPTY: JsonData = {
   projects: [], projectTasks: [], projectTimeLinks: [], automations: [], projectBindings: [], confirmMemory: [], dirActivity: [], processDrafts: [],
   lifeGoals: [], goalDayStates: [], chatSessions: [],
   reviewIgnores: [],
+  nodes: [],
+  graphNodes: [],
+  graphEdges: [],
   ocrShots: [],
   motions: [],
   pointsLedger: []
   ,
-  reportPatches: []
+  reportPatches: [],
+  deliverableJobs: [],
+  deliverableAudits: [],
+  memoryEvents: [],
+  calendarFeeds: [],
+  traceEvalCases: []
   }
 
 let dir = ''
@@ -427,4 +446,10 @@ export function removeFrom(name: JsonCollection, id: string): boolean {
   arr.splice(idx, 1)
   scheduleFlush()
   return true
+}
+
+/** 整集合替换（图谱重建用：一次写盘，避免逐条 upsert） */
+export function replaceCollection<T>(name: JsonCollection, items: T[]): void {
+  ;(data as unknown as Record<string, unknown[]>)[name] = items
+  scheduleFlush()
 }

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { MergedTrail, PlanItem, ProfileReference, QAMessage } from '@shared/types'
+import type { MergedTrail, OcrShot, OcrSnapshot, PlanItem, ProfileReference, QAMessage } from '@shared/types'
 import { genId } from '@shared/types'
 import { dateKey } from '@shared/trail'
+import { aiCredsReady } from '@shared/aiConfig'
 import { SLACK_STATES, WORK_LIKE_STATES } from '@shared/stateMeta'
 import { PRIVACY_LEVEL_META } from '@shared/personaMeta'
 import { PageHeader } from '../components/PageHeader'
@@ -9,7 +10,12 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { EmptyState } from '../components/EmptyState'
 import { AiThinking } from '../components/ui/AiThinking'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useAgentWizardStore } from '../stores/agentWizardStore'
 import { TraceTunnel } from '../components/TraceTunnel'
+import { AssistantCardView } from '../components/assistant/AssistantCardView'
+import { A2uiSurfaceView } from '../components/a2ui/A2uiSurfaceView'
+import { extractA2uiFromText, type A2uiSurface } from '@shared/a2ui'
+import type { AssistantCard, AssistantIntentResult } from '@shared/assistant'
 
 /** ✦ 渐变头像（AI 专属身份标识：aura 渐变圆角方块 + 白✦ + 辉光） */
 function AuraAvatar({ size = 26 }: { size?: number }) {
@@ -27,7 +33,7 @@ function AuraAvatar({ size = 26 }: { size?: number }) {
 const QA_THINK_HINTS = ['正在翻阅你的时段记录…', '正在比对历史问答…', '整理答案中…']
 
 /** 输入框上方的追问快捷 chips（点击即填入并发送） */
-const FOLLOW_UP_CHIPS = ['📊 生成今日小结', '🔥 哪段最专注？', '🐟 摸鱼都去哪了？', '🗓 帮我排下午计划']
+const FOLLOW_UP_CHIPS = ['生成今日小结', '哪段最专注？', '摸鱼都去哪了？', '帮我排下午计划']
 
 /** 助手气泡底部的引用来源行：⛓ 来源摘要 + 去重层级 chip（L3/L4 防御过滤不显示） */
 function ReferenceChips({ refs }: { refs?: ProfileReference[] }) {
@@ -58,7 +64,13 @@ function ReferenceChips({ refs }: { refs?: ProfileReference[] }) {
 }
 
 /** 本地消息：在 QAMessage 基础上附带本次回复的画像引用标记（v2.7）与处理轨迹 id */
-type LocalQAMessage = QAMessage & { references?: ProfileReference[]; traceId?: string }
+type LocalQAMessage = QAMessage & {
+  references?: ProfileReference[]
+  traceId?: string
+  card?: AssistantCard
+  /** A2UI P1/P2：声明式卡片（metric/table/timeline/steps/link + 动作回写） */
+  surface?: A2uiSurface
+}
 
 type BoardDay = 'today' | 'yesterday'
 
@@ -71,12 +83,57 @@ function fmtDurMin(min: number): string {
   return m > 0 ? `${h}h${m}m` : `${h}h`
 }
 
+/** 时间旅行缩略图：挂载时按需向主进程取 dataUrl（只允许截图目录；文件被清理时显示占位） */
+function ShotThumb({ shot, onClick }: { shot: OcrShot; onClick: (shot: OcrShot, url: string) => void }) {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    void Promise.resolve(window.api?.ocrShotImage?.(shot.file))
+      .then((u) => {
+        if (alive) setUrl(typeof u === 'string' ? u : '')
+      })
+      .catch(() => {
+        if (alive) setUrl('')
+      })
+    return () => {
+      alive = false
+    }
+  }, [shot.file])
+  const hm = new Date(shot.ts).toLocaleTimeString('zh-CN', { hour12: false }).slice(0, 5)
+  return (
+    <button
+      type="button"
+      onClick={() => url && onClick(shot, url)}
+      title={`${shot.app} · ${hm}${shot.keywords.length ? ` · ${shot.keywords.join('、')}` : ''}`}
+      className="group relative overflow-hidden rounded-lg border border-white/[0.07] bg-[var(--surface-2)] text-left transition-all hover:-translate-y-px hover:border-white/20"
+    >
+      {url ? (
+        <img
+          src={url}
+          alt={`${shot.app} ${hm}`}
+          className="block h-20 w-full object-cover object-top opacity-85 transition-opacity group-hover:opacity-100"
+        />
+      ) : (
+        <div className="flex h-20 w-full items-center justify-center text-2xs text-slate-600">
+          {url === '' ? '图片已清理' : '加载中…'}
+        </div>
+      )}
+      <div className="flex items-center gap-1 px-1.5 py-1 text-2xs text-slate-500">
+        <span className="tabular-nums">{hm}</span>
+        <span className="min-w-0 truncate">{shot.app}</span>
+      </div>
+    </button>
+  )
+}
+
 /** 问答回顾：消息流（✦ AI 头像 + aura 用户气泡）+ 追问 chips + 底部输入（AI 未配置时为本地统计模式） */
 export default function QAReview() {
-  const aiReady = useSettingsStore((s) => s.settings.aiEnabled && !!s.settings.aiApiKey)
+  const aiReady = useSettingsStore((s) => s.settings.aiEnabled && aiCredsReady(s.settings))
   const [messages, setMessages] = useState<LocalQAMessage[]>([])
   const [input, setInput] = useState('')
   const [thinking, setThinking] = useState(false)
+  /** 单条回答存入知识库的进度：避免重复点击，失败可见 */
+  const [saveState, setSaveState] = useState<Record<string, 'saving' | 'done' | 'error'>>({})
   const bottomRef = useRef<HTMLDivElement>(null)
   const [qaList, setQaList] = useState<Array<{id:string, date:string, question:string, answer:string, ts:number}>>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -89,6 +146,14 @@ export default function QAReview() {
   const [boardOpen, setBoardOpen] = useState(true)
   const [dayTrail, setDayTrail] = useState<MergedTrail | null>(null)
   const [dayPlans, setDayPlans] = useState<PlanItem[]>([])
+  /** 时间旅行：OCR 截图按时间窗/关键词回看 */
+  const [travelOpen, setTravelOpen] = useState(false)
+  const [travelPreset, setTravelPreset] = useState<30 | 120 | 480 | 'today'>(30)
+  const [travelKeyword, setTravelKeyword] = useState('')
+  const [travelBusy, setTravelBusy] = useState(false)
+  const [travelShots, setTravelShots] = useState<OcrShot[]>([])
+  const [travelSnaps, setTravelSnaps] = useState<OcrSnapshot[]>([])
+  const [travelPreview, setTravelPreview] = useState<{ shot: OcrShot; url: string } | null>(null)
 
   useEffect(() => {
     const d = boardDay === 'today' ? Date.now() : Date.now() - 86400000
@@ -122,11 +187,88 @@ export default function QAReview() {
 
   const LOCAL_EXAMPLES = ['今天专注了多久？', '我什么时候效率最高？', '今天摸鱼多久了？', '我最常用的应用？', '双屏并行占比？']
 
+  /** 时间旅行：当前时间窗（点击时取，避免渲染期时间漂移） */
+  const travelRange = (): { startTs: number; endTs: number; windowMin: number } => {
+    const endTs = Date.now()
+    if (travelPreset === 'today') {
+      const start = new Date()
+      start.setHours(0, 0, 0, 0)
+      return { startTs: start.getTime(), endTs, windowMin: Math.max(1, Math.round((endTs - start.getTime()) / 60000)) }
+    }
+    return { startTs: endTs - travelPreset * 60000, endTs, windowMin: travelPreset }
+  }
+
+  const loadTravel = async (): Promise<void> => {
+    setTravelBusy(true)
+    try {
+      const { startTs, endTs } = travelRange()
+      const res = (await window.api?.ocrShots?.(startTs, endTs, travelKeyword.trim() || undefined)) as
+        | { shots?: OcrShot[]; snaps?: OcrSnapshot[] }
+        | undefined
+      setTravelShots(res?.shots ?? [])
+      setTravelSnaps(res?.snaps ?? [])
+    } catch {
+      setTravelShots([])
+      setTravelSnaps([])
+    } finally {
+      setTravelBusy(false)
+    }
+  }
+
+  useEffect(() => {
+    if (travelOpen) void loadTravel()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [travelOpen, travelPreset])
+
+  /** 导出/复制：把当前窗口的截图索引与结构化快照压成摘要（不含 OCR 原文） */
+  const travelSummaryText = (): string => {
+    const fmt = (ts: number): string => new Date(ts).toLocaleTimeString('zh-CN', { hour12: false })
+    const apps = [...new Set(travelShots.map((s) => s.app))].slice(0, 8)
+    const kw = [...new Set(travelShots.flatMap((s) => s.keywords))].slice(0, 12)
+    const docs = [...new Set(travelSnaps.flatMap((s) => s.documentNames))].slice(0, 8)
+    return [
+      travelShots.length
+        ? `时间旅行 · ${fmt(travelShots[travelShots.length - 1].ts)} ~ ${fmt(travelShots[0].ts)}`
+        : '时间旅行 · 当前窗口',
+      `截图 ${travelShots.length} 张 / 结构化快照 ${travelSnaps.length} 条`,
+      apps.length ? `应用：${apps.join('、')}` : '',
+      kw.length ? `关键词：${kw.join('、')}` : '',
+      docs.length ? `文档：${docs.join('、')}` : ''
+    ]
+      .filter(Boolean)
+      .join('\n')
+  }
+
+  const copyTravel = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(travelSummaryText())
+    } catch {
+      /* 剪贴板不可用：忽略 */
+    }
+  }
+
+  const exportTravel = (): void => {
+    const blob = new Blob(
+      [JSON.stringify({ exportedAt: Date.now(), windowMin: travelRange().windowMin, shots: travelShots, snaps: travelSnaps }, null, 2)],
+      { type: 'application/json' }
+    )
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `workon-screens-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`
+    a.click()
+    window.setTimeout(() => URL.revokeObjectURL(a.href), 3000)
+  }
+
+
   useEffect(() => {
     window.api
       .listQA()
       .then((list) => {
-        const arr = (list as QAMessage[]) ?? []
+        const arr = (((list as QAMessage[]) ?? []) as LocalQAMessage[]).map((m) => {
+          if (m.role !== 'assistant') return m
+          const p = extractA2uiFromText(m.content)
+          return p.surface ? { ...m, content: p.text, surface: p.surface } : m
+        })
         setMessages(arr)
         // 派生回顾列表（按天分组用）：取助手回答，date 由 ts 推导
         setQaList(
@@ -142,20 +284,53 @@ export default function QAReview() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, thinking])
 
-  const ask = async (q: string) => {
+  const ask = async (q: string, windowMin?: number) => {
     if (!q || thinking) return
     setInput('')
-    setThinking(true)
     // 开始对话即主动收起看板，把空间让给对话
     setBoardOpen(false)
     setMessages((prev) => [...prev, { id: genId('qa'), role: 'user', content: q, ts: Date.now() }])
+    // 动态接入 Agent：不用改代码，向导逐项问完即写入注册表
+    if (/(增加|新增|接入|添加|加个|加一个).{0,10}(agent|智能体|助手)/i.test(q)) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: genId('qa'),
+          role: 'assistant',
+          content: '好，我来问你几个问题：名称、接入方式、地址/命令、认证和能力、额度口径。填完立即生效。',
+          ts: Date.now()
+        }
+      ])
+      useAgentWizardStore.getState().openWizard()
+      return
+    }
+    setThinking(true)
     try {
-      const ans = await window.api.askQAWithShots(q)
+      // 数据在本机的问句先走本地意图（待办梳理 / 列表 / 天气 / 应用接管）
+      const local = (await window.api.assistantIntent?.(q)) as AssistantIntentResult | undefined
+      if (local?.matched) {
+        setMessages((prev) => [...prev, { id: genId('qa'), role: 'assistant', content: local.text ?? '', card: local.card, ts: Date.now() }])
+        return
+      }
+      const ans = await window.api.askQAWithShots(q, windowMin)
       // v2.7：askQA 返回 { content, references }；兼容旧的 string 形态
       const payload = typeof ans === 'string' ? { content: ans, references: [] } : ((ans ?? {}) as { content?: string | null; references?: ProfileReference[]; traceId?: string })
       const content = typeof payload.content === 'string' && payload.content ? payload.content : '（本次未生成回复，换个问法试试？）'
       const references = Array.isArray(payload.references) ? payload.references : []
-      setMessages((prev) => [...prev, { id: genId('qa'), role: 'assistant', content, references, traceId: payload.traceId, ts: Date.now() }])
+      // A2UI：AI 正文里带的卡片 JSON 抽出渲染；校验失败则原文照旧（markdown 降级）
+      const parsed = extractA2uiFromText(content)
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: genId('qa'),
+          role: 'assistant',
+          content: parsed.surface && !parsed.text ? '' : parsed.text,
+          references,
+          traceId: payload.traceId,
+          surface: parsed.surface ?? undefined,
+          ts: Date.now()
+        }
+      ])
     } catch {
       setMessages((prev) => [...prev, { id: genId('qa'), role: 'assistant', content: '回答失败，请稍后再试。', ts: Date.now() }])
     } finally {
@@ -166,6 +341,28 @@ export default function QAReview() {
   const send = () => void ask(input.trim())
 
   /** 追问 chip：填入输入框并直接发送 */
+  /** 把一条问答回答存入本地知识库；成功后回顾页的知识沉淀可直接看到 */
+  const saveAnswer = async (m: LocalQAMessage): Promise<void> => {
+    const body = (m.content ?? '').trim()
+    if (!body || saveState[m.id] === 'saving' || saveState[m.id] === 'done') return
+    setSaveState((prev) => ({ ...prev, [m.id]: 'saving' }))
+    try {
+      const question = [...messages]
+        .slice(0, messages.findIndex((item) => item.id === m.id))
+        .reverse()
+        .find((item) => item.role !== 'assistant')?.content
+      const item = await window.api.addKnowledge?.({
+        title: (question || body).slice(0, 40),
+        body: question ? `问：${question}\n\n答：${body}` : body,
+        source: 'qa',
+        tags: ['问答']
+      })
+      setSaveState((prev) => ({ ...prev, [m.id]: item ? 'done' : 'error' }))
+    } catch {
+      setSaveState((prev) => ({ ...prev, [m.id]: 'error' }))
+    }
+  }
+
   const askChip = (q: string) => {
     if (thinking) return
     setInput(q)
@@ -182,8 +379,15 @@ export default function QAReview() {
           desc="向姵儿提问今日工作状态，随时回顾历史问答"
           actions={
             <>
-              <span className="chip shrink-0">{aiReady ? '🤖 AI 模式' : '📊 本地模式'}</span>
-              <button className="glass-btn text-xs shrink-0" onClick={() => { setPruneMode(!pruneMode); if (pruneMode) setSelectedIds(new Set()) }}>🗑 管理回顾</button>
+              <span className="chip shrink-0">{aiReady ? 'AI 模式' : '本地模式'}</span>
+              <button
+                className="glass-btn text-xs shrink-0"
+                title="按截图回看任意时段（深度模式开启后才有截图索引）"
+                onClick={() => setTravelOpen((v) => !v)}
+              >
+                时光机
+              </button>
+              <button className="glass-btn text-xs shrink-0" onClick={() => { setPruneMode(!pruneMode); if (pruneMode) setSelectedIds(new Set()) }}>管理回顾</button>
             </>
           }
         />
@@ -243,9 +447,91 @@ export default function QAReview() {
         </div>
       </div>
 
+      {travelOpen ? (
+        <div className="anim-fade-up shrink-0">
+          <div className="glass-card !p-3">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-medium text-slate-200">时光机</span>
+              <span className="text-2xs text-slate-500">按截图回看任意时段</span>
+              <div className="ml-auto flex items-center gap-0.5 rounded-lg p-0.5" style={{ background: 'var(--surface-2)' }}>
+                {([30, 120, 480, 'today'] as const).map((k) => (
+                  <button
+                    key={String(k)}
+                    type="button"
+                    onClick={() => setTravelPreset(k)}
+                    className={`rounded-md px-2 py-0.5 text-2xs transition-colors ${
+                      travelPreset === k ? 'text-white' : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                    style={travelPreset === k ? { background: 'var(--accent)' } : undefined}
+                  >
+                    {k === 'today' ? '今天' : k === 30 ? '30 分钟' : k === 120 ? '2 小时' : '8 小时'}
+                  </button>
+                ))}
+              </div>
+              <button className="glass-btn px-2 py-1 text-2xs" onClick={() => setTravelOpen(false)}>
+                关闭
+              </button>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <input
+                value={travelKeyword}
+                onChange={(e) => setTravelKeyword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void loadTravel()
+                }}
+                placeholder="关键词过滤：应用 / 文档 / 人物 / URL"
+                className="min-w-[160px] flex-1 rounded-lg px-2 py-1 text-xs text-slate-200 outline-none"
+                style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}
+              />
+              <button className="glass-btn px-2 py-1 text-2xs" disabled={travelBusy} onClick={() => void loadTravel()}>
+                {travelBusy ? '检索中…' : '检索'}
+              </button>
+              <button className="glass-btn px-2 py-1 text-2xs" onClick={() => void copyTravel()}>
+                复制摘要
+              </button>
+              <button className="glass-btn px-2 py-1 text-2xs" onClick={exportTravel}>
+                导出 JSON
+              </button>
+              <button
+                className="glass-btn primary px-2 py-1 text-2xs"
+                onClick={() => void ask('这段时间我在做什么？请结合屏幕记录总结进展、卡点与待办', travelRange().windowMin)}
+              >
+                问这段
+              </button>
+            </div>
+            {travelShots.length ? (
+              <div className="mt-2 grid grid-cols-3 gap-1.5 sm:grid-cols-5 lg:grid-cols-7">
+                {travelShots.map((s) => (
+                  <ShotThumb key={s.id} shot={s} onClick={(shot, url) => setTravelPreview({ shot, url })} />
+                ))}
+              </div>
+            ) : (
+              <div className="mt-2 rounded-lg px-2 py-3 text-center text-2xs text-slate-600">
+                {travelBusy ? '正在检索截图…' : '这个时段没有截图索引——深度模式开启后才会周期性截图。'}
+              </div>
+            )}
+            {travelSnaps.length ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {travelSnaps.slice(0, 12).map((s) => (
+                  <span
+                    key={s.id}
+                    className="rounded-full px-2 py-0.5 text-2xs text-slate-500"
+                    style={{ background: 'var(--surface-2)' }}
+                    title={[...s.keywords, ...s.documentNames].join('、')}
+                  >
+                    {new Date(s.ts).toLocaleTimeString('zh-CN', { hour12: false }).slice(0, 5)} · {s.app}
+                    {s.keywords.length ? ` · ${s.keywords.slice(0, 2).join('/')}` : ''}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       {!aiReady ? (
-        <div className="anim-fade-up shrink-0 rounded-2xl border border-neon-amber/25 bg-gradient-to-r from-neon-amber/[0.09] via-neon-amber/[0.05] to-transparent px-4 py-3" style={{ animationDelay: '60ms' }}>
-          <div className="text-xs leading-relaxed text-neon-amber">📊 本地模式：未配置 AI，可回答基础统计问题；配置后解锁深度问答</div>
+        <div className="anim-fade-up shrink-0 rounded-2xl border border-neon-amber/25 bg-neon-amber/[0.06] px-4 py-3" style={{ animationDelay: '60ms' }}>
+          <div className="text-xs leading-relaxed text-neon-amber">本地模式：未配置 AI，可回答基础统计问题；配置后解锁深度问答</div>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {LOCAL_EXAMPLES.map((q) => (
               <button
@@ -261,10 +547,10 @@ export default function QAReview() {
       ) : null}
       <div className="anim-fade-up shrink-0 flex flex-wrap gap-2 mb-3" style={{ animationDelay: '80ms' }}>
         <button className="glass-btn text-xs" onClick={() => void ask('生成今天的注意力曲线报告')}>
-          📈 注意力曲线
+          注意力曲线
         </button>
         <button className="glass-btn text-xs" onClick={() => void ask('分析今天的工作效率')}>
-          📊 周效率报表
+          周效率报表
         </button>
       </div>
       {pruneMode && (
@@ -315,7 +601,6 @@ export default function QAReview() {
       <div className="glass-card anim-fade-up min-h-0 flex-1 overflow-y-auto" style={{ animationDelay: '120ms' }}>
         {messages.length === 0 && !thinking ? (
           <EmptyState
-            emoji="💬"
             title="还没有问答记录"
             hint="问我任何关于今日工作状态的问题，例如「今天专注了多久？」「我什么时候效率最高？」"
           />
@@ -328,18 +613,46 @@ export default function QAReview() {
                 return (
                   <div key={m.id} className="anim-fade-up flex items-end justify-start gap-2">
                     {isFirstInGroup ? <AuraAvatar /> : <div className="w-[26px] shrink-0" />}
-                    <div className="max-w-[75%] whitespace-pre-wrap rounded-2xl rounded-bl-sm border border-white/[0.07] bg-[var(--surface-2)] px-3.5 py-2.5 text-sm leading-relaxed text-slate-200 shadow-[0_2px_10px_rgba(0,0,0,0.18)]">
-                      {m.content}
-                      <ReferenceChips refs={m.references} />
-                      {m.traceId ? (
-                        <button
-                          onClick={() => setTraceId(m.traceId as string)}
-                          title="查看本次处理用到的插件与耗时"
-                          className="mt-1.5 block border-0 bg-transparent p-0 text-2xs text-slate-500 transition-colors hover:text-slate-300"
-                        >
-                          ◇ 过程
-                        </button>
+                      <div className="flex min-w-0 max-w-[78%] flex-col gap-1">
+                      {m.content ? (
+                        <div className="whitespace-pre-wrap rounded-2xl rounded-bl-sm border border-white/[0.07] bg-[var(--surface-2)] px-3.5 py-2.5 text-sm leading-relaxed text-slate-200 shadow-[0_2px_10px_rgba(0,0,0,0.18)]">
+                          {m.content}
+                          <ReferenceChips refs={m.references} />
+                          <div className="mt-1.5 flex items-center gap-3">
+                            {m.traceId ? (
+                              <button
+                                onClick={() => setTraceId(m.traceId as string)}
+                                title="查看本次处理用到的插件与耗时"
+                                className="border-0 bg-transparent p-0 text-2xs text-slate-500 transition-colors hover:text-slate-300"
+                              >
+                                ◇ 过程
+                              </button>
+                            ) : null}
+                            <button
+                              onClick={() => void saveAnswer(m)}
+                              disabled={saveState[m.id] === 'saving' || saveState[m.id] === 'done'}
+                              title="存入本地知识库，回顾页的知识沉淀会直接看到"
+                              className={`border-0 bg-transparent p-0 text-2xs transition-colors disabled:cursor-default ${
+                                saveState[m.id] === 'done'
+                                  ? 'text-[#63d9b6]'
+                                  : saveState[m.id] === 'error'
+                                    ? 'text-rose-300'
+                                    : 'text-slate-500 hover:text-slate-300'
+                              }`}
+                            >
+                              {saveState[m.id] === 'done'
+                                ? '✓ 已存入知识'
+                                : saveState[m.id] === 'saving'
+                                  ? '存入中…'
+                                  : saveState[m.id] === 'error'
+                                    ? '存入失败，重试'
+                                    : '存入知识'}
+                            </button>
+                          </div>
+                        </div>
                       ) : null}
+                      {m.surface ? <A2uiSurfaceView surface={m.surface} /> : null}
+                      {m.card ? <AssistantCardView card={m.card} /> : null}
                     </div>
                   </div>
                 )
@@ -393,6 +706,30 @@ export default function QAReview() {
           ✦ 发送
         </button>
       </div>
+      {travelPreview ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
+          onClick={() => setTravelPreview(null)}
+        >
+          <div
+            className="max-h-full max-w-4xl overflow-hidden rounded-xl border border-white/10"
+            style={{ background: 'var(--bg-surface)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img src={travelPreview.url} alt="截图预览" className="max-h-[76vh] w-auto" />
+            <div className="flex items-center gap-2 px-3 py-2 text-2xs text-slate-400">
+              <span className="tabular-nums">
+                {new Date(travelPreview.shot.ts).toLocaleString('zh-CN', { hour12: false })}
+              </span>
+              <span>· {travelPreview.shot.app}</span>
+              <span className="min-w-0 truncate">{travelPreview.shot.keywords.join('、')}</span>
+              <button className="glass-btn ml-auto px-2 py-0.5 text-2xs" onClick={() => setTravelPreview(null)}>
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <TraceTunnel traceId={traceId} onClose={() => setTraceId(null)} />
     </div>
   )

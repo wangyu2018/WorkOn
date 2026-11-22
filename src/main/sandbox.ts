@@ -7,6 +7,7 @@
 import { llmChat, extractJson } from './ai'
 import { getSettings } from './settings'
 import { genId } from '@shared/types'
+import { aiCredsReady } from '@shared/aiConfig'
 
 export interface SandboxSection {
   title: string
@@ -32,7 +33,7 @@ const SYSTEM_RULES = `你是 WorkOn 的可视化生成器。输出一个 JSON：
 /** AI 生成沙箱块；未配 Key/失败返回 null（调用方回退引导） */
 export async function generateSandbox(srcText: string, ask?: string): Promise<SandboxPiece | null> {
   const s = getSettings()
-  if (!s.aiEnabled || !s.aiApiKey) return null
+  if (!s.aiEnabled || !aiCredsReady(s)) return null
   const user = `基于下面的内容做一个轻量可视化展示：\n"""\n${srcText.slice(0, 1200)}\n"""\n${ask ? `侧重：${ask}` : ''}`
   const out = await llmChat(
     [

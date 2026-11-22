@@ -34,7 +34,9 @@ function rapidocrExePath(): string {
 export function isRapidOCRAvailable(): boolean {
   if (rapidocrChecked) return rapidocrAvailable
   rapidocrChecked = true
-  rapidocrAvailable = fs.existsSync(rapidocrExePath())
+  // RapidOCR-json 是 Windows 可执行文件：macOS/Linux 上存在也不能用（spawn 会 EACCES），
+  // 否则会误判为可用、跳过 Tesseract 回退，导致屏幕记忆永远识别不到文字。
+  rapidocrAvailable = process.platform === 'win32' && fs.existsSync(rapidocrExePath())
   if (rapidocrAvailable) {
     console.log('[ocrEngine] RapidOCR-json 可用:', rapidocrExePath())
   }

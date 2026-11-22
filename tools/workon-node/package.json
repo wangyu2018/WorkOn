@@ -1,0 +1,16 @@
+{
+  "name": "workon-node",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WorkOn 外部节点（只读）：出站连回主端，提供 sys.info / fs.list / fs.read",
+  "main": "index.js",
+  "bin": {
+    "workon-node": "index.js"
+  },
+  "optionalDependencies": {
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

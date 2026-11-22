@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "WorkOn Browser Connector",
+  "version": "0.2.0",
+  "description": "让 WorkOn Agent 直接操作你日常使用的 Chrome（本地连接，不上传数据）",
+  "permissions": ["tabs", "scripting", "activeTab", "storage"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["page-observer.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_title": "WorkOn 浏览器连接器"
+  }
+}

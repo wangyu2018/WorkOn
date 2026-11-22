@@ -4,9 +4,13 @@
  * 快捷回复协议（v10 §7）：带选项的消息渲染 ①② 大按钮，输入框回数字即答
  * 块进化（v10 §4.C）：右页组件拖入输入场 → 挂对象芯片 → 一句话调参数
  */
-import { useEffect, useState, type RefObject, type DragEvent } from 'react'
+import { useEffect, useMemo, useState, type RefObject, type DragEvent } from 'react'
 import type { JSX } from 'react'
-import type { PresenceSnapshot, WorkState, ChatSession } from '@shared/types'
+import type { PresenceSnapshot, WorkState, ChatSession, RemoteNodeInfo, SessionTarget, GoalTreeDraft } from '@shared/types'
+import type { AgentView } from '@shared/agents'
+import type { OrchestrationRecommendation } from '@shared/superAgent'
+import { extractA2uiFromText } from '@shared/a2ui'
+import { A2uiSurfaceView } from '../components/a2ui/A2uiSurfaceView'
 import { STATE_LABEL } from '@shared/stateMeta'
 import { renderMarkdown } from './md'
 import { detectStructured, StructuredCard } from './structured'
@@ -14,10 +18,37 @@ import { MindMap } from './mindmap'
 import { Shrinkable } from './Shrinkable'
 import { SESSION_CONTEXTS, type ContextKey } from './sessionContext'
 import { TraceTunnel } from '../components/TraceTunnel'
+import { GoalTreeCard } from './GoalTreeCard'
+
+/** 会话目标显示：缺省=本机；节点会话带在线状态 */
+function targetInfo(target: ChatSession['target'], nodes?: RemoteNodeInfo[]): { label: string; online: boolean } {
+  if (target && target.kind === 'node') {
+    const node = nodes?.find((n) => n.id === target.nodeId)
+    return { label: node?.label ?? target.nodeId, online: !!node?.online }
+  }
+  return { label: '本机', online: true }
+}
+
+/** 会话按目标分组（文档 §6：本机 / 节点 A / 节点 B） */
+function groupSessions(
+  sessions: ChatSession[],
+  nodes?: RemoteNodeInfo[]
+): Array<{ key: string; label: string; items: ChatSession[] }> {
+  const groups: Array<{ key: string; label: string; items: ChatSession[] }> = []
+  for (const s of sessions) {
+    const key = s.target?.kind === 'node' ? `node:${s.target.nodeId}` : 'local'
+    let g = groups.find((x) => x.key === key)
+    if (!g) {
+      g = { key, label: targetInfo(s.target, nodes).label, items: [] }
+      groups.push(g)
+    }
+    g.items.push(s)
+  }
+  return groups
+}
 
 /** 你的话/AI 的话 */
-export interface ChatMsg {
-  /** 流式定位 id（打字机更新用） */
+export interface ChatMsg {  /** 流式定位 id（打字机更新用） */
   id?: string
   role: 'user' | 'ai'
   text: string
@@ -27,6 +58,10 @@ export interface ChatMsg {
   attachSrc?: string
   /** AI 处理轨迹 id（L2 隧道下钻入口） */
   traceId?: string
+  /** 目标树编排草案：随确认卡渲染，确认后由主进程整树落库 */
+  goalTree?: GoalTreeDraft
+  /** 只读编排建议：不自动安装 Skill、修改模型或保存工作流 */
+  recommendations?: OrchestrationRecommendation[]
 }
 
 /** 引用芯片（v10）：拖消息/折下卡进来，发送时自动附为上下文 */
@@ -168,8 +203,10 @@ function CopyBtn(props: { text: string }): JSX.Element {
 function RichAnswer(props: { text: string; onMindmap?: (src: string) => void; onAsk?: (q: string) => void; onSandbox?: (src: string) => void; aiOn?: boolean | null; sandboxLoading?: boolean }): JSX.Element {
   const [expanded, setExpanded] = useState(false)
   const [mapped, setMapped] = useState(false)
+  // A2UI P1/P2：AI 正文里带的受控卡片 JSON（校验失败则原文照旧，markdown 降级）
+  const parsed = useMemo(() => extractA2uiFromText(props.text), [props.text])
   const ctx = {
-    text: props.text,
+    text: parsed.text,
     expanded,
     setExpanded,
     mapped,
@@ -181,7 +218,12 @@ function RichAnswer(props: { text: string; onMindmap?: (src: string) => void; on
     sandboxLoading: props.sandboxLoading
   }
   const route = RENDER_ROUTES.find((r) => r.when(ctx.text)) ?? RENDER_ROUTES[RENDER_ROUTES.length - 1]
-  return route.render(ctx)
+  return (
+    <>
+      {route.render(ctx)}
+      {parsed.surface ? <A2uiSurfaceView surface={parsed.surface} /> : null}
+    </>
+  )
 }
 
 function MsgActions(props: {
@@ -262,6 +304,10 @@ export function AskPane(props: {
   onPrefill?: (q: string) => void
   /** 会话（v10）：列表 + 当前进入的会话 + 动作回调 */
   sessions?: ChatSession[]
+  /** 已配对的外部节点（节点模式 P0）：用于会话目标分组与在线状态 */
+  nodes?: RemoteNodeInfo[]
+  /** 新建会话时指定目标机器（缺省本机） */
+  onCreateSession?: (target: SessionTarget) => void
   activeSessionId?: string | null
   onEnterSession?: (id: string | null) => void
   onAddToSession?: (msgIndex: number, sessionId: string | null, topic?: 'project' | 'life' | 'general') => void
@@ -271,6 +317,11 @@ export function AskPane(props: {
   onDeleteSessionItem?: (index: number) => void
   onSessionRenamed?: (id: string, title: string) => void
   onSessionRemoved?: (id: string) => void
+  /** 会话级多 Agent 群组：可 @ 的 Agent / 参与 Agent 增删 / 派生子会话 */
+  agents?: AgentView[]
+  onAddParticipant?: (sessionId: string, agentId: string) => void
+  onRemoveParticipant?: (sessionId: string, agentId: string) => void
+  onForkSession?: (sessionId: string, agentId?: string) => void
   prefillText?: string | null
   onPrefillConsumed?: () => void
   aiOn?: boolean | null
@@ -325,6 +376,9 @@ export function AskPane(props: {
   const [listOpen, setListOpen] = useState(false) // 会话列表下拉
   const [armedSesId, setArmedSesId] = useState<string | null>(null) // 列表内删会话两次确认
   const active = props.sessions?.find((x) => x.id === props.activeSessionId) ?? null
+  const activeTarget = active ? targetInfo(active.target, props.nodes) : null
+  const agentName = (id: string): string => props.agents?.find((a) => a.id === id)?.name ?? id
+  const addableAgents = (props.agents ?? []).filter((a) => !(active?.participants ?? []).includes(a.id))
 
   // 会话视图：进入某会话后左栏显示其消息 + 继续追问
   const [renameMode, setRenameMode] = useState(false)
@@ -354,6 +408,15 @@ export function AskPane(props: {
             </span>
           )}
           <span className="ses-topic">{active.topic === 'project' ? '项目' : active.topic === 'life' ? '生活' : '通用'}</span>
+          {activeTarget && active.target?.kind === 'node' ? (
+            <span
+              className="ses-topic"
+              style={{ color: activeTarget.online ? 'var(--teal)' : 'var(--red, #c0392b)' }}
+              title={activeTarget.online ? '目标节点在线' : '目标节点离线，发送前会提示'}
+            >
+              ⇄ {activeTarget.label}{activeTarget.online ? '' : ' · 离线'}
+            </span>
+          ) : null}
           <button
             className={`ses-del${delArm ? ' armed' : ''}`}
             onClick={() => {
@@ -367,6 +430,48 @@ export function AskPane(props: {
             {delArm ? '确认删?' : '✕'}
           </button>
         </div>
+        <div className="v10-sesagents">
+          <span className="v10-sesagents-label">Agent</span>
+          {(active.participants ?? []).map((id) => (
+            <span key={id} className="v10-agentchip" title="移出本会话">
+              @{agentName(id)}
+              <button onClick={() => props.onRemoveParticipant?.(active.id, id)}>×</button>
+            </span>
+          ))}
+          {addableAgents.length ? (
+            <select
+              className="v10-agentadd"
+              value=""
+              onChange={(e) => {
+                if (e.target.value) props.onAddParticipant?.(active.id, e.target.value)
+              }}
+              title="把 Agent 加入本会话（也可直接在输入框 @名字 派发）"
+            >
+              <option value="">＋ Agent</option>
+              {addableAgents.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {props.onForkSession ? (
+            <button
+              className="v10-agentfork"
+              onClick={() => props.onForkSession?.(active.id)}
+              title="派生子会话：继承本会话最近消息与参与 Agent"
+            >
+              派生支线
+            </button>
+          ) : null}
+        </div>
+        {active.parentSessionId ? (
+          <div className="v10-sesparent">
+            ↳ 接续自「
+            {props.sessions?.find((x) => x.id === active.parentSessionId)?.title ?? active.parentSessionId}
+            」——上游最近消息已带进本会话
+          </div>
+        ) : null}
         <div className="v10-ask-scroll" ref={props.scrollRef}>
           {active.items.map((m, i) => (
             <div
@@ -442,35 +547,49 @@ export function AskPane(props: {
           <button className="mh-act" onClick={() => { void window.api?.attachPanes?.() }} title="合回主窗一面">✕ 合回</button>
         </div>
       ) : null}
-      {props.sessions && props.sessions.length > 0 ? (
-        <div className="v10-sesstop" style={{ position: 'relative' }}>
-          <button className="ses-back" onClick={() => setListOpen(!listOpen)}>会话 {props.sessions.length} ▸</button>
-          {listOpen ? (
-            <div className="v10-seslist">
-              {props.sessions.map((x) => (
-                <div key={x.id} className="v10-sesitem">
-                  <button onClick={() => { props.onEnterSession?.(x.id); setListOpen(false) }}>
-                    {x.title.slice(0, 16)}
-                    <span className="ses-n">{x.items.length} 条</span>
-                  </button>
-                  <button
-                    className={`ses-del${armedSesId === x.id ? ' armed' : ''}`}
-                    title={armedSesId === x.id ? '再点一次确认删除' : '删除会话'}
-                    onClick={() => {
-                      if (armedSesId !== x.id) { setArmedSesId(x.id); window.setTimeout(() => setArmedSesId(null), 2500); return }
-                      void window.api?.removeSession?.(x.id)
-                      props.onSessionRemoved?.(x.id)
-                      setArmedSesId(null)
-                    }}
-                  >
-                    {armedSesId === x.id ? '确认删?' : '✕'}
-                  </button>
-                </div>
+      <div className="v10-sesstop" style={{ position: 'relative' }}>
+        <button className="ses-back" onClick={() => setListOpen(!listOpen)}>会话 {props.sessions?.length ?? 0} ▸</button>
+        {listOpen ? (
+          <div className="v10-seslist">
+            {/* 节点模式（P0）：新建会话时选择目标机器，之后不可静默切换 */}
+            <div className="v10-sesnew">
+              <button onClick={() => { props.onCreateSession?.({ kind: 'local' }); setListOpen(false) }}>＋ 本机会话</button>
+              {(props.nodes ?? []).filter((n) => n.online).map((n) => (
+                <button key={n.id} onClick={() => { props.onCreateSession?.({ kind: 'node', nodeId: n.id }); setListOpen(false) }}>
+                  ＋ {n.label}
+                </button>
               ))}
             </div>
-          ) : null}
-        </div>
-      ) : null}
+            {groupSessions(props.sessions ?? [], props.nodes).map((g) => (
+              <div key={g.key}>
+                <div className="v10-sesgroup">{g.label}</div>
+                {g.items.map((x) => (
+                  <div key={x.id} className="v10-sesitem">
+                    <button onClick={() => { props.onEnterSession?.(x.id); setListOpen(false) }}>
+                      {x.parentSessionId ? '↳ ' : ''}
+                      {x.title.slice(0, 16)}
+                      {(x.participants?.length ?? 0) > 0 ? <span className="ses-n">@{x.participants!.length}</span> : null}
+                      <span className="ses-n">{x.items.length} 条</span>
+                    </button>
+                    <button
+                      className={`ses-del${armedSesId === x.id ? ' armed' : ''}`}
+                      title={armedSesId === x.id ? '再点一次确认删除' : '删除会话'}
+                      onClick={() => {
+                        if (armedSesId !== x.id) { setArmedSesId(x.id); window.setTimeout(() => setArmedSesId(null), 2500); return }
+                        void window.api?.removeSession?.(x.id)
+                        props.onSessionRemoved?.(x.id)
+                        setArmedSesId(null)
+                      }}
+                    >
+                      {armedSesId === x.id ? '确认删?' : '✕'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
       <div className="v10-ask-scroll" ref={props.scrollRef}>
         {!expanded && HIDE_COUNT > 0 ? (
           <button className="v10-chatfold" onClick={() => setExpanded(true)}>
@@ -505,6 +624,33 @@ export function AskPane(props: {
             ) : (
               m.text
             )}
+            {m.goalTree ? <GoalTreeCard draft={m.goalTree} /> : null}
+            {m.recommendations?.length ? (
+              <div className="v10-recs">
+                <div className="v10-recs-title">编排建议 · 只读，不会自动添加</div>
+                {m.recommendations.map((rec) => (
+                  <div className="v10-rec" key={rec.id}>
+                    <div className="v10-rec-head">
+                      <b>{rec.title}</b>
+                      <span className={`v10-rec-status ${rec.status}`}>
+                        {rec.status === 'missing' ? '未添加' : rec.status === 'applied' ? '本轮已应用' : '可复用'}
+                      </span>
+                    </div>
+                    <div className="v10-rec-reason">{rec.reason}</div>
+                    <div className="v10-rec-benefit">{rec.benefit}</div>
+                    <div className="v10-rec-meta">成本：{rec.cost}</div>
+                    <div className="v10-rec-meta">隐私：{rec.privacy}</div>
+                    {rec.action === 'configure-ai' ? (
+                      <button type="button" onClick={() => props.onSend('__aiconfig__')}>去配置</button>
+                    ) : rec.action === 'save-workflow' ? (
+                      <div className="v10-rec-action">可在工作流页确认保存</div>
+                    ) : rec.action === 'catalog' ? (
+                      <div className="v10-rec-action">待 Skill 目录开放后审阅添加</div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
             {m.role === 'ai' && m.traceId ? (
               <button
                 onClick={() => setTraceId(m.traceId as string)}

@@ -12,6 +12,7 @@ import { dateKey } from '@shared/trail'
 import { genId } from '@shared/types'
 import { llmChat, extractJson } from './ai'
 import { getSettings } from './settings'
+import { aiCredsReady } from '@shared/aiConfig'
 import { createTasksBulk, listTasks } from './projects'
 import type { PlanItem, Project, ProjectTask } from '@shared/types'
 
@@ -500,7 +501,7 @@ export function parseStatusCard(markdown: string, projectId?: string): CardDiff 
 export async function summarizeProgressPaste(projectId: string, text: string): Promise<CardDiff> {
   const fallback = parseStatusCard(text, projectId)
   const s = getSettings()
-  if (!s.aiEnabled || !s.aiApiKey || !text.trim()) return fallback
+  if (!s.aiEnabled || !aiCredsReady(s) || !text.trim()) return fallback
 
   const project = col<Project>('projects').find((p) => p.id === projectId)
   const tasks = listTasks(projectId)

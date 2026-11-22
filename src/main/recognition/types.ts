@@ -59,6 +59,8 @@ export interface RecognitionResult {
 export interface ModelPrediction {
   label: string
   prob: number
+  /** 全部候选概率（work_state.probs；用于边际判定，缺失时只看绝对置信度） */
+  probs?: Record<string, number>
 }
 
 /** 与 ml/train.py 特征列严格对齐的动作特征（9 字段） */

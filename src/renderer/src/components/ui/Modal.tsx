@@ -6,6 +6,19 @@ import { Icon } from '../Icon'
  * 蒙层 + 焦点陷阱 + Esc 关闭 + 焦点归还 + 滚动锁。
  * 全站弹层的唯一入口：要么用 Modal（带标题/底栏），要么用 ModalShell（自定义面板）。
  */
+
+/** 最近一次弹层外的焦点元素：表单弹层的 autoFocus 会在 effect 前抢焦，直接读 activeElement 会拿到弹层内部元素 */
+let lastOutsideFocus: HTMLElement | null = null
+if (typeof document !== 'undefined') {
+  document.addEventListener(
+    'focusin',
+    (e) => {
+      const t = e.target as HTMLElement | null
+      if (t && !t.closest('[role="dialog"]')) lastOutsideFocus = t
+    },
+    true
+  )
+}
 export function ModalShell({
   open,
   onClose,
@@ -25,10 +38,14 @@ export function ModalShell({
 
   useEffect(() => {
     if (!open) return
-    lastFocus.current = document.activeElement as HTMLElement | null
+    lastFocus.current =
+      (lastOutsideFocus && document.contains(lastOutsideFocus) ? lastOutsideFocus : document.activeElement) as HTMLElement | null
     const panel = panelRef.current
-    // 焦点落在面板本身（不落在第一个按钮上，避免一打开就出现焦点框）
-    panel?.focus()
+    // 表单类弹层直接聚焦第一个输入框；纯操作弹层焦点落在面板本身
+    const field = panel?.querySelector<HTMLElement>(
+      'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([disabled]), textarea:not([disabled]), select:not([disabled])'
+    )
+    ;(field ?? panel)?.focus()
 
     // 打开期间锁滚动，避免背景跟着滚
     const prevOverflow = document.body.style.overflow

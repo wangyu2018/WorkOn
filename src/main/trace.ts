@@ -58,11 +58,11 @@ export function startTrace(source: TraceSource, text: string): string {
 }
 
 /** 路由判定：本地直答时改写 decided 并记录原因 */
-export function markRoute(traceId: string | undefined, decided: 'llm' | 'local', reason?: string): void {
+export function markRoute(traceId: string | undefined, decided: 'llm' | 'local', reason?: string, domain?: string): void {
   if (!traceId) return
   const trace = buffers.get(traceId)
   if (!trace) return
-  trace.route = { ...trace.route, decided, reason }
+  trace.route = { ...trace.route, decided, reason, domain: domain ?? trace.route.domain }
   emit(trace, 'route')
 }
 
@@ -101,9 +101,19 @@ export function endTrace(traceId: string | undefined): void {
   if (!traceId) return
   const trace = buffers.get(traceId)
   if (!trace) return
+  trace.endedAt = Date.now()
   emit(trace, 'end')
 }
 
 export function getTrace(traceId: string): PipelineTrace | undefined {
   return buffers.get(traceId)
+}
+
+/** 最近若干条 trace（新的在前）：右侧「AI 处理流程」面板打开即能回看 */
+export function listTraces(limit = 8): PipelineTrace[] {
+  return order
+    .slice(-limit)
+    .reverse()
+    .map((id) => buffers.get(id))
+    .filter((t): t is PipelineTrace => !!t)
 }

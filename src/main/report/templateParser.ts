@@ -7,6 +7,7 @@ import type { ReportTemplate, SectionType, TemplateField, TemplateSection } from
 import { genId } from '@shared/types'
 import { getSettings } from '../settings'
 import { llmChat, extractJson } from '../ai'
+import { aiCredsReady } from '@shared/aiConfig'
 
 /** LLM 解析输出（§4.2 输出格式 + detectedFormat/industry/confidence） */
 interface ParsedTemplate {
@@ -101,7 +102,7 @@ function normalizeSections(parsed: ParsedTemplate): TemplateSection[] | null {
 /** AI 解析用户粘贴的模板文本；AI 不可用/解析失败返回 null（不落库） */
 export async function parseUserTemplate(rawContent: string): Promise<ReportTemplate | null> {
   const s = getSettings()
-  if (!s.aiEnabled || !s.aiApiKey) return null // AI 不可用
+  if (!s.aiEnabled || !aiCredsReady(s)) return null // AI 不可用
   const raw = rawContent.trim()
   if (!raw) return null
 

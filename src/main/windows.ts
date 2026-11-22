@@ -321,9 +321,7 @@ function appIcon(): Electron.NativeImage | undefined {
 }
 
 function rendererUrl(page: string): string {
-  // WORKON_V10=1 时主窗直接带 v10 参数启动（预览/截图用；日常入口在旧版侧栏「体验 v10 版面」）
-  const v10 = process.env.WORKON_V10 === '1' && page === 'index' ? '?v10=1' : ''
-  return `${process.env.ELECTRON_RENDERER_URL}/${page}.html${v10}`
+  return `${process.env.ELECTRON_RENDERER_URL}/${page}.html`
 }
 
 function rendererFile(page: string): string {
@@ -331,21 +329,41 @@ function rendererFile(page: string): string {
 }
 
 function load(win: BrowserWindow, page: string): void {
-  if (isDev) void win.loadURL(rendererUrl(page))
-  else void win.loadFile(rendererFile(page))
+  if (isDev) {
+    void win.loadURL(rendererUrl(page))
+    return
+  }
+  void win.loadFile(rendererFile(page))
+}
+
+/** 恢复主窗位置：确保至少有一部分落在某个显示器的可用区域内 */
+function restoreMainBounds(saved?: { x: number; y: number; width: number; height: number }): Electron.Rectangle | null {
+  if (!saved) return null
+  const { x, y, width, height } = saved
+  if (![x, y, width, height].every((v) => Number.isFinite(v)) || width < 480 || height < 320) return null
+  const visible = screen.getAllDisplays().some((d) => {
+    const wa = d.workArea
+    const overlapX = Math.min(x + width, wa.x + wa.width) - Math.max(x, wa.x)
+    const overlapY = Math.min(y + height, wa.y + wa.height) - Math.max(y, wa.y)
+    return overlapX >= 120 && overlapY >= 60
+  })
+  return visible ? { x, y, width, height } : null
 }
 
 export function createMainWindow(opts?: { deferShow?: boolean }): BrowserWindow {
   if (mainWindow && !mainWindow.isDestroyed()) {
+    // 从托盘 / 最小化状态唤回：show() 在部分平台不会自动还原
+    if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.show()
     mainWindow.focus()
     return mainWindow
   }
+  const saved = getSettings().mainWindowBounds
+  const restored = restoreMainBounds(saved)
   mainWindow = new BrowserWindow({
-    width: 1100,
-    height: 720,
-    minWidth: 900,
-    minHeight: 600,
+    ...(restored ?? { width: 1180, height: 780 }),
+    minWidth: 960,
+    minHeight: 620,
     show: false,
     autoHideMenuBar: true,
     frame: false,
@@ -356,13 +374,41 @@ export function createMainWindow(opts?: { deferShow?: boolean }): BrowserWindow 
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: false,
+      // 应用内浏览器（内置 Chromium 面板）依赖 <webview>
+      webviewTag: true
     }
   })
   // 有开启动画时主窗口延迟展示（等 splash 播完再亮）
   if (!opts?.deferShow) {
-    mainWindow.once('ready-to-show', () => mainWindow?.show())
+    mainWindow.once('ready-to-show', () => {
+      if (saved?.maximized) mainWindow?.maximize()
+      mainWindow?.show()
+    })
   }
+  // 位置 / 尺寸 / 最大化状态记忆（300ms 防抖）
+  let saveTimer: NodeJS.Timeout | null = null
+  const saveBounds = (): void => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    const b = mainWindow.isMaximized() ? mainWindow.getNormalBounds() : mainWindow.getBounds()
+    setSettings({
+      mainWindowBounds: { x: b.x, y: b.y, width: b.width, height: b.height, maximized: mainWindow.isMaximized() }
+    })
+  }
+  const scheduleSave = (): void => {
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = setTimeout(saveBounds, 300)
+  }
+  mainWindow.on('resize', scheduleSave)
+  mainWindow.on('move', scheduleSave)
+  mainWindow.on('maximize', () => {
+    scheduleSave()
+    sendTo('main', 'win:maxState', true)
+  })
+  mainWindow.on('unmaximize', () => {
+    scheduleSave()
+    sendTo('main', 'win:maxState', false)
+  })
   mainWindow.on('close', (e) => {
     // 托盘常驻，阻止误关
     e.preventDefault()
@@ -1131,8 +1177,8 @@ export function createWorkbenchWindow(): BrowserWindow {
       nodeIntegration: false
     }
   })
-  if (isDev) void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/index.html?v10=1&pane=paper`)
-  else void win.loadFile(path.join(__dirname, '../renderer/index.html'))
+  if (isDev) void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/index.html?pane=paper`)
+  else void win.loadFile(path.join(__dirname, '../renderer/index.html'), { query: { pane: 'paper' } })
   win.once('ready-to-show', () => {
     win.show()
     console.info('[workbench] 右页已拆出')
@@ -1227,7 +1273,7 @@ function paneMagneticSnap(moved: 'ask' | 'paper'): void {
   }
 }
 
-function createPaneWindow(which: 'ask' | 'paper'): BrowserWindow {
+function createPaneWindow(which: 'ask' | 'paper', sessionId?: string): BrowserWindow {
   const s = getSettings()
   const saved = which === 'ask' ? s.v10AskBounds : s.v10PaperBounds
   const wa = screen.getPrimaryDisplay().workArea
@@ -1258,8 +1304,11 @@ function createPaneWindow(which: 'ask' | 'paper'): BrowserWindow {
     }
   })
   const pane = which
-  if (isDev) void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/index.html?v10=1&pane=${pane}&glass=1`)
-  else void win.loadFile(path.join(__dirname, '../renderer/index.html'))
+  const suffix = sessionId ? `&session=${encodeURIComponent(sessionId)}` : ''
+  if (isDev) void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}/index.html?pane=${pane}&glass=1${suffix}`)
+  else void win.loadFile(path.join(__dirname, '../renderer/index.html'), {
+    query: { pane, glass: '1', ...(sessionId ? { session: sessionId } : {}) }
+  })
   win.once('ready-to-show', () => {
     win.show()
     paneInteractiveGuard(win)
@@ -1411,6 +1460,26 @@ export function expandPane(which: 'ask' | 'paper'): void {
     w.show()
     w.focus()
   }
+}
+
+/**
+ * 托盘快捷入口：打开「问」会话窗并定位到指定会话。
+ * 窗口不存在时只新建问玻璃；已存在时直接切会话，不重建。
+ */
+export function openAskSession(sessionId?: string): void {
+  let win = askPaneWindow && !askPaneWindow.isDestroyed() ? askPaneWindow : null
+  if (!win) {
+    askPaneWindow = createPaneWindow('ask', sessionId)
+    return
+  }
+  if (!win.isVisible()) win.show()
+  win.focus()
+  if (!sessionId) return
+  const focus = (): void => {
+    if (win && !win.isDestroyed()) win.webContents.send('qa:focus-session', sessionId)
+  }
+  if (win.webContents.isLoading()) win.webContents.once('did-finish-load', focus)
+  else focus()
 }
 
 /** 托盘/管理入口的收起态 */

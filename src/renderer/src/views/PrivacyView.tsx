@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AppSettings } from '@shared/types'
 import { useSettingsStore } from '../stores/settingsStore'
-import { Icon } from '../components/Icon'
+import { Icon, type IconName } from '../components/Icon'
 import { PageHeader } from '../components/PageHeader'
 import { Toggle } from '../components/Toggle'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -209,18 +209,18 @@ function PrivacyStats({ reloadToken, excludedKey, onCleared }: { reloadToken: nu
 
 /** 「不采集」类别名单：静态五项，开关增删 privacyExcludedApps 关键词（别名包含式匹配） */
 const DO_NOT_COLLECT_ITEMS = [
-  { emoji: '💬', label: '微信 / 聊天', keyword: '微信', desc: '聊天应用不截屏、不记标题' },
-  { emoji: '🏦', label: '银行 / 支付', keyword: '银行', desc: '含「银行」字样的应用与页面' },
-  { emoji: '💊', label: '健康 / 医疗', keyword: '健康', desc: '健康类应用不进入任何分析' },
-  { emoji: '🖼️', label: '相册 / 照片', keyword: '相册', desc: '照片类应用跳过 OCR 与记录' },
-  { emoji: '🔑', label: '密码管理器', keyword: '密码', desc: '1Password / Bitwarden 等不记录' }
+  { icon: 'message', label: '微信 / 聊天', keyword: '微信', desc: '聊天应用不截屏、不记标题' },
+  { icon: 'shield', label: '银行 / 支付', keyword: '银行', desc: '含「银行」字样的应用与页面' },
+  { icon: 'activity', label: '健康 / 医疗', keyword: '健康', desc: '健康类应用不进入任何分析' },
+  { icon: 'eye', label: '相册 / 照片', keyword: '相册', desc: '照片类应用跳过 OCR 与记录' },
+  { icon: 'command', label: '密码管理器', keyword: '密码', desc: '1Password / Bitwarden 等不记录' }
 ] as const
 
-/** 不采集名单网格：两列卡（emoji + 名称 + 开关），绑定 settings.privacyExcludedApps 字符串数组 */
+/** 不采集名单网格：两列卡（图标 + 名称 + 开关），绑定 settings.privacyExcludedApps 字符串数组 */
 function DoNotCollectGrid({ excluded, onToggle }: { excluded: string[]; onToggle: (keyword: string, on: boolean) => void }) {
   return (
     <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-      {DO_NOT_COLLECT_ITEMS.map(({ emoji, label, keyword, desc }) => {
+      {DO_NOT_COLLECT_ITEMS.map(({ icon, label, keyword, desc }) => {
         const on = excluded.includes(keyword)
         return (
           <div
@@ -235,10 +235,10 @@ function DoNotCollectGrid({ excluded, onToggle }: { excluded: string[]; onToggle
             title={desc}
           >
             <span
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-base"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400"
               style={{ background: 'var(--surface-3)', border: '1px solid var(--line)' }}
             >
-              {emoji}
+              <Icon name={icon} size={13} />
             </span>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium text-slate-200">{label}</div>
@@ -278,25 +278,25 @@ function StorageBars() {
   }, [])
   /** 满格基准：200MB */
   const REF = 200 * 1024 * 1024
-  const rows: { emoji: string; label: string; gradient: string; width: number; value: string; pending?: boolean }[] = [
+  const rows: { icon: IconName; label: string; color: string; width: number; value: string; pending?: boolean }[] = [
     {
-      emoji: '📝',
+      icon: 'book',
       label: '活动记录',
-      gradient: 'linear-gradient(90deg, var(--teal), var(--teal-border))',
+      color: 'var(--teal)',
       width: 26,
       value: recordCount != null ? `${recordCount.toLocaleString()} 条 · 体积统计即将支持` : '统计中…'
     },
     {
-      emoji: '🤖',
+      icon: 'brain',
       label: 'AI 上下文缓存',
-      gradient: 'var(--aura)',
+      color: 'var(--aura)',
       width: ocr ? Math.max(4, Math.min(100, Math.round((ocr.totalBytes / REF) * 100))) : 3,
       value: ocr ? `${fmtBytes(ocr.totalBytes)}（截屏 ${ocr.shotCount} 张 + 模型）` : '统计中…'
     },
     {
-      emoji: '📎',
+      icon: 'folder',
       label: '报表附件',
-      gradient: 'linear-gradient(90deg, rgba(139,92,246,.8), rgba(6,182,212,.45))',
+      color: '#94A3B8',
       width: 12,
       value: '即将支持',
       pending: true
@@ -304,15 +304,16 @@ function StorageBars() {
   ]
   return (
     <div className="flex flex-col gap-3 py-1">
-      {rows.map(({ emoji, label, gradient, width, value, pending }) => (
+      {rows.map(({ icon, label, color, width, value, pending }) => (
         <div key={label} className="flex items-center gap-3">
-          <span className="w-28 shrink-0 truncate text-xs text-slate-400">
-            {emoji} {label}
+          <span className="flex w-28 shrink-0 items-center gap-1.5 truncate text-xs text-slate-400">
+            <Icon name={icon} size={13} className="shrink-0" />
+            {label}
           </span>
           <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--surface-3)' }}>
             <span
               className={`block h-full rounded-full ${pending ? 'opacity-40' : ''}`}
-              style={{ width: `${width}%`, background: gradient, transition: 'width .5s var(--ease-soft)' }}
+              style={{ width: `${width}%`, background: color, transition: 'width .5s var(--ease-soft)' }}
             />
           </span>
           <span className={`w-44 shrink-0 text-right text-xs tabular-nums ${pending ? 'text-slate-600' : 'text-slate-500'}`}>{value}</span>
@@ -388,7 +389,7 @@ export default function PrivacyView() {
       >
         <span
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl"
-          style={{ background: 'linear-gradient(135deg, var(--teal), var(--teal-border))', boxShadow: '0 4px 14px var(--teal-glow)' }}
+          style={{ background: 'var(--teal)' }}
         >
           <Icon name="shield" size={20} className="text-white" />
         </span>
@@ -492,7 +493,7 @@ export default function PrivacyView() {
             ) : null}
           </div>
           <div className="mt-3 rounded-xl border border-neon-cyan/10 bg-neon-cyan/[0.03] p-3.5">
-            <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-neon-cyan/80">🔒 数据存储声明</p>
+            <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-neon-cyan/80"><Icon name="shield" size={13} /> 数据存储声明</p>
             <div className="grid grid-cols-1 gap-x-4 gap-y-1 text-xs text-slate-500 sm:grid-cols-2">
               <p className="flex items-center gap-1.5">
                 <Icon name="check" size={11} className="shrink-0 text-neon-green/80" /> 所有数据仅存储在本机
@@ -545,6 +546,7 @@ export default function PrivacyView() {
         <Row label="深度模式（OCR）" desc="空闲/干活都会采：仅「正在动手」那 1～2 秒跳过截屏防卡鼠标；干活中约每 45 秒可采一次">
           <Toggle checked={settings.deepMode} onChange={(v) => p({ deepMode: v })} />
         </Row>
+        <OcrSelfCheck />
         <Row label="性能优先" desc="停用屏幕 OCR 截屏（卡鼠标的主因之一），并降低后台采集负担。日常卡顿建议打开">
           <Toggle checked={!!settings.performanceMode} onChange={(v) => p({ performanceMode: v })} />
         </Row>
@@ -618,7 +620,7 @@ export default function PrivacyView() {
           >
             <Icon name="trash" size={13} /> {clearing ? '清理中…' : '一键清理全部截屏缓存'}
           </button>
-          <p className="mt-1.5 flex items-center gap-1 text-xs text-slate-600">⚠️ 清理后不可恢复，仅保留最近7天</p>
+          <p className="mt-1.5 flex items-center gap-1 text-xs text-slate-600"><Icon name="alert" size={12} /> 清理后不可恢复，仅保留最近7天</p>
           {clearNote ? <div className="anim-fade-in mt-1 text-xs text-neon-green">{clearNote}</div> : null}
         </div>
       </Section>
@@ -644,6 +646,105 @@ export default function PrivacyView() {
         onCancel={() => setConfirmClear(false)}
       />
 
+    </div>
+  )
+}
+
+interface OcrSelfStats {
+  running: boolean
+  lastTs: number | null
+  lastText: string
+  active?: boolean
+  permission?: 'granted' | 'denied' | 'unknown'
+  load?: { cpuPercent: number; memPercent: number; pressure: 'normal' | 'high' }
+}
+
+/** 屏幕记忆自检：采集中/未开启/已暂停 + 权限 + 最近识别 + 立即采集 */
+function OcrSelfCheck() {
+  const [stats, setStats] = useState<OcrSelfStats | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const deepMode = useSettingsStore((s) => s.settings.deepMode)
+
+  const load = useCallback((): void => {
+    void window.api.ocrStats().then((s) => setStats(s as OcrSelfStats)).catch(() => { /* ignore */ })
+  }, [])
+  useEffect(() => {
+    load()
+    const t = window.setInterval(load, 10000)
+    return () => window.clearInterval(t)
+  }, [load])
+
+  const capture = async (): Promise<void> => {
+    if (busy) return
+    setBusy(true)
+    setMsg(null)
+    try {
+      const r = (await window.api.captureOcrOnce()) as { ok: boolean; lines: number; permission: string }
+      if (r.permission !== 'granted') setMsg('未获屏幕录制权限：点「去授权」后在系统设置里勾选 WorkOn，再重启应用')
+      else if (r.ok) setMsg(`已识别 ${r.lines} 行文字`)
+      else setMsg('本次未识别到文字（当前窗口可能没有可读文本）')
+    } catch (e) {
+      setMsg(`采集失败：${(e as Error).message}`)
+    } finally {
+      setBusy(false)
+      load()
+    }
+  }
+
+  const enable = async (): Promise<void> => {
+    if (busy) return
+    setBusy(true)
+    setMsg(null)
+    try {
+      await useSettingsStore.getState().patch({ deepMode: true })
+      const r = (await window.api.captureOcrOnce()) as { ok: boolean; lines: number; permission: string }
+      if (r.permission !== 'granted') setMsg('已开启，但缺少屏幕录制权限：点「去授权」勾选 WorkOn 后重启应用')
+      else if (r.ok) setMsg(`屏幕记忆已开启，首次识别 ${r.lines} 行文字`)
+      else setMsg('屏幕记忆已开启，当前窗口暂无可读文字，切换窗口后会继续采集')
+    } catch (e) {
+      setMsg(`开启失败：${(e as Error).message}`)
+    } finally {
+      setBusy(false)
+      load()
+    }
+  }
+
+  const last = stats?.lastTs
+    ? new Date(stats.lastTs).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : '—'
+  const state = stats?.running ? '采集中' : deepMode ? '已暂停' : '未开启'
+  const stateTone = stats?.running ? 'text-neon-green' : deepMode ? 'text-amber-400' : 'text-slate-400'
+  const perm = stats?.permission
+  const memHigh = (stats?.load?.memPercent ?? 0) >= 85
+
+  return (
+    <div className="flex flex-col gap-1.5 px-2 pb-2 text-2xs text-slate-500">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span>屏幕记忆：<b className={stateTone}>{state}</b></span>
+        <span>· 最近识别 {last}</span>
+        {perm && perm !== 'granted' && <span className="text-amber-400">· 屏幕录制未授权</span>}
+        {stats?.running && memHigh && <span className="text-slate-400">· 内存高压，已降频</span>}
+      </div>
+      {stats?.lastText && <div className="truncate text-slate-400">{stats.lastText}</div>}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {!deepMode && (
+          <button className="glass-btn !px-2 !py-1 !text-2xs" disabled={busy} onClick={() => void enable()}>
+            开启屏幕记忆
+          </button>
+        )}
+        {deepMode && (
+          <button className="glass-btn !px-2 !py-1 !text-2xs" disabled={busy} onClick={() => void capture()}>
+            {busy ? '采集中…' : '立即采集一次'}
+          </button>
+        )}
+        {perm && perm !== 'granted' && (
+          <button className="glass-btn !px-2 !py-1 !text-2xs" onClick={() => void window.api.openOcrPermission()}>
+            去授权
+          </button>
+        )}
+      </div>
+      {msg && <div className="text-slate-400">{msg}</div>}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { Icon } from './Icon'
 
 interface ConfirmDialogProps {
@@ -29,15 +29,54 @@ export function ConfirmDialog({
   onConfirm,
   onCancel
 }: ConfirmDialogProps) {
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const cancelRef = useRef<HTMLButtonElement | null>(null)
+  const confirmRef = useRef<HTMLButtonElement | null>(null)
+  const lastFocus = useRef<HTMLElement | null>(null)
+
+  // 打开时锁滚动 + 初始焦点：危险操作落「取消」，普通确认落「确定」
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel()
-      if (e.key === 'Enter') onConfirm()
+    lastFocus.current = document.activeElement as HTMLElement | null
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const t = window.setTimeout(() => (danger ? cancelRef : confirmRef).current?.focus(), 0)
+    return () => {
+      window.clearTimeout(t)
+      document.body.style.overflow = prevOverflow
+      lastFocus.current?.focus?.()
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onCancel, onConfirm])
+  }, [open, danger])
+
+  // Esc 关闭 + Tab 焦点陷阱；回车交给当前聚焦按钮的原生行为，避免误确认/重复触发
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onCancel()
+        return
+      }
+      if (e.key !== 'Tab' || !panelRef.current) return
+      const items = Array.from(
+        panelRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => !el.hasAttribute('disabled'))
+      if (items.length === 0) return
+      const head = items[0]
+      const tail = items[items.length - 1]
+      if (!e.shiftKey && document.activeElement === tail) {
+        e.preventDefault()
+        head.focus()
+      } else if (e.shiftKey && document.activeElement === head) {
+        e.preventDefault()
+        tail.focus()
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [open, onCancel])
 
   if (!open) return null
   return (
@@ -46,9 +85,13 @@ export function ConfirmDialog({
       onClick={onCancel}
     >
       <div
+        ref={panelRef}
         className="glass-card anim-scale-in w-[340px] !p-5"
         style={{ borderRadius: 'var(--r-xl)', boxShadow: 'var(--shadow-lg)' }}
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wo-confirm-title"
       >
         <div className="flex items-center gap-2.5">
           <span
@@ -61,7 +104,7 @@ export function ConfirmDialog({
           >
             <Icon name="alert" size={15} />
           </span>
-          <h3 className="text-base font-semibold leading-tight text-slate-100">{title}</h3>
+          <h3 id="wo-confirm-title" className="text-base font-semibold leading-tight text-slate-100">{title}</h3>
         </div>
         {message ? (
           <div className="mt-2.5 pl-[42px] text-xs leading-relaxed text-slate-400">{message}</div>
@@ -74,16 +117,21 @@ export function ConfirmDialog({
             {impactNote}
           </div>
         ) : null}
-        <div className="mt-4 flex items-center justify-end gap-2 pl-[42px]">
+        <div className="confirm-actions mt-4 flex items-center justify-end gap-2 pl-[42px]">
           {extraAction ? (
-            <button className="glass-btn mr-auto" onClick={extraAction.onClick}>
+            <button type="button" className="glass-btn mr-auto" onClick={extraAction.onClick}>
               {extraAction.label}
             </button>
           ) : null}
-          <button className="glass-btn" onClick={onCancel}>
+          <button ref={cancelRef} type="button" className="glass-btn min-w-[72px]" onClick={onCancel}>
             {cancelLabel}
           </button>
-          <button className={`glass-btn ${danger ? 'danger' : 'primary'}`} onClick={onConfirm}>
+          <button
+            ref={confirmRef}
+            type="button"
+            className={`glass-btn min-w-[72px] ${danger ? 'danger' : 'primary'}`}
+            onClick={onConfirm}
+          >
             {confirmLabel}
           </button>
         </div>

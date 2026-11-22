@@ -14,7 +14,7 @@ export function Toggle({ checked, onChange, disabled }: ToggleProps) {
       className="relative h-5 w-9 shrink-0 rounded-full disabled:opacity-40"
       style={{
         background: checked ? 'var(--aura)' : 'var(--surface-3)',
-        boxShadow: checked ? '0 0 10px rgba(99, 102, 241, 0.35)' : 'inset 0 1px 2px rgba(0, 0, 0, 0.2)',
+        boxShadow: checked ? '0 0 10px rgba(15, 181, 164, 0.25)' : 'inset 0 1px 2px rgba(0, 0, 0, 0.2)',
         transition: 'background 150ms ease-out, box-shadow 150ms ease-out'
       }}
     >
