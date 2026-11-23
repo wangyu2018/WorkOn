@@ -29,6 +29,8 @@ interface WorkflowBattleBoardProps {
   onRun: () => void
   onStop: () => void
   onOpenStudio: (nodeId?: string) => void
+  /** 把一次历史运行回放到画布与时间轴 */
+  onReplayRun: (record: WorkflowRunRecord) => void
 }
 
 interface BoardMember {
@@ -251,7 +253,8 @@ export function WorkflowBattleBoard({
   onSelectWorkflow,
   onRun,
   onStop,
-  onOpenStudio
+  onOpenStudio,
+  onReplayRun
 }: WorkflowBattleBoardProps): JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [now, setNow] = useState(() => Date.now())
@@ -441,17 +444,25 @@ export function WorkflowBattleBoard({
             <Panel title="运行记录" meta={`${runRecords.length} 次`}>
               <div className="max-h-[150px] overflow-y-auto p-2">
                 {records.length ? records.map((record) => (
-                  <div key={record.id} className="mb-1.5 rounded-lg border border-[#1b2d47] bg-[#0e1a2c] p-2 last:mb-0">
+                  <button
+                    key={record.id}
+                    type="button"
+                    disabled={!record.nodeRuns?.length}
+                    onClick={() => onReplayRun(record)}
+                    title={record.nodeRuns?.length ? '把这次运行回放到画布与时间轴' : '这次运行没有逐节点记录，无法回放'}
+                    className="mb-1.5 w-full rounded-lg border border-[#1b2d47] bg-[#0e1a2c] p-2 text-left transition-colors last:mb-0 hover:border-[#2d4d70] disabled:cursor-default disabled:hover:border-[#1b2d47]"
+                  >
                     <div className="flex items-center gap-1.5 text-2xs">
                       <i className="h-1.5 w-1.5 rounded-full" style={{ background: record.ok ? '#45dfb2' : '#ff7e91' }} />
                       <span className={record.ok ? 'text-[#a5b8d1]' : 'text-[#ff9bac]'}>{record.ok ? '运行完成' : '运行失败'}</span>
                       <span className="ml-auto text-[#5f7391]">{record.trigger === 'manual' ? '手动' : '定时'}</span>
                     </div>
-                    <div className="mt-1 flex items-center text-2xs text-[#5f7391]">
+                    <div className="mt-1 flex items-center gap-1 text-2xs text-[#5f7391]">
                       <span>{formatTime(record.startedAt)}</span>
                       <span className="ml-auto">{formatDuration(record.endedAt - record.startedAt)} · {record.nodes} 节点</span>
+                      {record.nodeRuns?.length ? <span className="text-[#5bd4e8]">回放</span> : null}
                     </div>
-                  </div>
+                  </button>
                 )) : <div className="px-2 py-4 text-center text-2xs text-[#5f7391]">还没有运行记录</div>}
               </div>
             </Panel>
@@ -602,13 +613,25 @@ export function WorkflowBattleBoard({
                         className="cursor-pointer"
                         filter={run.status === 'running' ? 'url(#wf-board-glow)' : undefined}
                       >
-                        <title>{`${node.title} · ${member?.name ?? ''} · ${meta.label}`}</title>
-                        <rect width={NODE_W} height={NODE_H} rx="10" fill={selectedNode ? '#142844' : '#0e1b2e'} stroke={run.status === 'running' || selectedNode ? meta.color : '#29405e'} strokeWidth={run.status === 'running' ? 1.8 : 1.1} />
+                        <title>{`${node.title} · ${member?.name ?? ''} · ${meta.label}${run.model ? ` · ${run.model}` : ''}${run.fallback ? ' · 兜底' : ''}`}</title>
+                        <rect
+                          width={NODE_W}
+                          height={NODE_H}
+                          rx="10"
+                          fill={selectedNode ? '#142844' : '#0e1b2e'}
+                          stroke={run.fallback ? '#5bd4e8' : run.status === 'running' || selectedNode ? meta.color : '#29405e'}
+                          strokeWidth={run.status === 'running' ? 1.8 : 1.1}
+                          strokeDasharray={run.fallback ? '4 3' : undefined}
+                        />
                         <circle cx="14" cy="16" r="4" fill={member?.color ?? KIND_META[node.kind].color} className={run.status === 'running' ? 'wf-board-running' : undefined} />
                         <text x="25" y="20" fill="#d7e3f3" fontSize="11" fontWeight="500">{shortText(node.title, 11)}</text>
-                        <text x="12" y="39" fill="#687f9e" fontSize="9">{shortText(member?.name ?? KIND_META[node.kind].label, 15)}</text>
+                        <text x="12" y="39" fill="#687f9e" fontSize="9">{shortText(member?.name ?? KIND_META[node.kind].label, run.model ? 7 : 15)}</text>
+                        {run.model ? <text x={NODE_W - 10} y="39" textAnchor="end" fill="#7ea6c9" fontSize="8">{shortText(run.model, 12)}</text> : null}
                         <circle cx="13" cy="51" r="2.5" fill={meta.color} />
                         <text x="21" y="54" fill={meta.color} fontSize="9">{meta.label}</text>
+                        {run.fallback ? (
+                          <text x="50" y="54" fill="#5bd4e8" fontSize="8">{run.fallback === 'ocr' ? 'OCR' : '兜底'}</text>
+                        ) : null}
                         {run.ms !== undefined ? <text x={NODE_W - 10} y="54" textAnchor="end" fill="#617795" fontSize="8">{formatDuration(run.ms)}</text> : null}
                       </g>
                     )
@@ -617,7 +640,7 @@ export function WorkflowBattleBoard({
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[#182840] px-3 py-2 text-2xs text-[#5d7391]">
                 <span>实线：画布连线</span>
-                <span>虚线：显式上游</span>
+                <span>虚线：显式上游 / 兜底节点</span>
                 <span className="text-[#63c9ae]">流动卡片：真实输出片段正在传向下游</span>
                 <span className="ml-auto">绿色：已执行</span>
               </div>
@@ -677,6 +700,42 @@ export function WorkflowBattleBoard({
                     <span className="min-w-0 flex-1 truncate text-xs font-medium text-[#e0eaf7]">{selected.title}</span>
                     {selectedRun ? <StatusPill status={selectedRun.status} /> : null}
                   </div>
+                  {selected.model || selectedRun?.model ? (
+                    <div className="mt-2 rounded-lg border border-[#1d3a58] bg-[#0a1729] p-2">
+                      <div className="flex items-center gap-1.5 text-2xs text-[#8fb9ff]">
+                        <Icon name="activity" size={11} />
+                        本轮路由
+                        {selectedRun?.fallback ? (
+                          <span className="ml-auto rounded px-1 text-[#5bd4e8]" style={{ background: 'rgba(91,212,232,.12)' }}>
+                            {selectedRun.fallback === 'ocr' ? 'OCR 回退' : '兜底'}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-1 grid grid-cols-[52px_minmax(0,1fr)] gap-x-2 gap-y-0.5 text-2xs">
+                        <span className="text-[#5f7391]">指定模型</span>
+                        <span className="truncate text-[#b8c9dd]">{selected.model || '默认模型'}</span>
+                        {selectedRun?.model ? (
+                          <>
+                            <span className="text-[#5f7391]">实际模型</span>
+                            <span className="truncate text-[#b8c9dd]">{selectedRun.model}</span>
+                          </>
+                        ) : null}
+                        {selectedRun?.ms !== undefined ? (
+                          <>
+                            <span className="text-[#5f7391]">耗时</span>
+                            <span className="text-[#b8c9dd]">{formatDuration(selectedRun.ms)}</span>
+                          </>
+                        ) : null}
+                      </div>
+                      {selectedRun?.fallback === 'model' ? (
+                        <div className="mt-1 text-2xs text-[#5bd4e8]">指定模型失败，已自动切默认模型完成</div>
+                      ) : selectedRun?.fallback === 'ocr' ? (
+                        <div className="mt-1 text-2xs text-[#5bd4e8]">视觉模型不可用，已回退本地 OCR</div>
+                      ) : selected.model && !selectedRun?.model ? (
+                        <div className="mt-1 text-2xs text-[#5f7391]">指定模型失败时自动切默认模型兜底</div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div className="mt-2 text-2xs leading-relaxed text-[#6f85a3]">{selected.duty || KIND_META[selected.kind].hint}</div>
                   {selectedRun?.startedAt ? (
                     <div className="mt-2 flex items-center gap-2 font-mono text-2xs text-[#607895]">
@@ -767,12 +826,12 @@ export function WorkflowBattleBoard({
                   </div>
                   <div className="space-y-1">
                     {members.map((member) => (
-                      <div key={member.id} className="flex min-h-[34px] items-center">
+                      <div key={member.id} className="flex min-h-[42px] items-center">
                         <div className="flex w-[124px] shrink-0 items-center gap-2 pr-3">
                           <i className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: member.color }} />
                           <span className="truncate text-2xs text-[#8298b4]">{member.name}</span>
                         </div>
-                        <div className="relative h-[30px] min-w-0 flex-1 rounded-md bg-[#0a1525]">
+                        <div className="relative h-[38px] min-w-0 flex-1 rounded-md bg-[#0a1525]">
                           <div className="absolute inset-x-0 top-1/2 h-px bg-[#1b2d45]" />
                           {member.nodes.map((node) => {
                             const run = runs[node.id]
@@ -784,18 +843,25 @@ export function WorkflowBattleBoard({
                               <button
                                 key={node.id}
                                 type="button"
-                                title={`${node.title} · ${formatTime(run.startedAt)} — ${run.endedAt ? formatTime(run.endedAt) : '进行中'}`}
+                                title={`${node.title}${run.model ? ` · ${run.model}` : ''}${run.fallback ? ` · ${run.fallback === 'ocr' ? 'OCR 回退' : '模型兜底'}` : ''} · ${formatTime(run.startedAt)} — ${run.endedAt ? formatTime(run.endedAt) : '进行中'}`}
                                 onClick={() => setSelectedId(node.id)}
-                                className={`absolute top-[6px] h-[17px] min-w-[4px] overflow-hidden rounded-md border px-1.5 text-left text-2xs leading-[15px] ${run.status === 'running' ? 'wf-board-running' : ''}`}
+                                className={`absolute top-[5px] h-[27px] min-w-[4px] overflow-hidden rounded-md border px-1.5 text-left ${run.status === 'running' ? 'wf-board-running' : ''}`}
                                 style={{
                                   left: `${left}%`,
                                   width: `${Math.max(width, 0.7)}%`,
                                   color: STATUS_META[run.status].color,
-                                  borderColor: `${STATUS_META[run.status].color}66`,
+                                  borderColor: run.fallback ? '#5bd4e8' : `${STATUS_META[run.status].color}66`,
+                                  borderStyle: run.fallback ? 'dashed' : 'solid',
                                   background: STATUS_META[run.status].bg
                                 }}
                               >
-                                <span className="block truncate">{shortText(node.title, 12)}</span>
+                                <span className="block truncate text-[9px] leading-[11px]">{shortText(node.title, 12)}</span>
+                                {run.model ? (
+                                  <span className="block truncate text-[8px] leading-[10px] text-[#7ea6c9]">
+                                    {run.fallback ? (run.fallback === 'ocr' ? 'OCR · ' : '兜底 · ') : ''}
+                                    {shortText(run.model, 14)}
+                                  </span>
+                                ) : null}
                               </button>
                             )
                           })}

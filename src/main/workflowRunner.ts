@@ -22,6 +22,7 @@ import {
 } from './workflow'
 import { dispatchAgent } from './agents'
 import { pushNotify } from './notify'
+import { getSettings } from './settings'
 import { sendTo } from './windows'
 
 const RUNS_FILE = 'workflow-runs.json'
@@ -65,13 +66,55 @@ function upstreamText(def: WorkflowDef, node: WorkflowNode, outputs: Record<stri
     .join('\n\n---\n\n')
 }
 
+interface NodeResult {
+  ok: boolean
+  text: string
+  error?: string
+  /** 实际使用的模型（OCR 路径单独标注） */
+  model?: string
+  fallback?: 'ocr' | 'text-only' | 'model'
+}
+
+function defaultModelLabel(): string {
+  const model = String(getSettings().aiModel || '').trim()
+  return model || '默认模型'
+}
+
+/**
+ * 节点模型调用：指定模型失败时自动切到默认模型重试一次。
+ * 对应 HiRoute 的「低分保护 / 候选兜底」：不让单个模型故障中断整条工作流。
+ */
+async function runModelWithFallback(
+  req: { system: string; prompt: string; images?: string[]; think?: boolean; timeoutMs?: number },
+  model?: string
+): Promise<NodeResult> {
+  const primary = String(model || '').trim()
+  if (!primary) {
+    const r = await runWorkflowNode({ ...req })
+    return { ...r, model: defaultModelLabel() }
+  }
+  const first = await runWorkflowNode({ ...req, model: primary })
+  if (first.ok) return { ...first, model: primary }
+  const fallbackModel = defaultModelLabel()
+  if (!fallbackModel || fallbackModel === primary) return { ...first, model: primary }
+  const second = await runWorkflowNode({ ...req })
+  if (second.ok) return { ...second, model: fallbackModel, fallback: 'model' }
+  return {
+    ok: false,
+    text: '',
+    error: `${first.error || '模型调用失败'}；兜底模型「${fallbackModel}」也失败：${second.error || '未知错误'}`,
+    model: fallbackModel,
+    fallback: 'model'
+  }
+}
+
 async function runOne(
   node: WorkflowNode,
   def: WorkflowDef,
   input: string,
   outputs: Record<string, WorkflowNodeRun>,
   trigger: 'manual' | 'schedule'
-): Promise<{ ok: boolean; text: string; error?: string }> {
+): Promise<NodeResult> {
   const upstream = upstreamText(def, node, outputs)
 
   if (node.kind === 'input') {
@@ -102,22 +145,24 @@ async function runOne(
     if (!node.imageDataUrl) return { ok: false, text: '', error: '图像节点没有图片' }
     if (node.imageMode === 'ocr') {
       const r = await ocrWorkflowImage(node.imageDataUrl)
-      return r.ok ? { ok: true, text: r.text } : { ok: false, text: '', error: r.error || 'OCR 失败' }
+      return r.ok ? { ok: true, text: r.text, model: 'OCR（本地）' } : { ok: false, text: '', error: r.error || 'OCR 失败' }
     }
-    const r = await runWorkflowNode({
-      model: node.model || undefined,
-      system: systemFor(node),
-      prompt: promptFor(node, upstream, input),
-      images: [node.imageDataUrl],
-      think: false,
-      timeoutMs: 180_000
-    })
-    if (r.ok) return { ok: true, text: r.text }
+    const r = await runModelWithFallback(
+      {
+        system: systemFor(node),
+        prompt: promptFor(node, upstream, input),
+        images: [node.imageDataUrl],
+        think: false,
+        timeoutMs: 180_000
+      },
+      node.model
+    )
+    if (r.ok) return r
     if (node.imageMode === 'auto' || !node.imageMode) {
       const ocr = await ocrWorkflowImage(node.imageDataUrl)
-      if (ocr.ok) return { ok: true, text: `（视觉模型不可用，已回退 OCR）\n\n${ocr.text}` }
+      if (ocr.ok) return { ok: true, text: `（视觉模型不可用，已回退 OCR）\n\n${ocr.text}`, model: 'OCR（本地）', fallback: 'ocr' }
     }
-    return { ok: false, text: '', error: r.error || '图像处理失败' }
+    return { ok: false, text: '', error: r.error || '图像处理失败', model: r.model, fallback: r.fallback }
   }
 
   // agent
@@ -127,13 +172,11 @@ async function runOne(
     const r = await dispatchAgent(node.agentId, prompt, undefined, trigger === 'manual')
     return r.ok ? { ok: true, text: r.output } : { ok: false, text: r.output ?? '', error: r.error || 'Agent 派发失败' }
   }
-  const r = await runWorkflowNode({
-    model: node.model || undefined,
-    system: systemFor(node),
-    prompt,
-    timeoutMs: 180_000
-  })
-  return r.ok ? { ok: true, text: r.text } : { ok: false, text: '', error: r.error || '模型调用失败' }
+  const r = await runModelWithFallback(
+    { system: systemFor(node), prompt, timeoutMs: 180_000 },
+    node.model
+  )
+  return r.ok ? r : { ok: false, text: '', error: r.error || '模型调用失败', model: r.model, fallback: r.fallback }
 }
 
 /** 执行一个完整工作流（定时或手动「立即运行」） */
@@ -173,25 +216,37 @@ export async function runWorkflowById(
   running.add(id)
   const input = (inputOverride ?? def.schedule?.input ?? '定时运行').trim()
   const outputs: Record<string, WorkflowNodeRun> = {}
+  const nodeRuns: WorkflowNodeRun[] = []
   let lastText = ''
   let error: string | undefined
 
   try {
     for (const node of ordered) {
       const t0 = Date.now()
-      let r: { ok: boolean; text: string; error?: string }
+      let r: NodeResult
       try {
         r = await runOne(node, def, input, outputs, trigger)
       } catch (e) {
         r = { ok: false, text: '', error: (e as Error).message }
       }
+      const ms = Date.now() - t0
       outputs[node.id] = {
         nodeId: node.id,
         status: r.ok ? 'done' : 'error',
         output: r.text,
         error: r.error,
-        ms: Date.now() - t0
+        ms
       }
+      nodeRuns.push({
+        nodeId: node.id,
+        title: node.title,
+        status: r.ok ? 'done' : 'error',
+        output: r.text.slice(0, 2000),
+        error: r.error,
+        ms,
+        model: r.model,
+        fallback: r.fallback
+      })
       if (!r.ok) {
         error = `「${node.title}」${r.error ?? '执行失败'}`
         break
@@ -209,7 +264,8 @@ export async function runWorkflowById(
     ok: !error,
     error,
     nodes: ordered.length,
-    output: lastText.slice(0, 4000)
+    output: lastText.slice(0, 4000),
+    nodeRuns
   }
   appendRun(rec)
   if (trigger === 'schedule') {

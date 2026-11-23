@@ -123,6 +123,8 @@ export interface WorkflowRunRecord {
   error?: string
   nodes: number
   output?: string
+  /** 逐节点执行详情：用了哪个模型、耗时、是否兜底 */
+  nodeRuns?: WorkflowNodeRun[]
 }
 
 export interface WorkflowDef {
@@ -227,5 +229,10 @@ export interface WorkflowNodeRun {
   /** 本次节点执行的真实开始 / 结束时间（用于作战板泳道） */
   startedAt?: number
   endedAt?: number
-  fallback?: 'ocr' | 'text-only'
+  /** 实际使用的模型；未指定时为主进程默认模型 */
+  model?: string
+  /** 节点标题快照：工作流后续改名，历史运行仍可读 */
+  title?: string
+  /** 降级方式：ocr=视觉失败转 OCR；text-only=无视觉能力；model=指定模型失败后切默认模型 */
+  fallback?: 'ocr' | 'text-only' | 'model'
 }

@@ -732,6 +732,30 @@ export default function WorkflowView(): JSX.Element {
     }
   }, [])
 
+  /** 回放历史运行：按记录里的耗时重建节点时间，画布与时间轴直接可看 */
+  const replayRun = useCallback((record: WorkflowRunRecord): void => {
+    const rows = record.nodeRuns ?? []
+    if (!rows.length) {
+      setStatus('这次运行没有逐节点记录，暂时无法回放')
+      return
+    }
+    const next: Record<string, WorkflowNodeRun> = {}
+    let cursor = record.startedAt
+    rows.forEach((row) => {
+      const ms = row.ms ?? 0
+      next[row.nodeId] = {
+        ...row,
+        output: row.output ?? '',
+        startedAt: cursor,
+        endedAt: cursor + ms
+      }
+      cursor += ms
+    })
+    setRuns(next)
+    setSelectedId(rows[0].nodeId)
+    setStatus(`已回放 ${new Date(record.startedAt).toLocaleString('zh-CN', { hour12: false })} 的运行`)
+  }, [])
+
   useEffect(() => {
     void refreshRunRecords(activeId)
   }, [activeId, refreshRunRecords])
@@ -1399,7 +1423,39 @@ export default function WorkflowView(): JSX.Element {
     return { ok: true, text: res.text }
   }
 
-  const runNode = async (node: WorkflowNode, def: WorkflowDef, input: string, previous: Record<string, WorkflowNodeRun>): Promise<{ ok: boolean; text: string; error?: string }> => {
+  /** 节点指定模型失败时切默认模型重试一次，避免单点模型故障中断整条流程 */
+  const runNodeModel = async (req: {
+    model?: string
+    system?: string
+    prompt: string
+    images?: string[]
+    timeoutMs?: number
+    think?: boolean
+  }): Promise<{ ok: boolean; text: string; error?: string; model?: string; fallback?: 'ocr' | 'text-only' | 'model' }> => {
+    const primary = String(req.model || '').trim()
+    if (!primary) {
+      const r = await api.workflowRun({ ...req, model: undefined })
+      return { ...r, model: r.model || undefined }
+    }
+    const first = await api.workflowRun({ ...req, model: primary })
+    if (first.ok) return { ...first, model: first.model || primary }
+    const second = await api.workflowRun({ ...req, model: undefined })
+    if (second.ok) return { ...second, model: second.model || undefined, fallback: 'model' }
+    return {
+      ok: false,
+      text: '',
+      error: `${first.error || '模型调用失败'}；默认模型兜底也失败：${second.error || '未知错误'}`,
+      model: second.model || undefined,
+      fallback: 'model'
+    }
+  }
+
+  const runNode = async (
+    node: WorkflowNode,
+    def: WorkflowDef,
+    input: string,
+    previous: Record<string, WorkflowNodeRun>
+  ): Promise<{ ok: boolean; text: string; error?: string; model?: string; fallback?: 'ocr' | 'text-only' | 'model' }> => {
     const upstream = upstreamIdsOf(def, node.id)
       .map((id) => {
         const up = def.nodes.find((n) => n.id === id)
@@ -1449,9 +1505,11 @@ export default function WorkflowView(): JSX.Element {
       const useOcr = node.imageMode === 'ocr' || (node.imageMode !== 'vision' && !visionOf(node.model))
       if (useOcr) {
         const r = await api.workflowOcr(node.imageDataUrl)
-        return r.ok ? { ok: true, text: r.text } : { ok: false, text: '', error: r.error || 'OCR 未识别到文字' }
+        return r.ok
+          ? { ok: true, text: r.text, model: 'OCR（本地）' }
+          : { ok: false, text: '', error: r.error || 'OCR 未识别到文字', model: 'OCR（本地）' }
       }
-      const r = await api.workflowRun({
+      const r = await runNodeModel({
         model: node.model || undefined,
         system: systemFor(node),
         prompt: promptFor(node, upstream, input),
@@ -1459,12 +1517,14 @@ export default function WorkflowView(): JSX.Element {
         think: false,
         timeoutMs: 180_000
       })
-      if (r.ok) return { ok: true, text: r.text }
+      if (r.ok) return r
       if (node.imageMode === 'auto') {
         const ocr = await api.workflowOcr(node.imageDataUrl)
-        if (ocr.ok) return { ok: true, text: `（视觉模型不可用，已回退 OCR）\n\n${ocr.text}` }
+        if (ocr.ok) {
+          return { ok: true, text: `（视觉模型不可用，已回退 OCR）\n\n${ocr.text}`, model: 'OCR（本地）', fallback: 'ocr' }
+        }
       }
-      return { ok: false, text: '', error: r.error || '图像处理失败' }
+      return { ok: false, text: '', error: r.error || '图像处理失败', model: r.model, fallback: r.fallback }
     }
 
     // 会话上下文：agent 节点可接续已有会话 / 每次新建；其他节点不读写会话
@@ -1518,13 +1578,13 @@ export default function WorkflowView(): JSX.Element {
       return { ok: res.ok, text: res.output, error: res.error }
     }
 
-    const res = await api.workflowRun({
+    const res = await runNodeModel({
       model: node.model || undefined,
       system: systemFor(node),
       prompt: [sessionCtx, promptFor(node, upstream, input)].filter(Boolean).join('\n\n')
     })
     if (res.ok) await rememberSession(res.text)
-    return { ok: res.ok, text: res.text, error: res.error }
+    return { ok: res.ok, text: res.text, error: res.error, model: res.model, fallback: res.fallback }
   }
 
   const runAll = async (onlyId?: string): Promise<void> => {
@@ -1547,8 +1607,8 @@ export default function WorkflowView(): JSX.Element {
     for (const node of targets) {
       if (runStopRef.current) break
       const startedAt = Date.now()
-      setRun(node.id, { status: 'running', error: undefined, startedAt, endedAt: undefined, ms: undefined })
-      let result: { ok: boolean; text: string; error?: string }
+      setRun(node.id, { status: 'running', error: undefined, startedAt, endedAt: undefined, ms: undefined, model: undefined, fallback: undefined })
+      let result: { ok: boolean; text: string; error?: string; model?: string; fallback?: 'ocr' | 'text-only' | 'model' }
       try {
         result = await runNode(node, active, inputText, outputs)
       } catch (e) {
@@ -1563,8 +1623,27 @@ export default function WorkflowView(): JSX.Element {
       }
       const endedAt = Date.now()
       const ms = endedAt - startedAt
-      outputs[node.id] = { nodeId: node.id, status: result.ok ? 'done' : 'error', output: result.text, error: result.error, ms, startedAt, endedAt }
-      setRun(node.id, { status: result.ok ? 'done' : 'error', output: result.text, error: result.error, ms, startedAt, endedAt })
+      outputs[node.id] = {
+        nodeId: node.id,
+        status: result.ok ? 'done' : 'error',
+        output: result.text,
+        error: result.error,
+        ms,
+        startedAt,
+        endedAt,
+        model: result.model,
+        fallback: result.fallback
+      }
+      setRun(node.id, {
+        status: result.ok ? 'done' : 'error',
+        output: result.text,
+        error: result.error,
+        ms,
+        startedAt,
+        endedAt,
+        model: result.model,
+        fallback: result.fallback
+      })
       setLog((prev) => [
         ...prev,
         { nodeId: node.id, title: node.title, status: result.ok ? 'done' : 'error', input: inputText, output: result.text, error: result.error, ms, startedAt, endedAt }
@@ -1916,6 +1995,7 @@ export default function WorkflowView(): JSX.Element {
           }}
           onRun={() => void runAll()}
           onStop={() => void stopRun()}
+          onReplayRun={replayRun}
           onOpenStudio={(nodeId) => {
             if (nodeId) setSelectedId(nodeId)
             setViewMode('studio')
@@ -2106,6 +2186,38 @@ export default function WorkflowView(): JSX.Element {
                           {Math.round((r.endedAt - r.startedAt) / 1000)}s
                         </span>
                       </summary>
+                      {r.nodeRuns?.length ? (
+                        <div className="mt-1 space-y-0.5">
+                          {r.nodeRuns.map((n) => (
+                            <div key={n.nodeId} className="flex items-center gap-1.5">
+                              <span
+                                className="inline-block h-1 w-1 shrink-0 rounded-full"
+                                style={{ background: n.status === 'done' ? '#34d399' : '#f87171' }}
+                              />
+                              <span className="truncate text-slate-500">{n.title ?? n.nodeId}</span>
+                              {n.model ? <span className="shrink-0 text-slate-600">{n.model}</span> : null}
+                              {n.fallback === 'model' ? (
+                                <span
+                                  className="shrink-0 rounded px-1"
+                                  style={{ background: 'rgba(34,211,238,.12)', color: '#22d3ee' }}
+                                >
+                                  兜底
+                                </span>
+                              ) : n.fallback === 'ocr' ? (
+                                <span
+                                  className="shrink-0 rounded px-1"
+                                  style={{ background: 'rgba(148,163,184,.14)', color: '#94a3b8' }}
+                                >
+                                  OCR
+                                </span>
+                              ) : null}
+                              <span className="ml-auto shrink-0 text-slate-600">
+                                {n.ms ? `${(n.ms / 1000).toFixed(1)}s` : ''}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                       <div className="mt-1 whitespace-pre-wrap break-words text-slate-500">
                         {r.error ?? r.output ?? '（无输出）'}
                       </div>
@@ -3105,6 +3217,11 @@ export default function WorkflowView(): JSX.Element {
                         <option key={m.id} value={m.id}>{m.name}{m.vision ? ' · 视觉' : ''}</option>
                       ))}
                     </select>
+                    <div className="mt-1 text-2xs text-slate-600">
+                      {selected.model
+                        ? `候选链：${selected.model} → 设置里的默认模型（失败自动兜底）`
+                        : '候选链：设置里的默认模型（节点未指定模型）'}
+                    </div>
                   </Field>
                 ) : null}
 
