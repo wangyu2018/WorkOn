@@ -415,7 +415,8 @@ export function createMainWindow(opts?: { deferShow?: boolean }): BrowserWindow 
     mainWindow?.hide()
   })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
+    // 只把 web / 邮件地址交给系统；bitbrowser:// 等自定义协议静默拒绝（否则 macOS 反复弹窗）
+    if (/^https?:\/\//i.test(url) || /^mailto:/i.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
   // 渲染层错误转发到主进程日志（定位白屏/黑屏问题）

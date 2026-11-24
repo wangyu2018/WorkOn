@@ -5,10 +5,10 @@
  * - 收起首页/计划内容后，本栏自动占满剩余宽度（多态成为主视图）
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { PipelineTrace, TraceEvent, TraceToolCall } from '@shared/trace'
+import type { PipelineTrace, TraceEvent } from '@shared/trace'
 import type { PlanItem, Project, ProjectTask } from '@shared/types'
 import { dateKey } from '@shared/trail'
-import { toolMeta } from '../lib/toolUi'
+import { buildTraceGraph, TraceFlow, TraceNodeDetail } from '../v10/TraceFlow'
 import { useCoach } from '../lib/useCoach'
 import { COACH_KIND_META, COACH_STATUS_META } from '../lib/coachMeta'
 import { Icon, type IconName } from './Icon'
@@ -39,6 +39,9 @@ function fmtDay(ts: number): string {
 function FlowPanel() {
   const [traces, setTraces] = useState<PipelineTrace[]>([])
   const [openId, setOpenId] = useState<string | null>(null)
+  const [selected, setSelected] = useState<string | null>(null)
+  // 每条链路都转成节点图，展开时直接画（图 + 点节点看明细）
+  const graphs = useMemo(() => new Map(traces.map((t) => [t.id, buildTraceGraph(t)])), [traces])
 
   useEffect(() => {
     // 先拉回看，再订阅增量：面板重开也能看到最近的链路
@@ -65,13 +68,18 @@ function FlowPanel() {
     <div className="flex flex-col gap-2">
       {traces.map((t) => {
         const open = t.id === expandedId
+        const graph = graphs.get(t.id)
+        const node = open ? (graph?.nodes.find((n) => n.id === selected) ?? null) : null
         const tools = t.rounds.flatMap((r) => r.toolCalls)
         return (
           <section key={t.id} className="glass-card !p-3">
             <button
               type="button"
               className="flex w-full items-start gap-2 text-left"
-              onClick={() => setOpenId(open ? '__none__' : t.id)}
+              onClick={() => {
+                setSelected(null)
+                setOpenId(open ? '__none__' : t.id)
+              }}
             >
               <span className="mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: t.route.decided === 'local' ? 'var(--neon-amber, #f59e0b)' : 'var(--accent)' }} />
               <span className="min-w-0 flex-1">
@@ -85,47 +93,19 @@ function FlowPanel() {
               <span className="shrink-0 text-xs text-slate-600">{open ? '▾' : '▸'}</span>
             </button>
 
-            {open ? (
-              <div className="mt-2.5 flex flex-col gap-2 border-t border-white/[0.06] pt-2.5">
-                <FlowStep label="输入" text={t.input.text} />
-                <FlowStep label="路由" text={`${t.route.decided === 'local' ? '本地直答' : '模型调用'}${t.route.reason ? ` · ${t.route.reason}` : ''}`} />
-                <FlowTools tools={tools} />
-                <FlowStep label="模型" text={t.rounds.map((r) => r.model).filter(Boolean).join(' / ') || '—'} />
-                <FlowStep label="输出" text={t.output.text || '—'} />
+            {open && graph ? (
+              <div className="v10-trace-scope v10-trace-scope--app mt-2.5 border-t border-white/[0.06] pt-2.5">
+                <TraceFlow graph={graph} selectedId={selected} onSelect={setSelected} />
+                {node ? (
+                  <TraceNodeDetail node={node} />
+                ) : (
+                  <div className="v10-trace-hint">点节点看输入 / 输出与耗时；边上的标签是这一步传了什么。</div>
+                )}
               </div>
             ) : null}
           </section>
         )
       })}
-    </div>
-  )
-}
-
-function FlowStep({ label, text }: { label: string; text: string }) {
-  return (
-    <div className="flex gap-2 text-xs">
-      <span className="w-9 shrink-0 text-slate-600">{label}</span>
-      <span className="min-w-0 flex-1 break-words text-slate-400">{text}</span>
-    </div>
-  )
-}
-
-function FlowTools({ tools }: { tools: TraceToolCall[] }) {
-  if (tools.length === 0) return <FlowStep label="工具" text="未调用插件" />
-  return (
-    <div className="flex gap-2 text-xs">
-      <span className="w-9 shrink-0 text-slate-600">工具</span>
-      <span className="flex min-w-0 flex-1 flex-col gap-1">
-        {tools.slice(0, 8).map((call, i) => (
-          <span key={`${call.name}-${i}`} className="flex items-center gap-1.5">
-            <span className="inline-block h-1 w-1 shrink-0 rounded-full" style={{ background: call.ok ? 'var(--neon-cyan, #22d3ee)' : '#ef4444' }} />
-            <span className="truncate text-slate-300">{toolMeta(call.name).label}</span>
-            {call.target?.kind === 'node' ? <span className="truncate text-2xs text-violet-400">⇄ {call.target.label}</span> : null}
-            <span className="ml-auto shrink-0 text-2xs text-slate-600">{call.ms}ms</span>
-          </span>
-        ))}
-        {tools.length > 8 ? <span className="text-2xs text-slate-600">+{tools.length - 8} 个</span> : null}
-      </span>
     </div>
   )
 }

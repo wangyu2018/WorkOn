@@ -137,6 +137,10 @@ export function attachBrowserGuest(id: number): { ok: boolean } {
     wc.on('will-navigate', (e, url) => {
       if (!/^(https?|about):/i.test(url)) e.preventDefault()
     })
+    // 302 跳转到自定义协议（bitbrowser:// 等）同样拦掉，别交给系统
+    wc.on('will-redirect', (e, url) => {
+      if (!/^(https?|about):/i.test(url)) e.preventDefault()
+    })
     wc.on('destroyed', () => {
       if (guestId !== null && !webContents.fromId(guestId)) guestId = null
     })

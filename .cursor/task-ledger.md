@@ -2,6 +2,91 @@
 
 > Agent 自动维护。只保留最新 10 条。状态：`待开始` | `进行中` | `部分完成` | `已完成` | `已取消`
 
+## REQ-20261124-13 · 2026-11-24
+
+**原话**：workon一直要打开未设定用来打开URL bitbroeser://cc 的应用程序吗 一直弹窗
+
+**状态**：`已完成`
+
+**处理**
+
+- [x] 定位：主窗 `setWindowOpenHandler` 把任意 URL 直接 `shell.openExternal`，且未拦截 Chromium `openExternal` 权限请求；页面/链接一旦带自定义协议（`bitbrowser://cc` 等），macOS 就弹「未设定用来打开 URL 的应用程序」
+- [x] `main/index.ts`：新增 `guardExternalProtocols`，对 defaultSession 与全部 `session-created` 会话只放行 `http(s)` / `mailto`，其余 `openExternal` 静默拒绝
+- [x] `main/index.ts`：全局 `web-contents-created` 增加 `will-navigate` / `will-redirect` 守卫，非 `http(s)/about/file` 一律 `preventDefault`
+- [x] `main/windows.ts`：窗口打开处理器先校验协议，仅 http(s)/mailto 交给系统
+- [x] `main/browser.ts`：内嵌浏览器补 `will-redirect` 守卫，302 到自定义协议同样拦掉
+- [x] `ComposerDialog.tsx`：`workon:browser-url` 只接受/回写 http(s)，历史脏值回落到 Bing，避免每次开浏览器页重复加载坏协议
+
+**验证**
+
+- [x] `npm run typecheck` 通过；重新 build + `electron-builder --mac dir` 打包并启动新进程
+- [x] CDP 实测 `window.open('bitbrowser://cc')` 返回 `null`、页面 URL 不变，未再触发系统弹窗路径
+- [x] 右栏流程图仍正常：重新跑一次 `runSuperAgent`，`svg.v10-trace-svg` 数量 = 1
+
+---
+
+## REQ-20261123-12 · 2026-11-23
+
+**原话**：我原来的流程图呢 / 今天早上我看页面的右上角还是流程图。现在咋变成文字了
+
+**状态**：`已完成`
+
+**处理**
+
+- [x] 定位：主窗右上「流程」右栏（`RightRail.FlowPanel`）此前只渲染纯文字步骤（输入/路由/工具/模型/输出），图形图只在拆出的 `pane=paper` 右页
+- [x] `RightRail.tsx`：每条链路用 `buildTraceGraph` 转节点图，展开即用 `TraceFlow` 画「输入 → 主 Agent 路由 → 模型 → 工具/数据 Agent → 输出」，边标签保留关键词/上下文/任务/回答字数
+- [x] 点节点用 `TraceNodeDetail` 看该步输入/输出/工具耗时；移除冗余文字步骤块
+- [x] 图形挂 `v10-trace-scope v10-trace-scope--app`，复用主窗深色主题变量，不引入新样式
+
+**验证**
+
+- [x] `npm run typecheck` 通过；`npm run build` + `electron-builder --mac dir` 重新打包
+- [x] 启动打包版并真实跑一次 `runSuperAgent`，右栏出现 6 节点流程图与 5 条边标签；点「数据 Agent」节点明细正常展开
+- [x] 截图：`首页右上-处理流程图.png`（右栏原尺寸）、`首页-处理流程图-右上角.png`（整窗 2560×1320）
+
+---
+
+## REQ-20261123-11 · 2026-11-23
+
+**原话**：@video-creater 我需要一个针对workon的介绍视频，大概3分钟左右。就是产品点击。运行我比较亮眼功能 还有宣传等等 ，参加比赛用 让评委理解，跟市面agent区别，跟personal agent的效果 先构思一下
+
+**状态**：`已完成（3 分钟成片已交付：WorkOn-参赛介绍片.mp4，180.00s / 2560×1440 / 2K 16:9。H3 与图像生成被账户额度拦住，已用品牌动态图形替代四段生成镜头）`
+
+**处理**
+
+- [x] 摸清产品真实形态：主导航（今天 / 计划 / 情报 / Agent / 工作流 / 回顾 / 更多）、纸墨视觉（纸 #F7F4EE · 墨 #2B2B28 · 琥珀 #D98E2B · 青 #0FB5A4 · 青瓷）、主链路 知识 → 计划 → 回顾 → 次日 + 4 条旁路闭环
+- [x] 确认生成能力边界：MiniMax-H3 单次最长 15 秒（4–15 秒整数）、2K / 16:9、原生同步音频；3 分钟必须拆成多段生成后剪辑
+- [x] 盘点可直接做首帧的真实截图：`docs/art/p1-demo/01–09`（知识→计划→顺延闭环 / 流程图 / 结构化结果）、`test-results/*.png`（主界面、思考流、盯守卡、Agent 调用记录）
+- [x] 产出 12–14 镜分镜脚本（含中文旁白、屏幕字幕、镜头运动、音效）
+- [x] 补拍真实界面：发现打包版已在跑且 CDP 端口 9445 可连，直接复用；`video/promo-3min/capture-frames.mjs` 按真实点击路径取到 13 张 2560×1440 帧（今天/计划/情报/Agent/工作流/回顾/更多/知识/画像/隐私/问答/图谱/日历），全程只读未改业务数据
+- [x] 素材归一：`video/promo-3min/ref/` 共 33 张全部统一为 2560×1440（2K 16:9），ffmpeg 等比缩放 + 纸色居中填充，无裁切丢失界面元素
+- [x] 写出制作脚本 `video/promo-3min/script.json`：12 镜 / 180 秒 / 每镜旁白 + 字幕 + 素材映射 + 镜头运动 + 音效 + H3 生成 brief；校验 12 镜素材全部命中、旁白字数与 15 秒节奏匹配（S12 原 13.6s 已收紧）
+- [x] 查清配音能力：`matrix_synthesize_speech` / `batch_text_to_audio` 可用，中文音色齐全（青涩青年、精英青年、成熟女性等）
+- [x] 用户确认方案：路线 A（真实界面为主 + H3 生成 4 段电影化镜头）+ 独立 TTS + 180 秒 12 镜
+- [x] 12 段独立 TTS 旁白全部合成并落地（`female-chengshu` / speed 0.95 / emotion neutral），实测每段 5.3–12.5s，全部留足 15s 槽位余量
+- [x] 12 张字幕 / 对比表叠加层用 Electron canvas 渲染为带 alpha 的 2560×1440 PNG（ffmpeg 此构建无 drawtext/libass，改走 Chromium + PingFang SC，排版与产品界面一致）；S1/S2/S3 暗场另做墨色渐隐版，避免纸色底在暗画面上刺眼
+- [x] 8 段真实界面片段合成完成（`build-clips.py`：zoompan 运镜 + 多素材 xfade 交叉溶解 + 字幕淡入淡出），每段实测 15.00s / 2560×1440 / 30fps
+- [x] 音轨构建完成（`build-audio.py`）：旁白轨 180s + 配乐床 180s（122s 素材 4s 交叉溶解续接，头尾淡入淡出）
+- [x] 配乐生成：`batch_text_to_music` 产出两版，选用 bgm-a（121.9s）
+- [x] 成片合成链路已用占位素材演练通过（`build-film.py`）：concat 12 段 + sidechaincompress 旁白闪避配乐 + amix + loudnorm(I=-16)，输出 180.00s / 2560×1440 / h264+aac 无错误
+- [x] 写出 4 段 H3 提示词 `video/promo-3min/h3-prompts.json`（S1 空荡对话框 / S2 碎片化对话 / S3 空洞陪伴 / S12 清晨工作台），均为 16:9 / 2K / 15s 纯文生视频，码点 931–1043 全部远低于 7000 上限
+- [x] 用户确认 4 段 H3 付费生成（MiniMax-H3 / 2K / 16:9 / 15s ×4，无参考图，纯文生视频）
+- [x] 提交 4 段 H3：**全部被计费网关 402 拒绝**，未创建任何生成任务、未产生扣费（每段需 1666 credits，M Plan 周额度与账户积分均不足）；任务映射已按 `billing_rejected_402` 收尾
+- [x] 图像生成兜底同样被拒：账户无 purchased credits，free check-in credits 不能用于图像/视频生成
+- [x] 四段生成镜头改为 WorkOn「纸与墨」品牌动态图形（`render-graphics.cjs` + `build-graphics-clips.py`）：S1 墨夜空对话框+光标闪烁+时间刻度带右移、S2 冷灰七块碎片飘散消散、S3 暖琥珀一张卡片四周空无一物、S12 晨金光柱；色彩弧线 墨夜→冷灰→空暖→纸亮（产品登场）→晨金
+- [x] 跑 `build-film.py` 产出最终成片并交付：`video/promo-3min/final/WorkOn-参赛介绍片.mp4`
+- [ ] 3D 桌宠镜头未做：打包版 `petEnabled` 未开，CDP 唤起桌宠窗口无响应；本片以真实界面 + 品牌动态图形替代
+
+**验证**
+
+- [x] 13 张新帧逐张核对尺寸均为 2560×1440；`05-workflow.png` 同时含真实工作流节点图与右侧 Super Agent 路由记录（数据 Agent / Supervisor / qwen3.5:4b），可直接支撑 S6 与 S10 两镜
+- [x] 字幕层首轮未出现在成片：定位为叠加层 PNG 单帧输入导致 `fade` 只处理 t=0（全透明）；改为 `-loop 1` 后复测底部墨色像素 9222、青色引导条 191，字幕正常
+- [x] 成片实测：180.00s / 2560×1440 / 30fps / h264 + aac 48kHz 立体声 / 21.5MB；整合响度 -15.7 LUFS（LRA 5.8 LU），12 个旁白窗口电平 -15.2 ~ -23.9dB 全部可闻；抽帧联系表确认 暗场钩子→真实界面→Super Agent→盯守→闭环→对比表 节奏连贯
+- [x] 踩坑记录：ffmpeg overlay 的 x/y 表达式不接受 `{...}` 包裹；Python f-string 会把 ffmpeg 的 `t` 当变量求值（需 `{{t}}`）；filter graph 连续 `;;` 会报 "No such filter: ''"；Electron 脚本语法错误会卡在启动弹窗而非退出
+- [ ] 未做：未产出 H3/AI 生成镜头（账户额度不足，已用品牌动态图形替代）；未做 3D 桌宠镜头
+
+---
+
 ## REQ-20261122-10 · 2026-11-22
 
 **原话**：我明天要把这个产品当做一个完整产品提交比赛了 你得帮我完整的梳理一遍，验证一遍啊，还有没有开源的 agent 验证工具，帮我验证一下，感觉差太多了
@@ -236,68 +321,3 @@
 - [x] 业务流程截图：知识 → 计划 → 回顾 → 次日 六步主链路 + 情报 / 工作流 / 问答 / 本周四条旁路
 - [x] 处理结果结构化截图：知识 `links`、今日 3 条 `delayed`、明日 3 条 `planned`、备注与 6 项校验
 - [x] 演示报告：`docs/art/p1-demo/DEMO-REPORT.html`
-- [x] 场景扩充到 110 例：`docs/SCENARIO-TESTS-v2.md`（C1 20 / C2 15 / C3 15 / C4 20 / C5 20 / C6 10 / C7 10）
-
-**验证**
-
-- [x] 截图数据来自真实 API：`listPlans` / `listKnowledge` 返回写入 `result.json`
-- [x] 04/06 截图确认显示「未完成 3 项」「已顺延 3 项到 2026-11-21」
-- [x] 演示数据已清理：计划恢复 12 条、知识 0 条
-- [x] 窗口恢复 1900×959、位置 (321,277)，主界面回到 Today
-
----
-
-## REQ-20261120-02 · 2026-11-20
-
-**原话**：其他的继续修复 ，然后我们要拿几个特定角色 特定场景 设计测试
-
-**状态**：`已完成（三条闭环已实测；角色场景测试方案已设计，待执行）`
-
-**处理**
-
-- [x] 情报 → 今日计划：情报流每条新增「转今日计划」，摘要与原链接写入备注，来源标记「情报」
-- [x] 知识 → 今日计划：详情区新增「转为今日计划」，创建后回写 `plan` 关联，按钮变「已关联计划」防重复
-- [x] 回顾 → 未完成顺延：今日回顾「计划达成」支持单项 / 批量顺延到次日，生成新计划、原计划标记延期
-- [x] 本周 → 下周计划：本周未完成项可批量顺延到下周一，只统计已过去的日子
-- [x] `PlanSource` 增加 `intel | knowledge`，计划来源标签补齐
-- [x] 不新增页面、不改 Today 主界面、不写模拟数据
-- [x] 新增 `docs/SCENARIO-TESTS-v1.md`：3 个角色 × 7 个场景的测试矩阵、数据准备与清理口径
-
-**验证**
-
-- [x] `npm run typecheck`（node + web）通过
-- [x] 情报转计划：20 条情报中点第一条 → 今日计划出现 `source=intel`，备注含摘要与链接；测试后删除
-- [x] 知识转计划：创建 `SCENARIO-KNOW` → 今日计划 `source=knowledge`，知识 `links` 回写 `plan`；测试后删除
-- [x] 回顾顺延：03:00–03:30 测试计划在今日回顾显示未完成 → 点「顺延」→ 原计划 `delayed`，次日生成 `planned` 副本；测试后删除
-- [x] 本周入口：本周未完成行出现「顺延到 2026-11-23」按钮；未点击，避免影响真实计划
-- [x] 测试数据已清理：计划恢复 12 条、知识 0 条、无 `SCENARIO-` / 测试来源残留
-- [ ] 角色场景测试执行（按 `docs/SCENARIO-TESTS-v1.md` 逐条跑）
-
----
-
-## REQ-20261120-01 · 2026-11-20
-
-**原话**：功能不在新增了 我们要加速把产品完善 ，整理产品功能的流程闭环（批准「可以开始 P0」）
-
-**状态**：`已完成`
-
-**口径**
-
-- P0 只做「产物 / 回答 → 知识库 → 回顾页知识沉淀」的归档闭环
-- 不新增页面与实体，复用已有 `addKnowledge`；Today 主界面不改
-
-**处理**
-
-- [x] 类型层：`KnowledgeLinkType` 增加 `workflow`，`KnowledgeItem.source` 增加 `workflow | qa`；知识库来源标签新增「工作流产物」「问答」
-- [x] 工作流：作战板任务报告底部新增「存入知识」，取节点真实输出，标题「工作流名 · 节点名」，`source=workflow`，`links=[workflow:id]`，空产物禁用；归档后按钮变「已存入知识」并写入底部控制台
-- [x] 问答：助手回答底部新增「存入知识」，自动向上取最近一条提问，正文为「问：… 答：…」，`source=qa`，带「问答」标签；含存入中 / 失败重试 / 已存入三态
-- [x] 回顾闭环：知识写入后直接出现在回顾页「知识」页签（复用 `KnowledgeView`），无需额外改动
-- [x] 操守边界：工作流作战板与原 Studio 保留，不新增模拟数据
-
-**验证**
-
-- [x] `npm run typecheck`（node + web）通过
-- [x] 工作流归档实测：作战板「需求输入」存入后按钮变「已存入知识」，控制台提示一致；知识库出现 `source=workflow` 条目，`links` 指向所属工作流
-- [x] 问答归档实测：新发「今天专注了多久」经「✦ 发送」产生真实回答，点该条「存入知识」后变「✓ 已存入知识」，知识库新增 `source=qa` 条目（标题为提问，正文含问与答，标签「问答」）；历史回答同样可归档
-- [x] 测试条目已清理，`listKnowledge` total 0
-- [ ] 待确认：问答页历史回答全部常驻归档按钮（当前近百个），是否收敛为仅最新一条常驻

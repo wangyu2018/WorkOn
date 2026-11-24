@@ -99,6 +99,10 @@ interface StoredWatchCard {
 const WIDTH_KEY = 'workon:dock-width'
 const TAB_KEY = 'workon:dock-tab'
 const URL_KEY = 'workon:browser-url'
+/** 只接受 http(s)：历史里若存过 bitbrowser:// 等自定义协议，重开时别再交给系统 */
+function safeBrowserUrl(raw: string | null): string {
+  return raw && /^https?:\/\//i.test(raw) ? raw : 'https://www.bing.com'
+}
 const KIND_KEY = 'workon:browser-mode'
 /** 旧版单线程对话（仅用于一次性迁移） */
 const CHAT_KEY = 'workon:chat-messages'
@@ -603,7 +607,7 @@ export function ComposerDialog({
   const [confirm, setConfirm] = useState(false)
 
   // 浏览器
-  const [url, setUrl] = useState(() => localStorage.getItem(URL_KEY) || 'https://www.bing.com')
+  const [url, setUrl] = useState(() => safeBrowserUrl(localStorage.getItem(URL_KEY)))
   const [title, setTitle] = useState('')
   const [loading, setLoading] = useState(false)
   const [attached, setAttached] = useState(false)
@@ -833,7 +837,7 @@ export function ComposerDialog({
     const host = hostRef.current
     if (!host) return
     const wv = document.createElementNS('http://www.w3.org/1999/xhtml', 'webview') as unknown as WebviewElement
-    wv.setAttribute('src', localStorage.getItem(URL_KEY) || 'https://www.bing.com')
+    wv.setAttribute('src', safeBrowserUrl(localStorage.getItem(URL_KEY)))
     wv.setAttribute('partition', 'persist:workon-browser')
     wv.setAttribute('allowpopups', 'false')
     wv.style.width = '100%'
@@ -846,7 +850,7 @@ export function ComposerDialog({
       try {
         const next = wv.getURL()
         setUrl(next)
-        if (next) localStorage.setItem(URL_KEY, next)
+        if (/^https?:\/\//i.test(next)) localStorage.setItem(URL_KEY, next)
         setTitle(wv.getTitle())
       } catch { /* ignore */ }
     }

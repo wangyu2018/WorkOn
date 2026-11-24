@@ -2,7 +2,7 @@
  * WorkOn 主进程入口
  * 启动顺序：设置 → 存储 → 窗口 → 监控 → 集成服务 → 托盘 → 快捷键 → 周期任务
  */
-import { app, BrowserWindow, Notification, ipcMain, Menu } from 'electron'
+import { app, BrowserWindow, Notification, ipcMain, Menu, session, type Session } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import { initSettings, getSettings, setSettings } from './settings'
@@ -302,6 +302,32 @@ function parseHHMM(s: string): number | null {
   return h * 60 + mm
 }
 
+/**
+ * 外部协议兜底：只允许 http(s) / mailto 交给系统。
+ * 自定义协议（如 bitbrowser://cc）静默拒绝，避免 macOS 反复弹「未设定用来打开 URL 的应用程序」。
+ */
+function guardExternalProtocols(ses: Session): void {
+  ses.setPermissionRequestHandler((_wc, permission, callback, details) => {
+    if (permission !== 'openExternal') {
+      callback(true)
+      return
+    }
+    const url = (details as Electron.OpenExternalPermissionRequest).externalURL ?? ''
+    callback(/^https?:\/\//i.test(url) || /^mailto:/i.test(url))
+  })
+}
+app.on('session-created', guardExternalProtocols)
+
+// 内嵌页/主窗兜底：非 web 协议一律不导航（渲染层若被页面触发 bitbrowser:// 之类也不会打到系统）
+app.on('web-contents-created', (_e, contents) => {
+  contents.on('will-navigate', (e, url) => {
+    if (!/^(https?|about|file):/i.test(url)) e.preventDefault()
+  })
+  contents.on('will-redirect', (e, url) => {
+    if (!/^(https?|about|file):/i.test(url)) e.preventDefault()
+  })
+})
+
 // 单实例锁必须在 ready 之前申请（官方口径）；放 whenReady 里会导致第二进程/钩子异常时窗口永不出现
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) {
@@ -317,6 +343,7 @@ if (!gotSingleInstanceLock) {
 
 app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return
+  guardExternalProtocols(session.defaultSession)
 
   // macOS 开发态 Dock 图标（打包后由 icns 接管）
   if (process.platform === 'darwin') {
